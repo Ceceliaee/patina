@@ -53,12 +53,18 @@ export async function runPomodoroScenarios({ client, sessionId, runTest }: Brows
       assert.equal(await evaluate(client, sessionId, `Boolean(document.querySelector('.tools-pomodoro-task-row .lucide-alarm-clock'))`), false);
       assert.equal(await evaluate(client, sessionId, `globalThis.__PATINA_POMODORO_CASE.pomodoro_tasks.every(t=>t.run.status==='idle')`), true);
       await fill('New task draft');
-      await evaluate(client, sessionId, `document.querySelector('[data-pomodoro-task-id="42"] .tools-pomodoro-run-button').click()`);
-      await waitForExpression(client, sessionId, `globalThis.__PATINA_POMODORO_CASE.pomodoro_tasks[0].run.status==='running' && !document.querySelector('[data-pomodoro-task-id="42"] .tools-pomodoro-run-button').disabled`);
+      await evaluate(client, sessionId, `globalThis.__PATINA_POMODORO_HOLD=true;globalThis.__PATINA_POMODORO_CALLS=[];
+        globalThis.__PATINA_FOCUS_BUTTONS=[...document.querySelectorAll('[data-pomodoro-task-id] button')].map(button=>({button,x:button.getBoundingClientRect().x}));
+        {const b=document.querySelector('[data-pomodoro-task-id="42"] .tools-pomodoro-run-button');b.focus();b.click()}`);
+      await waitForExpression(client, sessionId, `Boolean(globalThis.__PATINA_POMODORO_RELEASE) && document.activeElement?.getAttribute('aria-busy')==='true'`);
+      assert.equal(await evaluate(client, sessionId, `(()=>{const items=globalThis.__PATINA_FOCUS_BUTTONS;items.forEach(({button})=>button.click());return items.every(({button,x})=>button.isConnected&&!button.disabled&&getComputedStyle(button).opacity==='1'&&button.getBoundingClientRect().x===x)&&document.activeElement===items[0].button&&!document.querySelector('.tools-pomodoro-editor')&&globalThis.__PATINA_POMODORO_CALLS.length===1})()`), true, 'pending actions keep both rows stable and block duplicate or edit actions');
+      await evaluate(client, sessionId, `globalThis.__PATINA_POMODORO_HOLD=false;globalThis.__PATINA_POMODORO_RELEASE()`);
+      await waitForExpression(client, sessionId, `globalThis.__PATINA_POMODORO_CASE.pomodoro_tasks[0].run.status==='running' && Boolean(document.querySelector('[data-pomodoro-task-id="42"] .tools-pomodoro-run-button:not([aria-busy="true"]):not(:disabled)'))`);
       assert.equal(await evaluate(client, sessionId, `Boolean(document.querySelector('[data-pomodoro-task-id="42"] .tools-pomodoro-run-button .lucide-pause'))`), true);
       assert.equal(await evaluate(client, sessionId, `Boolean(document.querySelector('.tools-pomodoro-task-actions .lucide-fast-forward'))`), false);
+      assert.equal(await evaluate(client, sessionId, `Boolean(document.querySelector('.tools-pomodoro-task-actions .lucide-rotate-ccw'))`), false);
       await evaluate(client, sessionId, `document.querySelector('[data-pomodoro-task-id="42"] .tools-pomodoro-run-button').click()`);
-      await waitForExpression(client, sessionId, `globalThis.__PATINA_POMODORO_CASE.pomodoro_tasks[0].run.status==='paused' && !document.querySelector('[data-pomodoro-task-id="42"] .tools-pomodoro-run-button').disabled`);
+      await waitForExpression(client, sessionId, `globalThis.__PATINA_POMODORO_CASE.pomodoro_tasks[0].run.status==='paused' && Boolean(document.querySelector('[data-pomodoro-task-id="42"] .tools-pomodoro-run-button:not([aria-busy="true"]):not(:disabled)'))`);
       assert.equal(await evaluate(client, sessionId, `Boolean(document.querySelector('[data-pomodoro-task-id="42"] .tools-pomodoro-run-button .lucide-play'))`), true);
       const progressBeforeEdit = await evaluate(client, sessionId, `JSON.stringify(globalThis.__PATINA_POMODORO_CASE.pomodoro_tasks[0].run)`);
       const editButton = '[data-pomodoro-task-id="42"] button:has(.lucide-pencil-line)';
@@ -115,11 +121,22 @@ export async function runPomodoroScenarios({ client, sessionId, runTest }: Brows
       await waitForExpression(client, sessionId, `!document.querySelector('.tools-pomodoro-settings-popover')`);
       await client.command('Emulation.setDeviceMetricsOverride', {width:1280,height:820,deviceScaleFactor:1,mobile:false}, sessionId);
       await fill("Keep draft");
-      await evaluate(client, sessionId, `globalThis.__PATINA_POMODORO_FAILURE=true;document.querySelector('.tools-pomodoro-create button[type="submit"]').click()`);
-      await waitForExpression(client, sessionId, `Boolean(document.querySelector('.qp-toast[role="alert"]'))`);
+      await evaluate(client, sessionId, `globalThis.__PATINA_POMODORO_CALLS=[];globalThis.__PATINA_POMODORO_RELEASE=null;globalThis.__PATINA_POMODORO_HOLD=true;globalThis.__PATINA_POMODORO_FAILURE=true;document.querySelector('.tools-pomodoro-create button[type="submit"]').click()`);
+      await waitForExpression(client, sessionId, `Boolean(globalThis.__PATINA_POMODORO_RELEASE) && document.querySelector('[data-pomodoro-task-id="42"] .qp-icon-action-danger').getAttribute('aria-busy')==='true'`);
+      // An earlier failure toast may still be visible; only this request settling makes deletion safe.
+      const failedCreateSettled = `globalThis.__PATINA_POMODORO_CALLS.some(a=>a.kind==='save'&&a.label==='Keep draft') && Boolean(document.querySelector('.tools-pomodoro-create button[type="submit"]:not(:disabled):not([aria-busy="true"])'))`;
+      assert.equal(await evaluate(client, sessionId, failedCreateSettled), false, 'a held create must not satisfy the completion gate');
+      await evaluate(client, sessionId, `globalThis.__PATINA_POMODORO_HOLD=false;globalThis.__PATINA_POMODORO_RELEASE()`);
+      await waitForExpression(client, sessionId, failedCreateSettled, undefined, 'failed creation settles before deletion');
+      assert.equal(await evaluate(client, sessionId, `Boolean(document.querySelector('.qp-toast[role="alert"]'))`), true);
       assert.equal(await evaluate(client, sessionId, `document.querySelector('#tools-pomodoro-name').value`), "Keep draft");
-      await evaluate(client, sessionId, `document.querySelector('[data-pomodoro-task-id="42"] .qp-icon-action-danger').click()`);
-      await waitForExpression(client, sessionId, `globalThis.__PATINA_POMODORO_CALLS.some(a=>a.kind==='delete') && !document.querySelector('[data-pomodoro-task-id="42"] .qp-icon-action-danger').disabled`);
+      await evaluate(client, sessionId, `globalThis.__PATINA_POMODORO_RELEASE=null;globalThis.__PATINA_POMODORO_HOLD=true;document.querySelector('[data-pomodoro-task-id="42"] .qp-icon-action-danger').click()`);
+      await waitForExpression(client, sessionId, `Boolean(globalThis.__PATINA_POMODORO_RELEASE) && document.querySelector('[data-pomodoro-task-id="42"] .qp-icon-action-danger').getAttribute('aria-busy')==='true'`);
+      // Busy icon actions stay focusable and are not natively disabled.
+      const failedDeleteSettled = `globalThis.__PATINA_POMODORO_CALLS.some(a=>a.kind==='delete'&&a.id===42) && Boolean(document.querySelector('[data-pomodoro-task-id="42"] .qp-icon-action-danger:not([aria-busy="true"]):not(:disabled)'))`;
+      assert.equal(await evaluate(client, sessionId, failedDeleteSettled), false, 'a held delete must not satisfy the retry gate');
+      await evaluate(client, sessionId, `globalThis.__PATINA_POMODORO_HOLD=false;globalThis.__PATINA_POMODORO_RELEASE()`);
+      await waitForExpression(client, sessionId, failedDeleteSettled, undefined, 'failed deletion settles before retry');
       assert.equal(await evaluate(client, sessionId, `document.querySelectorAll('[data-pomodoro-task-id]').length`), 2, 'failed direct deletion keeps the task available for retry');
       await evaluate(client, sessionId, `globalThis.__PATINA_POMODORO_FAILURE=false; document.querySelector('[data-pomodoro-task-id="42"] .qp-icon-action-danger').click()`);
       await waitForExpression(client, sessionId, `document.querySelectorAll('[data-pomodoro-task-id]').length===1`);
