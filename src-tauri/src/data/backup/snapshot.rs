@@ -13,6 +13,7 @@ use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::AppHandle;
+use zip::read::ZipReadOptions;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
@@ -720,7 +721,7 @@ async fn write_snapshot_archive_internal(
 
 fn read_metadata_entry(archive: &mut ZipArchive<File>, name: &str) -> Result<Vec<u8>, String> {
     let entry = archive
-        .by_name(name)
+        .by_name_with_options(name, ZipReadOptions::new().enforce_header_consistency(true))
         .map_err(|error| format!("snapshot archive is missing `{name}`: {error}"))?;
     if entry.size() > MAX_METADATA_BYTES {
         return Err(format!("snapshot metadata entry `{name}` is too large"));
@@ -786,7 +787,10 @@ pub(super) async fn extract_snapshot_archive(
         let mut names = BTreeSet::new();
         for index in 0..archive.len() {
             let entry = archive
-                .by_index(index)
+                .by_index_with_options(
+                    index,
+                    ZipReadOptions::new().enforce_header_consistency(true),
+                )
                 .map_err(|error| format!("failed to inspect snapshot archive: {error}"))?;
             let name = entry
                 .name()
@@ -1254,6 +1258,39 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn snapshot_reader_rejects_inconsistent_local_header_names() {
+        let work_dir = SnapshotTestDirectory::new("patina-header-consistency-test");
+        let mut zip = ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        write_zip_entry(
+            &mut zip,
+            MANIFEST_ENTRY,
+            br#"{"format":"PatinaSQLiteSnapshot-1"}"#,
+        )
+        .unwrap();
+        write_zip_entry(&mut zip, CHECKSUMS_ENTRY, b"{}").unwrap();
+        write_zip_entry(&mut zip, DATABASE_ENTRY, b"fixture").unwrap();
+        let original = zip.finish().unwrap().into_inner();
+        for name in [MANIFEST_ENTRY, CHECKSUMS_ENTRY, DATABASE_ENTRY] {
+            let mut archive = ZipArchive::new(std::io::Cursor::new(&original)).unwrap();
+            let offset = archive.by_name(name).unwrap().header_start() as usize;
+            let mut bytes = original.clone();
+            assert_eq!(&bytes[offset..offset + 4], b"PK\x03\x04");
+            bytes[offset + 30] ^= 1;
+            let path = work_dir.0.join("mismatched.zip");
+            fs::write(&path, &bytes).unwrap();
+            let error = extract_snapshot_archive(&path, false)
+                .await
+                .err()
+                .expect("inconsistent headers must be rejected");
+            assert!(error.contains("header inconsistency"), "{name}: {error}");
+            if name == MANIFEST_ENTRY {
+                assert!(!is_snapshot_archive(&path).unwrap());
+            }
+            assert_eq!(fs::read(&path).unwrap(), bytes);
+        }
+    }
+
+    #[tokio::test]
     async fn snapshot_reader_rejects_duplicate_entries() {
         let work_dir = SnapshotTestDirectory::new("patina-duplicate-zip-test");
         let path = work_dir.0.join("duplicate.zip");
@@ -1350,7 +1387,7 @@ mod tests {
             write_zip_entry(&mut zip, DATABASE_ENTRY, database).unwrap();
             let mut bytes = zip.finish().unwrap().into_inner();
             if case == "database-limit" {
-                // Patch only the declared size in this small fixture's central directory.
+                // Keep both headers consistent while declaring an oversized database.
                 let end = bytes.len() - 22;
                 assert_eq!(&bytes[end..end + 4], b"PK\x05\x06");
                 let mut cursor =
@@ -1369,6 +1406,12 @@ mod tests {
                             as usize;
                     if &bytes[cursor + 46..cursor + 46 + name_len] == DATABASE_ENTRY.as_bytes() {
                         bytes[cursor + 24..cursor + 28]
+                            .copy_from_slice(&(declared_size as u32).to_le_bytes());
+                        let local =
+                            u32::from_le_bytes(bytes[cursor + 42..cursor + 46].try_into().unwrap())
+                                as usize;
+                        assert_eq!(&bytes[local..local + 4], b"PK\x03\x04");
+                        bytes[local + 22..local + 26]
                             .copy_from_slice(&(declared_size as u32).to_le_bytes());
                         patched += 1;
                     }

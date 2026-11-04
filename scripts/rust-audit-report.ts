@@ -19,9 +19,10 @@ export function collectRustAuditFindings(report: CargoAuditReport, lockfile: str
   // GitHub advisories absent from RustSec still need regression protection.
   // https://github.com/advisories/GHSA-7gmj-67g7-phm9
   // https://github.com/advisories/GHSA-2f9f-gq7v-9h6m
+  // https://github.com/advisories/GHSA-m665-v7pm-7grj
   for (const block of lockfile.split("[[package]]").slice(1)) {
     const name = /^name = "([^"]+)"/m.exec(block)?.[1];
-    if (name !== "tauri" && name !== "thrift") continue;
+    if (name !== "tauri" && name !== "thrift" && name !== "zip") continue;
     const version = /^version = "([^"]+)"/m.exec(block)?.[1];
     if (!version || !/^\d+\.\d+\.\d+$/.test(version)) {
       throw new Error(`Unsupported audited version: ${name}@${version}`);
@@ -29,7 +30,9 @@ export function collectRustAuditFindings(report: CargoAuditReport, lockfile: str
     const [major, minor, patch] = version.split(".").map(Number);
     const id = name === "tauri"
       ? major === 2 && (minor < 11 || (minor === 11 && patch === 0)) ? "GHSA-7gmj-67g7-phm9" : null
-      : major === 0 && minor < 23 ? "GHSA-2f9f-gq7v-9h6m" : null;
+      : name === "thrift"
+        ? major === 0 && minor < 23 ? "GHSA-2f9f-gq7v-9h6m" : null
+        : major < 9 || (major === 9 && minor === 0 && patch < 5) ? "GHSA-m665-v7pm-7grj" : null;
     if (id) findings.push({ advisory: { id }, package: { name, version } });
   }
   return findings;

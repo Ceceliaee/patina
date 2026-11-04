@@ -59,6 +59,12 @@ for (const version of ["2.11.1", "2.11.5", "2.12.0"]) {
 assert.equal(collectRustAuditFindings(cleanRustReport, crateLock("thrift", "0.17.0")).length, 1);
 assert.equal(collectRustAuditFindings(cleanRustReport, crateLock("thrift", "0.22.0")).length, 1);
 assert.deepEqual(collectRustAuditFindings(cleanRustReport, crateLock("thrift", "0.23.0")), []);
+for (const version of ["0.6.6", "8.6.0", "9.0.0", "9.0.4"]) {
+  assert.equal(collectRustAuditFindings(cleanRustReport, crateLock("zip", version))[0]?.advisory?.id, "GHSA-m665-v7pm-7grj");
+}
+for (const version of ["9.0.5", "9.1.0", "10.0.0"]) {
+  assert.deepEqual(collectRustAuditFindings(cleanRustReport, crateLock("zip", version)), []);
+}
 const unsound = { advisory: { id: "RUSTSEC-example" }, package: { name: "example", version: "1.0.0" } };
 assert.deepEqual(collectRustAuditFindings({ ...cleanRustReport, warnings: { unsound: [unsound] } }, ""), [unsound]);
 assert.deepEqual(collectRustAuditFindings({ vulnerabilities: { list: [unsound] }, warnings: {} }, ""), [unsound]);

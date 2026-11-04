@@ -60,7 +60,7 @@ rfd = "0.15.4"
 crc32fast = "1.4"
 sha2 = "0.10"
 uuid = { version = "1.23.5", features = ["v4"] }
-zip = { version = "9.0.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+zip = { version = "9.0.5", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 arrow = { version = "59.3", default-features = false, features = ["ipc"] }
 parquet = { version = "59.3", default-features = false, features = ["arrow"] }
 csv = "1.3"
