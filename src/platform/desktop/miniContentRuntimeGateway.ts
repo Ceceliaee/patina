@@ -39,7 +39,10 @@ interface RawMiniBootstrapSnapshot {
 }
 
 interface RawMiniToolProjection {
-  kind: "pomodoro";
+  id: number;
+  label: string;
+  counting_up: boolean;
+  kind: "pomodoro" | "free_focus";
   state: "running" | "paused" | "completed";
   value_ms: number;
   visible_until_ms: number | null;
@@ -49,6 +52,7 @@ interface RawMiniToolProjection {
 
 interface RawMiniStatusSnapshot {
   tools: RawMiniToolProjection[];
+  reminder: { id: number; label: string; scheduled_at: number } | null;
   sampled_at_ms: number;
 }
 
@@ -74,7 +78,10 @@ export interface MiniBootstrapSnapshot {
 }
 
 export interface MiniToolProjection {
-  kind: "pomodoro";
+  id: number;
+  label: string;
+  countingUp: boolean;
+  kind: "pomodoro" | "free_focus";
   state: "running" | "paused" | "completed";
   valueMs: number;
   visibleUntilMs: number | null;
@@ -84,6 +91,7 @@ export interface MiniToolProjection {
 
 export interface MiniStatusSnapshot {
   tools: MiniToolProjection[];
+  reminder: { id: number; label: string; scheduledAt: number } | null;
   sampledAtMs: number;
 }
 
@@ -169,7 +177,9 @@ export function parseMiniBootstrapSnapshot(value: unknown): MiniBootstrapSnapsho
 function isRawMiniToolProjection(value: unknown): value is RawMiniToolProjection {
   if (!value || typeof value !== "object") return false;
   const raw = value as RawMiniToolProjection;
-  return raw.kind === "pomodoro"
+  return ["pomodoro", "free_focus"].includes(raw.kind)
+    && Number.isSafeInteger(raw.id) && raw.id > 0
+    && typeof raw.label === "string" && typeof raw.counting_up === "boolean"
     && ["running", "paused", "completed"].includes(raw.state)
     && isFiniteNumber(raw.value_ms)
     && raw.value_ms >= 0
@@ -185,12 +195,17 @@ export function parseMiniStatusSnapshot(value: unknown): MiniStatusSnapshot | nu
     !Array.isArray(raw.tools)
     || raw.tools.length > 1
     || !raw.tools.every(isRawMiniToolProjection)
+    || !(raw.reminder === null || (raw.reminder && Number.isSafeInteger(raw.reminder.id) && raw.reminder.id > 0
+      && typeof raw.reminder.label === "string" && isFiniteNumber(raw.reminder.scheduled_at)))
     || !isFiniteNumber(raw.sampled_at_ms)
   ) {
     return null;
   }
   return {
     tools: raw.tools.map((tool) => ({
+      id: tool.id,
+      label: tool.label,
+      countingUp: tool.counting_up,
       kind: tool.kind,
       state: tool.state,
       valueMs: tool.value_ms,
@@ -198,6 +213,7 @@ export function parseMiniStatusSnapshot(value: unknown): MiniStatusSnapshot | nu
       totalMs: tool.total_ms,
       phase: tool.phase,
     })),
+    reminder: raw.reminder ? { id: raw.reminder.id, label: raw.reminder.label, scheduledAt: raw.reminder.scheduled_at } : null,
     sampledAtMs: raw.sampled_at_ms,
   };
 }

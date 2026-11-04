@@ -1,4 +1,4 @@
-use crate::domain::mini_window::content::{self, MiniStatusSnapshot};
+use crate::domain::mini_window::content::{self, MiniStatusSnapshot, MiniToolKind, MiniToolState};
 use crate::domain::tracking::TrackingStatusSnapshot;
 use crate::engine::tools::ToolsRuntimeState;
 use crate::engine::tracking::runtime_snapshot::{
@@ -7,6 +7,61 @@ use crate::engine::tracking::runtime_snapshot::{
 use crate::platform::windows::foreground::WindowInfo;
 use serde::Serialize;
 use tauri::{AppHandle, Manager, Runtime};
+
+pub(super) fn current_status<R: Runtime>(app: &AppHandle<R>) -> MiniStatusSnapshot {
+    content::build_mini_status_snapshot(
+        app.state::<ToolsRuntimeState>().snapshot(),
+        chrono::Utc::now().timestamp_millis(),
+    )
+}
+
+pub(super) async fn control_tool<R: Runtime>(
+    app: &AppHandle<R>,
+    kind: MiniToolKind,
+    id: i64,
+    resume: bool,
+) -> Result<(), String> {
+    let status = current_status(app);
+    let expected = if resume {
+        MiniToolState::Paused
+    } else {
+        MiniToolState::Running
+    };
+    if !status
+        .tools
+        .iter()
+        .any(|tool| tool.kind == kind && tool.id == id && tool.state == expected)
+    {
+        return Err("Mini tool state changed".into());
+    }
+    match kind {
+        MiniToolKind::Pomodoro => {
+            use crate::domain::tools::PomodoroTaskAction;
+            super::super::tools::pomodoro_task(
+                app,
+                if resume {
+                    PomodoroTaskAction::Resume { id }
+                } else {
+                    PomodoroTaskAction::Pause { id }
+                },
+            )
+            .await?;
+        }
+        MiniToolKind::FreeFocus => {
+            use crate::domain::free_focus::FreeFocusAction;
+            super::super::tools::free_focus(
+                app,
+                if resume {
+                    FreeFocusAction::Resume { id }
+                } else {
+                    FreeFocusAction::Pause { id }
+                },
+            )
+            .await?;
+        }
+    }
+    Ok(())
+}
 
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct MiniPresentationSnapshot {
@@ -27,8 +82,7 @@ pub(crate) async fn get_mini_presentation_snapshot<R: Runtime>(
     let tracking = state
         .snapshot()
         .ok_or_else(|| "tracking runtime snapshot is not ready".to_string())?;
-    let tools = app.state::<ToolsRuntimeState>().snapshot();
-    let status = content::build_mini_status_snapshot(tools, chrono::Utc::now().timestamp_millis());
+    let status = current_status(app);
 
     Ok(MiniPresentationSnapshot {
         tracking_paused,

@@ -14,17 +14,15 @@ pub const PANEL_HEIGHT: f64 = 240.0;
 #[serde(rename_all = "snake_case")]
 pub enum Page {
     #[default]
-    Today,
     Activity,
     Tools,
 }
 
 impl Page {
-    pub fn cycle(self, forward: bool) -> Self {
-        match (self, forward) {
-            (Self::Today, true) | (Self::Tools, false) => Self::Activity,
-            (Self::Activity, true) | (Self::Today, false) => Self::Tools,
-            (Self::Tools, true) | (Self::Activity, false) => Self::Today,
+    pub fn cycle(self, _forward: bool) -> Self {
+        match self {
+            Self::Activity => Self::Tools,
+            Self::Tools => Self::Activity,
         }
     }
 }
@@ -104,8 +102,26 @@ pub fn clamp_rect(rect: Rect, work: Rect) -> Rect {
 }
 
 pub fn bounds(placement: &Placement, expanded: bool, work: Rect, dpi: f64) -> Rect {
+    bounds_with_tools(placement, expanded, work, dpi, 0)
+}
+
+pub fn bounds_with_tools(
+    placement: &Placement,
+    expanded: bool,
+    work: Rect,
+    dpi: f64,
+    rows: u8,
+) -> Rect {
     let (width, height) = if expanded || placement.edge.is_none() {
-        (PANEL_WIDTH, PANEL_HEIGHT)
+        (
+            PANEL_WIDTH,
+            PANEL_HEIGHT
+                + if rows == 0 {
+                    0.0
+                } else {
+                    6.0 + 36.0 * f64::from(rows.min(2))
+                },
+        )
     } else if placement.edge == Some(Edge::Top) {
         (112.0, 24.0)
     } else {
@@ -136,6 +152,9 @@ pub fn bounds(placement: &Placement, expanded: bool, work: Rect, dpi: f64) -> Re
                 .as_ref()
                 .map(|m| m.work_area)
                 .unwrap_or(work);
+            if previous_work == work {
+                return clamp_rect(Rect::new(saved.x, saved.y, width, height), work);
+            }
             let fraction = |position: i32, origin: i32, extent: u32, size: u32| {
                 ((f64::from(position) - f64::from(origin))
                     / f64::from(extent.saturating_sub(size).max(1)))
@@ -395,21 +414,20 @@ mod tests {
     }
     #[test]
     fn page_migration_preserves_placement_and_hold_and_cycles_both_directions() {
-        for page in ["null", "7", "\"future\""] {
+        for page in ["null", "7", "\"future\"", "\"today\""] {
             let preferences: Preferences = serde_json::from_str(&format!(
                 "{{\"held\":true,\"placement\":{{\"edge\":\"left\",\"anchor\":0.25}},\"page\":{page}}}"
             )).unwrap();
             assert!(preferences.held);
             assert_eq!(preferences.placement.edge, Some(Edge::Left));
             assert_eq!(preferences.placement.anchor, 0.25);
-            assert_eq!(preferences.page, Page::Today);
+            assert_eq!(preferences.page, Page::Activity);
         }
         let old: Preferences = serde_json::from_str("{\"held\":true}").unwrap();
-        assert_eq!(old.page, Page::Today);
-        assert_eq!(Page::Today.cycle(true), Page::Activity);
+        assert_eq!(old.page, Page::Activity);
         assert_eq!(Page::Activity.cycle(true), Page::Tools);
-        assert_eq!(Page::Tools.cycle(true), Page::Today);
-        for page in [Page::Today, Page::Activity, Page::Tools] {
+        assert_eq!(Page::Tools.cycle(true), Page::Activity);
+        for page in [Page::Activity, Page::Tools] {
             assert_eq!(page.cycle(false).cycle(true), page);
         }
     }

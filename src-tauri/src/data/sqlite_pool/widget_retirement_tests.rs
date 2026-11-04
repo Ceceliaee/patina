@@ -75,7 +75,7 @@ async fn widget_retirement_upgrade_repairs_history_without_skipping_data_cleanup
             .await
             .unwrap();
         let mut expected = serde_json::from_str::<serde_json::Value>(MINI_PREFERENCES).unwrap();
-        expected["page"] = serde_json::json!("today");
+        expected["page"] = serde_json::json!("activity");
         assert_eq!(serde_json::to_value(&mini).unwrap(), expected);
         let work = mini.placement.monitor.as_ref().unwrap().work_area;
         assert_eq!(

@@ -1,5 +1,5 @@
 //! Native clipping follows the current visual transition, not an old completion.
-use super::{bounds, Edge, Placement, Rect};
+use super::{bounds_with_tools, Edge, Placement, Rect};
 use serde::Serialize;
 use std::time::{Duration, Instant};
 
@@ -10,9 +10,9 @@ pub struct VisualGeometry {
     pub anchor: f64,
 }
 
-pub fn visual_geometry(placement: &Placement, work: Rect, dpi: f64) -> VisualGeometry {
-    let panel = bounds(placement, true, work, dpi);
-    let handle = bounds(placement, false, work, dpi);
+pub fn visual_geometry(placement: &Placement, work: Rect, dpi: f64, rows: u8) -> VisualGeometry {
+    let panel = bounds_with_tools(placement, true, work, dpi, rows);
+    let handle = bounds_with_tools(placement, false, work, dpi, rows);
     let (offset, travel) = if placement.edge == Some(Edge::Top) {
         (handle.x - panel.x, panel.width.saturating_sub(handle.width))
     } else {
@@ -76,6 +76,7 @@ impl Transition {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::mini_window::bounds;
 
     #[test]
     fn handle_matches_native_clip_inside_the_fixed_canvas() {
@@ -90,7 +91,7 @@ mod tests {
                     };
                     let panel = bounds(&placement, true, work, dpi);
                     let handle = bounds(&placement, false, work, dpi);
-                    let visual = visual_geometry(&placement, work, dpi);
+                    let visual = visual_geometry(&placement, work, dpi, 0);
                     let projected = if edge == Edge::Top {
                         f64::from(panel.x) + f64::from(panel.width - handle.width) * visual.anchor
                     } else {
@@ -125,6 +126,54 @@ mod tests {
         assert!(motion.complete(motion.id));
         assert!(!motion.surface_expanded());
         assert!(!motion.complete(motion.id));
+    }
+
+    #[test]
+    fn tool_rows_extend_panel_without_changing_handle_or_floating_origin() {
+        let work = Rect::new(-1920, -120, 1920, 1080);
+        for dpi in [1.0, 1.25, 1.5, 2.0] {
+            for rows in [0, 1, 2] {
+                for edge in [Some(Edge::Top), Some(Edge::Left), Some(Edge::Right), None] {
+                    let placement = Placement {
+                        edge,
+                        floating: Some(Rect::new(-1600, 10, 320, 240)),
+                        ..Placement::default()
+                    };
+                    let panel = bounds_with_tools(&placement, true, work, dpi, rows);
+                    let visual = visual_geometry(&placement, work, dpi, rows);
+                    let height = match rows {
+                        0 => 240.0,
+                        1 => 282.0,
+                        _ => 318.0,
+                    };
+                    assert_eq!(panel.height, super::super::scale(height, dpi) as u32);
+                    assert_eq!(visual.height, f64::from(panel.height) / dpi);
+                    if edge.is_none() {
+                        assert_eq!((panel.x, panel.y), (-1600, 10));
+                    } else {
+                        let handle = bounds_with_tools(&placement, false, work, dpi, rows);
+                        assert_eq!(handle, bounds(&placement, false, work, dpi));
+                        let projected = if edge == Some(Edge::Top) {
+                            f64::from(panel.x)
+                                + f64::from(panel.width - handle.width) * visual.anchor
+                        } else {
+                            f64::from(panel.y)
+                                + f64::from(panel.height - handle.height) * visual.anchor
+                        };
+                        assert!(
+                            (projected
+                                - f64::from(if edge == Some(Edge::Top) {
+                                    handle.x
+                                } else {
+                                    handle.y
+                                }))
+                            .abs()
+                                < 0.001
+                        );
+                    }
+                }
+            }
+        }
     }
 
     #[test]
