@@ -18,7 +18,7 @@ const STORAGE_PATH_SAFETY_SOURCE = "src-tauri/src/data/storage_path_safety.rs";
 const WEBDAV_SOURCE = "src-tauri/src/platform/webdav.rs";
 const CREDENTIALS_SOURCE = "src-tauri/src/platform/credentials.rs";
 const STARTUP_WARMUP_SOURCE = "src/app/services/startupWarmupService.ts";
-const DATA_COMPONENT_SOURCE = "src/features/data/components/Data.tsx";
+const DATA_NAVIGATION_READINESS_SOURCE = "src/features/data/hooks/useDataNavigationReadiness.ts";
 const DATA_HEATMAP_SOURCE = "src/features/data/hooks/useDataHeatmapSnapshot.ts";
 const STORAGE_MIGRATION_SOURCE = "src-tauri/src/data/storage_migration.rs";
 const STORAGE_MIGRATION_CLEANUP_SOURCE = "src-tauri/src/data/storage_migration_cleanup.rs";
@@ -184,7 +184,7 @@ const SOURCE_CONTRACT_MUTANTS: SourceContractMutant[] = [
   },
   {
     name: "data cold heatmap failures never settle the page completion state",
-    source: DATA_COMPONENT_SOURCE,
+    source: DATA_NAVIGATION_READINESS_SOURCE,
     search: "&& isDataHeatmapSelectionSettled(yearSessionsView, selectedHeatmapView, heatmapColdError)",
     replacement: "&& yearSessionsView === selectedHeatmapView",
     verify: verifyDataHeatmapCompletionContract,

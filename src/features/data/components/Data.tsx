@@ -21,7 +21,6 @@ import {
 import {
   buildActivityHeatmap,
   buildYearOptions,
-  isDataHeatmapSelectionSettled,
   type HeatmapSelection,
 } from "../services/dataHeatmapReadModel.ts";
 import {
@@ -80,7 +79,7 @@ import {
 import DataAppTrendPanel from "./DataAppTrendPanel.tsx";
 import DataTrendPanel from "./DataTrendPanel.tsx";
 import DataHeatmapPanel, { type HeatmapGranularity } from "./DataHeatmapPanel.tsx";
-import { markDataNavigationStage } from "../services/dataNavigationPerformance.ts";
+import { useDataNavigationReadiness } from "../hooks/useDataNavigationReadiness.ts";
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
 import QuickClassificationEntry from "../../classification/components/QuickClassificationEntry.tsx";
 import { useQuickClassificationLauncher } from "../../classification/hooks/useQuickClassificationLauncher.ts";
@@ -91,6 +90,7 @@ import {
 } from "../../classification/types.ts";
 
 interface Props {
+  onInitialContentReady?: () => void;
   icons: Record<string, string>;
   refreshKey?: number;
   trackerHealth: TrackerHealthSnapshot;
@@ -119,7 +119,6 @@ const DEFAULT_DATA_APP_CHART_AXIS: DataAppTrendViewModel["chartAxis"] = {
   domainMax: 3,
   ticks: [0, 1, 2, 3],
 };
-const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 function toCategoryPanelOption(
   category: DataCategoryTrendViewModel["categoryOptions"][number],
@@ -153,6 +152,7 @@ export default function Data({
   onQuickActionError,
   uiLanguage,
   webActivityEnabled,
+  onInitialContentReady,
 }: Props) {
   const UI_TEXT = useLocaleText();
   const quickClassification = useQuickClassificationLauncher();
@@ -958,13 +958,6 @@ export default function Data({
     ? webHeatmapReady && !webHeatmapLoading
     : !destinationHeatmapSnapshot.loading
       && (destinationHeatmapSnapshot.hasSnapshot || destinationHeatmapSnapshot.error);
-  const dataContentComplete = Boolean(
-    trustedReadModelsReady
-    && (freshHeatmapRows || heatmapColdError)
-    && isDataHeatmapSelectionSettled(yearSessionsView, selectedHeatmapView, heatmapColdError)
-    && destinationContentReady
-    && destinationPanelCommitted,
-  );
   const destinationHeatmapYearOptions = buildYearOptions(
     isWebDestination ? webHeatmapEarliestStartTime : earliestStartTime,
     currentYear,
@@ -1071,23 +1064,18 @@ export default function Data({
     yearSessionsView,
   ]);
 
-  useIsomorphicLayoutEffect(() => {
-    markDataNavigationStage("rootMounted");
-    const root = dataRootRef.current;
-    if (root?.querySelector(".data-overview .data-trend-range-trigger")) {
-      markDataNavigationStage("structureActive");
-    }
-  }, []);
-
-
-  useEffect(() => {
-    if (trustedReadModelsReady) {
-      markDataNavigationStage("readModelReady");
-    }
-    if (dataContentComplete) {
-      markDataNavigationStage("complete");
-    }
-  }, [dataContentComplete, trustedReadModelsReady]);
+  const dataContentComplete = useDataNavigationReadiness({
+    initialContentReady: Boolean(visibleTrendViewModel || overviewTrend.error)
+      && (overviewHeatmap.hasSnapshot || canUseBootstrapHeatmap || heatmapColdError),
+    freshHeatmapRows,
+    heatmapColdError,
+    yearSessionsView,
+    selectedHeatmapView,
+    trustedReadModelsReady,
+    destinationContentReady,
+    destinationPanelCommitted,
+    onInitialContentReady,
+  });
 
   return (
     <div

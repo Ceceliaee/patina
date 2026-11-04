@@ -85,6 +85,7 @@ import {
 } from "../../classification/types.ts";
 
 interface Props {
+  onInitialContentReady?: () => void;
   uiText: UiText;
   locale: Locale;
   icons: Record<string, string>;
@@ -219,6 +220,7 @@ export default function History({
   webActivityEnabled = false,
   onOverridesChanged,
   onQuickActionError,
+  onInitialContentReady,
 }: Props) {
   const requestedInitialDate = selectedDateRequest ? parseLocalDateKey(selectedDateRequest.dateKey) : null;
   const selectedDateRequestId = selectedDateRequest?.requestId ?? null;
@@ -349,16 +351,10 @@ export default function History({
   }, []);
 
   useEffect(() => {
-    if (webActivityEnabled || dayDistributionMode !== "web") return;
-
+    if (webActivityEnabled) return;
     setDayDistributionMode("app");
-  }, [dayDistributionMode, webActivityEnabled]);
-
-  useEffect(() => {
-    if (webActivityEnabled || timelineDialogMode !== "web") return;
-
     setTimelineDialogMode("app");
-  }, [timelineDialogMode, webActivityEnabled]);
+  }, [webActivityEnabled]);
 
   useEffect(() => {
     if (selectedDateRequestId === null || !selectedDateRequestDateKey) return;
@@ -1055,6 +1051,15 @@ export default function History({
     <HistoryDaySummaryPanel copy={historyCopy} view={visibleDaySummaryView} />
   );
 
+  const meaningfulContent = hasMeaningfulHistoryContent({
+    contentState, visibleDateKey, requestedDateKey, visibleMappingVersion,
+    requestedMappingVersion: mappingVersion, timelineContentHidden: showTimelineQuietPlaceholder,
+    timelineSegmentCount: visibleHistoryTimelineView.segments.length,
+  });
+  useLayoutEffect(() => {
+    if (contentState === "error" || meaningfulContent) onInitialContentReady?.();
+  }, [contentState, meaningfulContent, onInitialContentReady]);
+
   return (
     <div
       className="flex-1 min-h-0 flex flex-col gap-4 md:gap-5 h-full overflow-hidden"
@@ -1063,15 +1068,7 @@ export default function History({
       data-history-requested-date={requestedDateKey}
       data-history-content-mapping-version={visibleMappingVersion ?? ""}
       data-history-requested-mapping-version={mappingVersion}
-      data-history-content-meaningful={hasMeaningfulHistoryContent({
-        contentState,
-        visibleDateKey,
-        requestedDateKey,
-        visibleMappingVersion,
-        requestedMappingVersion: mappingVersion,
-        timelineContentHidden: showTimelineQuietPlaceholder,
-        timelineSegmentCount: visibleHistoryTimelineView.segments.length,
-      })}
+      data-history-content-meaningful={meaningfulContent}
     >
       <HistoryDateHeader
         datePickerRef={datePickerRef}

@@ -208,11 +208,12 @@ export function useHistorySnapshotRuntime({
     }
 
     const restorePersistedSnapshot = async () => {
-      if (hasUsableSnapshot) return;
+      // An aggregate-only Dashboard seed cannot draw the timeline. Restore the
+      // last complete History frame while the fresh native read is pending.
+      if (cachedSnapshot || bootstrapSnapshot) return;
 
       const persisted = await loadPersistedHistoryBootstrapSnapshot();
       if (freshReadSettled || requestGenerationRef.current !== requestGeneration) return;
-      if (visibleDateKeyRef.current === requestDateKey) return;
       if (
         persisted
         && persisted.identity.dateKey === requestIdentity.dateKey

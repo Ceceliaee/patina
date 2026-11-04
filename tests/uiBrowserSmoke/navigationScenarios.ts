@@ -87,6 +87,91 @@ async function dispatchTabKey(context: Pick<BrowserSmokeContext, "client" | "ses
 export async function runNavigationScenarios(context: BrowserSmokeContext) {
   const { client, sessionId, runTest } = context;
 
+  await runTest("chart navigation retains the previous page until content or an error is ready", async () => {
+    for (const [view, label] of [['history', '历史'], ['data', '数据']]) {
+      for (const outcome of ['ready', 'error', 'leave']) {
+        await evaluate(client, sessionId, `document.querySelector('.qp-nav-item[aria-label="今天"]').click()`);
+        await waitForExpression(client, sessionId, `document.querySelector('main')?.dataset.presentedView==='dashboard'`);
+        await evaluate(client, sessionId, `(async()=>{
+          const history=await import('/src/features/history/services/historyCacheLifecycle.ts');
+          const data=await import('/src/features/data/services/dataCacheLifecycle.ts');
+          await history.clearHistoryCachesAfterDataChange();data.clearDataHeavyCaches();await data.clearDataBootstrapCache();
+          globalThis.__PATINA_CHART_PENDING=[];
+          const hold=()=>new Promise((resolve,reject)=>globalThis.__PATINA_CHART_PENDING.push({resolve,reject}));
+          globalThis.__PATINA_AGGREGATE_HOOK=hold;
+          globalThis.__PATINA_READ_HOOK=(command)=>command==='cmd_get_history_range_rows'?hold():undefined;
+          document.querySelector('.qp-nav-item[aria-label="${label}"]').click();
+        })()`);
+        try {
+          await waitForExpression(client, sessionId, `globalThis.__PATINA_CHART_PENDING.length>0 && !!document.querySelector('${view === 'history' ? '[data-history-content-state]' : '[data-data-content-state]'}')`);
+          await waitForAnimationFrames(client, sessionId, 3);
+          assert.equal(await evaluate(client, sessionId, `document.querySelector('main').dataset.presentedView`), 'dashboard', `${view} exposed an empty chart before its read settled`);
+          if (outcome === 'leave') {
+            await evaluate(client, sessionId, `document.querySelector('.qp-nav-item[aria-label="关于"]').click()`);
+            await waitForExpression(client, sessionId, `document.querySelector('main')?.dataset.presentedView==='about'`);
+          }
+          await evaluate(client, sessionId, `(()=>{
+            globalThis.__PATINA_AGGREGATE_HOOK=undefined;globalThis.__PATINA_READ_HOOK=undefined;
+            for(const pending of globalThis.__PATINA_CHART_PENDING.splice(0)) ${outcome === 'error' ? "pending.reject(new Error('Injected chart read failure'))" : 'pending.resolve(undefined)'};
+          })()`);
+          await waitForExpression(client, sessionId, `document.querySelector('main')?.dataset.presentedView==='${outcome === 'leave' ? 'about' : view}'`);
+          if (outcome === 'error') {
+            assert.equal(await evaluate(client, sessionId, `Boolean(document.querySelector('${view === 'history' ? '[data-history-read-error]' : '[data-trend-read-error]'}'))`), true);
+          } else if (outcome === 'ready') {
+            assert.equal(await evaluate(client, sessionId, `Boolean(document.querySelector('${view === 'history' ? '.history-horizontal-timeline-segment' : '.data-overview .qp-native-trend-line'}'))`), true);
+          }
+        } finally {
+          await evaluate(client, sessionId, `globalThis.__PATINA_AGGREGATE_HOOK=undefined;globalThis.__PATINA_READ_HOOK=undefined;for(const p of globalThis.__PATINA_CHART_PENDING.splice(0))p.resolve(undefined)`);
+        }
+      }
+    }
+  });
+
+  await runTest("chart navigation presents the previous snapshot before a slow refresh settles", async () => {
+    for (const [view, label, chart] of [
+      ['history', '历史', '.history-horizontal-timeline-segment'],
+      ['data', '数据', '.data-overview .qp-native-trend-line'],
+    ]) {
+      await evaluate(client, sessionId, `document.querySelector('.qp-nav-item[aria-label="${label}"]').click()`);
+      await waitForExpression(client, sessionId, `document.querySelector('main')?.dataset.presentedView==='${view}' && !!document.querySelector('${chart}')`);
+      await waitForExpression(client, sessionId, view === 'history'
+        ? `document.querySelector('[data-history-content-state]')?.dataset.historyContentState==='ready'`
+        : `document.querySelector('[data-data-content-state]')?.dataset.dataContentState==='complete'`);
+      await evaluate(client, sessionId, `document.querySelector('.qp-nav-item[aria-label="今天"]').click()`);
+      await waitForExpression(client, sessionId, `document.querySelector('main')?.dataset.presentedView==='dashboard'`);
+      await evaluate(client, sessionId, `(async()=>{
+        const history=await import('/src/features/history/services/historySnapshotCache.ts');
+        const data=await import('/src/features/data/services/dataCacheLifecycle.ts');
+        history.clearHistorySnapshotCache();data.clearDataHeavyCaches();
+        ${view === 'history' ? `const bootstrap=await import('/src/features/history/services/historyBootstrapSnapshot.ts');bootstrap.resetHistoryBootstrapSnapshotForTests();` : ''}
+        globalThis.__PATINA_CHART_PENDING=[];
+        const hold=()=>new Promise(resolve=>globalThis.__PATINA_CHART_PENDING.push(resolve));
+        globalThis.__PATINA_AGGREGATE_HOOK=hold;
+        globalThis.__PATINA_READ_HOOK=(command)=>command==='cmd_get_history_range_rows'?hold():undefined;
+        document.querySelector('.qp-nav-item[aria-label="${label}"]').click();
+      })()`);
+      try {
+        await waitForExpression(client, sessionId, `globalThis.__PATINA_CHART_PENDING.length>0 && document.querySelector('main')?.dataset.presentedView==='${view}' && !!document.querySelector('${chart}')`, 3_000,
+          `${view} should show its old chart without waiting for fresh reads`);
+        await evaluate(client, sessionId, `(()=>{
+          globalThis.__PATINA_CHART_BLANK_FRAMES=0;globalThis.__PATINA_CHART_SAMPLE=true;
+          const sample=()=>{if(!globalThis.__PATINA_CHART_SAMPLE)return;
+            if(!document.querySelector('${chart}'))globalThis.__PATINA_CHART_BLANK_FRAMES++;
+            requestAnimationFrame(sample);};sample();
+          globalThis.__PATINA_AGGREGATE_HOOK=undefined;globalThis.__PATINA_READ_HOOK=undefined;
+          for(const resolve of globalThis.__PATINA_CHART_PENDING.splice(0))resolve(undefined);
+        })()`);
+        await waitForExpression(client, sessionId, view === 'history'
+          ? `document.querySelector('[data-history-content-state]')?.dataset.historyContentState==='ready'`
+          : `document.querySelector('[data-data-content-state]')?.dataset.dataContentState==='complete'`);
+        await waitForAnimationFrames(client, sessionId, 3);
+        assert.equal(await evaluate(client, sessionId, `globalThis.__PATINA_CHART_BLANK_FRAMES`), 0, `${view} blanked while replacing its snapshot`);
+      } finally {
+        await evaluate(client, sessionId, `globalThis.__PATINA_CHART_SAMPLE=false;globalThis.__PATINA_AGGREGATE_HOOK=undefined;globalThis.__PATINA_READ_HOOK=undefined;for(const resolve of globalThis.__PATINA_CHART_PENDING.splice(0))resolve(undefined)`);
+      }
+    }
+  });
+
   await runTest("sidebar navigation labels toggle without geometry or navigation drift", async () => {
     await evaluate(client!, sessionId, `
       localStorage.removeItem("patina:sidebar-navigation-mode");
@@ -522,10 +607,11 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
           dragWidth: rect(dragRegion)?.width ?? 0,
           toolButtonCount: toolButtons.length,
           toolButtonSizes: toolButtons.map((button) => rect(button)),
+          windowButtonSize: rect(controls.querySelector('.app-titlebar-button')),
           toolButtonsUndecorated: toolButtons.every((button) => {
             const style = getComputedStyle(button);
             return style.backgroundColor === "rgba(0, 0, 0, 0)"
-              && style.borderTopColor === "rgba(0, 0, 0, 0)";
+              && (style.borderTopWidth === "0px" || style.borderTopColor === "rgba(0, 0, 0, 0)");
           }),
           navHeight: navRect?.height,
           overflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -541,6 +627,7 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
       dragWidth: number;
       toolButtonCount: number;
       toolButtonSizes: Array<{ width: number; height: number } | null>;
+      windowButtonSize: { width: number; height: number };
       toolButtonsUndecorated: boolean;
       navHeight: number;
       overflowX: number;
@@ -556,8 +643,8 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
     assert.equal(shellEntryState.toolButtonsUndecorated, true);
     shellEntryState.toolButtonSizes.forEach((buttonRect) => {
       assert.ok(buttonRect);
-      assert.ok(Math.abs(buttonRect.width - 28) <= 0.5);
-      assert.ok(Math.abs(buttonRect.height - 28) <= 0.5);
+      assert.ok(Math.abs(buttonRect.width - shellEntryState.windowButtonSize.width) <= 0.5);
+      assert.ok(Math.abs(buttonRect.height - shellEntryState.windowButtonSize.height) <= 0.5);
     });
     assert.ok(Math.abs(shellEntryState.navHeight - 340) <= 0.5);
     assert.ok(shellEntryState.overflowX <= 1);
@@ -577,6 +664,7 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
       y: firstToolStatusCenter.y,
     }, sessionId);
     await waitForAnimationFrames(client!, sessionId, 2);
+    await waitForExpression(client!, sessionId, `document.querySelector('.tools-status-entry-titlebar-item').getAnimations().every(a=>a.playState==='finished')`);
     const toolStatusHoverState = await evaluate(client!, sessionId, `
       (() => {
         const group = document.querySelector("[data-titlebar-tools-status]");
@@ -596,6 +684,12 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
       groupUndecorated: true,
       buttonHasQuietHover: true,
     });
+    const hoverAppearance = (selector: string) => evaluate(client!, sessionId, `(()=>{const s=getComputedStyle(document.querySelector(${JSON.stringify(selector)}));return [s.backgroundColor,s.color,s.borderRadius]})()`);
+    const toolsHoverAppearance = await hoverAppearance('.tools-status-entry-titlebar-item');
+    const miniCenter = await evaluate(client!, sessionId, `(()=>{const r=document.querySelector('[data-titlebar-mini-entry]').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`) as { x: number; y: number };
+    await client!.command('Input.dispatchMouseEvent', {type:'mouseMoved',...miniCenter}, sessionId);
+    await waitForExpression(client!, sessionId, `document.querySelector('[data-titlebar-mini-entry]').getAnimations().every(a=>a.playState==='finished')`);
+    assert.deepEqual(await hoverAppearance('[data-titlebar-mini-entry]'), toolsHoverAppearance, 'Tools and adjacent window controls share hover color and shape');
     await client!.command("Input.dispatchMouseEvent", {
       type: "mouseMoved",
       x: 0,
@@ -1050,11 +1144,6 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("历史"))} + ']')?.className.includes("qp-nav-item-active")`,
-    );
-    await waitForExpression(
-      client!,
-      sessionId,
       `document.querySelector("[data-history-content-state]")?.getAttribute("data-history-content-state") === "bootstrap"
         && !["—", "0m"].includes(document.querySelector(".history-day-summary-value")?.textContent?.trim() ?? "")`,
       undefined,
@@ -1082,11 +1171,17 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
     assert.equal(coldState.statusText, null);
     assert.equal(coldState.timelineText, "");
     assert.equal(coldState.segmentCount, 0, JSON.stringify(coldState));
+    assert.equal(
+      await evaluate(client!, sessionId, `document.querySelector("main")?.dataset.presentedView`),
+      "dashboard",
+      "Dashboard should remain visible while History only has an aggregate seed",
+    );
 
     await waitForExpression(
       client!,
       sessionId,
-      `document.querySelector("[data-history-content-state]")?.getAttribute("data-history-content-state") === "ready"`,
+      `document.querySelector("[data-history-content-state]")?.getAttribute("data-history-content-state") === "ready"
+        && document.querySelector("main")?.dataset.presentedView === "history"`,
       15_000,
       "History cold query should settle",
     );

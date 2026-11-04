@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getPreloadableViewChunkStatus,
   preloadLazyViewChunk,
@@ -93,6 +93,13 @@ async function prepareNavigationView(view: View) {
 export function useAppShellRenderedView(currentView: View) {
   const [renderedView, setRenderedView] = useState<View>("dashboard");
   const [presentedView, setPresentedView] = useState<View>(renderedView);
+  const [content, setContent] = useState({ view: renderedView, ready: false });
+  if (content.view !== renderedView) setContent({ view: renderedView, ready: false });
+  const markContentReady = useCallback((view: View) => {
+    setContent(current => current.view === view && !current.ready ? { view, ready: true } : current);
+  }, []);
+  const onHistoryContentReady = useCallback(() => markContentReady("history"), [markContentReady]);
+  const onDataContentReady = useCallback(() => markContentReady("data"), [markContentReady]);
   const requestRef = useRef(0);
 
   useEffect(() => {
@@ -133,7 +140,11 @@ export function useAppShellRenderedView(currentView: View) {
     outletProps: {
       onPresentedViewChange: setPresentedView,
       renderedView,
+      contentReady: (renderedView !== "history" && renderedView !== "data")
+        || (content.view === renderedView && content.ready),
     },
+    onHistoryContentReady,
+    onDataContentReady,
     presentedView,
     renderedView,
   };

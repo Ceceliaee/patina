@@ -11,6 +11,7 @@ import type { View } from "../types/view.ts";
 interface AppViewOutletProps {
   onPresentedViewChange?: (view: View) => void;
   renderedView: View;
+  contentReady?: boolean;
   uiText: UiText;
   views: Record<View, ReactNode>;
 }
@@ -18,6 +19,7 @@ interface AppViewOutletProps {
 export default function AppViewOutlet({
   onPresentedViewChange,
   renderedView,
+  contentReady = true,
   uiText,
   views,
 }: AppViewOutletProps) {
@@ -52,13 +54,22 @@ export default function AppViewOutlet({
       return undefined;
     }
 
+    if (!contentReady || displayedView !== renderedView) return undefined;
+
+    // Cached chart content is already committed; present it before paint and
+    // let its feature refresh the data without delaying navigation.
+    if (displayedView === "history" || displayedView === "data") {
+      finishTransition();
+      return undefined;
+    }
+
     const animationFrameId = window.requestAnimationFrame(finishTransition);
     const fallbackTimerId = window.setTimeout(finishTransition, 50);
     return () => {
       window.cancelAnimationFrame(animationFrameId);
       window.clearTimeout(fallbackTimerId);
     };
-  }, [displayedView, onPresentedViewChange, outgoingView]);
+  }, [contentReady, displayedView, onPresentedViewChange, outgoingView, renderedView]);
 
   const transitionActive = outgoingView !== null;
 
@@ -77,6 +88,8 @@ export default function AppViewOutlet({
       >
         <div
           key={displayedView}
+          inert={transitionActive}
+          aria-hidden={transitionActive || undefined}
           className="qp-view-container flex-1 min-h-0 flex flex-col h-full overflow-hidden"
         >
           {views[displayedView]}

@@ -265,7 +265,6 @@ export default function AppShellContent({
           views={{
             dashboard: (
               <Dashboard
-                key="dashboard"
                 dashboard={dashboard}
                 icons={icons}
                 readState={dashboardReadState}
@@ -282,7 +281,7 @@ export default function AppShellContent({
             ),
             history: (
               <History
-                key="history"
+                onInitialContentReady={viewPresentation.onHistoryContentReady}
                 icons={icons}
                 refreshKey={refreshSignal}
                 refreshIntervalSecs={appSettings.refreshIntervalSecs}
@@ -305,6 +304,7 @@ export default function AppShellContent({
             ),
             data: (
               <Data
+                onInitialContentReady={viewPresentation.onDataContentReady}
                 icons={icons}
                 refreshKey={refreshSignal}
                 trackerHealth={trackerHealth}
