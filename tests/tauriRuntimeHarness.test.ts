@@ -11,6 +11,20 @@ import { readPreparedRuntime, runBackgroundCommand, runtimeInstrumentation, Runt
 import { RuntimeReport } from "./tauriRuntimeReport.ts";
 import { assertIsolatedTempPath, waitFor, type CdpConnection } from "./uiBrowserSmoke/browserHarness.ts";
 import { verifyDesktopResourceLifecycle } from "./tauriResourceLifecycle.ts";
+import { threadInventoryDelta, type RuntimeThreadSnapshot } from "./tauriRuntimeMeasurement.ts";
+
+{
+  const thread = (id: number, startedAt: string, module = "patina.exe"): RuntimeThreadSnapshot =>
+    ({ id, startedAt, module, name: null, startAddress: "1000", state: "Wait" });
+  const stable = thread(1, "2026-01-01T00:00:00Z");
+  const exited = thread(2, "2026-01-01T00:00:00Z");
+  const reusedId = thread(2, "2026-01-01T00:01:00Z", "ntdll.dll");
+  const added = thread(3, "2026-01-01T00:01:00Z", "ntdll.dll");
+  assert.deepEqual(threadInventoryDelta([stable, exited], [reusedId, stable, added]),
+    { added: [reusedId, added], removed: [exited] });
+  assert.deepEqual(threadInventoryDelta([stable, added], [added, stable]), { added: [], removed: [] });
+  assert.deepEqual(threadInventoryDelta([], [stable]), { added: [stable], removed: [] });
+}
 
 assert.equal(parseRuntimeOptions([]).group, null);
 assert.deepEqual(selectRuntimeGroups(parseRuntimeOptions([])), ["contracts", "data-recovery", "storage-restart", "tools-startup", "webview-recovery", "window-lifecycle", "mini-input"]);

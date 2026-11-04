@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { waitFor, type CdpConnection } from "./uiBrowserSmoke/browserHarness.ts";
+import { threadInventoryDelta, type RuntimeThreadSnapshot } from "./tauriRuntimeMeasurement.ts";
 
 interface NativeResources {
   webview_window_count: number;
@@ -42,7 +43,7 @@ export async function installDesktopResourceIntervalProbe(client: CdpConnection)
 export async function verifyDesktopResourceLifecycle(
   client: CdpConnection,
   evaluate: (expression: string) => Promise<unknown>,
-  processTree: () => { coverage: string; privateUsageBytes: number; processCount: number },
+  processTree: () => { coverage: string; privateUsageBytes: number; processCount: number; rootThreads: RuntimeThreadSnapshot[] },
   collectionMode: "forced" | "natural" = "forced",
   signal?: AbortSignal,
 ) {
@@ -104,7 +105,7 @@ export async function verifyDesktopResourceLifecycle(
     const tree = processTree();
     assert.equal(tree.coverage, "root_and_descendants", "resource acceptance requires the complete process tree");
     samples.push({ cycle, native, dom, connectedListeners, intervals, intervalDetails, documentVisibility, processTree: tree });
-    console.log(`Desktop resource sample ${cycle} (${collectionMode} GC): handles=${native.process_resources.handle_count}, listeners=${dom.jsEventListeners}, intervals=${intervals}`);
+    console.log(`Desktop resource sample ${cycle} (${collectionMode} GC): handles=${native.process_resources.handle_count}, threads=${native.process_resources.thread_count}, listeners=${dom.jsEventListeners}, intervals=${intervals}`);
   };
   try {
     await client.command("Network.enable");
@@ -150,7 +151,8 @@ export async function verifyDesktopResourceLifecycle(
     assert.ok(final.processTree.privateUsageBytes <= baseline.processTree.privateUsageBytes + 128 * 1024 * 1024, "Complete process-tree private memory retention grew");
     assert.ok(final.processTree.processCount <= baseline.processTree.processCount, "Descendant processes accumulated across window cycles");
     assert.ok(final.native.process_resources.handle_count <= baseline.native.process_resources.handle_count + 24);
-    assert.ok(final.native.process_resources.thread_count <= baseline.native.process_resources.thread_count + 2, "Native thread retention grew");
+    assert.ok(final.native.process_resources.thread_count <= baseline.native.process_resources.thread_count + 2,
+      `Native thread retention grew: ${baseline.native.process_resources.thread_count} -> ${final.native.process_resources.thread_count}; sampled thread changes: ${JSON.stringify(threadInventoryDelta(baseline.processTree.rootThreads, final.processTree.rootThreads))}`);
     assert.ok(final.native.process_resources.gdi_objects <= baseline.native.process_resources.gdi_objects + 10, "GDI object retention grew");
     assert.ok(final.native.process_resources.user_objects <= baseline.native.process_resources.user_objects + 10, "USER object retention grew");
     // DOM counters include unreachable objects awaiting collection. Only the
