@@ -155,6 +155,32 @@ mod tests {
         pool.close().await;
     }
     #[tokio::test]
+    async fn bad_domain_override_rolls_back_legacy_rule_conversion() {
+        let pool = database().await;
+        let legacy = json!({"members":["other.com"]}).to_string();
+        sqlx::query("INSERT INTO settings VALUES('__web_site::chat.example.com',?)")
+            .bind(&legacy)
+            .execute(&pool)
+            .await
+            .unwrap();
+        for invalid in ["broken-json", "[]"] {
+            sqlx::query("INSERT OR REPLACE INTO settings VALUES('__web_domain_override::chat.example.com',?)")
+                .bind(invalid).execute(&pool).await.unwrap();
+            let mut tx = pool.begin().await.unwrap();
+            assert!(migrate_legacy_web_grouping(&mut tx).await.is_err());
+            tx.rollback().await.unwrap();
+            let raw: String = sqlx::query_scalar(
+                "SELECT value FROM settings WHERE key='__web_site::chat.example.com'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(raw, legacy);
+        }
+        pool.close().await;
+    }
+
+    #[tokio::test]
     async fn migration_discards_manual_links_preserves_raw_settings_and_is_idempotent() {
         use sqlx::Executor;
         let pool = database().await;
