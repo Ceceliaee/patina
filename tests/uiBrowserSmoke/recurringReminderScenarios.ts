@@ -1,13 +1,20 @@
 import assert from "node:assert/strict";
 import { loadLocaleText } from "../../src/shared/i18n/runtime.ts";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
-import { evaluate, waitForExpression } from "./browserHarness.ts";
+import { evaluate, waitFor, waitForExpression } from "./browserHarness.ts";
 
 export async function runRecurringReminderScenarios({ client, sessionId, runTest }: BrowserSmokeContext) {
   await runTest("Recurring reminder draft applies directly, persists its rule and exposes unframed state icons in every locale", async () => {
     const storage = String(await evaluate(client, sessionId, `JSON.stringify({...localStorage})`));
     const click = async (selector: string) => {
-      const { x, y } = await evaluate(client, sessionId, `(() => {const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`) as { x: number; y: number };
+      const { x, y } = await waitFor(`clickable reminder control ${selector}`, async () =>
+        await evaluate(client, sessionId, `(() => {
+          const target = document.querySelector(${JSON.stringify(selector)});
+          if (!target || target.closest('[inert]')) return null;
+          const rect = target.getBoundingClientRect();
+          const x = rect.x + rect.width / 2, y = rect.y + rect.height / 2;
+          return target.contains(document.elementFromPoint(x, y)) ? { x, y } : null;
+        })()`) as { x: number; y: number } | null);
       await client.command("Input.dispatchMouseEvent", {type:"mousePressed",x,y,button:"left",clickCount:1}, sessionId);
       await client.command("Input.dispatchMouseEvent", {type:"mouseReleased",x,y,button:"left",clickCount:1}, sessionId);
     };

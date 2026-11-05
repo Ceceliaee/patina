@@ -300,8 +300,15 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
       await read(`document.body.removeAttribute('tabindex')`);
     }
   });
+  const testWithMotion = (name: string, scenario: () => Promise<void>) => runTest(name, async () => {
+    await client.command("Emulation.setEmulatedMedia", {
+      features: [{ name: "prefers-reduced-motion", value: "no-preference" }],
+    }, sessionId);
+    try { await scenario(); }
+    finally { await client.command("Emulation.setEmulatedMedia", { features: [] }, sessionId); }
+  });
   for (const edge of ["top", "left", "right"]) {
-    await runTest(`mini ${edge} morph reverses continuously with one opaque surface and stable content`, async () => {
+    await testWithMotion(`mini ${edge} morph reverses continuously with one opaque surface and stable content`, async () => {
       const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini"); url.searchParams.set("miniPage", "tools"); url.searchParams.set("miniEdge", edge);
       await client.command("Page.navigate", { url: url.href }, sessionId);
       await wait(`Boolean(document.querySelector('.mini-activity-content'))`);
@@ -371,7 +378,7 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
       })()`), true, "collapsed background and hit target must match on every edge");
     });
   }
-  await runTest("mini completes only after the shape, content and handle transitions finish", async () => {
+  await testWithMotion("mini completes only after the shape, content and handle transitions finish", async () => {
     const url = new URL(appUrl); url.searchParams.set("__patinaWindow", "mini"); url.searchParams.set("miniPage", "tools");
     await client.command("Page.navigate", { url: url.href }, sessionId);
     await wait(`Boolean(document.querySelector('.mini-activity-content'))`);
