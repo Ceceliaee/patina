@@ -5,6 +5,7 @@ import { emit } from "@tauri-apps/api/event";
 import { parseNotificationPreferences, parseToolPresentation } from "../src/platform/runtime/toolNotificationGateway.ts";
 import { toolPresentationStore } from "../src/features/tools/services/toolPresentationStore.ts";
 import { formatUsageDuration } from "../src/features/tools/services/toolsLabels.ts";
+import { buildToolStatusEntries } from "../src/features/tools/services/toolStatusEntries.ts";
 import {
   buildActivityReminderRuleRows,
   buildPomodoroViewModel,
@@ -247,7 +248,7 @@ await runTest("pomodoro view models format runtime state", () => {
   assert.equal(pomodoro.remainingLabel, "04:00");
 });
 
-await runTest("tools status chips preserve arrival order", () => {
+await runTest("tools status chips keep timer before reminder regardless of arrival", () => {
   const chips = buildToolsStatusChipViewModels(snapshot({
     reminders: [{ id: 9, label: "Check", scheduledAt: 2_000_000, createdAt: 900_000, status: "scheduled", firedAt: null, cancelledAt: null, recurrence: null }],
     currentPomodoro: {
@@ -258,7 +259,40 @@ await runTest("tools status chips preserve arrival order", () => {
     },
     nextReminderAt: 2_000_000,
   }), 1_010_000, labels);
-  assert.deepEqual(chips.map((chip) => chip.targetSection), ["reminders", "pomodoro"]);
+  assert.deepEqual(chips.map((chip) => chip.targetSection), ["pomodoro", "reminders"]);
+});
+
+await runTest("tool entries deduplicate running timers and ignore paused tasks and stale reminder metadata", () => {
+  const free = { id: 1, label: "Reading", restMode: "fixed" as const, restMinutes: 5, restRatio: 5,
+    phase: "focus" as const, status: "running" as const, elapsedMs: 30_000, restRemainingMs: 0,
+    startedAt: 1_000_000, createdAt: 0, updatedAt: 1_000_000, deletedAt: null };
+  const reminders = [
+    { id: 5, label: "Later", scheduledAt: 3_000_000, createdAt: 0, status: "scheduled" as const, firedAt: null, cancelledAt: null, recurrence: null },
+    { id: 3, label: "First", scheduledAt: 2_000_000, createdAt: 0, status: "scheduled" as const, firedAt: null, cancelledAt: null, recurrence: null },
+  ];
+  const data = snapshot({ freeFocusTasks: [free, {...free,id:2,label:"Latest",updatedAt:1_000_001}], reminders, nextReminderAt: 1 });
+  const entries = buildToolsStatusChipViewModels(data, 1_010_000, labels);
+  assert.deepEqual(entries.map(entry => entry.targetSection), ["pomodoro", "reminders"]);
+  assert.match(entries[0].label, /Latest.*00:40/);
+  assert.match(entries[1].label, /First/);
+  data.freeFocusTasks = data.freeFocusTasks.map(task => ({...task,status:"paused"}));
+  assert.equal(buildToolsStatusChipViewModels(data, 1_010_000, labels).length, 1);
+  data.reminders = data.reminders.map(reminder => ({...reminder,status:"fired"}));
+  assert.deepEqual(buildToolsStatusChipViewModels(data, 1_010_000, labels), []);
+});
+
+await runTest("shared reminder entry appears only from 24 hours before its scheduled time", () => {
+  const now = 1_000_000;
+  const day = 24 * 60 * 60 * 1000;
+  const data = { timer: null, reminder: { label: "Tomorrow", scheduledAt: now + day + 1 } };
+  assert.deepEqual(buildToolStatusEntries(data, 0, now, labels), []);
+  assert.equal(buildToolStatusEntries(data, 0, now + 1, labels).length, 1);
+  assert.equal(buildToolStatusEntries(data, 0, data.reminder.scheduledAt, labels).length, 1);
+  assert.deepEqual(buildToolStatusEntries(data, 0, data.reminder.scheduledAt + 1, labels), []);
+  const reminders = [{ id: 1, ...data.reminder, createdAt: now, status: "scheduled" as const,
+    firedAt: null, cancelledAt: null, recurrence: null }];
+  assert.deepEqual(buildToolsStatusChipViewModels(snapshot({ reminders }), now, labels), []);
+  assert.equal(buildToolsStatusChipViewModels(snapshot({ reminders }), now + 1, labels).length, 1);
 });
 
 await runTest("tools preferences merge previous activity tabs into usage mode", () => {

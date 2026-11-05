@@ -167,14 +167,8 @@ function tauriStubFor(path: string) {
           return globalThis.__PATINA_MINI_OPEN_HOOK();
         }
         if (command === "cmd_get_mini_window_snapshot" || command === "cmd_mini_window_action" || command === "cmd_open_mini_window") {
-          if (payload?.action?.kind === "tool_control") {
-            await globalThis.__PATINA_MINI_TOOL_CONTROL_HOOK?.(payload.action);
-            const status = structuredClone(globalThis.__PATINA_MINI_LAST_STATUS);
-            const tool = status.tools.find(tool => tool.id === payload.action.id && tool.kind === payload.action.tool);
-            if (!tool || tool.state !== (payload.action.resume ? "paused" : "running")) throw new Error("Mini tool state changed");
-            tool.state = payload.action.resume ? "running" : "paused";
-            globalThis.__PATINA_MINI_TRACKING_OVERRIDE = { ...globalThis.__PATINA_MINI_TRACKING_OVERRIDE, miniStatus: status };
-            globalThis.__PATINA_EMIT_TAURI_EVENT("tracking-data-changed", { reason: "tracking-status-changed", changed_at_ms: Date.now() });
+          if (payload?.action?.kind === "open_tools") {
+            await globalThis.__PATINA_MINI_OPEN_TOOLS_HOOK?.(payload.action);
           }
           const { miniCommand } = await import("/tests/uiBrowserSmoke/miniFixture.ts");
           return miniCommand(command, payload);
@@ -234,9 +228,6 @@ function tauriStubFor(path: string) {
           status.reminder ??= null;
           status.tools = status.tools.map(tool => ({ id: 1, label: "", counting_up: false, ...tool }));
           globalThis.__PATINA_MINI_LAST_STATUS = status;
-          const { miniToolRows } = await import("/tests/uiBrowserSmoke/miniFixture.ts");
-          const resized = miniToolRows(status.tools.length + Number(Boolean(status.reminder)));
-          if (resized) globalThis.__PATINA_EMIT_TAURI_EVENT("mini-window-state", resized);
           const tracking = override?.currentTrackingSnapshot ?? {
             window: {
               hwnd: "1",
@@ -370,6 +361,11 @@ function tauriStubFor(path: string) {
             generation: Number(globalThis.__PATINA_MAIN_WINDOW_GENERATION__),
             loadEpoch: Number(globalThis.__PATINA_MAIN_WINDOW_LOAD_EPOCH__),
           };
+        }
+        if (command === "cmd_take_main_tools_target") {
+          const target = globalThis.__PATINA_MAIN_TOOLS_TARGET ?? null;
+          globalThis.__PATINA_MAIN_TOOLS_TARGET = null;
+          return target;
         }
         if (command === "cmd_mark_main_window_ready") {
           globalThis.__PATINA_MAIN_WINDOW_READY_EVIDENCE = {

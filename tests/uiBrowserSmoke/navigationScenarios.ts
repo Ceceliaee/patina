@@ -711,7 +711,7 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(TOOLS_TEXT.remindersTitle))} + ']')
+      `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(TOOLS_TEXT.pomodoroTitle))} + ']')
         ?.getAttribute("aria-pressed") === "true"`,
       undefined,
       "The first title bar status should open its matching Tools section",

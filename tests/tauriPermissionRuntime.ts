@@ -1,3 +1,4 @@
+import { verifyMiniToolStatusRuntime } from "./tauriMiniToolStatusRuntime.ts";
 import assert from "node:assert/strict";
 import { createServer as createNetServer, type Server as NetServer } from "node:net";
 import { verifySqlBoundaryRuntime } from "./tauriSqlBoundaryRuntime.ts";
@@ -30,6 +31,8 @@ export async function run(session: RuntimeSession) {
   let client = session.client!;
   try {
     await session.show();
+    await verifyMiniToolStatusRuntime(session);
+    client = session.client!;
     await verifySqlBoundaryRuntime(expression => evaluate(client, expression), root);
     await verifyUsageReminderRuntime(expression => evaluate(client, expression), root);
     await evaluate(client, 'window.__TAURI_INTERNALS__.invoke("cmd_open_mini_window")');

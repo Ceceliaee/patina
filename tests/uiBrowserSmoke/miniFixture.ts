@@ -22,10 +22,3 @@ export function miniCommand(command: string, payload: { action?: MiniAction; epo
   snapshot = { ...snapshot, revision: snapshot.revision + 1 };
   return { ...snapshot };
 }
-
-export function miniToolRows(rows: number) {
-  const height = 240 + (rows ? 6 + 36 * rows : 0);
-  if (snapshot.visual.height === height) return null;
-  snapshot = { ...snapshot, revision: snapshot.revision + 1, visual: { ...snapshot.visual, height } };
-  return { ...snapshot };
-}

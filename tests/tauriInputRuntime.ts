@@ -5,7 +5,6 @@ import { verifyDesktopResourceLifecycle } from "./tauriResourceLifecycle.ts";
 import { RuntimeSession, evaluate } from "./tauriRuntimeHarness.ts";
 import { createProcessMeasurement } from "./tauriRuntimeMeasurement.ts";
 import { verifyInputEnvironmentControls } from "./tauriInputEnvironmentRuntime.ts";
-import { verifyMiniToolSliceRuntime } from "./tauriMiniToolSliceRuntime.ts";
 export async function run(session: RuntimeSession, resourceCycles: boolean, feedback = false) {
   assert.ok(!(resourceCycles && feedback), "Short feedback cannot be used for resource acceptance");
   let client = session.client!;
@@ -13,7 +12,6 @@ export async function run(session: RuntimeSession, resourceCycles: boolean, feed
   const { measureRuntimeProcessTree, runRuntimeBinaryProcessCommand } = createProcessMeasurement(session.binary);
   await session.show();
   try {
-    await verifyMiniToolSliceRuntime(client, devtoolsPort);
     session.report.enter(resourceCycles ? "resources:input" : "mini-input:input");
     const owner = await evaluate(client, 'window.__TAURI_INTERNALS__.invoke("cmd_get_resource_diagnostics")') as { process_id: number };
     await verifyInputEnvironmentControls(owner.process_id, session.cancellation.signal, session.ownCleanup);

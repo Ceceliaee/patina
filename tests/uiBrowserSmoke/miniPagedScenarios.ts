@@ -158,40 +158,48 @@ export async function runMiniPagedScenarios({ client, sessionId, appUrl, runTest
       assert.equal(await read(`document.querySelector('.mini-daily-range').textContent`), '—');
       await read(`delete globalThis.__PATINA_MINI_ACTIVITY_HOOK;globalThis.__PATINA_EMIT_TAURI_EVENT('tracking-data-changed',{reason:'tracking-status-changed',changed_at_ms:Date.now()})`);
     });
-    await runTest("mini tool slice combines timer and earliest reminder, controls safely, and disappears when empty", async () => {
-      const timer = { id: 17, label: "", counting_up: false, kind: "pomodoro", state: "paused", value_ms: 300_000, visible_until_ms: null, total_ms: 300_000, phase: "short_break" };
-      const reminder = { id: 8, label: "喝水", scheduled_at: new Date(2026, 10, 4, 22, 30).getTime() };
+    await runTest("mini status buttons share visibility, fixed order, navigation and compact geometry", async () => {
+      const timer = { id: 17, label: "Reading", counting_up: false, kind: "pomodoro", state: "paused", value_ms: 300_000, visible_until_ms: null, total_ms: 300_000, phase: "short_break" };
+      const reminder = { id: 8, label: "喝水", scheduled_at: Date.now() + 600_000 };
       const setStatus = async (tools: unknown[], next: unknown) => read(`globalThis.__PATINA_MINI_TRACKING_OVERRIDE={miniStatus:${JSON.stringify({ tools, reminder: next, sampled_at_ms: Date.now() })}};globalThis.__PATINA_EMIT_TAURI_EVENT('tracking-data-changed',{reason:'tracking-status-changed',changed_at_ms:Date.now()})`);
+      await setStatus([], {...reminder,scheduled_at:Date.now()+24*60*60*1000+2000});
+      await wait(`!document.querySelector('[data-titlebar-tools-status]')`);
+      await wait(`document.querySelectorAll('[data-titlebar-tools-status] button').length===1`);
       await setStatus([timer], reminder);
-      await wait(`document.querySelectorAll('.mini-tool').length===2`);
-      assert.equal(await read(`document.querySelector('.mini-reminder time').textContent`), "22:30");
-      assert.equal(await read(`Boolean(document.querySelector('.mini-tool-name svg,.mini-navigation'))`), false);
+      await wait(`document.querySelectorAll('[data-titlebar-tools-status] button').length===1`);
+      assert.equal(await read(`Boolean(document.querySelector('[data-titlebar-tools-status] .lucide-bell-ring'))`), true);
+      await setStatus([{...timer,state:'running'}], reminder);
+      await wait(`document.querySelectorAll('[data-titlebar-tools-status] button').length===2`);
+      assert.equal(await read(`Boolean(document.querySelector('[data-titlebar-tools-status] button:first-child .lucide-alarm-clock'))`), true);
       for (const [scale, locale] of [[1, "zh-CN"], [1.25, "en-US"], [1.5, "ru-RU"], [2, "es"]] as const) {
-        await client.command("Emulation.setDeviceMetricsOverride", { width: 320, height: 318, deviceScaleFactor: scale, mobile: false }, sessionId);
+        await client.command("Emulation.setDeviceMetricsOverride", { width: 320, height: 240, deviceScaleFactor: scale, mobile: false }, sessionId);
         await patch({ language: locale });
-        await wait(`document.documentElement.lang==='${locale}'&&document.querySelectorAll('.mini-tool').length===2&&document.querySelector('.mini-panel').getBoundingClientRect().height===318`);
-        assert.deepEqual(await read(`(() => {const main=document.querySelector('.mini-main').getBoundingClientRect(),tool=document.querySelector('.mini-tools').getBoundingClientRect();return {main:main.height,tool:tool.height,gap:tool.top-main.bottom,bottom:tool.bottom,overflow:document.querySelector('.mini-tools').scrollWidth>document.querySelector('.mini-tools').clientWidth}})()`), { main: 240, tool: 72, gap: 6, bottom: 318, overflow: false });
+        await wait(`document.documentElement.lang==='${locale}'&&document.querySelectorAll('[data-titlebar-tools-status] button').length===2&&document.querySelector('.mini-shell').dataset.transitioning==='false'`);
+        assert.deepEqual(await read(`(() => {const panel=document.querySelector('.mini-panel').getBoundingClientRect(),drag=document.querySelector('.mini-drag-region').getBoundingClientRect();return {height:panel.height,card:Boolean(document.querySelector('.mini-tools')),drag:drag.width>=24,buttons:Array.from(document.querySelectorAll('.mini-header button')).every(b=>{const r=b.getBoundingClientRect();return r.width===24&&r.height===24&&r.right<=320;})}})()`), { height:240,card:false,drag:true,buttons:true });
+        assert.equal(await read(`(() => {
+          const pin=document.querySelector('.mini-window-actions button'),p=pin.getBoundingClientRect();
+          return Array.from(document.querySelectorAll('[data-titlebar-tools-status] button')).every(button=>{
+            const r=button.getBoundingClientRect();return Math.abs(r.top+r.height/2-p.top-p.height/2)<0.5
+              &&getComputedStyle(button).borderRadius===getComputedStyle(pin).borderRadius;
+          });
+        })()`),true,"status buttons must match the window controls' vertical center and rounded corners");
         const screenshot = await client.command("Page.captureScreenshot", { format: "png" }, sessionId) as { data: string };
         writeFileSync(join(evidence, `${locale}-tools.png`), Buffer.from(screenshot.data, "base64"));
       }
-      await read(`globalThis.__PATINA_MINI_TOOL_CONTROL_HOOK=()=>new Promise(resolve=>{globalThis.__miniControlRelease=resolve});document.querySelector('.mini-tool button').click();document.querySelector('.mini-tool button').click()`);
-      await wait(`document.querySelector('.mini-tool button').disabled&&Boolean(globalThis.__miniControlRelease)`);
-      assert.equal(await read(`globalThis.__PATINA_INVOKED_COMMANDS.filter(x=>x.payload?.action?.kind==='tool_control').length`), 1);
-      await read(`globalThis.__miniControlRelease();delete globalThis.__PATINA_MINI_TOOL_CONTROL_HOOK;delete globalThis.__miniControlRelease`);
-      await wait(`Boolean(document.querySelector('.mini-tool button .lucide-pause'))`);
-      await read(`globalThis.__PATINA_MINI_TOOL_CONTROL_HOOK=()=>{throw new Error('tool write failed')};document.querySelector('.mini-tool button').click()`);
-      await wait(`Boolean(document.querySelector('.mini-error'))&&!document.querySelector('.mini-tool button').disabled`);
-      assert.equal(await read(`Boolean(document.querySelector('.mini-tool button .lucide-pause'))`), true);
-      await read(`delete globalThis.__PATINA_MINI_TOOL_CONTROL_HOOK;document.querySelector('.mini-tool button').click()`);
-      await wait(`Boolean(document.querySelector('.mini-tool button .lucide-play'))&&!document.querySelector('.mini-error')`);
-      await setStatus([], { ...reminder, id: 9, label: "下一条提醒" });
-      await wait(`document.querySelectorAll('.mini-tool').length===1&&document.querySelector('.mini-reminder').textContent.includes('下一条提醒')`);
-      assert.equal(await read(`document.querySelector('.mini-tools').getBoundingClientRect().height`), 36);
-      assert.equal(await read(`document.querySelectorAll('.mini-tool button').length`), 0);
+      await read(`globalThis.__PATINA_MINI_OPEN_TOOLS_HOOK=()=>{throw new Error('main unavailable')};document.querySelector('[data-titlebar-tools-status] button').click()`);
+      await wait(`Boolean(document.querySelector('.mini-error'))`);
+      await read(`delete globalThis.__PATINA_MINI_OPEN_TOOLS_HOOK;document.querySelector('[data-titlebar-tools-status] button').click()`);
+      await wait(`!document.querySelector('.mini-error')`);
+      await read(`Array.from(document.querySelectorAll('[data-titlebar-tools-status] button')).at(-1).click()`);
+      await wait(`globalThis.__PATINA_INVOKED_COMMANDS.some(x=>x.payload?.action?.kind==='open_tools'&&x.payload.action.section==='reminders')`);
+      assert.equal(await read(`globalThis.__PATINA_INVOKED_COMMANDS.some(x=>x.payload?.action?.kind==='open_tools'&&x.payload.action.section==='pomodoro')`),true);
+      await setStatus([{...timer,state:'completed'}], {...reminder,id:9,label:'下一条提醒'});
+      await wait(`document.querySelectorAll('[data-titlebar-tools-status] button').length===1&&document.querySelector('[data-titlebar-tools-status] button').getAttribute('aria-label').includes('下一条提醒')`);
       await setStatus([], null);
-      await wait(`!document.querySelector('.mini-tools')&&document.querySelector('.mini-panel').getBoundingClientRect().height===240`);
+      await wait(`!document.querySelector('[data-titlebar-tools-status]')&&document.querySelector('.mini-panel').getBoundingClientRect().height===240`);
       await read(`delete globalThis.__PATINA_MINI_TRACKING_OVERRIDE`);
     });
+
     for (const [scale, locale] of [[1, "zh-CN"], [1.25, "en-US"], [1.5, "ru-RU"], [2, "es"]] as const) {
       await runTest(`mini activity fits 320 by 240 at ${scale} scale in ${locale}`, async () => {
         await client.command("Emulation.setDeviceMetricsOverride", { width: 320, height: 240, deviceScaleFactor: scale, mobile: false }, sessionId);
