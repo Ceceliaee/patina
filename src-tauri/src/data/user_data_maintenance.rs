@@ -1,4 +1,4 @@
-use crate::data::repositories::classification_settings::APP_OVERRIDE_KEY_PREFIX;
+use crate::data::repositories::{icon_cache::acquire_icon_cache_maintenance, icon_retention};
 use crate::data::sqlite_error::SqliteOperationError;
 use crate::data::sqlite_pool::run_recoverable_sqlite_write;
 use sqlx::{Pool, Sqlite};
@@ -87,7 +87,9 @@ async fn delete_web_activity_by_domain_in_pool(
     pool: &Pool<Sqlite>,
     normalized_domain: &str,
 ) -> Result<(), SqliteOperationError> {
-    if normalized_domain.starts_with('{') {
+    let _guard = acquire_icon_cache_maintenance(pool).await;
+    let mut tx = pool.begin().await.map_err(cache_error)?;
+    let domains = if normalized_domain.starts_with('{') {
         #[derive(serde::Deserialize)]
         #[serde(deny_unknown_fields)]
         struct GroupDeletion {
@@ -108,10 +110,6 @@ async fn delete_web_activity_by_domain_in_pool(
                 "invalid group selection",
             ));
         }
-        let mut tx = pool
-            .begin()
-            .await
-            .map_err(|e| SqliteOperationError::from_sqlx("delete website group", e))?;
         let rules = crate::data::repositories::web_links::load_in_tx(&mut tx)
             .await
             .map_err(|e| SqliteOperationError::invalid_input("delete website group", e))?;
@@ -132,20 +130,27 @@ async fn delete_web_activity_by_domain_in_pool(
                 "group changed; save and refresh before deleting",
             ));
         }
-        sqlx::query("DELETE FROM web_activity_segments WHERE normalized_domain IN (SELECT value FROM json_each(?))")
-            .bind(serde_json::to_string(&target.members).map_err(|e| SqliteOperationError::invalid_input("delete website group", e.to_string()))?)
-            .execute(&mut *tx).await.map_err(|e| SqliteOperationError::from_sqlx("delete website group", e))?;
-        return tx
-            .commit()
+        target.members
+    } else {
+        vec![normalized_domain.to_owned()]
+    };
+    let encoded = serde_json::json!(domains).to_string();
+    let browsers: Vec<String> = sqlx::query_scalar("SELECT DISTINCT browser_exe_name FROM web_activity_segments WHERE normalized_domain IN (SELECT value FROM json_each(?))")
+        .bind(&encoded).fetch_all(&mut *tx).await.map_err(cache_error)?;
+    let deleted = sqlx::query("DELETE FROM web_activity_segments WHERE normalized_domain IN (SELECT value FROM json_each(?))")
+        .bind(&encoded).execute(&mut *tx).await.map_err(|e| SqliteOperationError::from_sqlx("delete web activity by domain", e))?;
+    if deleted.rows_affected() > 0 {
+        icon_retention::prune_domains(&mut tx, &domains)
             .await
-            .map_err(|e| SqliteOperationError::from_sqlx("delete website group", e));
+            .map_err(cache_error)?;
+        let named = icon_retention::named_reminder_apps(&mut tx)
+            .await
+            .map_err(cache_error)?;
+        icon_retention::prune_apps(&mut tx, &browsers, &named)
+            .await
+            .map_err(cache_error)?;
     }
-    sqlx::query("DELETE FROM web_activity_segments WHERE normalized_domain = ?")
-        .bind(normalized_domain)
-        .execute(pool)
-        .await
-        .map(|_| ())
-        .map_err(|error| SqliteOperationError::from_sqlx("delete web activity by domain", error))
+    tx.commit().await.map_err(cache_error)
 }
 
 fn non_empty_values(values: Vec<String>) -> Vec<String> {
@@ -161,27 +166,53 @@ fn in_clause_placeholders(value_count: usize) -> String {
         .join(", ")
 }
 
-fn canonical_override_executable(value: &str) -> Option<String> {
-    let trimmed = value.trim().trim_matches('"');
-    if trimmed.is_empty() {
-        return None;
-    }
+fn cache_error(error: sqlx::Error) -> SqliteOperationError {
+    SqliteOperationError::from_sqlx("clean unreferenced activity icons", error)
+}
 
-    let mut normalized = trimmed.to_ascii_lowercase();
-    if !normalized.ends_with(".exe") {
-        normalized.push_str(".exe");
-    }
-    Some(normalized)
+async fn apps_in_deletion(
+    tx: &mut sqlx::Transaction<'_, Sqlite>,
+    names: &[String],
+    range: Option<(i64, i64)>,
+) -> Result<Vec<String>, SqliteOperationError> {
+    sqlx::query_scalar(
+        "WITH target AS (SELECT value FROM json_each(?1))
+         SELECT exe_name FROM sessions WHERE exe_name IN target AND (?2 IS NULL OR start_time >= ?2 AND start_time < ?3)
+         UNION SELECT exe_name FROM import_exact_sessions WHERE exe_name IN target AND (?2 IS NULL OR start_time >= ?2 AND start_time < ?3)
+         UNION SELECT exe_name FROM import_time_buckets WHERE exe_name IN target AND (?2 IS NULL OR bucket_start_time >= ?2 AND bucket_start_time < ?3)",
+    ).bind(serde_json::json!(names).to_string()).bind(range.map(|r| r.0)).bind(range.map(|r| r.1))
+     .fetch_all(&mut **tx).await.map_err(cache_error)
 }
 
 async fn delete_sessions_before_in_pool(
     pool: &Pool<Sqlite>,
     cutoff_time: i64,
 ) -> Result<(), SqliteOperationError> {
+    let _guard = acquire_icon_cache_maintenance(pool).await;
     let mut tx = pool.begin().await.map_err(|error| {
         SqliteOperationError::from_sqlx("start historical activity cleanup", error)
     })?;
 
+    let apps: Vec<String> = sqlx::query_scalar(
+        "SELECT exe_name FROM sessions WHERE start_time < ?1
+         UNION SELECT exe_name FROM import_exact_sessions WHERE start_time < ?1
+         UNION SELECT exe_name FROM import_time_buckets WHERE bucket_start_time < ?1
+         UNION SELECT browser_exe_name FROM web_activity_segments WHERE start_time < ?1",
+    )
+    .bind(cutoff_time)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(cache_error)?;
+    let domains: Vec<String> = sqlx::query_scalar(
+        "SELECT DISTINCT normalized_domain FROM web_activity_segments WHERE start_time < ?",
+    )
+    .bind(cutoff_time)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(cache_error)?;
+    let named = icon_retention::named_reminder_apps(&mut tx)
+        .await
+        .map_err(cache_error)?;
     sqlx::query(
         "DELETE FROM session_title_samples WHERE session_id IN (SELECT id FROM sessions WHERE start_time < ?)",
     )
@@ -222,6 +253,12 @@ async fn delete_sessions_before_in_pool(
         .map_err(|error| {
             SqliteOperationError::from_sqlx("delete historical web activity", error)
         })?;
+    icon_retention::prune_apps(&mut tx, &apps, &named)
+        .await
+        .map_err(cache_error)?;
+    icon_retention::prune_domains(&mut tx, &domains)
+        .await
+        .map_err(cache_error)?;
     refresh_import_batch_counts(&mut tx).await?;
 
     tx.commit().await.map_err(|error| {
@@ -233,14 +270,17 @@ async fn delete_sessions_by_exe_names_in_pool(
     pool: &Pool<Sqlite>,
     exe_names: &[String],
 ) -> Result<(), SqliteOperationError> {
-    let _icon_maintenance =
-        crate::data::repositories::icon_cache::acquire_icon_cache_maintenance(pool).await;
+    let _icon_maintenance = acquire_icon_cache_maintenance(pool).await;
     let placeholders = in_clause_placeholders(exe_names.len());
     let mut tx = pool
         .begin()
         .await
         .map_err(|error| SqliteOperationError::from_sqlx("start app record deletion", error))?;
 
+    let affected = apps_in_deletion(&mut tx, exe_names, None).await?;
+    let named = icon_retention::named_reminder_apps(&mut tx)
+        .await
+        .map_err(cache_error)?;
     let title_query = format!(
         "DELETE FROM session_title_samples
          WHERE session_id IN (SELECT id FROM sessions WHERE exe_name IN ({placeholders}))"
@@ -275,33 +315,9 @@ async fn delete_sessions_by_exe_names_in_pool(
             .map_err(|error| SqliteOperationError::from_sqlx(operation, error))?;
     }
 
-    for exe_name in exe_names {
-        let Some(canonical_exe) = canonical_override_executable(exe_name) else {
-            continue;
-        };
-        if crate::data::repositories::app_links::is_linked_identity(&mut tx, &canonical_exe)
-            .await
-            .map_err(|error| {
-                SqliteOperationError::from_sqlx("retain linked application identity", error)
-            })?
-        {
-            continue;
-        }
-        sqlx::query("DELETE FROM icon_cache WHERE LOWER(exe_name) = ?")
-            .bind(&canonical_exe)
-            .execute(&mut *tx)
-            .await
-            .map_err(|error| {
-                SqliteOperationError::from_sqlx("delete app icon cache by executable", error)
-            })?;
-        sqlx::query("DELETE FROM settings WHERE key = ?")
-            .bind(format!("{APP_OVERRIDE_KEY_PREFIX}{canonical_exe}"))
-            .execute(&mut *tx)
-            .await
-            .map_err(|error| {
-                SqliteOperationError::from_sqlx("delete app classification by executable", error)
-            })?;
-    }
+    icon_retention::prune_apps(&mut tx, &affected, &named)
+        .await
+        .map_err(cache_error)?;
 
     refresh_import_batch_counts(&mut tx).await?;
     tx.commit()
@@ -315,11 +331,16 @@ async fn delete_sessions_by_exe_names_between_in_pool(
     start_time: i64,
     end_time: i64,
 ) -> Result<(), SqliteOperationError> {
+    let _guard = acquire_icon_cache_maintenance(pool).await;
     let placeholders = in_clause_placeholders(exe_names.len());
     let mut tx = pool.begin().await.map_err(|error| {
         SqliteOperationError::from_sqlx("start ranged app record deletion", error)
     })?;
 
+    let affected = apps_in_deletion(&mut tx, exe_names, Some((start_time, end_time))).await?;
+    let named = icon_retention::named_reminder_apps(&mut tx)
+        .await
+        .map_err(cache_error)?;
     let title_query = format!(
         "DELETE FROM session_title_samples
          WHERE session_id IN (
@@ -369,13 +390,16 @@ async fn delete_sessions_by_exe_names_between_in_pool(
             .map_err(|error| SqliteOperationError::from_sqlx(operation, error))?;
     }
 
+    icon_retention::prune_apps(&mut tx, &affected, &named)
+        .await
+        .map_err(cache_error)?;
     refresh_import_batch_counts(&mut tx).await?;
     tx.commit().await.map_err(|error| {
         SqliteOperationError::from_sqlx("commit ranged app record deletion", error)
     })
 }
 
-async fn refresh_import_batch_counts(
+pub(super) async fn refresh_import_batch_counts(
     tx: &mut sqlx::Transaction<'_, Sqlite>,
 ) -> Result<(), SqliteOperationError> {
     sqlx::query(
@@ -407,6 +431,94 @@ mod tests {
     use super::*;
     use crate::data::schema as db_schema;
     use sqlx::{Executor, Row, SqlitePool};
+
+    #[tokio::test]
+    async fn ranged_cleanup_removes_only_last_record_icons_and_keeps_references() {
+        let pool = setup_test_db().await;
+        pool.execute("INSERT INTO sessions(app_name,exe_name,start_time,end_time,duration)
+            VALUES ('Free','Free.EXE',0,10,10),('Free','Free.EXE',20,30,10),
+                   ('Named reminder','utility.exe',0,10,10),('Steam','SteamWebHelper.EXE',0,10,10);
+            INSERT INTO icon_cache(exe_name,icon_base64,last_updated)
+            VALUES ('free.exe','A',1),('utility.exe','A',1),('steam.exe','A',1),('untouched.exe','A',1);
+            INSERT INTO settings(key,value) VALUES ('__app_link::member.exe','steam.exe');
+            INSERT INTO tool_activity_reminder_rules(target_kind,app_name,label_snapshot,limit_ms,message,created_at,updated_at)
+            VALUES ('app','Named reminder','Reminder',60000,'',1,1)")
+            .await.unwrap();
+        let names = [
+            "Free.EXE",
+            "utility.exe",
+            "SteamWebHelper.EXE",
+            "untouched.exe",
+        ]
+        .map(String::from);
+        delete_sessions_by_exe_names_between_in_pool(&pool, &names, 0, 20)
+            .await
+            .unwrap();
+        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM icon_cache")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 4);
+        delete_sessions_by_exe_names_between_in_pool(&pool, &names, 20, 31)
+            .await
+            .unwrap();
+        let retained: Vec<String> =
+            sqlx::query_scalar("SELECT exe_name FROM icon_cache ORDER BY exe_name")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+        assert_eq!(retained, ["steam.exe", "untouched.exe", "utility.exe"]);
+    }
+
+    #[tokio::test]
+    async fn website_deletion_checks_configuration_and_rolls_back_with_cache_failure() {
+        let pool = setup_test_db().await;
+        pool.execute("INSERT INTO settings(key,value) VALUES ('__web_site::example.com','{\"version\":2,\"category\":\"office\",\"exceptions\":[]}');
+            INSERT INTO tool_activity_reminder_rules(target_kind,normalized_domain,label_snapshot,limit_ms,message,created_at,updated_at)
+            VALUES ('web','alarm.test','Reminder',60000,'',1,1)").await.unwrap();
+        for domain in ["no-rule.net", "docs.example.com", "alarm.test"] {
+            sqlx::query("INSERT INTO web_activity_segments(browser_client_id,browser_kind,browser_exe_name,domain,normalized_domain,start_time,end_time,duration,created_at,updated_at)
+                VALUES ('fixture','chrome','chrome.exe',?1,?1,0,10,10,1,1)").bind(domain).execute(&pool).await.unwrap();
+            sqlx::query("INSERT INTO web_favicon_cache(normalized_domain,favicon_url,updated_at) VALUES (?,'icon',1)")
+                .bind(domain).execute(&pool).await.unwrap();
+        }
+        pool.execute("INSERT INTO icon_cache(exe_name,icon_base64,last_updated) VALUES ('chrome.exe','icon',1)").await.unwrap();
+        pool.execute("CREATE TRIGGER reject_cache_delete BEFORE DELETE ON web_favicon_cache BEGIN SELECT RAISE(ABORT,'fixture'); END").await.unwrap();
+        assert!(delete_web_activity_by_domain_in_pool(&pool, "no-rule.net")
+            .await
+            .is_err());
+        let count: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM web_activity_segments WHERE normalized_domain='no-rule.net'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(count, 1);
+        pool.execute("DROP TRIGGER reject_cache_delete")
+            .await
+            .unwrap();
+        delete_web_activity_by_domain_in_pool(&pool, "no-rule.net")
+            .await
+            .unwrap();
+        let browsers: i64 = sqlx::query_scalar("SELECT count(*) FROM icon_cache")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(browsers, 1);
+        delete_sessions_before_in_pool(&pool, 20).await.unwrap();
+        let browsers: i64 = sqlx::query_scalar("SELECT count(*) FROM icon_cache")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(browsers, 0);
+        let retained: Vec<String> = sqlx::query_scalar(
+            "SELECT normalized_domain FROM web_favicon_cache ORDER BY normalized_domain",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(retained, ["alarm.test", "docs.example.com"]);
+    }
 
     #[tokio::test]
     async fn group_deletion_rejects_stale_members_and_preserves_independent_root() {
@@ -676,6 +788,12 @@ mod tests {
         )
         .await
         .unwrap();
+        pool.execute(db_schema::WEB_FAVICON_CACHE_SCHEMA_SQL)
+            .await
+            .unwrap();
+        pool.execute(db_schema::ACTIVITY_REMINDER_RULES_SCHEMA_SQL)
+            .await
+            .unwrap();
         pool.execute(db_schema::ACTIVITY_READ_MODELS_SCHEMA_SQL)
             .await
             .unwrap();
@@ -868,9 +986,9 @@ mod tests {
                     .unwrap();
             assert_eq!(browser_count, 0);
             assert_eq!(editor_native_count, 1);
-            assert!(browser_override.is_none());
+            assert!(browser_override.is_some());
             assert!(editor_override.is_some());
-            assert!(browser_icon.is_none());
+            assert!(browser_icon.is_some());
             assert!(editor_icon.is_some());
             assert_eq!(batch_row.get::<i64, _>("exact_session_count"), 0);
             assert_eq!(batch_row.get::<i64, _>("hour_bucket_count"), 1);

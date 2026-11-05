@@ -5,7 +5,6 @@ use crate::data::import::model::{
 };
 use crate::data::repositories::classification_settings::{
     apply_classification_setting_mutations_in_tx, ClassificationSettingMutation,
-    APP_OVERRIDE_KEY_PREFIX,
 };
 use sha2::{Digest, Sha256};
 use sqlx::{Pool, Row, Sqlite, Transaction};
@@ -47,6 +46,7 @@ pub async fn delete(pool: &Pool<Sqlite>, batch_id: &str) -> Result<ImportDeleteR
     if batch_id.trim().is_empty() {
         return Err("import batch id cannot be empty".to_string());
     }
+    let _guard = super::icon_cache::acquire_icon_cache_maintenance(pool).await;
     let mut tx = pool
         .begin()
         .await
@@ -67,7 +67,10 @@ pub async fn delete(pool: &Pool<Sqlite>, batch_id: &str) -> Result<ImportDeleteR
     .ok_or_else(|| "import batch no longer exists".to_string())?;
     let deleted_exact_sessions = row.get::<i64, _>("exact_session_count");
     let deleted_hour_buckets = row.get::<i64, _>("hour_bucket_count");
-    let affected_executables = sqlx::query(
+    let named = super::icon_retention::named_reminder_apps(&mut tx)
+        .await
+        .map_err(|e| e.to_string())?;
+    let affected_executables: Vec<String> = sqlx::query_scalar(
         "SELECT exe_name FROM import_exact_sessions WHERE batch_id = ?
          UNION
          SELECT exe_name FROM import_time_buckets WHERE batch_id = ?",
@@ -76,10 +79,7 @@ pub async fn delete(pool: &Pool<Sqlite>, batch_id: &str) -> Result<ImportDeleteR
     .bind(batch_id)
     .fetch_all(&mut *tx)
     .await
-    .map_err(|error| format!("failed to inspect imported applications: {error}"))?
-    .into_iter()
-    .filter_map(|row| normalize_exe_name(row.get::<String, _>("exe_name").as_str()))
-    .collect::<HashSet<_>>();
+    .map_err(|error| format!("failed to inspect imported applications: {error}"))?;
 
     let deleted = sqlx::query("DELETE FROM import_batches WHERE id = ?")
         .bind(batch_id)
@@ -90,54 +90,9 @@ pub async fn delete(pool: &Pool<Sqlite>, batch_id: &str) -> Result<ImportDeleteR
         return Err("import batch changed during deletion".to_string());
     }
 
-    for exe_name in affected_executables {
-        let has_native_records = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(
-                SELECT 1 FROM sessions
-                WHERE LOWER(TRIM(exe_name)) = ?
-            )",
-        )
-        .bind(&exe_name)
-        .fetch_one(&mut *tx)
+    super::icon_retention::prune_apps(&mut tx, &affected_executables, &named)
         .await
-        .map_err(|error| format!("failed to inspect native application records: {error}"))?;
-        if has_native_records {
-            continue;
-        }
-
-        let has_remaining_external_records = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(
-                SELECT 1 FROM import_exact_sessions
-                WHERE LOWER(TRIM(exe_name)) = ?
-                UNION ALL
-                SELECT 1 FROM import_time_buckets
-                WHERE LOWER(TRIM(exe_name)) = ?
-            )",
-        )
-        .bind(&exe_name)
-        .bind(&exe_name)
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(|error| {
-            format!("failed to inspect remaining imported application records: {error}")
-        })?;
-        if has_remaining_external_records
-            || super::app_links::is_linked_identity(&mut tx, &exe_name)
-                .await
-                .map_err(|error| format!("inspect linked application identity: {error}"))?
-        {
-            continue;
-        }
-
-        let override_key = format!("{APP_OVERRIDE_KEY_PREFIX}{exe_name}");
-        sqlx::query("DELETE FROM settings WHERE key = ?")
-            .bind(override_key)
-            .execute(&mut *tx)
-            .await
-            .map_err(|error| {
-                format!("failed to remove orphaned imported classification: {error}")
-            })?;
-    }
+        .map_err(|e| format!("clean imported app icons: {e}"))?;
     tx.commit()
         .await
         .map_err(|error| format!("failed to commit import batch deletion: {error}"))?;
@@ -146,19 +101,6 @@ pub async fn delete(pool: &Pool<Sqlite>, batch_id: &str) -> Result<ImportDeleteR
         deleted_exact_sessions,
         deleted_hour_buckets,
     })
-}
-
-fn normalize_exe_name(value: &str) -> Option<String> {
-    let trimmed = value.trim().trim_matches('"');
-    if trimmed.is_empty() {
-        return None;
-    }
-
-    let mut normalized = trimmed.to_ascii_lowercase();
-    if !normalized.ends_with(".exe") {
-        normalized.push_str(".exe");
-    }
-    Some(normalized)
 }
 
 pub async fn load_fingerprints(pool: &Pool<Sqlite>) -> Result<HashSet<String>, String> {
@@ -357,6 +299,12 @@ mod tests {
     async fn setup_pool() -> Pool<Sqlite> {
         let pool = Pool::<Sqlite>::connect("sqlite::memory:").await.unwrap();
         pool.execute(CURRENT_BASELINE_SCHEMA_SQL).await.unwrap();
+        pool.execute(crate::data::schema::WEB_ACTIVITY_SCHEMA_SQL)
+            .await
+            .unwrap();
+        pool.execute(crate::data::schema::ACTIVITY_REMINDER_RULES_SCHEMA_SQL)
+            .await
+            .unwrap();
         pool.execute(IMPORT_DATA_SCHEMA_SQL).await.unwrap();
         pool.execute(IMPORT_DATA_ISOLATION_SCHEMA_SQL)
             .await
@@ -556,7 +504,47 @@ mod tests {
     }
 
     #[test]
-    fn deleting_the_last_external_records_removes_an_import_only_app_override() {
+    fn import_only_icon_is_removed_with_the_last_batch() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_pool().await;
+            let first = commit_records(
+                &pool,
+                "one.csv",
+                "patina-csv",
+                "one",
+                &[record(ImportRecordType::ExactSession, 1000)],
+                0,
+                &[],
+            )
+            .await
+            .unwrap();
+            let last = commit_records(
+                &pool,
+                "two.csv",
+                "patina-csv",
+                "two",
+                &[record(ImportRecordType::HourBucket, 3000)],
+                0,
+                &[],
+            )
+            .await
+            .unwrap();
+            pool.execute("INSERT INTO icon_cache(exe_name,icon_base64,last_updated) VALUES ('code.exe','icon',0)").await.unwrap();
+            for (batch, expected) in [(first, 1_i64), (last, 0)] {
+                delete(&pool, batch.batch_id.as_deref().unwrap())
+                    .await
+                    .unwrap();
+                let count: i64 = sqlx::query_scalar("SELECT count(*) FROM icon_cache")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+                assert_eq!(count, expected);
+            }
+        });
+    }
+
+    #[test]
+    fn deleting_the_last_external_records_keeps_configured_app_icons() {
         tauri::async_runtime::block_on(async {
             let pool = setup_pool().await;
             let override_key = "__app_override::code.exe";
@@ -584,6 +572,7 @@ mod tests {
             .await
             .unwrap();
 
+            pool.execute("INSERT INTO icon_cache(exe_name,icon_base64,last_updated) VALUES (\'code.exe\',\'icon\',0)").await.unwrap();
             delete(&pool, report.batch_id.as_deref().unwrap())
                 .await
                 .unwrap();
@@ -609,7 +598,19 @@ mod tests {
                     .await
                     .unwrap();
             assert_eq!(remaining_external_records, 0);
-            assert_eq!(override_value, None);
+            assert_eq!(
+                override_value.as_deref(),
+                Some(r#"{"category":"custom:category_focus","enabled":true}"#)
+            );
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT count(*) FROM icon_cache WHERE exe_name=\'code.exe\'"
+                )
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+                1
+            );
             assert_eq!(category_value.as_deref(), Some("1"));
         });
     }

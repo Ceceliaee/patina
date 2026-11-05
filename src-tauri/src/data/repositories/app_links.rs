@@ -5,14 +5,6 @@ use std::collections::HashMap;
 
 pub const APP_LINK_PREFIX: &str = "__app_link::";
 
-pub async fn is_linked_identity(
-    tx: &mut Transaction<'_, Sqlite>,
-    key: &str,
-) -> Result<bool, sqlx::Error> {
-    sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM settings WHERE substr(key,1,12)='__app_link::' AND (substr(key,13)=? OR value=?))")
-        .bind(key).bind(key).fetch_one(&mut **tx).await
-}
-
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct LinkChange {

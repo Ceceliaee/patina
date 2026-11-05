@@ -47,7 +47,7 @@ async fn with_import_policy_refresh<T>(
     titles: &TitleRecordingRuntimeState,
     operation: impl std::future::Future<Output = Result<T, String>>,
 ) -> Result<T, String> {
-    // Import can write overrides; deleting a batch can remove orphaned ones.
+    // Imported classifications can change the tracking policy.
     // Keep the transaction and invalidation indivisible to the sampling loop.
     let _transition = tracking.transition.lock().await;
     let result = operation.await?;

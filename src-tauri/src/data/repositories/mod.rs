@@ -3,6 +3,7 @@ pub mod app_links;
 pub mod app_settings;
 pub mod classification_settings;
 pub mod icon_cache;
+pub(crate) mod icon_retention;
 pub mod import_batches;
 pub mod mini_activity;
 pub mod mini_window;
