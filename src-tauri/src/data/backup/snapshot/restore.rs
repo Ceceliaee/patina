@@ -24,22 +24,17 @@ pub(in crate::data::backup) async fn prepare_snapshot_backup(
 
     // A pre-identity snapshot has no portable lineage. Replaying the same
     // source database must converge without conflating rows from different databases.
-    let old_source = if extracted.preview.schema_version
-        < crate::data::schema::REMINDER_IDENTITY_MIGRATION_VERSION as u32
-    {
-        Some(super::sha256_file(&extracted.db_path)?)
-    } else {
-        None
-    };
     let candidate_pool = open_single_connection_sqlite_pool(&extracted.db_path, false).await?;
     if let Err(error) = prepare_pool_schema(&candidate_pool, &extracted.db_path).await {
         candidate_pool.close().await;
         return Err(error);
     }
-    if let Some(source) = old_source {
+    if extracted.preview.schema_version
+        < crate::data::schema::REMINDER_IDENTITY_MIGRATION_VERSION as u32
+    {
         if let Err(error) =
             sqlx::query("UPDATE tool_reminder_identities SET restore_key=? || ':' || reminder_id")
-                .bind(source)
+                .bind(&extracted.database_sha256)
                 .execute(&candidate_pool)
                 .await
         {

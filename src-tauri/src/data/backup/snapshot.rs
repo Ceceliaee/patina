@@ -124,6 +124,7 @@ struct SnapshotChecksums {
 }
 
 pub(super) struct ExtractedSnapshot {
+    database_sha256: String,
     work_dir: PathBuf,
     pub(super) db_path: PathBuf,
     pub(super) preview: BackupPreview,
@@ -370,6 +371,7 @@ pub(super) async fn validate_current_schema(pool: &Pool<Sqlite>) -> Result<(), S
         || expected_migration_fingerprint(head).as_deref() != Some(fingerprint.as_str())
         || !crate::data::schema_contracts::has_web_activity_session_schema(pool).await?
         || !crate::data::schema_contracts::has_activity_reminder_enabled_schema(pool).await?
+        || !crate::data::schema_contracts::has_reminder_identity_schema(pool).await?
         || !crate::data::schema_contracts::has_reminder_recurrence_schema(pool).await?
         || !crate::data::schema_contracts::has_activity_reminder_extensions_schema(pool).await?
     {
@@ -380,6 +382,12 @@ pub(super) async fn validate_current_schema(pool: &Pool<Sqlite>) -> Result<(), S
         .begin()
         .await
         .map_err(|e| format!("validate restored associations: {e}"))?;
+    let missing_identity: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM tool_reminders r
+        WHERE NOT EXISTS(SELECT 1 FROM tool_reminder_identities i WHERE i.reminder_id=r.id AND length(i.restore_key)>0))")
+        .fetch_one(&mut *tx).await.map_err(|e| format!("verify restored reminder identities: {e}"))?;
+    if missing_identity {
+        return Err("restored timed reminder is missing its identity".into());
+    }
     crate::data::repositories::app_links::validate_in_tx(&mut tx).await?;
     crate::data::repositories::web_links::migrate_legacy_web_grouping(&mut tx).await?;
     tx.commit()
@@ -865,6 +873,7 @@ pub(super) async fn extract_snapshot_archive(
         let supported = verify_extracted_database(&db_path, &manifest, full_check).await?;
         let preview = preview_from_manifest(&manifest, supported);
         Ok(ExtractedSnapshot {
+            database_sha256: digest,
             work_dir: work_dir.clone(),
             db_path: db_path.clone(),
             preview,

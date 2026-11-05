@@ -366,3 +366,21 @@ async fn pre_identity_snapshot_replay_preserves_independent_reminders() {
     assert_eq!(count_table(&target, "tool_reminders").await.unwrap(), 3);
     target.close().await;
 }
+
+#[tokio::test]
+async fn restored_snapshot_requires_an_identity_for_every_timed_reminder() {
+    let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+    crate::data::sqlite_pool::prepare_pool_schema(&pool, Path::new(":memory:"))
+        .await
+        .unwrap();
+    pool.execute("INSERT INTO tool_reminders(label,scheduled_at,created_at,status) VALUES('A',60000,1000,'scheduled')").await.unwrap();
+    validate_current_schema(&pool).await.unwrap();
+    pool.execute("DELETE FROM tool_reminder_identities")
+        .await
+        .unwrap();
+    assert!(validate_current_schema(&pool)
+        .await
+        .unwrap_err()
+        .contains("missing its identity"));
+    pool.close().await;
+}
