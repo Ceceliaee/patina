@@ -1,9 +1,9 @@
+import { buildToolStatusEntries } from "./toolStatusEntries.ts";
 import type { Locale } from "../../../shared/i18n/index.ts";
 import { formatUsageDuration } from "./toolsLabels.ts";
 import type {
   PomodoroPhase,
   ToolPomodoroRun,
-  ToolReminder,
   ToolsRuntimeSnapshot,
 } from "../../../shared/types/tools.ts";
 import type {
@@ -66,12 +66,7 @@ function formatReminderDueLabel(timestampMs: number) {
   });
 }
 
-function formatReminderClock(timestampMs: number) {
-  return new Date(timestampMs).toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+
 
 export function buildReminderRows(snapshot: ToolsRuntimeSnapshot): ReminderRowViewModel[] {
   return snapshot.reminders.filter((reminder) => reminder.status !== "cancelled").map((reminder) => ({
@@ -139,78 +134,24 @@ export function buildPomodoroViewModel(
   };
 }
 
-type SortableToolStatusChipViewModel = ToolStatusChipViewModel & {
-  sortIndex: number;
-  sortStartedAtMs: number;
-};
-
-function resolveNextReminderSortStartedAt(
-  reminders: readonly ToolReminder[],
-  nextReminderAt: number,
-): number {
-  let matchingReminder: ToolReminder | null = null;
-
-  for (const reminder of reminders) {
-    if (reminder.status !== "scheduled" || reminder.scheduledAt !== nextReminderAt) {
-      continue;
-    }
-
-    if (
-      !matchingReminder
-      || reminder.createdAt < matchingReminder.createdAt
-      || (reminder.createdAt === matchingReminder.createdAt && reminder.id < matchingReminder.id)
-    ) {
-      matchingReminder = reminder;
-    }
-  }
-
-  return matchingReminder?.createdAt ?? nextReminderAt;
-}
-
-function sortStatusChipsByArrival(
-  chips: SortableToolStatusChipViewModel[],
-): ToolStatusChipViewModel[] {
-  return chips
-    .sort((left, right) => (
-      left.sortStartedAtMs - right.sortStartedAtMs
-      || left.sortIndex - right.sortIndex
-    ))
-    .map(({ sortStartedAtMs: _sortStartedAtMs, sortIndex: _sortIndex, ...chip }) => chip);
-}
-
 export function buildToolsStatusChipViewModels(
-  snapshot: ToolsRuntimeSnapshot,
-  nowMs: number,
-  labels: ToolsViewModelLabels,
+  snapshot: ToolsRuntimeSnapshot, nowMs: number, labels: ToolsViewModelLabels,
 ): ToolStatusChipViewModel[] {
-  const chips: SortableToolStatusChipViewModel[] = [];
-  let sortIndex = 0;
-  const pomodoro = snapshot.currentPomodoro;
-  const free = snapshot.freeFocusTasks.find(task => task.status === "running");
-  if (free) {
+  const run = snapshot.currentPomodoro;
+  let updatedAt = run?.status === "running" ? run.updatedAt : -Infinity;
+  let timer = run?.status === "running" ? {
+    state: run.status, label: snapshot.pomodoroTasks.find(task => task.run.id === run.id)?.label ?? "",
+    phase: run.phase, valueMs: getPomodoroRemainingMs(run, nowMs), countingUp: false,
+  } : null;
+  for (const free of snapshot.freeFocusTasks) {
+    if (free.status !== "running" || free.updatedAt <= updatedAt) continue;
+    updatedAt = free.updatedAt;
     const delta = Math.max(0, nowMs - (free.startedAt ?? nowMs));
-    const time = free.phase === "focus" ? free.elapsedMs + delta : Math.max(0, free.restRemainingMs - delta);
-    chips.push({ label: `${free.phase === "focus" ? labels.chipFocus : labels.chipBreak} ${formatCompactDuration(time)}`,
-      targetSection: "pomodoro", sortIndex: sortIndex++, sortStartedAtMs: free.startedAt ?? free.createdAt });
+    timer = { state: "running", label: free.label, phase: free.phase === "focus" ? "focus" : "short_break",
+      valueMs: free.phase === "focus" ? free.elapsedMs + delta : Math.max(0, free.restRemainingMs - delta),
+      countingUp: free.phase === "focus" };
   }
-  if (pomodoro?.status === "running") {
-    const phaseLabel = pomodoro.phase === "focus" ? labels.chipFocus : labels.chipBreak;
-    chips.push({
-      label: `${phaseLabel} ${formatCompactDuration(getPomodoroRemainingMs(pomodoro, nowMs))}`,
-      targetSection: "pomodoro",
-      sortIndex: sortIndex++,
-      sortStartedAtMs: pomodoro.phaseStartedAt ?? pomodoro.createdAt,
-    });
-  }
-
-  if (snapshot.nextReminderAt !== null) {
-    chips.push({
-      label: `${labels.chipReminder} ${formatReminderClock(snapshot.nextReminderAt)}`,
-      targetSection: "reminders",
-      sortIndex: sortIndex++,
-      sortStartedAtMs: resolveNextReminderSortStartedAt(snapshot.reminders, snapshot.nextReminderAt),
-    });
-  }
-
-  return sortStatusChipsByArrival(chips);
+  const reminder = snapshot.reminders.filter(item => item.status === "scheduled")
+    .sort((a, b) => a.scheduledAt - b.scheduledAt || a.id - b.id)[0] ?? null;
+  return buildToolStatusEntries({ timer, reminder }, 0, nowMs, labels);
 }

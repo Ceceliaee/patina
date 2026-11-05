@@ -1,20 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlarmClock, BellRing } from "lucide-react";
 import { useLocaleText } from "../../../shared/i18n/index.ts";
 import type { ToolsRuntimeSnapshot } from "../../../shared/types/tools.ts";
 import { buildToolsViewModelLabels } from "../services/toolsLabels.ts";
 import { toolsRuntimeSnapshotStore } from "../services/toolsRuntimeSnapshotStore.ts";
 import { buildToolsStatusChipViewModels } from "../services/toolsViewModel.ts";
-import type { ToolStatusChipViewModel, ToolsOpenTarget } from "../types.ts";
-import ToolsStatusChip from "./ToolsStatusChip.tsx";
+import type { ToolsOpenTarget } from "../types.ts";
+import ToolStatusButtons from "./ToolStatusButtons.tsx";
 
 interface ToolsStatusEntryProps {
   onOpenSection: (target: ToolsOpenTarget) => void;
-}
-
-function resolveStatusIcon(statusChip: ToolStatusChipViewModel) {
-  if (statusChip.targetSection === "pomodoro") return AlarmClock;
-  return BellRing;
 }
 
 function hasToolsStatusChip(snapshot: ToolsRuntimeSnapshot | null) {
@@ -23,7 +17,7 @@ function hasToolsStatusChip(snapshot: ToolsRuntimeSnapshot | null) {
     && (
       snapshot.currentPomodoro?.status === "running"
       || snapshot.freeFocusTasks.some(task => task.status === "running")
-      || snapshot.nextReminderAt !== null
+      || snapshot.reminders.some(reminder => reminder.status === "scheduled")
     ),
   );
 }
@@ -50,6 +44,7 @@ export default function ToolsStatusEntry({
     let cancelled = false;
     const unsubscribe = toolsRuntimeSnapshotStore.subscribe((nextSnapshot) => {
       if (!cancelled) {
+        setNowMs(Date.now());
         setSnapshot(nextSnapshot);
       }
     });
@@ -71,30 +66,5 @@ export default function ToolsStatusEntry({
       : []
   ), [labels, nowMs, snapshot]);
 
-  if (statusChips.length === 0) {
-    return null;
-  }
-
-  return (
-    <div
-      className="tools-status-entry-titlebar"
-      data-titlebar-tools-status=""
-      role="group"
-      aria-label={uiText.tools.title}
-    >
-      {statusChips.map((statusChip) => (
-        <ToolsStatusChip
-          key={statusChip.targetSection}
-          label={statusChip.label}
-          icon={resolveStatusIcon(statusChip)}
-          onClick={() => onOpenSection({
-            section: statusChip.targetSection,
-          })}
-          className="tools-status-entry-titlebar-item"
-          iconOnly
-          tooltipPlacement="bottom"
-        />
-      ))}
-    </div>
-  );
+  return <ToolStatusButtons entries={statusChips} onOpenSection={onOpenSection} />;
 }

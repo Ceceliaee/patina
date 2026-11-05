@@ -6,7 +6,7 @@ import { useAppThemeMode } from "../hooks/useAppThemeMode.ts";
 import { useMiniTracking } from "./useMiniTracking.ts";
 import { useMiniWindow } from "./useMiniWindow.ts";
 import MiniContent from "./MiniContent.tsx";
-import MiniToolsSlice from "./MiniToolsSlice.tsx";
+import MiniToolStatus from "./MiniToolStatus.tsx";
 import { useMiniTransition } from "./useMiniTransition.ts";
 import { buildMiniViewModel } from "./miniViewModel.ts";
 
@@ -102,7 +102,10 @@ function MiniView({ runtime, tracking }: {
       <div className="mini-panel-body">
       <div className="mini-main">
       <header className="mini-header">
-        <div className="mini-drag-region" {...dragProps}><AppWindow size={14} aria-hidden="true" /></div>
+        <div className="mini-status-icon" {...dragProps}><AppWindow size={14} aria-hidden="true" /></div>
+        {(snapshot.expanded || snapshot.transitioning) && !snapshot.suppressed && <MiniToolStatus tracking={tracking}
+          onOpenSection={({ section }) => { void act({ kind: "open_tools", section }); }} />}
+        <div className="mini-drag-region" {...dragProps} />
         <div className="mini-window-actions">
         <button type="button" className="qp-icon-action qp-icon-action-neutral" aria-label={text.miniWindow.hold} aria-pressed={snapshot?.held ?? false}
           onClick={() => { void act({ kind: "hold", held: !snapshot?.held }); }}><Pin size={14} /></button>
@@ -115,8 +118,6 @@ function MiniView({ runtime, tracking }: {
       {snapshot && (snapshot.expanded || snapshot.transitioning) && !snapshot.suppressed
         && <MiniContent tracking={tracking} />}
       </div>
-      {snapshot && (snapshot.expanded || snapshot.transitioning) && !snapshot.suppressed
-        && <MiniToolsSlice tracking={tracking} act={act} />}
       </div>
     </div>
     <button ref={handle} type="button" className="mini-handle" inert={snapshot?.expanded ?? false} aria-hidden={snapshot?.expanded ?? false} aria-label={text.miniWindow.open} {...dragProps}

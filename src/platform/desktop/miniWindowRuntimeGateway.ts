@@ -18,7 +18,7 @@ export interface MiniSnapshot {
   visual: { width: number; height: number; anchor: number };
 }
 export type MiniAction =
-  | { kind: "tool_control"; tool: "pomodoro" | "free_focus"; id: number; resume: boolean }
+  | { kind: "open_tools"; section: "pomodoro" | "reminders" }
   | { kind: "cycle_page"; forward: boolean }
   | { kind: "reveal" | "collapse" | "dock" | "begin_drag" | "close" }
   | { kind: "hold"; held: boolean }

@@ -1,3 +1,4 @@
+import { useMainToolsNavigation } from "./hooks/useMainToolsNavigation.ts";
 import { type ComponentProps, useCallback, useState } from "react";
 import { useLocale, useLocaleText } from "../shared/i18n/index.ts";
 import AppSidebar from "./components/AppSidebar";
@@ -165,11 +166,13 @@ export default function AppShellContent({
     uiTextLanguage,
   });
 
-  const handleToolsStatusChipOpen = useCallback((target: ToolsOpenTarget) => {
+  const handleToolsStatusChipOpen = useCallback(async (target: ToolsOpenTarget) => {
+    if (!(await handleNavigate("tools")).navigated) return;
     setHistoryDateRequest(null);
     setToolsInitialTarget(target);
-    void handleNavigate("tools");
   }, [handleNavigate]);
+  useMainToolsNavigation(handleToolsStatusChipOpen);
+
   const handleToolsInitialTargetConsumed = useCallback(() => {
     setToolsInitialTarget(null);
   }, []);
@@ -249,7 +252,7 @@ export default function AppShellContent({
     >
       <AppTitleBar
         isMaximized={isWindowMaximized}
-        toolsStatusEntry={<ToolsStatusEntry onOpenSection={handleToolsStatusChipOpen} />}
+        toolsStatusEntry={<ToolsStatusEntry onOpenSection={target => { void handleToolsStatusChipOpen(target); }} />}
         {...titleBarUpdateEntry}
       />
 

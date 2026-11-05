@@ -100,7 +100,7 @@ Tauri application command 采用显式、默认拒绝的窗口授权模型：
 
 - `src-tauri/build.rs` 中的 application command manifest 是命令分类入口；新增 custom command 必须先归入 main-only 或对应小窗的精确 allowlist，未分类即构建门失败。
 - `src-tauri/permissions/window-commands.toml` 和 `src-tauri/capabilities/` 的窗口配置只授予精确命令，不使用 application command 通配符或 default allow-all。
-- main、mini、tool-notification 使用独立 permission set。mini 通过专用命令读取 bootstrap、内容与窗口快照，可操作自身窗口、打开主窗口，以及通过带会话代次的 Mini 动作暂停或继续当前投影的计时任务。原生端校验任务类型、ID 与预期状态；mini 不能调用通用工具写入或追踪设置命令。通知窗只读取分配给自己的呈现快照、报告尺寸并执行绑定当前提醒 ID 的动作，不能调用通用任务写入或全局设置命令。三个窗口均不获得 plugin SQL load/select/execute。
+- main、mini、tool-notification 使用独立 permission set。mini 通过专用命令读取 bootstrap、内容与窗口快照，可操作自身窗口、打开主窗口，以及通过带会话代次的 Mini 动作请求主窗口打开专注或提醒分区。原生端只接受这两个目标；mini 不能修改工具任务或追踪设置。通知窗只读取分配给自己的呈现快照、报告尺寸并执行绑定当前提醒 ID 的动作，不能调用通用任务写入或全局设置命令。三个窗口均不获得 plugin SQL load/select/execute。
 - 删除、恢复、密钥、存储迁移和更新安装等敏感 command 即使 capability 配错，也必须在 Rust handler 内根据真实 `WebviewWindow` label 做 caller guard；前端按钮不是安全边界。
 - 存储迁移编排归 `data/storage_migration.rs`，真实路径身份与无破坏写探针归 `data/storage_path_safety.rs`，staging/替换/旧数据清理的 reparse-safe 删除策略归 `data/storage_migration_cleanup.rs`；三者均默认拒绝无法确认的路径，破坏性清理前必须重新比较数据根和 WebView 根的交叉真实身份。
 - manifest、permission sets、capabilities、前端调用和 Rust `invoke_handler` 注册必须由静态 checker 保持一致，并由真实 main / mini / tool-notification runtime denial matrix 证明边界没有只停留在配置文本。
@@ -291,13 +291,13 @@ src/
 
 #### Mini 生命周期
 
-迷你窗由主标题栏独立打开，使用 `mini` label 和独立 WebView；主窗口最小化统一进入任务栏。`domain/mini_window` 拥有几何、收起规则与工具投影，`domain/window_geometry` 保存 Windows 全屏检测也需要的物理坐标值类型。`app/mini_window` 串行应用窗口及当前计时动作并编排生命周期；窗口偏好保存失败时回滚已应用状态。`data/mini_window_store` 保存独立偏好并读取 bootstrap。前端 `app/mini` 拥有活动区、工具分片、状态指示与订阅，接受带会话代次与修订号的窗口状态；活动区不再由旧页面偏好切换。主窗聚焦不关闭 mini，悬停展开不激活窗口，关闭 mini 释放它自己的检测任务和 WebView。
+迷你窗由主标题栏独立打开，使用 `mini` label 和独立 WebView；主窗口最小化统一进入任务栏。`domain/mini_window` 拥有几何、收起规则与工具投影，`domain/window_geometry` 保存 Windows 全屏检测也需要的物理坐标值类型。`app/mini_window` 串行应用窗口动作与工具导航请求并编排生命周期；窗口偏好保存失败时回滚已应用状态。`data/mini_window_store` 保存独立偏好并读取 bootstrap。前端 `app/mini` 拥有活动区、标题栏状态入口、状态指示与订阅，接受带会话代次与修订号的窗口状态；活动区不再由旧页面偏好切换。主窗聚焦不关闭 mini，悬停展开不激活窗口，关闭 mini 释放它自己的检测任务和 WebView。
 
-追踪与工具展示快照沿用 tracking transition 锁。今日与最近一小时通过 Mini 专用只读命令，在同一 SQLite 事务和时间截点读取活动事实、分类与显示元数据，不占用 tracking transition 锁。今日沿用小时读模型的 projection / fallback，最近一小时沿用精确会话与网站归并规则；时间线纯规则由 `shared/lib` 供 History 与 Mini 消费。内容只在展开时刷新，折叠清理内容任务并丢弃迟到请求；失败与空数据分别呈现。工具分片消费原生投影的当前计时和最早 scheduled 提醒，无工具时隐藏；窗口几何按相同投影的行数加高，悬停过渡本身不改变视口尺寸。mini 不挂载主界面页面树、不延长主窗口后台寿命，主窗口释放后仍能更新内容。收起后停止内容刷新和健康轮询，状态颜色继续通过追踪与设置事件更新。
+追踪与工具展示快照沿用 tracking transition 锁。今日与最近一小时通过 Mini 专用只读命令，在同一 SQLite 事务和时间截点读取活动事实、分类与显示元数据，不占用 tracking transition 锁。今日沿用小时读模型的 projection / fallback，最近一小时沿用精确会话与网站归并规则；时间线纯规则由 `shared/lib` 供 History 与 Mini 消费。内容只在展开时刷新，折叠清理内容任务并丢弃迟到请求；失败与空数据分别呈现。主界面与 Mini 共用工具状态入口组件和文案规则，固定计时在前、提醒在后，每类最多一个。计时仅在运行时显示；多个运行任务选最近更新的任务，更新时间相同优先番茄计时。提醒选最早 scheduled 项，同一时刻按 ID 排序；仅在触发时间位于当前时刻至未来 24 小时内时显示，随时钟自动更新。Mini 固定为 320×240，不随工具状态加高。点击状态入口打开主界面对应工具分区；`app/main_window/tools_navigation` 暂存最近目标，主窗口订阅后读取一次，后台回收和重建不丢失请求，正常未保存编辑确认仍生效。mini 不挂载主界面页面树、不延长主窗口后台寿命，主窗口释放后仍能更新内容。收起后停止内容刷新和健康轮询，状态颜色继续通过追踪与设置事件更新。
 
 小时图消费已有 `hourly_activity_chart_mode`；时间线模式由 `activityDisplaySettings` 定义，规范值存入 `history_timeline_mode`。主窗口启动时迁移旧本地偏好，事务插入不覆盖已存在的规范值，成功后清理旧值；History 写入并广播设置变化，Mini 只读跟随。两个窗口使用相同的模式解析和网站不可用回退，不共享历史日期、缩放或详情筛选状态。
 
-贴边展开与收起保持原生画布及 WebView 视口的位置、尺寸稳定。横条、活动区与工具片使用不透明背景，分片间隙透明；前端连续改变外壳的位置和尺寸，内容保持原有布局并淡入淡出。展开前放开原生裁剪；收起时，等待外壳、内容与横条标记的当前视觉过渡都完成后，再将显示和鼠标命中区域裁回横条，避免缩窗重排造成闪帧。前端确认携带会话代次与过渡编号，迟到确认不能结束新的过渡。视觉插值归前端，原生目标与裁剪归 mini owner；收起确认缺失时仍有界收回面板命中区域，环境改变、拖动和重建不继续旧过渡。
+贴边展开与收起保持原生画布及 WebView 视口的位置、尺寸稳定。横条与活动区使用不透明背景；前端连续改变外壳的位置和尺寸，内容保持原有布局并淡入淡出。展开前放开原生裁剪；收起时，等待外壳、内容与横条标记的当前视觉过渡都完成后，再将显示和鼠标命中区域裁回横条，避免缩窗重排造成闪帧。前端确认携带会话代次与过渡编号，迟到确认不能结束新的过渡。视觉插值归前端，原生目标与裁剪归 mini owner；收起确认缺失时仍有界收回面板命中区域，环境改变、拖动和重建不继续旧过渡。
 
 #### app 的职责限制
 
