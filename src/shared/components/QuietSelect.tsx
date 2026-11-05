@@ -239,7 +239,7 @@ export default function QuietSelect<T extends string | number>({
 
   useLayoutEffect(() => {
     if (!menuReady) return undefined;
-    const frame = requestAnimationFrame(() => listRef.current?.focus());
+    const frame = requestAnimationFrame(() => listRef.current?.focus({ preventScroll: true }));
     return () => cancelAnimationFrame(frame);
   }, [menuReady]);
 

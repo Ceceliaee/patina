@@ -989,7 +989,15 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
       await key('Enter', 13);
     };
     await evaluate(client, sessionId, `document.querySelector(${jsonString(soundTrigger)}).focus()`);
-    await selectSound('Home', 36);
+    await client.command('Emulation.setEmulatedMedia', {
+      features: [{ name: 'prefers-reduced-motion', value: 'reduce' }],
+    }, sessionId);
+    try {
+      await waitForExpression(client, sessionId, `document.documentElement.dataset.qpMotion === 'reduced'`);
+      await selectSound('Home', 36);
+    } finally {
+      await client.command('Emulation.setEmulatedMedia', { features: [] }, sessionId);
+    }
     await waitForExpression(client, sessionId, `JSON.parse(localStorage.getItem('__patina_notification_preferences')).sound === 'default'
       && document.activeElement?.matches('.tools-notification-setting-row [aria-haspopup="listbox"]')`);
     await selectSound('End', 35);
