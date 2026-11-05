@@ -2,7 +2,12 @@
 export const MESSAGES = {
   "mapping.webIndependent": "Показывать отдельно",
   "mapping.mergeWebDomain": {"$type": "message", "body": {"$op": "concat", "parts": ["Объединить в ", {"$op": "arg", "name": "domain"}]}},
-  "mapping.deleteWebGroupDetail": {"$type": "message", "body": {"$op": "concat", "parts": ["Удалить историю для ", {"$op": "arg", "name": "count"}, " доменов этой группы: ", {"$op": "arg", "name": "domains"}]}},
+  "mapping.deletionMembers": "Объекты для удаления",
+  "mapping.deletionLinks": "Удаляемые связи или исключения из группировки",
+  "mapping.deletionReminders": "Удаляемые напоминания",
+  "mapping.deletionSharedReminders": "Общие напоминания будут сохранены",
+  "mapping.deletionPendingChanges": "Сначала сохраните или отмените изменения классификации",
+  "mapping.objectDeleted": "Выбранный объект удалён",
 
   "mapping.webLinks": "Автоматическая группа",
   "mapping.addLinkedWebDomain": "Добавить сайт",
@@ -16,7 +21,7 @@ export const MESSAGES = {
   "mapping.backToLinkedApps": "Назад к связанным приложениям",
   "mapping.individualControls": "Запись заголовков, отслеживание и удаление относятся только к выбранной программе",
   "mapping.saveFailed": "Не удалось сохранить изменения. Повторите попытку.",
-  "mapping.deleteFailed": "Не удалось завершить удаление записей. Повторите попытку.",
+  "mapping.deleteFailed": "Удаление не завершено. Проверьте список объектов и попробуйте снова.",
   "mapping.titleCaptureOnHint": "Запись заголовков включена. Нажмите, чтобы отключить.",
   "mapping.titleCaptureOffHint": "Запись заголовков отключена. Нажмите, чтобы включить.",
   "mapping.trackingOnHint": "Анонимный учёт",
@@ -44,22 +49,8 @@ export const MESSAGES = {
   "mapping.createCategoryAction": "Новая категория",
   "mapping.createCategoryPlaceholder": "Например: Учёба",
   "mapping.createCategoryTitle": "Новая категория",
-  "mapping.deleteAppRecords": "Удалить записи",
-  "mapping.deleteAppSessionsDetail": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "Все записи приложения «",
-        {
-          "$op": "arg",
-          "name": "label"
-        },
-        "», включая записи Patina и импортированные данные, будут удалены. Записи других приложений и их импортированные данные не изменятся."
-      ]
-    }
-  },
-  "mapping.deleteAppSessionsTitle": "Удалить записи прил.",
+  "mapping.deleteAppRecords": "Удалить приложение",
+  "mapping.deleteObjectDetail": {"$type":"message","body":{"$op":"concat","parts":["История, индивидуальные настройки и значок «",{"$op":"arg","name":"label"},"» будут удалены безвозвратно."]}},
   "mapping.deleteCategory": {
     "$type": "message",
     "body": {
@@ -89,22 +80,7 @@ export const MESSAGES = {
     }
   },
   "mapping.deleteCategoryTitle": "Удалить категорию",
-  "mapping.deleteWebDomainHistoryDetail": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "Будут удалены записи сайта: ",
-        {
-          "$op": "arg",
-          "name": "label"
-        },
-        "."
-      ]
-    }
-  },
-  "mapping.deleteWebDomainHistoryTitle": "Удалить записи сайта",
-  "mapping.deleteWebRecords": "Удалить записи сайта",
+  "mapping.deleteWebRecords": "Удалить сайт",
   "mapping.disableTitleCapture": "Прекратить запись заголовков",
   "mapping.disableTracking": "Прекратить учёт и скрыть имеющуюся историю",
   "mapping.disableWebTracking": "Прекратить учёт и скрыть имеющуюся историю",

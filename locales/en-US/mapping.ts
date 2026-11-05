@@ -3,7 +3,12 @@ export const MESSAGES = {
 
   "mapping.webIndependent": "Show separately",
   "mapping.mergeWebDomain": {"$type": "message", "body": {"$op": "concat", "parts": ["Merge into ", {"$op": "arg", "name": "domain"}]}},
-  "mapping.deleteWebGroupDetail": {"$type": "message", "body": {"$op": "concat", "parts": ["Delete history for ", {"$op": "arg", "name": "count"}, " domains in this group: ", {"$op": "arg", "name": "domains"}]}},
+  "mapping.deletionMembers": "Included identities",
+  "mapping.deletionLinks": "Links or independent-site exceptions to remove",
+  "mapping.deletionReminders": "Reminders to delete",
+  "mapping.deletionSharedReminders": "Shared reminders to keep",
+  "mapping.deletionPendingChanges": "Save or cancel your classification changes first",
+  "mapping.objectDeleted": "Selected item deleted",
 
   "mapping.webLinks": "Automatic group",
   "mapping.addLinkedWebDomain": "Add website",
@@ -17,7 +22,7 @@ export const MESSAGES = {
   "mapping.backToLinkedApps": "Back to linked applications",
   "mapping.individualControls": "Title recording, tracking and deletion apply only to the selected program",
   "mapping.saveFailed": "Could not save changes. Try again.",
-  "mapping.deleteFailed": "Could not finish deleting records. Try again.",
+  "mapping.deleteFailed": "Deletion did not finish. Review the scope and try again.",
 
   "mapping.titleCaptureOnHint": "Title recording is on. Click to turn it off.",
   "mapping.titleCaptureOffHint": "Title recording is off. Click to turn it on.",
@@ -47,22 +52,8 @@ export const MESSAGES = {
   "mapping.createCategoryAction": "New category",
   "mapping.createCategoryPlaceholder": "Example: Study",
   "mapping.createCategoryTitle": "New category",
-  "mapping.deleteAppRecords": "Delete records",
-  "mapping.deleteAppSessionsDetail": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "All app records for ",
-        {
-          "$op": "arg",
-          "name": "label"
-        },
-        ", including Patina and imported records, will be deleted. Other apps and imported records are unaffected."
-      ]
-    }
-  },
-  "mapping.deleteAppSessionsTitle": "Delete app records",
+  "mapping.deleteAppRecords": "Delete application",
+  "mapping.deleteObjectDetail": {"$type":"message","body":{"$op":"concat","parts":["Permanently delete the history, settings and icon for “",{"$op":"arg","name":"label"},"”."]}},
   "mapping.deleteCategory": {
     "$type": "message",
     "body": {
@@ -92,22 +83,7 @@ export const MESSAGES = {
     }
   },
   "mapping.deleteCategoryTitle": "Delete category",
-  "mapping.deleteWebDomainHistoryDetail": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "This will delete web records for ",
-        {
-          "$op": "arg",
-          "name": "label"
-        },
-        "."
-      ]
-    }
-  },
-  "mapping.deleteWebDomainHistoryTitle": "Delete web records",
-  "mapping.deleteWebRecords": "Delete web records",
+  "mapping.deleteWebRecords": "Delete website",
   "mapping.disableTitleCapture": "Stop recording titles",
   "mapping.disableTracking": "Stop tracking and hide existing history",
   "mapping.disableWebTracking": "Stop tracking and hide existing history",

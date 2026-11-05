@@ -3,7 +3,12 @@ export const MESSAGES = {
 
   "mapping.webIndependent": "独立显示",
   "mapping.mergeWebDomain": {"$type": "message", "body": {"$op": "concat", "parts": ["合并到 ", {"$op": "arg", "name": "domain"}]}},
-  "mapping.deleteWebGroupDetail": {"$type": "message", "body": {"$op": "concat", "parts": ["将删除组内 ", {"$op": "arg", "name": "count"}, " 个域名的历史：", {"$op": "arg", "name": "domains"}]}},
+  "mapping.deletionMembers": "删除范围",
+  "mapping.deletionLinks": "将移除的关联或独立显示规则",
+  "mapping.deletionReminders": "将删除的提醒",
+  "mapping.deletionSharedReminders": "其他应用共用，将保留的提醒",
+  "mapping.deletionPendingChanges": "请先保存或取消分类更改",
+  "mapping.objectDeleted": "已删除所选对象",
 
   "mapping.webLinks": "自动分组",
   "mapping.addLinkedWebDomain": "添加网页",
@@ -17,7 +22,7 @@ export const MESSAGES = {
   "mapping.backToLinkedApps": "返回关联应用",
   "mapping.individualControls": "标题、追踪和删除仅作用于所选程序",
   "mapping.saveFailed": "保存失败，请重试。",
-  "mapping.deleteFailed": "删除记录未完成，请重试。",
+  "mapping.deleteFailed": "删除未完成，请重新核对范围后重试。",
 
   "mapping.titleCaptureOnHint": "标题记录已开启，点击关闭",
   "mapping.titleCaptureOffHint": "标题记录已关闭，点击开启",
@@ -47,22 +52,8 @@ export const MESSAGES = {
   "mapping.createCategoryAction": "新建分类",
   "mapping.createCategoryPlaceholder": "例如：学习",
   "mapping.createCategoryTitle": "新建分类",
-  "mapping.deleteAppRecords": "删除应用记录",
-  "mapping.deleteAppSessionsDetail": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "将删除 ",
-        {
-          "$op": "arg",
-          "name": "label"
-        },
-        " 的全部应用记录，包括原生记录和外部导入记录。其他应用及其他导入记录不受影响。"
-      ]
-    }
-  },
-  "mapping.deleteAppSessionsTitle": "删除应用记录",
+  "mapping.deleteAppRecords": "删除应用",
+  "mapping.deleteObjectDetail": {"$type":"message","body":{"$op":"concat","parts":["将永久删除「",{"$op":"arg","name":"label"},"」的历史、专属配置和图标。"]}},
   "mapping.deleteCategory": {
     "$type": "message",
     "body": {
@@ -92,22 +83,7 @@ export const MESSAGES = {
     }
   },
   "mapping.deleteCategoryTitle": "删除分类",
-  "mapping.deleteWebDomainHistoryDetail": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "将删除 ",
-        {
-          "$op": "arg",
-          "name": "label"
-        },
-        " 的网页记录。"
-      ]
-    }
-  },
-  "mapping.deleteWebDomainHistoryTitle": "删除网页记录",
-  "mapping.deleteWebRecords": "删除网页记录",
+  "mapping.deleteWebRecords": "删除网站",
   "mapping.disableTitleCapture": "停止记录标题",
   "mapping.disableTracking": "停止追踪并隐藏已有历史",
   "mapping.disableWebTracking": "停止追踪并隐藏已有历史",

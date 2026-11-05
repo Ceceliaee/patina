@@ -3,7 +3,12 @@ export const MESSAGES = {
 
   "mapping.webIndependent": "Mostrar por separado",
   "mapping.mergeWebDomain": {"$type": "message", "body": {"$op": "concat", "parts": ["Combinar en ", {"$op": "arg", "name": "domain"}]}},
-  "mapping.deleteWebGroupDetail": {"$type": "message", "body": {"$op": "concat", "parts": ["Eliminar el historial de ", {"$op": "arg", "name": "count"}, " dominios de este grupo: ", {"$op": "arg", "name": "domains"}]}},
+  "mapping.deletionMembers": "Elementos incluidos",
+  "mapping.deletionLinks": "Vínculos o excepciones de agrupación que se quitarán",
+  "mapping.deletionReminders": "Recordatorios que se eliminarán",
+  "mapping.deletionSharedReminders": "Recordatorios compartidos que se conservarán",
+  "mapping.deletionPendingChanges": "Guarda o cancela primero los cambios de clasificación",
+  "mapping.objectDeleted": "Elemento seleccionado eliminado",
 
   "mapping.webLinks": "Grupo automático",
   "mapping.addLinkedWebDomain": "Añadir sitio web",
@@ -17,7 +22,7 @@ export const MESSAGES = {
   "mapping.backToLinkedApps": "Volver a aplicaciones vinculadas",
   "mapping.individualControls": "Los títulos, el seguimiento y la eliminación solo afectan al programa seleccionado",
   "mapping.saveFailed": "No se pudieron guardar los cambios. Inténtalo de nuevo.",
-  "mapping.deleteFailed": "No se pudo completar la eliminación de los registros. Inténtalo de nuevo.",
+  "mapping.deleteFailed": "No se completó la eliminación. Revisa los elementos e inténtalo de nuevo.",
 
   "mapping.titleCaptureOnHint": "El registro de títulos está activado. Haz clic para desactivarlo.",
   "mapping.titleCaptureOffHint": "El registro de títulos está desactivado. Haz clic para activarlo.",
@@ -47,22 +52,8 @@ export const MESSAGES = {
   "mapping.createCategoryAction": "Nueva categoría",
   "mapping.createCategoryPlaceholder": "Ejemplo: Estudio",
   "mapping.createCategoryTitle": "Nueva categoría",
-  "mapping.deleteAppRecords": "Eliminar registros",
-  "mapping.deleteAppSessionsDetail": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "Todos los registros de la app ",
-        {
-          "$op": "arg",
-          "name": "label"
-        },
-        ", incluidos los de Patina y los importados, se eliminarán. No se modificarán los registros de otras apps ni sus datos importados."
-      ]
-    }
-  },
-  "mapping.deleteAppSessionsTitle": "Eliminar registros de la app",
+  "mapping.deleteAppRecords": "Eliminar aplicación",
+  "mapping.deleteObjectDetail": {"$type":"message","body":{"$op":"concat","parts":["Se eliminarán el historial, la configuración propia y el icono de «",{"$op":"arg","name":"label"},"» de forma permanente."]}},
   "mapping.deleteCategory": {
     "$type": "message",
     "body": {
@@ -92,22 +83,7 @@ export const MESSAGES = {
     }
   },
   "mapping.deleteCategoryTitle": "Eliminar categoría",
-  "mapping.deleteWebDomainHistoryDetail": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "Se eliminarán los registros web de ",
-        {
-          "$op": "arg",
-          "name": "label"
-        },
-        "."
-      ]
-    }
-  },
-  "mapping.deleteWebDomainHistoryTitle": "Eliminar registros web",
-  "mapping.deleteWebRecords": "Eliminar registros web",
+  "mapping.deleteWebRecords": "Eliminar sitio web",
   "mapping.disableTitleCapture": "Dejar de registrar títulos",
   "mapping.disableTracking": "Detener el registro y ocultar el historial existente",
   "mapping.disableWebTracking": "Detener el registro y ocultar el historial existente",

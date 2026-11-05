@@ -66,7 +66,12 @@ export const MESSAGE_SCHEMA = {
 
   "mapping.webIndependent": {"kind": "string", "params": [], "surface": "frontend", "description": "Keep this exact domain outside its automatic website group"},
   "mapping.mergeWebDomain": {"kind": "message", "params": [{"name": "domain", "type": "string", "optional": false}], "surface": "frontend", "description": "Merge an independent domain into its automatic root group"},
-  "mapping.deleteWebGroupDetail": {"kind": "message", "params": [{"name": "count", "type": "number", "optional": false}, {"name": "domains", "type": "string", "optional": false}], "surface": "frontend", "description": "Confirm deletion of exactly the listed current website group members"},
+  "mapping.deletionMembers": { "kind": "string", "params": [], "surface": "frontend" },
+  "mapping.deletionLinks": { "kind": "string", "params": [], "surface": "frontend" },
+  "mapping.deletionReminders": { "kind": "string", "params": [], "surface": "frontend" },
+  "mapping.deletionSharedReminders": { "kind": "string", "params": [], "surface": "frontend" },
+  "mapping.deletionPendingChanges": { "kind": "string", "params": [], "surface": "frontend" },
+  "mapping.objectDeleted": { "kind": "string", "params": [], "surface": "frontend" },
 
   "native.storage.startupFailure": { "kind": "message", "params": [{"name":"details","type":"string","optional":false}], "surface": "native", "description": "Storage preparation failure before the database and locale preferences can be loaded; uses the source locale." },
   "settings.timeRulesTitle": {"kind": "string", "params": [], "surface": "frontend", "description": "Settings group heading: Time rules"},
@@ -2711,7 +2716,7 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "mapping.deleteAppSessionsDetail": {
+  "mapping.deleteObjectDetail": {
     "kind": "message",
     "params": [
       {
@@ -2720,11 +2725,6 @@ export const MESSAGE_SCHEMA = {
         "optional": false
       }
     ],
-    "surface": "frontend"
-  },
-  "mapping.deleteAppSessionsTitle": {
-    "kind": "string",
-    "params": [],
     "surface": "frontend"
   },
   "mapping.deleteCategory": {
@@ -2750,22 +2750,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "mapping.deleteCategoryTitle": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
-  "mapping.deleteWebDomainHistoryDetail": {
-    "kind": "message",
-    "params": [
-      {
-        "name": "label",
-        "type": "string",
-        "optional": false
-      }
-    ],
-    "surface": "frontend"
-  },
-  "mapping.deleteWebDomainHistoryTitle": {
     "kind": "string",
     "params": [],
     "surface": "frontend"
