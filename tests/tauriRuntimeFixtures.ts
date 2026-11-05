@@ -139,7 +139,7 @@ export async function verifyBackupReplaceRuntime(client: CdpConnection, root: st
     if(["cmd_clear_history_bootstrap_snapshot_payload", "cmd_clear_data_bootstrap_snapshot_payload"].includes(command)) {
       cacheClearCommands.add(command);
     }
-    if(["cmd_commit_classification_settings", "cmd_delete_sessions_by_exe_names"].includes(command)) {
+    if(["cmd_commit_classification_settings", "cmd_classification_object_deletion"].includes(command)) {
       mutationCommands.add(command);
     }
   });
@@ -319,10 +319,11 @@ export async function verifyBackupReplaceRuntime(client: CdpConnection, root: st
     await evaluate(client, `Array.from(document.querySelectorAll('[role="dialog"]')).find(dialog =>
       dialog.textContent.includes('Runtime Restore Original')).querySelector('.qp-button-danger').click()`);
     await waitForMutationRefresh();
-    assert.equal(mutationCommands.has("cmd_delete_sessions_by_exe_names"), true);
+    assert.equal(mutationCommands.has("cmd_classification_object_deletion"), true);
     await waitFor("classification catalog removes deleted fixture", async () => evaluate(client,
       `document.querySelector('[data-classification-content-state]')?.getAttribute('data-classification-content-state') === 'ready'
         && !document.querySelector('[data-classification-app="runtime-restore-original.exe"]')`), 10_000);
+    assert.deepEqual(await readRuntimeDatabaseRows(expression => evaluate(client, expression), "SELECT value FROM settings WHERE key = ?", ["__app_override::runtime-restore-original.exe"]), []);
     const afterCleanup = await readSettledStatus();
     assert.ok(afterCleanup.sourceRevision > afterClassification.sourceRevision);
     const cleanedAggregate = await readFixtureAggregate();

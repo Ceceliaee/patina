@@ -88,8 +88,8 @@ export async function runWebLinksScenarios({ client, sessionId, runTest }: Brows
       for(const type of ['keyDown','keyUp'])await client.command('Input.dispatchKeyEvent',{type,key:'Escape',windowsVirtualKeyCode:27},sessionId);
       await click(site+' .qp-app-mapping-delete');
       await waitForExpression(client,sessionId,`!!document.querySelector('[role=dialog]')`);
-      assert.equal(await evaluate(client,sessionId,`document.querySelector('[role=dialog]').textContent.includes('5 个域名')`),true);
-      await button('继续');
+      assert.equal(await evaluate(client,sessionId,`document.querySelectorAll('[role=dialog] .qp-object-delete-section:first-child li').length === 5`),true);
+      await button('删除网站');
       await waitForExpression(client,sessionId,`document.querySelectorAll('[data-classification-web]').length===1`);
       assert.deepEqual(await evaluate(client,sessionId,`globalThis.__PATINA_CLASSIFICATION_WEB_ROWS.map(row=>row.normalized_domain)`),['other.com']);
     } finally {

@@ -127,12 +127,15 @@ export async function runClassificationAppLayoutScenarios({ client, sessionId, r
       assert.equal(await evaluate(client!, sessionId, `document.querySelector(${jsonString(title)}).getAttribute('aria-pressed')`), "true");
       assert.equal(await evaluate(client!, sessionId, `document.querySelector('#classification-global-title-disabled')?.textContent`), "全局标题已关闭");
       assert.equal(await evaluate(client!, sessionId, `document.querySelector(${jsonString(title)}).getAttribute('aria-describedby')?.includes('classification-global-title-disabled')`), true);
+      await evaluate(client!, sessionId, `globalThis.__PATINA_DELETE_IMPACT={links:[["child.exe","catalog-000.exe"]],reminders:[{id:7,label:"Focus reminder",target:"catalog-000.exe",shared:false},{id:8,label:"Shared reminder",target:"Editor",shared:true}]}`);
       await click(`${row} .qp-app-mapping-delete`);
       await waitForExpression(client!, sessionId, `document.querySelector('.qp-dialog-surface') && document.activeElement?.textContent==='取消'`);
+      const impactText = String(await evaluate(client!, sessionId, `document.querySelector(".qp-dialog-body").textContent`));
+      assert.ok(impactText.includes("child.exe → catalog-000.exe") && impactText.includes("Focus reminder") && impactText.includes("其他应用共用，将保留的提醒") && impactText.includes("Shared reminder"));
       await key("Escape", 27);
       await waitForExpression(client!, sessionId, `!document.querySelector('.qp-dialog-surface')`);
       await waitForExpression(client!, sessionId, `document.activeElement===document.querySelector(${jsonString(row + ' .qp-app-mapping-delete')})`);
-      assert.equal(await evaluate(client!, sessionId, `globalThis.__PATINA_INVOKED_COMMANDS.filter(n=>n.command==='cmd_delete_sessions_by_exe_names').length`), 0);
+      assert.equal(await evaluate(client!, sessionId, `globalThis.__PATINA_INVOKED_COMMANDS.filter(n=>n.command==='cmd_classification_object_deletion' && n.payload.confirmed).length`), 0);
     });
     await runTest("application actions keep failed drafts retryable and guard repeated deletion", async () => {
       await reload("zh-CN", "light");
@@ -147,16 +150,16 @@ export async function runClassificationAppLayoutScenarios({ client, sessionId, r
       await evaluate(client!, sessionId, `globalThis.__PATINA_REJECT_APP_DELETE=true`);
       await click(`${row} .qp-app-mapping-delete`);
       await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.qp-dialog-surface'))`);
-      await button("继续");
-      await waitForExpression(client!, sessionId, `document.querySelector('[role="alert"]')?.textContent==='删除记录未完成，请重试。'`);
+      await button("删除应用");
+      await waitForExpression(client!, sessionId, `document.querySelector('[role="alert"]')?.textContent==='删除未完成，请重新核对范围后重试。'`);
       assert.equal(await evaluate(client!, sessionId, `Boolean(document.querySelector(${jsonString(row)}))`), true);
       await evaluate(client!, sessionId, `globalThis.__PATINA_REJECT_APP_DELETE=false; globalThis.__PATINA_HOLD_APP_DELETE=true`);
       await click(`${row} .qp-app-mapping-delete`);
       await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.qp-dialog-surface'))`);
-      await evaluate(client!, sessionId, `(() => {const confirm=[...document.querySelectorAll('.qp-dialog-surface button')].find(n=>n.textContent==='继续');confirm.click();confirm.click();})()`);
+      await evaluate(client!, sessionId, `(() => {const confirm=[...document.querySelectorAll('.qp-dialog-surface button')].find(n=>n.textContent==='删除应用');confirm.click();confirm.click();})()`);
       await waitForExpression(client!, sessionId, `typeof globalThis.__PATINA_RELEASE_APP_DELETE==='function'`);
       await evaluate(client!, sessionId, `document.querySelector(${jsonString(row + ' .qp-app-mapping-delete')}).click()`);
-      assert.equal(await evaluate(client!, sessionId, `globalThis.__PATINA_INVOKED_COMMANDS.filter(n=>n.command==='cmd_delete_sessions_by_exe_names').length`), 2);
+      assert.equal(await evaluate(client!, sessionId, `globalThis.__PATINA_INVOKED_COMMANDS.filter(n=>n.command==='cmd_classification_object_deletion' && n.payload.confirmed).length`), 2);
       await evaluate(client!, sessionId, `globalThis.__PATINA_RELEASE_APP_DELETE()`);
       await waitForExpression(client!, sessionId, `document.querySelector(${jsonString(row + ' .qp-app-mapping-delete')})?.disabled===false`);
       assert.equal(await evaluate(client!, sessionId, `document.querySelector('[role="alert"]')`), null);

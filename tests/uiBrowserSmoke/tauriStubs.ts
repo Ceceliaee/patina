@@ -1025,6 +1025,27 @@ function tauriStubFor(path: string) {
           }
           storeSettings(settings);
         }
+        if (command === "cmd_classification_object_deletion") {
+          const {target, confirmed} = payload;
+          const settings = loadStoredSettings();
+          const rows = globalThis.__PATINA_CLASSIFICATION_WEB_ROWS ?? [];
+          const members = target.kind === "group" ? [...new Set(rows.map(row => row.normalized_domain).filter(domain => (domain === target.key || domain.endsWith("."+target.key)) && !JSON.parse(settings["__web_site::"+target.key] ?? "{}").exceptions?.includes(domain)))].sort() : [target.key];
+          const plan = {target,members,links: globalThis.__PATINA_DELETE_IMPACT?.links ?? [],reminders: globalThis.__PATINA_DELETE_IMPACT?.reminders ?? []};
+          if (!confirmed) return plan;
+          if (target.kind === "app") {
+            if (globalThis.__PATINA_REJECT_APP_DELETE) throw new Error("fixture delete failed");
+            if (globalThis.__PATINA_HOLD_APP_DELETE) await new Promise(resolve => {globalThis.__PATINA_RELEASE_APP_DELETE=resolve});
+            delete settings["__app_override::"+target.key];
+          } else {
+            globalThis.__PATINA_WEB_DELETE_CALLS = [...(globalThis.__PATINA_WEB_DELETE_CALLS ?? []),target.key];
+            if (globalThis.__PATINA_REJECT_WEB_DELETE) throw new Error("fixture delete failed");
+            if (globalThis.__PATINA_HOLD_WEB_DELETE) await new Promise(resolve => {globalThis.__PATINA_RELEASE_WEB_DELETE=resolve});
+            globalThis.__PATINA_CLASSIFICATION_WEB_ROWS=rows.filter(row=>!members.includes(row.normalized_domain));
+            for(const member of members) delete settings["__web_domain_override::"+member];
+          }
+          storeSettings(settings);
+          return plan;
+        }
         if (command === "cmd_delete_sessions_by_exe_names") {
           if (globalThis.__PATINA_REJECT_APP_DELETE) throw new Error("App deletion rejected by fixture");
           if (globalThis.__PATINA_HOLD_APP_DELETE) {

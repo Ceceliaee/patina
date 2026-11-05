@@ -595,7 +595,7 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
     assert.equal(
       await evaluate(client!, sessionId, `
         Array.from(document.querySelectorAll("button"))
-          .some((button) => button.getAttribute("aria-label") === "删除应用记录")
+          .some((button) => button.getAttribute("aria-label") === "删除应用")
       `),
       true,
       "imported and native candidates should expose the same record controls",

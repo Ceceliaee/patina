@@ -33,7 +33,6 @@ import { AppClassification } from "../../src/shared/classification/appClassifica
 import { ProcessMapper } from "../../src/shared/classification/processMapper.ts";
 import {
   applyMappingOverridesReadModelRefresh,
-  applySessionDeletionReadModelRefresh,
   INITIAL_READ_MODEL_REFRESH_STATE,
   resolveReadModelRefreshSignal,
 } from "../../src/app/services/readModelRefreshState.ts";
@@ -74,7 +73,6 @@ export {
   makeSession,
   makeWindow,
   applyMappingOverridesReadModelRefresh,
-  applySessionDeletionReadModelRefresh,
   loadDashboardRuntimeSnapshotWithDeps,
   loadHistoryRuntimeSnapshotWithDeps,
   planWindowTransition,

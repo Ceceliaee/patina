@@ -22,7 +22,6 @@ import {
   buildSaveWebDomainOverrideMutations,
   buildLegacyAutoClassificationMigrationMutations,
   parsePersistedDeletedCategories,
-  removeOrphanedAppOverrides,
   type ObservedAppCandidate,
 } from "../src/features/classification/services/classificationStore.ts";
 import {
@@ -564,7 +563,7 @@ await runTest("legacy auto-classification migration writes migrated overrides an
   });
 });
 
-await runTest("legacy migration reads bounded identities and preserves failure and orphan cleanup contracts", async () => {
+await runTest("legacy migration reads bounded identities and retains configured applications without activity", async () => {
   const host = globalThis as unknown as { window?: unknown };
   const previousWindow = host.window;
   const marker = "__classification_manual_confirmation_migration::v1";
@@ -572,11 +571,9 @@ await runTest("legacy migration reads bounded identities and preserves failure a
   const commits: Array<Array<{ key: string; value: string | null }>> = [];
   let readFailure = true;
   let invalidPayload = false;
-  let distinctFailure = true;
   let commitFailure = false;
   let identityReads = 0;
   let distinctReads = 0;
-  let recordedNames = ["Douyin_tray.exe"];
   host.window = { __TAURI_INTERNALS__: { invoke: async (command: string, args: Record<string, unknown>) => {
     if (command === "cmd_get_legacy_classification_apps") {
       identityReads += 1;
@@ -596,8 +593,7 @@ await runTest("legacy migration reads bounded identities and preserves failure a
     }
     if (command === "cmd_get_recorded_executable_names") {
       distinctReads += 1;
-      if (distinctFailure) throw new Error("controlled distinct read");
-      return recordedNames;
+      return [];
     }
     assert.equal(command, "cmd_get_setting_rows", "raw migration fact transfer is forbidden");
     if (typeof args.key === "string") return settings.has(args.key) ? [{ key: args.key, value: settings.get(args.key) }] : [];
@@ -620,9 +616,6 @@ await runTest("legacy migration reads bounded identities and preserves failure a
     assert.deepEqual(commits[0].map(row => row.key), [marker]);
 
     settings.set("__app_override::Douyin_tray.exe", JSON.stringify({ category: "video", enabled: true }));
-    await assert.rejects(loadAppOverrides(), { message: "controlled distinct read" });
-    assert.equal(commits.length, 1, "failed presence reads must not commit transition or orphan cleanup");
-    distinctFailure = false;
     const retained = await loadAppOverrides();
     assert.equal(retained["douyin.exe"]?.category, "video");
     assert.equal(identityReads, 3, "the successful migration is not rerun on ordinary mapping refresh");
@@ -630,16 +623,16 @@ await runTest("legacy migration reads bounded identities and preserves failure a
 
     settings.delete("__app_override::douyin.exe");
     settings.set("__app_override::Douyin_tray.exe", JSON.stringify({ category: "video", enabled: true }));
-    recordedNames = [];
     commitFailure = true;
     await assert.rejects(loadAppOverrides(), { code: "COMMIT_FAILED" });
     assert.equal(commits.length, 2);
     assert.equal(settings.has("__app_override::Douyin_tray.exe"), true);
     commitFailure = false;
-    assert.deepEqual(await loadAppOverrides(), {});
+    assert.equal((await loadAppOverrides())["douyin.exe"]?.category, "video");
+    assert.equal(distinctReads, 0);
     assert.deepEqual(commits[2].map(row => [row.key, row.value === null]), [
-      ["__app_override::Douyin_tray.exe", true], ["__app_override::douyin.exe", false], ["__app_override::douyin.exe", true],
-    ], "transition and orphan deletion stay in the same atomic command");
+      ["__app_override::Douyin_tray.exe", true], ["__app_override::douyin.exe", false],
+    ], "override transition is atomic");
   } finally {
     if (previousWindow === undefined) delete host.window;
     else host.window = previousWindow;
@@ -914,21 +907,6 @@ await runTest("app override transition leaves unknown truncated modern category 
     JSON.parse(transition.mutations[0].value ?? "{}").category,
     truncatedCategory,
   );
-});
-
-await runTest("orphaned app overrides are removed while record-backed classifications remain", () => {
-  const cleanup = removeOrphanedAppOverrides({
-    "kept.exe": { category: "development", enabled: true },
-    "deleted.exe": { category: "communication", displayName: "Deleted", enabled: true },
-  }, ["KEPT.EXE"]);
-
-  assert.deepEqual(cleanup.overrides, {
-    "kept.exe": { category: "development", enabled: true },
-  });
-  assert.deepEqual(cleanup.mutations, [{
-    key: "__app_override::deleted.exe",
-    value: null,
-  }]);
 });
 
 await runTest("hasClassificationDraftChanges ignores unsupported deleted categories", () => {

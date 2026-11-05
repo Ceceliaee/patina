@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import {
   cancelAppMappingNameEdit,
   cancelWebDomainNameEdit,
-  deleteObservedCandidateSessionsWithDeps,
   saveAppMappingStateWithDeps,
   startAppMappingNameEdit,
   startWebDomainNameEdit,
@@ -277,34 +276,6 @@ await runTest("app mapping interaction helpers keep dirty state correct across e
     true,
   );
 
-  let deletedSessions = 0;
-  const deleteResult = await deleteObservedCandidateSessionsWithDeps(candidate, {
-    confirmDelete: async () => true,
-    deleteObservedAppSessions: async () => {
-      deletedSessions += 1;
-    },
-    onSessionsDeleted: () => {
-      deletedSessions += 1;
-    },
-  });
-  assert.equal(deleteResult.deleted, true);
-  assert.equal(deletedSessions, 2);
-
-  let externalDeleteCalls = 0;
-  const externalOnlyDeleteResult = await deleteObservedCandidateSessionsWithDeps({
-    ...candidate,
-    hasNativeRecords: false,
-  }, {
-    confirmDelete: async () => {
-      externalDeleteCalls += 1;
-      return true;
-    },
-    deleteObservedAppSessions: async () => {
-      externalDeleteCalls += 1;
-    },
-  });
-  assert.equal(externalOnlyDeleteResult.deleted, true);
-  assert.equal(externalDeleteCalls, 2);
   assert.equal(
     hasClassificationDraftChanges(savedState, reEdited.draftState),
     true,

@@ -1,6 +1,5 @@
 import {
   applyMappingOverridesReadModelRefresh,
-  applySessionDeletionReadModelRefresh,
   assert,
   INITIAL_READ_MODEL_REFRESH_STATE,
   loadDashboardRuntimeSnapshotWithDeps,
@@ -121,18 +120,6 @@ export function runReadModelRuntimeTests() {
     assert.equal(resolveReadModelRefreshSignal(5, nextState), 6);
   });
 
-  runTest("session deletion refresh keeps mapping version stable and only bumps refresh tick", () => {
-    const nextState = applySessionDeletionReadModelRefresh({
-      mappingVersion: 2,
-      dataRefreshTick: 3,
-    });
-
-    assert.deepEqual(nextState, {
-      mappingVersion: 2,
-      dataRefreshTick: 4,
-    });
-    assert.equal(resolveReadModelRefreshSignal(5, nextState), 9);
-  });
 
   runTest("dashboard runtime snapshot waits for mapper runtime before loading and caching", async () => {
     const events: string[] = [];
