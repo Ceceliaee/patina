@@ -357,6 +357,12 @@
           "markdownDescription": "Enables the cmd_check_for_updates command without any pre-configured scope."
         },
         {
+          "description": "Enables the cmd_classification_object_deletion command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-classification-object-deletion",
+          "markdownDescription": "Enables the cmd_classification_object_deletion command without any pre-configured scope."
+        },
+        {
           "description": "Enables the cmd_clear_data_bootstrap_snapshot_payload command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-clear-data-bootstrap-snapshot-payload",
@@ -981,6 +987,12 @@
           "markdownDescription": "Enables the cmd_start_pomodoro command without any pre-configured scope."
         },
         {
+          "description": "Enables the cmd_take_main_tools_target command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-take-main-tools-target",
+          "markdownDescription": "Enables the cmd_take_main_tools_target command without any pre-configured scope."
+        },
+        {
           "description": "Enables the cmd_test_webdav_backup_target command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-test-webdav-backup-target",
@@ -1039,6 +1051,12 @@
           "type": "string",
           "const": "deny-cmd-check-for-updates",
           "markdownDescription": "Denies the cmd_check_for_updates command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_classification_object_deletion command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-classification-object-deletion",
+          "markdownDescription": "Denies the cmd_classification_object_deletion command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_clear_data_bootstrap_snapshot_payload command without any pre-configured scope.",
@@ -1663,6 +1681,12 @@
           "type": "string",
           "const": "deny-cmd-start-pomodoro",
           "markdownDescription": "Denies the cmd_start_pomodoro command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_take_main_tools_target command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-take-main-tools-target",
+          "markdownDescription": "Denies the cmd_take_main_tools_target command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_test_webdav_backup_target command without any pre-configured scope.",
