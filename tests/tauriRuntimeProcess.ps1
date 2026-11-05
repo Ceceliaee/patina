@@ -124,11 +124,13 @@ try {
         'exit' { $result = $runtimeJob.ExitCode($request.pid) }
         'desktop' { $runtimeJob.ClaimDesktop($request.name); $result=0 }
         'stop' { $runtimeJob.Stop(); $result = 0 }
+        'close' { $runtimeJob.Stop(); $result = 0 }
         default { throw 'Unknown owned runtime job operation' }
       }
       [Console]::WriteLine('PATINA_JOB_REPLY ' + (@{ id=$request.id; result=$result } | ConvertTo-Json -Compress))
     } catch {
       [Console]::WriteLine('PATINA_JOB_REPLY ' + (@{ id=$request.id; error=$_.Exception.Message } | ConvertTo-Json -Compress))
     }
+    if ($request.op -eq 'close') { break }
   }
 } finally { $runtimeJob.Dispose() }

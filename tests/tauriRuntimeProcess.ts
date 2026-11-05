@@ -53,12 +53,12 @@ export async function createRuntimeJob(env: NodeJS.ProcessEnv, onLog: (text: str
   };
   child.on("error", fail);
   child.stdin.on("error", fail);
-  child.on("exit", (code, signal) => fail(new Error(`Owned runtime supervisor exited (${code}, ${signal})`)));
+  child.on("close", (code, signal) => fail(new Error(`Owned runtime supervisor exited (${code}, ${signal})`)));
   const readinessTimer = setTimeout(() => readyReject(new Error("Runtime supervisor startup timed out")), 30_000);
   try { await ready; } catch(error) { child.kill(); lines.close(); throw error; }
   finally { clearTimeout(readinessTimer); }
   const request = (op: string, args: Record<string, unknown> = {}) => new Promise<number>((resolve, reject) => {
-    if(closed || (closing && op !== "stop") || child.exitCode !== null || child.signalCode !== null) { reject(new Error("Runtime job is closed")); return; }
+    if(closed || (closing && op !== "close") || child.exitCode !== null || child.signalCode !== null) { reject(new Error("Runtime job is closed")); return; }
     const id = ++nextId;
     const timer = setTimeout(() => { pending.delete(id); reject(new Error(`Runtime job ${op} timed out`)); }, 20_000);
     pending.set(id, { resolve: value => { clearTimeout(timer); resolve(value); }, reject: error => { clearTimeout(timer); reject(error); } });
@@ -74,13 +74,13 @@ export async function createRuntimeJob(env: NodeJS.ProcessEnv, onLog: (text: str
     stop: () => request("stop"),
     close() { return closing ??= (async () => {
       if(closed) return;
-      try { await request("stop"); }
+      try { await request("close"); }
       finally {
         closed = true;
         child.stdin.end();
         await new Promise<void>(resolve => {
           if(child.exitCode !== null || child.signalCode !== null) { resolve(); return; }
-          const timer = setTimeout(() => { child.kill(); resolve(); }, 5_000);
+          const timer = setTimeout(() => child.kill(), 5_000);
           child.once("exit", () => { clearTimeout(timer); resolve(); });
         });
         lines.close();
