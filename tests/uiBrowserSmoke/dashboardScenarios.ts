@@ -4,39 +4,13 @@ import { resolve } from "node:path";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
 import { getLocaleText } from "../../src/shared/i18n/runtime.ts";
 import {
+  withFixedBrowserClock,
   evaluate,
   jsonString,
   waitFor,
   waitForAnimationFrames,
   waitForExpression,
 } from "./browserHarness.ts";
-
-async function withFixedDashboardClock(context: BrowserSmokeContext, scenario: () => Promise<void>) {
-  const { appUrl, client, sessionId } = context;
-  // Both 30-minute fixture segments must fit in today. Bootstrap and reads
-  // use the same clock even when the suite runs just after midnight.
-  const clock = await client.command("Page.addScriptToEvaluateOnNewDocument", {
-    source: `(() => {
-      const NativeDate = Date;
-      const now = new NativeDate(2026, 9, 17, 12, 0, 0, 0).getTime();
-      globalThis.Date = new Proxy(NativeDate, {
-        construct(target, args, newTarget) { return Reflect.construct(target, args.length ? args : [now], newTarget); },
-        apply() { return new NativeDate(now).toString(); },
-        get(target, key) { return key === 'now' ? () => now : Reflect.get(target, key); }
-      });
-    })()`,
-  }, sessionId) as { identifier: string };
-  try {
-    await scenario();
-  } finally {
-    await client.command("Page.removeScriptToEvaluateOnNewDocument", { identifier: clock.identifier }, sessionId);
-    const previousDocument = await evaluate(client, sessionId, `performance.timeOrigin`);
-    await client.command("Page.navigate", { url: appUrl }, sessionId);
-    await waitForExpression(client, sessionId, `performance.timeOrigin !== ${previousDocument} && document.readyState === 'complete'`);
-    assert.ok(Math.abs(Number(await evaluate(client, sessionId, `Date.now()`)) - Date.now()) < 5_000,
-      "dashboard scenario must restore the browser clock after navigation");
-  }
-}
 
 export async function runDashboardReadFailureScenarios(context: BrowserSmokeContext) {
   const { appUrl, client, sessionId, runTest } = context;
@@ -93,7 +67,7 @@ export async function runDashboardReadFailureScenarios(context: BrowserSmokeCont
     await waitForExpression(client, sessionId, `Boolean(document.querySelector('[data-presented-view="dashboard"][data-view-transition-state="settled"]'))`);
   };
 
-  await runTest("dashboard distinguishes cold read failure, retry success, and successful empty data", () => withFixedDashboardClock(context, async () => {
+  await runTest("dashboard distinguishes cold read failure, retry success, and successful empty data", () => withFixedBrowserClock(context, async () => {
     await evaluate(client, sessionId, `localStorage.setItem('__patina_reject_aggregate_kind', 'dashboard')`);
     try {
       await showDashboard();
@@ -211,7 +185,7 @@ export async function runDashboardScenarios(context: BrowserSmokeContext) {
     await writeFile(resolve(captureDir, fileName), Buffer.from(result.data, "base64"));
   };
 
-  await runTest("anonymous activity ranks once with abstract tiles and unique chart patterns without a classification menu", () => withFixedDashboardClock(context, async () => {
+  await runTest("anonymous activity ranks once with abstract tiles and unique chart patterns without a classification menu", () => withFixedBrowserClock(context, async () => {
     const navigate = async () => {
       const previousDocument = await evaluate(client, sessionId, `performance.timeOrigin`);
       await client.command("Page.navigate", { url: appUrl }, sessionId);

@@ -1,3 +1,4 @@
+import type { BrowserSmokeContext } from "./scenarioTypes.ts";
 import assert from "node:assert/strict";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -417,6 +418,33 @@ export async function waitForStableExpression(
     `);
     return value ? value : null;
   }, timeoutMs);
+}
+
+export async function withFixedBrowserClock(context: BrowserSmokeContext, scenario: () => Promise<void>) {
+  const { appUrl, client, sessionId } = context;
+  // Both 30-minute fixture segments must fit in today. Bootstrap and reads
+  // use the same clock even when the suite runs just after midnight.
+  const clock = await client.command("Page.addScriptToEvaluateOnNewDocument", {
+    source: `(() => {
+      const NativeDate = Date;
+      const now = new NativeDate(2026, 9, 17, 12, 0, 0, 0).getTime();
+      globalThis.Date = new Proxy(NativeDate, {
+        construct(target, args, newTarget) { return Reflect.construct(target, args.length ? args : [now], newTarget); },
+        apply() { return new NativeDate(now).toString(); },
+        get(target, key) { return key === 'now' ? () => now : Reflect.get(target, key); }
+      });
+    })()`,
+  }, sessionId) as { identifier: string };
+  try {
+    await scenario();
+  } finally {
+    await client.command("Page.removeScriptToEvaluateOnNewDocument", { identifier: clock.identifier }, sessionId);
+    const previousDocument = await evaluate(client, sessionId, `performance.timeOrigin`);
+    await client.command("Page.navigate", { url: appUrl }, sessionId);
+    await waitForExpression(client, sessionId, `performance.timeOrigin !== ${previousDocument} && document.readyState === 'complete'`);
+    assert.ok(Math.abs(Number(await evaluate(client, sessionId, `Date.now()`)) - Date.now()) < 5_000,
+      "scenario must restore the browser clock after navigation");
+  }
 }
 
 export async function waitForAnimationFrames(

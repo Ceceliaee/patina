@@ -6,6 +6,8 @@ import {
   evaluate,
   jsonString,
   titleDetailsButtonExpression,
+  withFixedBrowserClock,
+  waitFor,
   waitForAnimationFrames,
   waitForExpression,
 } from "./browserHarness.ts";
@@ -376,7 +378,7 @@ export async function runHistoryReadFailureScenarios(context: BrowserSmokeContex
 }
 
 export async function runHistoryScenarios(context: BrowserSmokeContext) {
-  await withClassifiedApps(context, () => runHistoryScenarioSet(context));
+  await withFixedBrowserClock(context, () => withClassifiedApps(context, () => runHistoryScenarioSet(context)));
 }
 
 async function runHistoryScenarioSet(context: BrowserSmokeContext) {
@@ -635,13 +637,14 @@ async function runHistoryScenarioSet(context: BrowserSmokeContext) {
     assert.equal(dateControls.fontWeight, "650");
     assert.equal(dateControls.lineHeight, "18px");
     assert.equal(dateControls.height, 30);
-    const accessibilityTree = await client!.command("Accessibility.getFullAXTree", {}, sessionId) as {
-      nodes: Array<{ role?: { value?: string }; name?: { value?: string } }>;
-    };
-    for (const name of dateControls.names) {
-      assert.ok(accessibilityTree.nodes.some((node) => node.role?.value === "button" && node.name?.value === name),
-        `history date arrow must expose its computed accessible name: ${name}`);
-    }
+    await waitFor(`history date arrows in accessibility tree: ${dateControls.names.join(", ")}`, async () => {
+      const accessibilityTree = await client.command("Accessibility.getFullAXTree", {}, sessionId) as {
+        nodes: Array<{ role?: { value?: string }; name?: { value?: string } }>;
+      };
+      return dateControls.names.every(name => accessibilityTree.nodes.some(
+        node => node.role?.value === "button" && node.name?.value === name,
+      ));
+    });
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {

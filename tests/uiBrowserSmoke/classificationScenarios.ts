@@ -8,9 +8,13 @@ import { runClassificationWebLayoutScenarios } from "./classificationWebLayoutSc
 import { runClassificationAppLayoutScenarios } from "./classificationAppLayoutScenarios.ts";
 import { runClassificationCategoryFilterScenarios } from "./classificationCategoryFilterScenarios.ts";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
-import { delay, evaluate, jsonString, waitForExpression, waitForStableExpression } from "./browserHarness.ts";
+import { delay, evaluate, jsonString, waitForExpression, waitForStableExpression, withFixedBrowserClock } from "./browserHarness.ts";
 
 export async function runClassificationScenarios(context: BrowserSmokeContext) {
+  return withFixedBrowserClock(context, () => runClassificationCases(context));
+}
+
+async function runClassificationCases(context: BrowserSmokeContext) {
   await runClassificationLinkLayoutScenarios(context);
   await runClassificationLinkLayoutMatrix(context);
   await runWebLinkLayoutScenario(context);

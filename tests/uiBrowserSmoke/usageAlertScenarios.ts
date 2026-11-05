@@ -14,7 +14,13 @@ export async function runUsageAlertScenarios({ client, sessionId, runTest }: Bro
       await client!.command("Input.dispatchKeyEvent", { type: "keyDown", key, windowsVirtualKeyCode: code }, sessionId);
       await client!.command("Input.dispatchKeyEvent", { type: "keyUp", key, windowsVirtualKeyCode: code }, sessionId);
     };
-    const markedChoices = () => evaluate(client!, sessionId, `[...document.querySelectorAll('.tools-usage-alert-option')].filter(row => getComputedStyle(row.querySelector('.tools-usage-alert-option-check')).visibility === 'visible').map(row => row.querySelector('input').value)`);
+    const waitForMarkedChoice = (expected: string) => waitForExpression(client!, sessionId, `
+      (() => {
+        const marked = [...document.querySelectorAll('.tools-usage-alert-option')].filter(row =>
+          getComputedStyle(row.querySelector('.tools-usage-alert-option-check')).visibility === 'visible');
+        return marked.length === 1 && marked[0].querySelector('input:checked')?.value === ${jsonString(expected)};
+      })()
+    `, undefined, `only the checked ${expected} option shows its checkmark`);
     try {
       await evaluate(client!, sessionId, `localStorage.setItem('__time_tracker_smoke_settings', JSON.stringify({ language: 'zh-CN' })); document.documentElement.dataset.usageReload='pending'; location.reload();`);
       await waitForExpression(client!, sessionId, `document.documentElement.dataset.usageReload !== 'pending' && typeof globalThis.__PATINA_EMIT_TAURI_EVENT === 'function' && !!document.querySelector('main.qp-canvas')`);
@@ -42,18 +48,17 @@ export async function runUsageAlertScenarios({ client, sessionId, runTest }: Bro
       await waitForExpression(client!, sessionId, `document.activeElement?.value === 'fifteen_minutes'`);
       assert.equal(await evaluate(client!, sessionId, `document.querySelectorAll('.tools-usage-alert-extend .qp-dialog-body p').length`), 0);
       assert.equal(await evaluate(client!, sessionId, `document.querySelectorAll('.tools-usage-alert-option').length`), 3);
-      assert.deepEqual(await markedChoices(), ["fifteen_minutes"]);
+      await waitForMarkedChoice("fifteen_minutes");
       assert.equal(await evaluate(client!, sessionId, `getComputedStyle(document.querySelector('.tools-usage-alert-surface')).backgroundColor`), usageBackground);
       await key("ArrowDown", 40);
-      await waitForExpression(client!, sessionId, `document.querySelector('input[value="one_hour"]').checked`);
-      assert.deepEqual(await markedChoices(), ["one_hour"]);
+      await waitForMarkedChoice("one_hour");
       assert.equal(await evaluate(client!, sessionId, `getComputedStyle(document.activeElement.closest('.tools-usage-alert-option')).outlineStyle`), "solid");
       await key("Escape", 27);
       await waitForExpression(client!, sessionId, `!!document.querySelector('.tools-usage-alert-limit') && document.activeElement?.textContent === ${jsonString(text.tools.usageExtend)}`);
       await click(text.tools.usageExtend);
       await waitForExpression(client!, sessionId, `document.querySelector('input[value="fifteen_minutes"]').checked`);
       await evaluate(client!, sessionId, `document.querySelector('.tools-usage-alert-option:has(input[value="today"])').click(); globalThis.__PATINA_USAGE_ALERT_CASE.hold=true; globalThis.__PATINA_USAGE_ALERT_CASE.error='injected failure';`);
-      assert.deepEqual(await markedChoices(), ["today"]);
+      await waitForMarkedChoice("today");
       await click(text.common.confirm);
       await click(text.common.confirm);
       await waitForExpression(client!, sessionId, `globalThis.__PATINA_USAGE_ALERT_CASE.calls.length === 1 && !!globalThis.__PATINA_USAGE_ALERT_CASE.release`);

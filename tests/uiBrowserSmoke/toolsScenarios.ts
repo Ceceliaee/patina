@@ -973,11 +973,12 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
       await client.command('Input.dispatchKeyEvent', {type:'keyUp',key,windowsVirtualKeyCode:code}, sessionId);
     };
     await evaluate(client, sessionId, `document.querySelector('.tools-notification-setting-row [aria-haspopup="listbox"]').click()`);
-    await waitForExpression(client, sessionId, `!!document.querySelector('[role="listbox"]')`);
+    await waitForExpression(client, sessionId, `document.activeElement?.matches('[role="listbox"]')`);
     await key('Home',36); await key('Enter',13);
-    await waitForExpression(client, sessionId, `JSON.parse(localStorage.getItem('__patina_notification_preferences')).sound === 'default'`);
+    await waitForExpression(client, sessionId, `JSON.parse(localStorage.getItem('__patina_notification_preferences')).sound === 'default'
+      && document.activeElement?.matches('.tools-notification-setting-row [aria-haspopup="listbox"]')`);
     await evaluate(client, sessionId, `document.querySelector('.tools-notification-setting-row [aria-haspopup="listbox"]').click()`);
-    await waitForExpression(client, sessionId, `!!document.querySelector('[role="listbox"]')`);
+    await waitForExpression(client, sessionId, `document.activeElement?.matches('[role="listbox"]')`);
     await key('End',35); await key('Enter',13);
     await waitForExpression(client, sessionId, `JSON.parse(localStorage.getItem('__patina_notification_preferences')).sound === 'none'`);
 
