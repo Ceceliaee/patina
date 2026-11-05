@@ -138,23 +138,33 @@ export async function verifyMiniWindowRuntime(main: CdpConnection, port: number,
     }
     // Extend only the protocol sampling window; normal timing remains covered by
     // browser transitions and the full native hover budget below.
-    await evaluate(mini!, `document.querySelector('.mini-shell').style.setProperty('--qp-motion-base','600ms')`);
+    await mini!.command("Emulation.setEmulatedMedia", {
+      features: [{ name: "prefers-reduced-motion", value: "no-preference" }],
+    });
     try {
+      await evaluate(mini!, `document.querySelector('.mini-shell').style.setProperty('--qp-motion-base','600ms')`);
       for (const edge of ["top", "left", "right"] as const) {
         await action({ kind: "place", edge });
         await probe.request("focus");
-        const full = await probe.request("sample");
+        const { canvas } = await probe.request("sample");
         await evaluate(mini!, `(() => {
           globalThis.__miniResizeCount = 0;
           globalThis.__miniResizeListener = () => { globalThis.__miniResizeCount += 1; };
           window.addEventListener('resize', globalThis.__miniResizeListener);
         })()`);
-        await probe.request("move", full.x + Math.floor(full.width / 2), full.y + Math.floor(full.height / 2));
-        await waitFor(`${edge} panel ready before reversal`, async () => (await state()).expanded, 3_000);
-        await probe.request("move", full.x + full.width + 100, full.y + full.height + 100);
+        await probe.request("move", canvas.x + Math.floor(canvas.width / 2), canvas.y + Math.floor(canvas.height / 2));
+        await waitFor(`${edge} panel ready before reversal`, async () => {
+          const value = await state(); return value.expanded && !value.transitioning;
+        }, 3_000);
+        const full = await probe.request("sample");
+        await probe.request("move", workCenterX, workCenterY);
         const closing = await waitFor(`${edge} exit starts`, async () => {
           const value = await state(); return !value.expanded && value.transitioning ? value : null;
-        }, 3_000);
+        }, 3_000).catch(async error => {
+          const motion = await evaluate(mini!, `({ reduced: matchMedia('(prefers-reduced-motion: reduce)').matches,
+            root: document.documentElement.dataset.qpMotion, shell: document.querySelector('.mini-shell').dataset.expanded })`);
+          throw new Error(`${error}; motion=${JSON.stringify(motion)}; state=${JSON.stringify(await state())}; native=${JSON.stringify(await probe.request("sample"))}`);
+        });
         const duringExit = await probe.request("sample");
         assert.deepEqual(duringExit.canvas, full.canvas);
         assert.equal(duringExit.width, full.width, "exit must retain the expanded native width");
@@ -173,7 +183,7 @@ export async function verifyMiniWindowRuntime(main: CdpConnection, port: number,
         assert.equal(afterReturn.width, full.width);
         assert.equal(afterReturn.height, full.height);
         await waitFor(`${edge} reverse animation completes`, async () => !(await state()).transitioning, 3_000);
-        await probe.request("move", full.x + full.width + 100, full.y + full.height + 100);
+        await probe.request("move", workCenterX, workCenterY);
         await waitFor(`${edge} native region contracts after exit`, isCollapsed, 3_000);
         const collapsed = await probe.request("sample");
         assert.deepEqual(collapsed.canvas, full.canvas, "settling must not resize or move the WebView");
@@ -187,10 +197,14 @@ export async function verifyMiniWindowRuntime(main: CdpConnection, port: number,
       }
     } finally {
       await evaluate(mini!, `document.querySelector('.mini-shell').style.removeProperty('--qp-motion-base')`);
+      await mini!.command("Emulation.setEmulatedMedia", { features: [] });
     }
     console.log("PASS native morph keeps a fixed canvas in both directions, clips hit testing after exit, reverses and rejects stale completions on all three edges");
     // Isolate surface opacity and the handle fade from text and status hues.
     // Geometry, content retention and native clipping are asserted separately.
+    await mini!.command("Emulation.setEmulatedMedia", {
+      features: [{ name: "prefers-reduced-motion", value: "no-preference" }],
+    });
     await evaluate(mini!, `(() => {
       const style = document.createElement('style');
       style.id = 'mini-compositor-fixture';
@@ -246,6 +260,7 @@ export async function verifyMiniWindowRuntime(main: CdpConnection, port: number,
     } finally {
       await evaluate(mini!, `document.getElementById('mini-compositor-fixture')?.remove()`);
       await probe.request("restore-backdrop");
+      await mini!.command("Emulation.setEmulatedMedia", { features: [] });
     }
     await probe.request("focus");
     console.log("PASS shared surface remains opaque and handle pixels fade without flashes over a blue backdrop on all three edges in both directions");
