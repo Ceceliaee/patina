@@ -57,7 +57,7 @@ html[data-window-label="mini"] #root {
   width: var(--mini-panel-width, 320px);
   height: var(--mini-panel-height, 240px);
   border: 0;
-  background: transparent;
+  background: var(--qp-bg-canvas);
 }
 .mini-shell[data-transitioning="true"] .mini-panel {
   transition: top var(--qp-motion-base) var(--qp-motion-ease), left var(--qp-motion-base) var(--qp-motion-ease),

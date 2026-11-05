@@ -311,6 +311,14 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
         const handle = document.querySelector('.mini-handle');
         const content = document.querySelector('.mini-content');
         const body = document.querySelector('.mini-panel-body');
+        const probe = document.createElement('canvas').getContext('2d');
+        const surfaceAlpha = () => {
+          probe.clearRect(0, 0, 1, 1);
+          probe.fillStyle = getComputedStyle(panel).backgroundColor;
+          probe.fillRect(0, 0, 1, 1);
+          return probe.getImageData(0, 0, 1, 1).data[3];
+        };
+        if (surfaceAlpha() !== 255) throw new Error('expanded Mini surface must paint its own opaque background');
         const expandedBounds = panel.getBoundingClientRect().toJSON();
         const handleBounds = handle.getBoundingClientRect().toJSON();
         const bodyWidth = body.getBoundingClientRect().width;
@@ -333,7 +341,7 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
           }
           for (const animation of animations) { animation.pause(); animation.currentTime = Number(animation.effect.getTiming().duration) * 0.35; }
           const before = value();
-          const opacity = Number(getComputedStyle(panel).opacity);
+          const opacity = Number(getComputedStyle(panel).opacity) * surfaceAlpha() / 255;
           const expanded = shell.dataset.expanded !== 'true';
           const after = await toggle(expanded);
           samples.push({before, after, opacity, bodyWidth: body.getBoundingClientRect().width, sameContent: content === document.querySelector('.mini-content'), pending: shell.dataset.transitioning});
