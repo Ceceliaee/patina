@@ -385,6 +385,9 @@ fn now_ms() -> i64 {
 }
 
 #[cfg(test)]
+pub(super) mod capacity;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::data::schema;

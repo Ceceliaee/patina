@@ -1,4 +1,5 @@
 mod compact;
+mod totals;
 pub(crate) use compact::recent_snapshot_in_tx;
 
 use crate::data::sqlite_error::SqliteOperationError;
@@ -404,15 +405,6 @@ pub async fn load_in_tx(tx: &mut Transaction<'_, Sqlite>) -> Result<WebLinkRules
     Ok(rules)
 }
 
-async fn lifetime_domain_totals(
-    tx: &mut Transaction<'_, Sqlite>,
-) -> Result<BTreeMap<String, i64>, String> {
-    let totals: Vec<(String, i64)> = sqlx::query_as(
-        "WITH ordered AS (SELECT normalized_domain, browser_client_id, browser_kind, browser_exe_name, start_time, COALESCE(end_time, updated_at) finish, MAX(COALESCE(end_time, updated_at)) OVER (PARTITION BY normalized_domain,browser_client_id,browser_kind,browser_exe_name ORDER BY start_time,id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) previous_end FROM web_activity_segments) SELECT normalized_domain,SUM(MAX(0,finish-MAX(start_time,COALESCE(previous_end,start_time)))) FROM ordered GROUP BY normalized_domain")
-        .fetch_all(&mut **tx).await.map_err(|e| e.to_string())?;
-    Ok(totals.into_iter().collect())
-}
-
 async fn migrate_domain_categories(
     tx: &mut Transaction<'_, Sqlite>,
     protected: &std::collections::BTreeSet<String>,
@@ -426,24 +418,12 @@ async fn migrate_domain_categories(
     if done {
         return Ok(());
     }
-    let rows: Vec<(String, String)> = sqlx::query_as("SELECT substr(key,24),value FROM settings WHERE substr(key,1,23)='__web_domain_override::'")
-        .fetch_all(&mut **tx).await.map_err(|e| e.to_string())?;
-    let overrides: BTreeMap<String, serde_json::Value> = rows
-        .into_iter()
-        .map(|(domain, value)| {
-            let value: serde_json::Value =
-                serde_json::from_str(&value).map_err(|e| e.to_string())?;
-            if !value.is_object() {
-                return Err("invalid website override object".into());
-            }
-            Ok((domain, value))
-        })
-        .collect::<Result<_, String>>()?;
+    let overrides = read_overrides_in_tx(tx).await?;
     if overrides
         .values()
         .any(|value| value.get("category").is_some())
     {
-        let totals = lifetime_domain_totals(tx).await?;
+        let totals = totals::read_uncached(tx).await?;
         let mut rules = load_in_tx(tx).await?;
         let mut winners: BTreeMap<String, (String, i64)> = BTreeMap::new();
         for domain in totals.keys().chain(overrides.keys()) {
@@ -592,18 +572,16 @@ pub struct WebLinksSnapshot {
 
 pub async fn snapshot(pool: &sqlx::Pool<Sqlite>) -> Result<WebLinksSnapshot, String> {
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
-    snapshot_in_tx(&mut tx).await
+    let snapshot = snapshot_in_tx(&mut tx).await?;
+    tx.commit().await.map_err(|e| e.to_string())?;
+    Ok(snapshot)
 }
 
 pub async fn snapshot_in_tx(tx: &mut Transaction<'_, Sqlite>) -> Result<WebLinksSnapshot, String> {
     let rules = load_in_tx(tx).await?;
     let overrides = read_overrides_in_tx(tx).await?;
-    let domains: Vec<String> = sqlx::query_scalar(
-        "SELECT DISTINCT normalized_domain FROM web_activity_segments ORDER BY normalized_domain",
-    )
-    .fetch_all(&mut **tx)
-    .await
-    .map_err(|e| e.to_string())?;
+    let totals = totals::read_cached(tx).await?;
+    let domains: Vec<String> = totals.keys().cloned().collect();
     let roots = domains
         .iter()
         .chain(overrides.keys())
@@ -611,7 +589,6 @@ pub async fn snapshot_in_tx(tx: &mut Transaction<'_, Sqlite>) -> Result<WebLinks
             crate::domain::web_links::registrable_domain(domain).map(|root| (domain.clone(), root))
         })
         .collect();
-    let totals = lifetime_domain_totals(tx).await?;
     let favicons: Vec<(String, String)> = sqlx::query_as(
         "SELECT normalized_domain,favicon_url FROM web_favicon_cache WHERE trim(favicon_url) <> ''",
     )
@@ -667,6 +644,7 @@ pub async fn snapshot_range(
             .collect(),
     );
     snapshot.segments = Some(read_segments_in_tx(&mut tx, start, end, now).await?);
+    tx.commit().await.map_err(|e| e.to_string())?;
     Ok(snapshot)
 }
 

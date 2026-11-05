@@ -1377,6 +1377,7 @@ mod query_plan_diagnostics {
         web_segment_count: i64,
         range_start_ms: i64,
         range_end_ms: i64,
+        web_range: Vec<serde_json::Value>,
         notes: Vec<&'static str>,
     }
 
@@ -1864,6 +1865,7 @@ mod query_plan_diagnostics {
                 web_segment_count: WEB_SEGMENT_COUNT,
                 range_start_ms: RANGE_START_MS,
                 range_end_ms: RANGE_END_MS,
+                web_range: crate::data::web_activity_analysis::capacity::measure().await,
                 notes: vec![
                     "Synthetic in-memory SQLite data; no product migration or user database is modified.",
                     "Candidate indexes are created only after baseline measurements in the temporary database.",
