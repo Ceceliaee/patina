@@ -1,3 +1,4 @@
+import { useActivityDisplayColor } from "../hooks/useActivityDisplayColor.ts";
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import QuietChartTooltip, {
   type QuietChartTooltipItem,
@@ -96,6 +97,7 @@ export default function NativeTrendChart({
   ticks,
   width,
 }: Props) {
+  const displayColor = useActivityDisplayColor();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const safeWidth = Math.max(1, width);
   const safeHeight = Math.max(1, height);
@@ -257,12 +259,12 @@ export default function NativeTrendChart({
             : "";
           return (
             <g key={item.key}>
-              <path d={areaPath} fill={item.color} fillOpacity="0.12" />
+              <path d={areaPath} fill={displayColor(item.color)} fillOpacity="0.12" />
               <path
                 className="qp-native-trend-line"
                 d={linePath}
                 fill="none"
-                stroke={item.color}
+                stroke={displayColor(item.color)}
                 strokeWidth="2"
               />
               {points.map((point, index) => (
@@ -271,7 +273,7 @@ export default function NativeTrendChart({
                   className="qp-native-trend-dot"
                   cx={point.x}
                   cy={point.y}
-                  fill={item.color}
+                  fill={displayColor(item.color)}
                   r="3"
                 />
               ))}

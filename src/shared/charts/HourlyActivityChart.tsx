@@ -1,3 +1,4 @@
+import { useActivityDisplayColor } from "../hooks/useActivityDisplayColor.ts";
 import { useLocaleText } from "../i18n/index.ts";
 import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import AnonymousActivityPattern from "./AnonymousActivityPattern.tsx";
@@ -110,6 +111,7 @@ export default function HourlyActivityChart({
   margin,
   padding,
 }: Props) {
+  const displayColor = useActivityDisplayColor();
   const UI_TEXT = useLocaleText();
   const anonymousPatternId = useId();
   const chartRef = useRef<HTMLDivElement | null>(null);
@@ -256,7 +258,7 @@ export default function HourlyActivityChart({
                           segmentHeight,
                           radius,
                         )}
-                        fill={segment.category === "anonymous" ? `url(#${anonymousPatternId})` : segment.color}
+                        fill={segment.category === "anonymous" ? `url(#${anonymousPatternId})` : displayColor(segment.color)}
                       />
                     );
                   }
@@ -264,7 +266,7 @@ export default function HourlyActivityChart({
                     <rect
                       key={dataKey}
                       className="qp-hourly-chart-bar"
-                      fill={segment.category === "anonymous" ? `url(#${anonymousPatternId})` : segment.color}
+                      fill={segment.category === "anonymous" ? `url(#${anonymousPatternId})` : displayColor(segment.color)}
                       height={segmentHeight}
                       width={renderedBarWidth}
                       x={x}

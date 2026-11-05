@@ -1,3 +1,4 @@
+import { useActivityDisplayColor } from "../../../shared/hooks/useActivityDisplayColor.ts";
 import { useEffect, useId, useRef, useState } from "react";
 import { Filter } from "lucide-react";
 import QuietIconAction from "../../../shared/components/QuietIconAction.tsx";
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export default function CategorySearchField({ value, options, onChange, placeholder, disabled }: Props) {
+  const displayColor = useActivityDisplayColor();
   const text = useLocaleText();
   const id = useId();
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -106,7 +108,7 @@ export default function CategorySearchField({ value, options, onChange, placehol
               className={`qp-category-filter-option ${optionIndex === index ? "qp-category-filter-option-active" : ""}`}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => select(option.label)}>
-              <span className="qp-category-filter-dot" aria-hidden style={{ backgroundColor: option.color }} />
+              <span className="qp-category-filter-dot" aria-hidden style={{ backgroundColor: displayColor(option.color, "elevated") }} />
               <span className="qp-category-filter-label">{option.label}</span>
             </button>
           ))}

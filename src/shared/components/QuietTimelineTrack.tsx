@@ -1,3 +1,4 @@
+import { useActivityDisplayColor } from "../hooks/useActivityDisplayColor.ts";
 import type { CSSProperties, ReactNode } from "react";
 import QuietTooltip from "./QuietTooltip.tsx";
 import { ANONYMOUS_ACTIVITY_BACKGROUND } from "../charts/AnonymousActivityPattern.tsx";
@@ -91,11 +92,12 @@ export function QuietTimelineSegment({
   disabled = false,
   hideOnPointerDown = true,
 }: QuietTimelineSegmentProps) {
+  const displayColor = useActivityDisplayColor();
   const style: TimelineSegmentStyle = {
     "--qp-timeline-segment-pattern": anonymous ? ANONYMOUS_ACTIVITY_BACKGROUND : "none",
     "--qp-timeline-segment-left": `${leftRatio * 100}%`,
     "--qp-timeline-segment-width": `${Math.max(0, widthRatio) * 100}%`,
-    "--qp-timeline-segment-color": color,
+    "--qp-timeline-segment-color": displayColor(color, "timeline"),
   };
 
   return (

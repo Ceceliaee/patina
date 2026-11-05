@@ -1,3 +1,4 @@
+import { useActivityDisplayColor } from "../../shared/hooks/useActivityDisplayColor.ts";
 import { useState, type SyntheticEvent } from "react";
 import { ANONYMOUS_ACTIVITY_BACKGROUND } from "../../shared/charts/AnonymousActivityPattern.tsx";
 import QuietChartTooltip, { type QuietChartTooltipItem } from "../../shared/components/QuietChartTooltip.tsx";
@@ -23,6 +24,7 @@ function rangeLabel(start: number, end: number, sampledAt: number) {
 }
 
 export default function MiniActivityContent({ page, health }: { page: "activity"; health: TrackerHealthSnapshot }) {
+  const displayColor = useActivityDisplayColor();
   const text = useLocaleText();
   const { view, today, failed, retry } = useMiniActivity(page, health);
   const [tip, setTip] = useState<{ scope: string; key: string; anchor: HTMLButtonElement } | null>(null);
@@ -88,7 +90,7 @@ export default function MiniActivityContent({ page, health }: { page: "activity"
         <div className="mini-timeline-paint" aria-hidden="true">
           {view.timeline.segments.map(item => <span key={item.id}
             style={{ left: `${item.startRatio * 100}%`, width: `${Math.max(0, item.widthRatio) * 100}%`,
-              backgroundColor: item.color, backgroundImage: item.category === "anonymous" ? ANONYMOUS_ACTIVITY_BACKGROUND : undefined }} />)}
+              backgroundColor: displayColor(item.color, "canvasTrack"), backgroundImage: item.category === "anonymous" ? ANONYMOUS_ACTIVITY_BACKGROUND : undefined }} />)}
         </div>
         {view.timeline.segments.map(item => <button key={item.id} type="button" className="mini-timeline-segment"
           style={{ left: `${item.startRatio * 100}%`, width: `${Math.max(0, item.widthRatio) * 100}%` }}
@@ -97,7 +99,7 @@ export default function MiniActivityContent({ page, health }: { page: "activity"
       </QuietTimelineTrack>
       <ul className="mini-leaders" aria-label={text.miniWindow.recentHour}>
         {view.leaders.slice(0, 3).map(item => <li key={item.key} className="mini-leader">
-          <span className="mini-category-dot" style={{ backgroundColor: item.color }} aria-hidden="true" />
+          <span className="mini-category-dot" style={{ backgroundColor: displayColor(item.color, "canvas") }} aria-hidden="true" />
           <span className="mini-leader-name">{item.label}</span><span className="mini-duration">{formatMiniActivityDuration(item.duration)}</span>
         </li>)}
       </ul>

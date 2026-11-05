@@ -41,11 +41,7 @@
   left: 0;
   height: var(--qp-timeline-segment-height, 36px);
   border-radius: var(--qp-radius-timeline-segment);
-  background: color-mix(
-    in srgb,
-    var(--qp-timeline-segment-color) 88%,
-    var(--qp-bg-panel)
-  );
+  background: var(--qp-timeline-segment-color);
   background-image: var(--qp-timeline-segment-pattern, none);
   background-size: 6px 6px;
   content: "";

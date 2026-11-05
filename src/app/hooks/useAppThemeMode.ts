@@ -1,4 +1,5 @@
 import { deriveTheme } from "../../shared/theme/deriveTheme.ts";
+import { applyActivityDisplayTheme } from "../../shared/theme/activityDisplayTheme.ts";
 import { getThemePreset } from "../../shared/theme/themePresets.ts";
 import { useLayoutEffect } from "react";
 import type { ColorScheme, ThemeMode } from "../../shared/settings/appSettings.ts";
@@ -18,11 +19,13 @@ function applyDocumentTheme(themeMode: ThemeMode, effectiveTheme: EffectiveTheme
   root.dataset.themeMode = themeMode;
   root.dataset.theme = effectiveTheme;
   root.dataset.colorScheme = colorScheme;
-  for (const [key, value] of Object.entries(deriveTheme(effectiveTheme, colorScheme, null))) {
+  const tokens = deriveTheme(effectiveTheme, colorScheme, null);
+  for (const [key, value] of Object.entries(tokens)) {
     root.style.setProperty(key, value);
   }
   root.dataset.themeContrast = String(getThemePreset(effectiveTheme, colorScheme).contrast);
   root.style.colorScheme = effectiveTheme;
+  applyActivityDisplayTheme(effectiveTheme, tokens);
 }
 
 export function isDocumentThemeApplied(

@@ -1,3 +1,4 @@
+import { useActivityDisplayColor } from "../../../shared/hooks/useActivityDisplayColor.ts";
 import AnonymousActivityIcon from "../../../shared/components/AnonymousActivityIcon.tsx";
 import { useLocale, useLocaleText } from "../../../shared/i18n/index.ts";
 import type { UiText } from "../../../shared/i18n/index.ts";
@@ -59,6 +60,7 @@ export default function DestinationDetailDialog({
   runtime,
   onClose,
 }: Props) {
+  const displayColor = useActivityDisplayColor();
   const UI_TEXT = useLocaleText();
   const locale = useLocale();
   const copy = UI_TEXT.destinationDetail;
@@ -151,7 +153,7 @@ export default function DestinationDetailDialog({
     >
       <div
         className="destination-detail"
-        style={{ "--destination-detail-color": target.color } as CSSProperties}
+        style={{ "--destination-detail-color": displayColor(target.color) } as CSSProperties}
       >
         <section className="destination-detail-section">
           <div

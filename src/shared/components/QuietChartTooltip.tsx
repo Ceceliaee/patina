@@ -1,3 +1,4 @@
+import { useActivityDisplayColor } from "../hooks/useActivityDisplayColor.ts";
 import type { CSSProperties, ReactNode } from "react";
 
 export interface QuietChartTooltipItem {
@@ -22,6 +23,7 @@ export default function QuietChartTooltip({
   label,
   style,
 }: Props) {
+  const displayColor = useActivityDisplayColor();
   if (items.length === 0) {
     return null;
   }
@@ -41,7 +43,7 @@ export default function QuietChartTooltip({
             <span className="qp-chart-tooltip-key">
               <span
                 className="qp-chart-tooltip-dot"
-                style={{ backgroundColor: item.color ?? "var(--qp-accent-default)" }}
+                style={{ backgroundColor: item.color ? displayColor(item.color) : "var(--qp-accent-default)" }}
               />
               <span className="qp-chart-tooltip-name">{item.name}</span>
             </span>

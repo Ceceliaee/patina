@@ -1,3 +1,4 @@
+import { useActivityDisplayColor } from "../../../shared/hooks/useActivityDisplayColor.ts";
 import { useLocale, useLocaleText } from "../../../shared/i18n/index.ts";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode, } from "react";
 import QuietStepperSlider from "../../../shared/components/QuietStepperSlider.tsx";
@@ -84,6 +85,7 @@ export default function DestinationDetailTimeline({
   onViewportChange,
   onZoomHoursChange,
 }: Props) {
+  const displayColor = useActivityDisplayColor();
   const UI_TEXT = useLocaleText();
   const locale = useLocale();
   const copy = UI_TEXT.destinationDetail;
@@ -337,7 +339,7 @@ export default function DestinationDetailTimeline({
               formatDuration(segment.duration),
             );
             const tooltipContentStyle: TooltipContentStyle = {
-              "--tooltip-color": color,
+              "--tooltip-color": displayColor(color),
             };
             return (
               <QuietTimelineSegment
