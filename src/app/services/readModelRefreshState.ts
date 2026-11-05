@@ -23,12 +23,3 @@ export function applyMappingOverridesReadModelRefresh(
     dataRefreshTick: state.dataRefreshTick + 1,
   };
 }
-
-export function applySessionDeletionReadModelRefresh(
-  state: ReadModelRefreshState,
-): ReadModelRefreshState {
-  return {
-    ...state,
-    dataRefreshTick: state.dataRefreshTick + 1,
-  };
-}

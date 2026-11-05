@@ -1,9 +1,10 @@
 import { useLocaleText } from "../i18n/index.ts";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import QuietConfirmDialog from "../components/QuietConfirmDialog";
 import QuietPromptDialog from "../components/QuietPromptDialog";
 
 interface ConfirmDialogOptions {
+  details?: ReactNode;
   title: string;
   description?: string;
   confirmLabel?: string;
@@ -63,6 +64,7 @@ export function useQuietDialogs() {
       {confirmState && (
         <QuietConfirmDialog
           open={confirmState.open}
+          details={confirmState.details}
           title={confirmState.title}
           description={confirmState.description}
           confirmLabel={confirmState.confirmLabel ?? UI_TEXT.dialog.confirm}

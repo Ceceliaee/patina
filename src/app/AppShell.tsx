@@ -23,7 +23,6 @@ import type { ColorSchemePreview } from "../features/settings/types.ts";
 import { useDashboardStats } from "../features/dashboard/hooks/useDashboardStats";
 import { useWindowTracking } from "./hooks/useWindowTracking";
 import {
-  applySessionDeletionReadModelRefresh,
   INITIAL_READ_MODEL_REFRESH_STATE,
   resolveReadModelRefreshSignal,
 } from "./services/readModelRefreshState.ts";
@@ -33,12 +32,9 @@ import {
   loadDataTrendRuntimeSnapshot,
   loadHistoryRuntimeSnapshot,
 } from "./services/readModelRuntimeService";
-import { clearDashboardSnapshotCache } from "../features/dashboard/services/dashboardSnapshotCache.ts";
 import {
   clearDataBootstrapCache,
-  clearDataHeavyCaches,
 } from "../features/data/services/dataCacheLifecycle.ts";
-import { clearHistoryCachesAfterDataChange } from "../features/history/services/historyCacheLifecycle.ts";
 import { useQuietDialogs } from "../shared/hooks/useQuietDialogs";
 import { useAppShellNavigation } from "./hooks/useAppShellNavigation";
 import { useAppShellToasts } from "./hooks/useAppShellToasts";
@@ -374,13 +370,9 @@ export default function AppShellContent({
                 titleRecordingEnabled={appSettings.titleRecordingEnabled}
                 onDirtyChange={setMappingDirty}
                 onOverridesChanged={handleMappingOverridesChanged}
-                onSessionsDeleted={(kind) => {
-                  clearDashboardSnapshotCache();
-                  void clearHistoryCachesAfterDataChange();
-                  clearDataHeavyCaches();
-                  void clearDataBootstrapCache();
-                  setReadModelRefreshState(applySessionDeletionReadModelRefresh);
-                  pushToast(kind === "web" ? uiText.toast.cleanupSuccess : uiText.app.historyDeleted, "success");
+                onSessionsDeleted={() => {
+                  onMappingOverridesChanged();
+                  pushToast(uiText.mapping.objectDeleted, "success");
                 }}
                 webActivityEnabled={appSettings.webActivityEnabled}
               />

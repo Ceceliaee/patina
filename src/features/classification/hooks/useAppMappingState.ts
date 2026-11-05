@@ -1,4 +1,4 @@
-import { changeAppLink, isLinkedIdentity } from "../../../shared/classification/appLinks.ts";
+import { changeAppLink } from "../../../shared/classification/appLinks.ts";
 import { groupLinkedAppCatalog, seedLinkedAppName } from "../services/linkedAppCatalog.ts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocaleText } from "../../../shared/i18n/index.ts";
@@ -8,10 +8,14 @@ import { useRequestedAppIcons } from "../../../shared/hooks/useRequestedAppIcons
 import { useQuietDialogs } from "../../../shared/hooks/useQuietDialogs";
 import type { ColorDisplayFormat } from "../../../shared/lib/colorFormatting";
 import { refreshKnownWebDomains } from "../../../shared/classification/webLinks.ts";
-import { loadWebDomainOverrides } from "../services/classificationStore.ts";
+import { webLinkParent } from "../../../shared/classification/webLinks.ts";
+import { publishAppIconChange } from "../../../shared/hooks/appIconChanges.ts";
+import { confirmObjectDeletion } from "../components/ObjectDeletionConfirmation.tsx";
+import type { DeletionTarget } from "../services/classificationService.ts";
 import {
   ClassificationService,
   type AppOverride,
+  type ClassificationBootstrapData,
   type ClassificationDraftState,
 } from "../services/classificationService";
 import { cloneClassificationDraftState } from "../services/classificationDraftState.ts";
@@ -41,7 +45,6 @@ import {
 import {
   cancelAppMappingNameEdit,
   cancelWebDomainNameEdit,
-  deleteObservedCandidateSessionsWithDeps,
   saveAppMappingStateWithDeps,
   startAppMappingNameEdit,
   startWebDomainNameEdit,
@@ -72,7 +75,7 @@ interface UseAppMappingStateOptions {
   icons: Record<string, string>;
   onDirtyChange?: (dirty: boolean) => void;
   onOverridesChanged?: () => void;
-  onSessionsDeleted?: (kind?: "web") => void;
+  onSessionsDeleted?: () => void;
   onRegisterSaveHandler?: (handler: (() => Promise<boolean>) | null) => void;
   webActivityEnabled?: boolean;
 }
@@ -121,6 +124,23 @@ export function useAppMappingState({
   const skipNextWebNameBlurDomainRef = useRef<string | null>(null);
   const hasUnsavedChangesRef = useRef(false);
 
+  const resetNameEditors = useCallback(() => {
+    setNameDrafts({});
+    setNameEditSnapshots({});
+    setEditingNameExe(null);
+    setWebNameDrafts({});
+    setWebNameEditSnapshots({});
+    setEditingWebDomain(null);
+    skipNextNameBlurExeRef.current = null;
+    skipNextWebNameBlurDomainRef.current = null;
+  }, []);
+  const acceptBootstrap = useCallback((bootstrap: ClassificationBootstrapData) => {
+    const next = createAppMappingDraftState(bootstrap);
+    setSavedState(next);
+    setDraftState(cloneClassificationDraftState(next));
+    resetNameEditors();
+  }, [resetNameEditors]);
+
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
@@ -142,15 +162,7 @@ export function useAppMappingState({
           setSavedState(refresh);
           setDraftState(refresh);
         } else {
-          const nextState = createAppMappingDraftState(bootstrap);
-          setSavedState(nextState);
-          setDraftState(cloneClassificationDraftState(nextState));
-          setNameEditSnapshots({});
-          setEditingNameExe(null);
-          setWebNameEditSnapshots({});
-          setEditingWebDomain(null);
-          skipNextNameBlurExeRef.current = null;
-          skipNextWebNameBlurDomainRef.current = null;
+          acceptBootstrap(bootstrap);
         }
       } catch (error) {
         console.warn("load app mapping bootstrap failed", error);
@@ -168,7 +180,7 @@ export function useAppMappingState({
     return () => {
       cancelled = true;
     };
-  }, [loadRequestVersion]);
+  }, [loadRequestVersion, acceptBootstrap]);
 
   const retryLoading = useCallback(() => {
     setLoadRequestVersion((current) => current + 1);
@@ -290,19 +302,6 @@ export function useAppMappingState({
   const categorySearchOptions = candidateCategoryOptions
     .filter((option) => availableFilterCategories.has(option.value))
     .map((option) => ({ ...option, color: resolveCategoryColor(option.value) }));
-
-  const refreshWebDomainCandidates = useCallback(async () => {
-    const [observedWebDomains, freshWebOverrides] = await Promise.all([
-      ClassificationService.loadObservedWebDomainCandidates(),
-      loadWebDomainOverrides(),
-    ]);
-    setWebDomainCandidates(observedWebDomains);
-    const refresh = (current: ClassificationDraftState | null) => current ? {
-      ...current, webDomainOverrides: refreshKnownWebDomains(current.webDomainOverrides, freshWebOverrides),
-    } : current;
-    setSavedState(refresh);
-    setDraftState(refresh);
-  }, []);
 
   const updateOverride = useCallback((exeName: string, nextOverride: AppOverride | null) => {
     setDraftState((current) => {
@@ -626,92 +625,39 @@ export function useAppMappingState({
     webNameEditSnapshots,
   ]);
 
-  const handleDeleteAllSessions = useCallback(async (candidate: ObservedAppCandidate) => {
-    if (deletingAppRecordsRef.current) return;
+  const deleteObject = async (target: DeletionTarget, displayName: string) => {
+    if (deletingAppRecordsRef.current || hasUnsavedChanges || saving) return;
     deletingAppRecordsRef.current = true;
+    setDeletingSessionsExe(target.key);
     setActionError(null);
-    const displayName = resolveEffectiveDisplayName(candidate);
-    setDeletingSessionsExe(candidate.exeName);
+    let deleted = false;
     try {
-      const result = await deleteObservedCandidateSessionsWithDeps(candidate, {
-        confirmDelete: () => confirm({
-          title: UI_TEXT.mapping.deleteAppSessionsTitle,
-          description: UI_TEXT.mapping.deleteAppSessionsDetail(`${displayName} (${candidate.exeName})`),
-          confirmLabel: UI_TEXT.dialog.confirmDanger,
-          danger: true,
-        }),
-        deleteObservedAppSessions: async (exeName, scope) => {
-          await ClassificationService.deleteObservedAppSessions(exeName, scope);
-        },
-        onSessionsDeleted,
-      });
-      if (!result.deleted) {
-        return;
-      }
-      setSavedState((current) => (
-        current && !isLinkedIdentity(candidate.exeName, current.appLinks ?? {})
-          ? updateAppOverrideInDraftState(current, candidate.exeName, null) : current
-      ));
-      setDraftState((current) => (
-        current && !isLinkedIdentity(candidate.exeName, current.appLinks ?? {})
-          ? updateAppOverrideInDraftState(current, candidate.exeName, null) : current
-      ));
-      setNameDrafts((current) => {
-        const next = { ...current };
-        delete next[candidate.exeName];
-        return next;
-      });
-      setNameEditSnapshots((current) => {
-        const next = { ...current };
-        delete next[candidate.exeName];
-        return next;
-      });
-      setEditingNameExe((current) => (current === candidate.exeName ? null : current));
-      await appCatalog.reload();
+      deleted = await confirmObjectDeletion(target, displayName, UI_TEXT, confirm);
+      if (!deleted) return;
+      ClassificationService.invalidateBootstrapCache();
+      ClassificationService.invalidateAppCatalog({ discardCommitted: true });
+      const [bootstrap] = await Promise.all([ClassificationService.loadClassificationBootstrap(), appCatalog.reload()]);
+      ClassificationService.applyBootstrapToProcessMapper(bootstrap);
+      acceptBootstrap(bootstrap);
+      setWebDomainCandidates(cloneObservedWebDomainCandidates(bootstrap.observedWebDomains));
     } catch (error) {
-      console.warn("delete app records failed", error);
-      setActionError("delete");
+      console.warn("classification object deletion failed", error);
+      setActionError(deleted ? "refresh" : "delete");
     } finally {
+      if (deleted) {
+        if (target.kind === "app") publishAppIconChange(target.key);
+        onSessionsDeleted?.();
+      }
       deletingAppRecordsRef.current = false;
       setDeletingSessionsExe(null);
     }
-  }, [appCatalog, confirm, onSessionsDeleted, resolveEffectiveDisplayName, UI_TEXT]);
+  };
+  const handleDeleteAllSessions = (candidate: ObservedAppCandidate) => deleteObject({ kind: "app", key: candidate.exeName }, resolveEffectiveDisplayName(candidate));
+  const handleDeleteWebDomainHistory = (candidate: ObservedWebDomainCandidate) => {
+    const root = webLinkParent(candidate.normalizedDomain);
+    return deleteObject({ kind: root ? "group" : "web", key: root ?? candidate.normalizedDomain }, resolveWebDomainDisplayName(candidate));
+  };
 
-  const handleDeleteWebDomainHistory = useCallback(async (candidate: ObservedWebDomainCandidate) => {
-    if (deletingAppRecordsRef.current) return;
-    deletingAppRecordsRef.current = true;
-    setActionError(null);
-    const displayName = resolveWebDomainDisplayName(candidate);
-    const recordedMembers = candidate.memberCandidates?.filter(member => draftWebDomainOverrides[member.normalizedDomain]?.knownDomain);
-    setDeletingSessionsExe(candidate.normalizedDomain);
-    try {
-      const confirmed = await confirm({
-        title: UI_TEXT.mapping.deleteWebDomainHistoryTitle,
-        description: recordedMembers
-          ? UI_TEXT.mapping.deleteWebGroupDetail(recordedMembers.length, recordedMembers.map(member => member.normalizedDomain).join(", "))
-          : UI_TEXT.mapping.deleteWebDomainHistoryDetail(displayName === candidate.normalizedDomain ? displayName : `${displayName} (${candidate.normalizedDomain})`),
-        confirmLabel: UI_TEXT.dialog.confirmDanger,
-        danger: true,
-      });
-      if (!confirmed) {
-        return;
-      }
-      await ClassificationService.deleteObservedWebDomainHistory(candidate.normalizedDomain, recordedMembers?.map(member => member.normalizedDomain));
-      onSessionsDeleted?.("web");
-      try {
-        await refreshWebDomainCandidates();
-      } catch (error) {
-        console.warn("refresh web records after deletion failed", error);
-        setActionError("refresh");
-      }
-    } catch (error) {
-      console.warn("delete web records failed", error);
-      setActionError("delete");
-    } finally {
-      deletingAppRecordsRef.current = false;
-      setDeletingSessionsExe(null);
-    }
-  }, [confirm, draftWebDomainOverrides, onSessionsDeleted, refreshWebDomainCandidates, resolveWebDomainDisplayName, UI_TEXT]);
 
   const handleTrackingToggle = useCallback((candidate: ObservedAppCandidate, nextTrack: boolean) => {
     const current = draftOverrides[candidate.exeName] ?? null;
@@ -765,12 +711,7 @@ export function useAppMappingState({
         setClassificationBootstrapCache(result.nextBootstrap);
       }
       if (result.resetEditingState) {
-        setNameEditSnapshots({});
-        setEditingNameExe(null);
-        setWebNameEditSnapshots({});
-        setEditingWebDomain(null);
-        skipNextNameBlurExeRef.current = null;
-        skipNextWebNameBlurDomainRef.current = null;
+        resetNameEditors();
         onOverridesChanged?.();
       }
       setSaveStatus(result.nextSaveStatus);
@@ -787,7 +728,7 @@ export function useAppMappingState({
       setSaveStatus("idle");
       return false;
     }
-  }, [draftState, hasUnsavedChanges, onOverridesChanged, savedState, saving, webDomainCandidates]);
+  }, [draftState, hasUnsavedChanges, onOverridesChanged, resetNameEditors, savedState, saving, webDomainCandidates]);
 
   useEffect(() => {
     if (saveStatus !== "saved") return;
@@ -806,16 +747,9 @@ export function useAppMappingState({
     if (!savedState || !hasUnsavedChanges || saving) return;
     setActionError(null);
     setDraftState(savedState);
-    setNameDrafts({});
-    setNameEditSnapshots({});
-    setEditingNameExe(null);
-    setWebNameDrafts({});
-    setWebNameEditSnapshots({});
-    setEditingWebDomain(null);
-    skipNextNameBlurExeRef.current = null;
-    skipNextWebNameBlurDomainRef.current = null;
+    resetNameEditors();
     setSaveStatus("idle");
-  }, [hasUnsavedChanges, savedState, saving]);
+  }, [hasUnsavedChanges, savedState, saving, resetNameEditors]);
 
   const handleNameBlur = useCallback((candidate: ObservedAppCandidate) => {
     if (skipNextNameBlurExeRef.current === candidate.exeName) {

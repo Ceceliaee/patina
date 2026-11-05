@@ -66,16 +66,6 @@ interface AppMappingSaveFlowResult {
   error: unknown | null;
 }
 
-interface DeleteObservedSessionsDeps {
-  confirmDelete: () => Promise<boolean>;
-  deleteObservedAppSessions: (exeName: string, scope: "today" | "all") => Promise<void>;
-  onSessionsDeleted?: () => void;
-}
-
-interface DeleteObservedSessionsFlowResult {
-  deleted: boolean;
-}
-
 function withUpdatedOverride(
   state: ClassificationDraftState,
   exeName: string,
@@ -348,22 +338,4 @@ export async function saveAppMappingStateWithDeps(
       error,
     };
   }
-}
-
-export async function deleteObservedCandidateSessionsWithDeps(
-  candidate: ObservedAppCandidate,
-  deps: DeleteObservedSessionsDeps,
-): Promise<DeleteObservedSessionsFlowResult> {
-  const confirmed = await deps.confirmDelete();
-  if (!confirmed) {
-    return {
-      deleted: false,
-    };
-  }
-
-  await deps.deleteObservedAppSessions(candidate.exeName, "all");
-  deps.onSessionsDeleted?.();
-  return {
-    deleted: true,
-  };
 }

@@ -1,9 +1,10 @@
 import { useLocaleText } from "../i18n/index.ts";
-import { useRef } from "react";
+import { useRef, type ReactNode } from "react";
 import QuietDialog from "./QuietDialog";
 import QuietButton from "./QuietButton";
 
 interface QuietConfirmDialogProps {
+  details?: ReactNode;
   open: boolean;
   title: string;
   description?: string;
@@ -17,6 +18,7 @@ interface QuietConfirmDialogProps {
 }
 
 export default function QuietConfirmDialog({
+  details,
   open,
   title,
   description,
@@ -60,6 +62,6 @@ export default function QuietConfirmDialog({
           </QuietButton>
         </>
       )}
-    />
+    >{details}</QuietDialog>
   );
 }

@@ -24,7 +24,7 @@ interface Props {
   icons: Record<string, string>;
   onDirtyChange?: (dirty: boolean) => void;
   onOverridesChanged?: () => void;
-  onSessionsDeleted?: (kind?: "web") => void;
+  onSessionsDeleted?: () => void;
   onRegisterSaveHandler?: (handler: (() => Promise<boolean>) | null) => void;
   webActivityEnabled?: boolean;
   titleRecordingEnabled?: boolean;
@@ -158,10 +158,10 @@ export default function AppMapping(props: Props) {
   useEffect(() => {
     const deletionFinished = previousDeletion.current !== null && deletingSessionsExe === null;
     previousDeletion.current = deletingSessionsExe;
-    if (deletionFinished && effectiveObjectMode === "web" && document.activeElement === document.body) {
+    if (deletionFinished && document.activeElement === document.body) {
       mappingRoot.current?.querySelector<HTMLInputElement>(".qp-category-search input")?.focus({ preventScroll: true });
     }
-  }, [deletingSessionsExe, effectiveObjectMode]);
+  }, [deletingSessionsExe]);
   return (
     <div
       ref={mappingRoot}
@@ -331,6 +331,7 @@ export default function AppMapping(props: Props) {
                         assignedCategory={assignedCategory}
                         globalTitleEnabled={titleRecordingEnabled}
                         isBusy={isBusy}
+                    deletionBlocked={hasUnsavedChanges}
                         isEditingName={isEditingName}
                         inputValue={inputValue}
                         colorFormat={colorFormat}
@@ -378,7 +379,7 @@ export default function AppMapping(props: Props) {
                 const assignedCategory = resolveMappedCategory(candidate);
                 const trackingEnabled = resolveTrackingEnabled(candidate);
                 const titleCaptureEnabled = resolveTitleCaptureEnabled(candidate);
-                const isBusy = inactive || saving || deletingSessionsExe === candidate.exeName;
+                const isBusy = inactive || saving || deletingSessionsExe !== null;
                 const isEditingName = !inactive && editingNameExe === candidate.exeName;
                 const inputValue = nameDrafts[candidate.exeName] ?? displayName;
 
@@ -402,6 +403,7 @@ export default function AppMapping(props: Props) {
                     trackingEnabled={trackingEnabled}
                     globalTitleEnabled={titleRecordingEnabled}
                     isBusy={isBusy}
+                    deletionBlocked={hasUnsavedChanges}
                     isEditingName={isEditingName}
                     inputValue={inputValue}
                     colorFormat={colorFormat}

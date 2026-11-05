@@ -1,4 +1,3 @@
-import { deleteWebActivitySegmentsByDomain as deleteWebActivitySegmentsByDomainViaCommand } from "./persistenceWriteRuntimeGateway.ts";
 import { invokeWithCommandError } from "./commandError.ts";
 import { isAnonymousActivity } from "../../shared/classification/anonymousActivity.ts";
 import { loadWebLinksOverrides } from "./webLinksGateway.ts";
@@ -71,9 +70,6 @@ export async function getWebActivitySegmentsInRange(
   return rows.map(mapRawWebActivitySegment);
 }
 
-export async function deleteWebActivitySegmentsByDomain(normalizedDomain: string): Promise<void> {
-  await deleteWebActivitySegmentsByDomainViaCommand(normalizedDomain);
-}
 
 export async function loadObservedWebDomainStats(
   days: number = 30,

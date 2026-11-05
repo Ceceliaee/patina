@@ -1,3 +1,5 @@
+import { classificationDeletion, type DeletionImpact, type DeletionTarget } from "../../../platform/persistence/classificationDeletionGateway.ts";
+export type { DeletionTarget } from "../../../platform/persistence/classificationDeletionGateway.ts";
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
 import type { AppLinks } from "../../../shared/classification/appLinks.ts";
 import { ProcessMapper } from "../../../shared/classification/processMapper.ts";
@@ -363,20 +365,8 @@ export class ClassificationService {
     ProcessMapper.setDeletedCategories(sanitizeDeletedCategories(categories));
   }
 
-  static async deleteObservedAppSessions(exeName: string, scope: "today" | "all" = "all") {
-    await classificationStore.deleteObservedAppSessions(exeName, scope);
-    if (scope === "all") {
-      if (AppClassification.getLinkedAppKeys(exeName).length === 1) {
-        ProcessMapper.setUserOverride(exeName, null);
-      }
-      this.invalidateBootstrapCache();
-      this.invalidateAppCatalog();
-    }
-  }
-
-  static async deleteObservedWebDomainHistory(normalizedDomain: string, members?: string[]) {
-    await classificationStore.deleteObservedWebDomainHistory(normalizedDomain, members);
-    this.invalidateBootstrapCache();
+  static deleteObject(target: DeletionTarget, confirmed?: DeletionImpact) {
+    return classificationDeletion(target, confirmed);
   }
 
   static hasDraftChanges(saved: ClassificationDraftState, draft: ClassificationDraftState): boolean {

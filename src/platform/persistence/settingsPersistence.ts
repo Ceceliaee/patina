@@ -1,4 +1,4 @@
-import { deleteSessionsBefore as deleteSessionsBeforeViaCommand } from "./persistenceWriteRuntimeGateway.ts";
+export { deleteSessionsBefore } from "./persistenceWriteRuntimeGateway.ts";
 import { invokeWithCommandError } from "./commandError.ts";
 
 interface SettingRow {
@@ -30,8 +30,4 @@ export async function loadSettingRows(filter: { key?: string; keyPrefix?: string
 
 export async function loadSettingValue(key: string): Promise<string | null> {
   return (await loadSettingRows({ key }))[0]?.value ?? null;
-}
-
-export async function deleteSessionsBefore(cutoffTime: number): Promise<void> {
-  await deleteSessionsBeforeViaCommand(cutoffTime);
 }

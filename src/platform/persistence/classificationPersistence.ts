@@ -1,8 +1,4 @@
 import { commitClassificationSettingMutations } from "./classificationSettingsGateway.ts";
-import {
-  deleteSessionsByExeNames as deleteSessionsByExeNamesViaCommand,
-  deleteSessionsByExeNamesBetween as deleteSessionsByExeNamesBetweenViaCommand,
-} from "./persistenceWriteRuntimeGateway.ts";
 import { loadSettingRows } from "./settingsPersistence.ts";
 export { loadSettingValue } from "./settingsPersistence.ts";
 import { invokeWithCommandError } from "./commandError.ts";
@@ -19,10 +15,6 @@ interface SettingKeyValueRow {
 
 interface SettingKeyRow {
   key: string;
-}
-
-interface SessionExeNameRow {
-  exeName: string;
 }
 
 export interface RecordedAppCatalogCursor {
@@ -68,7 +60,7 @@ export async function loadSettingKeysByKeyPrefix(keyPrefix: string): Promise<Set
   return (await loadSettingRows({ keyPrefix })).map(({ key }) => ({ key }));
 }
 
-export async function loadDistinctSessionExeNames(): Promise<SessionExeNameRow[]> {
+export async function loadDistinctSessionExeNames(): Promise<Array<{ exeName: string }>> {
   const rows = await invokeWithCommandError<string[]>("cmd_get_recorded_executable_names");
   return rows.map((exeName) => ({ exeName }));
 }
@@ -87,6 +79,7 @@ export async function loadRecordedAppCatalogPage(
 ): Promise<RecordedAppCatalogPage> {
   const page = await loadActivityCatalogPage(input);
   return {
+    ...page,
     rows: page.rows.map((row) => ({
       rawExeName: row.rawExeName,
       appName: row.appName,
@@ -94,27 +87,5 @@ export async function loadRecordedAppCatalogPage(
       hasNativeRecords: row.hasNativeRecords,
     })),
     nextCursor: page.nextCursor ?? input.cursor,
-    hasMore: page.hasMore,
-    readPath: page.readPath,
-    fallbackReason: page.fallbackReason,
-    sourceRevision: page.sourceRevision,
   };
-}
-
-export async function deleteSessionsByExeNames(exeNames: string[]): Promise<void> {
-  if (exeNames.length === 0) {
-    return;
-  }
-  await deleteSessionsByExeNamesViaCommand(exeNames);
-}
-
-export async function deleteSessionsByExeNamesBetween(
-  exeNames: string[],
-  startTime: number,
-  endTime: number,
-): Promise<void> {
-  if (exeNames.length === 0) {
-    return;
-  }
-  await deleteSessionsByExeNamesBetweenViaCommand(exeNames, startTime, endTime);
 }

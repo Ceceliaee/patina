@@ -30,6 +30,7 @@ interface ClassificationMappingCardProps {
   titleCaptureEnabled: boolean;
   globalTitleEnabled: boolean;
   isBusy: boolean;
+  deletionBlocked?: boolean;
   isEditingName: boolean;
   inputValue: string;
   colorFormat: ColorDisplayFormat;
@@ -75,6 +76,7 @@ export default function ClassificationMappingCard({
   fallbackIcon,
   editNameLabel,
   deleteRecordsLabel,
+  deletionBlocked,
   icon,
   displayName,
   displayColor,
@@ -215,11 +217,11 @@ export default function ClassificationMappingCard({
           {additionalAction}
           <QuietIconAction
             icon={<Trash2 size={16} />}
-            title={deleteRecordsLabel}
+            title={deletionBlocked ? UI_TEXT.mapping.deletionPendingChanges : deleteRecordsLabel}
             tone="danger"
             className="qp-app-mapping-delete"
             buttonRef={deleteButtonRef}
-            disabled={isBusy}
+            disabled={isBusy || deletionBlocked}
             onClick={() => {
               restoreDeleteFocus.current = true;
               onDeleteAllSessions();

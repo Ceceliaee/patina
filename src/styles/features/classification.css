@@ -393,3 +393,12 @@
 .qp-app-link-main-icon { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex-shrink: 0; }
 .qp-app-link-main-icon, .qp-app-link-controls { margin-right: -6px; }
 .qp-app-link-controls .qp-icon-action { width: 24px; height: 24px; flex-shrink: 0; }
+
+.qp-dialog-body:has(.qp-object-delete-section) {
+  max-height: min(45vh, 360px);
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+.qp-object-delete-section + .qp-object-delete-section { margin-top: 10px; }
+.qp-object-delete-section li { font-variant-numeric: tabular-nums; }

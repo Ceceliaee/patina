@@ -2,10 +2,7 @@ import { APP_LINK_KEY_PREFIX, validateAppLinks, type AppLinks } from "../../../s
 import { loadWebLinksOverrides } from "../../../platform/persistence/webLinksGateway.ts";
 import { siteRuleFromOverride, webLinkParent, WEB_LINK_SETTING_PREFIX } from "../../../shared/classification/webLinks.ts";
 import {
-  deleteSessionsByExeNames,
-  deleteSessionsByExeNamesBetween,
   deleteSettingValue,
-  loadDistinctSessionExeNames,
   loadLegacyClassificationApps,
   loadRecordedAppCatalogPage,
   loadSettingValue,
@@ -15,7 +12,6 @@ import {
   type RecordedAppCatalogQueryInput,
 } from "../../../platform/persistence/classificationPersistence.ts";
 import {
-  deleteWebActivitySegmentsByDomain,
   loadObservedWebDomainStats,
 } from "../../../platform/persistence/webActivityRepository.ts";
 import {
@@ -63,7 +59,6 @@ export interface ObservedAppCandidate {
 
 export type { ObservedWebDomainCandidate };
 
-type DeleteAppSessionScope = "today" | "all";
 
 interface AppOverrideTransitionResult {
   canonicalExe: string | null;
@@ -258,20 +253,8 @@ export async function loadAppOverrides(): Promise<Record<string, AppOverride>> {
   ]);
 
   const { overrides, transitionMutations } = buildLoadedAppOverrides(rows, persistedCategoryIds);
-  const cleanup = Object.keys(overrides).length === 0
-    ? { overrides, mutations: [] }
-    : removeOrphanedAppOverrides(
-      overrides,
-      [...(await loadDistinctSessionExeNames()).map((row) => row.exeName),
-        ...Object.entries(await loadAppLinks()).flat()],
-    );
-
-  await commitClassificationSettingMutations([
-    ...transitionMutations,
-    ...cleanup.mutations,
-  ]);
-
-  return cleanup.overrides;
+  await commitClassificationSettingMutations(transitionMutations);
+  return overrides;
 }
 
 export async function loadAppLinks(): Promise<AppLinks> {
@@ -279,37 +262,6 @@ export async function loadAppLinks(): Promise<AppLinks> {
   const links = Object.fromEntries(rows.map((row) => [row.key.slice(APP_LINK_KEY_PREFIX.length), row.value]));
   validateAppLinks(links);
   return links;
-}
-
-export function removeOrphanedAppOverrides(
-  overrides: Readonly<Record<string, AppOverride>>,
-  recordedExeNames: readonly string[],
-): {
-  overrides: Record<string, AppOverride>;
-  mutations: ClassificationSettingMutation[];
-} {
-  const recordedExecutables = new Set(
-    recordedExeNames.map(resolveCanonicalExecutable).filter(Boolean),
-  );
-  const retainedOverrides: Record<string, AppOverride> = {};
-  const mutations: ClassificationSettingMutation[] = [];
-
-  for (const [exeName, override] of Object.entries(overrides)) {
-    const canonicalExe = resolveCanonicalExecutable(exeName);
-    if (!canonicalExe) {
-      continue;
-    }
-    if (recordedExecutables.has(canonicalExe)) {
-      retainedOverrides[canonicalExe] = override;
-      continue;
-    }
-    mutations.push(...buildSaveAppOverrideMutations(canonicalExe, null));
-  }
-
-  return {
-    overrides: retainedOverrides,
-    mutations,
-  };
 }
 
 export async function loadWebDomainOverrides(): Promise<Record<string, WebDomainOverride>> {
@@ -697,56 +649,4 @@ export async function loadObservedWebDomainCandidates(
   limit: number = 120,
 ): Promise<ObservedWebDomainCandidate[]> {
   return loadObservedWebDomainStats(days, limit);
-}
-
-export async function deleteObservedWebDomainHistory(normalizedDomain: string, members?: string[]): Promise<void> {
-  const root = webLinkParent(normalizedDomain);
-  if (root) {
-    if (!members) throw new Error("Website group has no selected members");
-    await deleteWebActivitySegmentsByDomain(JSON.stringify({ kind: "group", domain: root, members: [...new Set(members)].sort() }));
-    return;
-  }
-  const domainKey = normalizeWebDomainKey(normalizedDomain);
-  if (!domainKey) {
-    return;
-  }
-  await deleteWebActivitySegmentsByDomain(domainKey);
-}
-
-export async function deleteObservedAppSessions(
-  exeName: string,
-  scope: DeleteAppSessionScope = "all",
-): Promise<number> {
-  const canonicalExe = resolveCanonicalExecutable(exeName);
-  if (!canonicalExe) {
-    return 0;
-  }
-
-  const rows = await loadDistinctSessionExeNames();
-  const matchedExeNames = rows
-    .map((row) => row.exeName)
-    .filter((rawExeName) => resolveCanonicalExecutable(rawExeName) === canonicalExe);
-
-  if (matchedExeNames.length === 0) {
-    return 0;
-  }
-
-  const now = new Date();
-  const dayStart = new Date(now);
-  dayStart.setHours(0, 0, 0, 0);
-  const dayEnd = new Date(dayStart);
-  dayEnd.setDate(dayEnd.getDate() + 1);
-
-  if (scope === "all") {
-    await deleteSessionsByExeNames([...new Set([...matchedExeNames, canonicalExe])]);
-    return matchedExeNames.length;
-  }
-
-  await deleteSessionsByExeNamesBetween(
-    matchedExeNames,
-    dayStart.getTime(),
-    dayEnd.getTime(),
-  );
-
-  return matchedExeNames.length;
 }

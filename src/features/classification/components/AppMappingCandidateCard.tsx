@@ -17,6 +17,7 @@ interface AppMappingCandidateCardProps {
   titleCaptureEnabled: boolean;
   globalTitleEnabled: boolean;
   isBusy: boolean;
+  deletionBlocked?: boolean;
   isEditingName: boolean;
   inputValue: string;
   colorFormat: ColorDisplayFormat;
