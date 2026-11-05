@@ -972,14 +972,24 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
       await client.command('Input.dispatchKeyEvent', {type:'keyDown',key,windowsVirtualKeyCode:code}, sessionId);
       await client.command('Input.dispatchKeyEvent', {type:'keyUp',key,windowsVirtualKeyCode:code}, sessionId);
     };
-    await evaluate(client, sessionId, `document.querySelector('.tools-notification-setting-row [aria-haspopup="listbox"]').click()`);
-    await waitForExpression(client, sessionId, `document.activeElement?.matches('[role="listbox"]')`);
-    await key('Home',36); await key('Enter',13);
+    const soundTrigger = '.tools-notification-setting-row [aria-haspopup="listbox"]';
+    const selectSound = async (navigationKey: 'Home' | 'End', code: number) => {
+      await key('ArrowDown', 40);
+      await waitForExpression(client, sessionId, `document.activeElement?.matches('[role="listbox"]')
+        && document.activeElement.id === document.querySelector(${jsonString(soundTrigger)})?.getAttribute('aria-controls')`,
+        undefined, 'notification sound listbox takes keyboard focus');
+      await key(navigationKey, code);
+      const position = navigationKey === 'Home' ? 'first' : 'last';
+      await waitForExpression(client, sessionId, `document.activeElement.getAttribute('aria-activedescendant')
+        === document.activeElement.querySelector('li:${position}-child [role="option"]')?.id`,
+        undefined, `sound listbox highlights the ${position} option`);
+      await key('Enter', 13);
+    };
+    await evaluate(client, sessionId, `document.querySelector(${jsonString(soundTrigger)}).focus()`);
+    await selectSound('Home', 36);
     await waitForExpression(client, sessionId, `JSON.parse(localStorage.getItem('__patina_notification_preferences')).sound === 'default'
       && document.activeElement?.matches('.tools-notification-setting-row [aria-haspopup="listbox"]')`);
-    await evaluate(client, sessionId, `document.querySelector('.tools-notification-setting-row [aria-haspopup="listbox"]').click()`);
-    await waitForExpression(client, sessionId, `document.activeElement?.matches('[role="listbox"]')`);
-    await key('End',35); await key('Enter',13);
+    await selectSound('End', 35);
     await waitForExpression(client, sessionId, `JSON.parse(localStorage.getItem('__patina_notification_preferences')).sound === 'none'`);
 
     const clickDelivery = (text: string) => evaluate(client, sessionId, `[...document.querySelectorAll('.tools-notification-setting-row button')].find(b => b.textContent.trim() === ${jsonString(text)}).click()`);

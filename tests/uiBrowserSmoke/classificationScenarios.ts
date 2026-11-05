@@ -918,15 +918,18 @@ async function runClassificationCases(context: BrowserSmokeContext) {
       `),
       true,
     );
-    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.qp-select-trigger'))`);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector(
+      'main[data-presented-view="mapping"][data-view-transition-state="settled"] .qp-select-trigger'))`);
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
           const trigger = Array.from(document.querySelectorAll('button'))
             .find((button) => button.textContent?.trim() === '管理分类');
-          trigger?.focus();
-          trigger?.click();
-          return Boolean(trigger);
+          if (!trigger) return false;
+          trigger.focus();
+          if (document.activeElement !== trigger) return false;
+          trigger.click();
+          return true;
         })()
       `),
       true,

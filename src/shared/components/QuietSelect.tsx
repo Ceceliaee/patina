@@ -239,8 +239,8 @@ export default function QuietSelect<T extends string | number>({
 
   useLayoutEffect(() => {
     if (!menuReady) return undefined;
-    listRef.current?.focus();
-    return undefined;
+    const frame = requestAnimationFrame(() => listRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
   }, [menuReady]);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
