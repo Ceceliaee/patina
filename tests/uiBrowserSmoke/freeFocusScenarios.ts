@@ -50,17 +50,26 @@ export async function runFreeFocusScenarios({ client, sessionId, runTest }: Brow
           && !document.querySelector('[data-free-focus-id] button[aria-busy]')`, undefined, 'free focus actions ready to measure');
         await evaluate(client, sessionId, `(()=>{const f=globalThis.__PATINA_FREE_FOCUS_CASE;f.hold=true;f.error=${JSON.stringify(error)};f.release=null;f.calls=[];
           const b=document.querySelector('[data-free-focus-id] button:has(.lucide-play)');b.focus();
-          globalThis.__PATINA_FREE_BUTTONS=[...document.querySelectorAll('[data-free-focus-id] button')].map(button=>({button,x:button.getBoundingClientRect().x}));
+          globalThis.__PATINA_FREE_BUTTONS=[...document.querySelectorAll('[data-free-focus-id] button')].map(button => {
+            const bounds = button.getBoundingClientRect();
+            return {button, inset: button.closest('[data-free-focus-id]').getBoundingClientRect().right - bounds.right,
+              width: bounds.width, height: bounds.height};
+          });
           b.click()})()`);
         await waitForExpression(client, sessionId, `Boolean(globalThis.__PATINA_FREE_FOCUS_CASE.release) && document.activeElement?.getAttribute('aria-busy')==='true'`);
         const pending = await evaluate(client, sessionId, `(() => {
           const items = globalThis.__PATINA_FREE_BUTTONS;
           items.forEach(({button}) => button.click());
           return {
-            changedButtons: items.filter(({button, x}) => !button.isConnected || button.disabled
-              || getComputedStyle(button).opacity !== '1' || button.getBoundingClientRect().x !== x
-            ).map(({button, x}) => ({label: button.getAttribute('aria-label'), x, currentX: button.getBoundingClientRect().x,
-              connected: button.isConnected, disabled: button.disabled, opacity: getComputedStyle(button).opacity})),
+            changedButtons: items.flatMap(({button, inset, width, height}) => {
+              const bounds = button.getBoundingClientRect();
+              const currentInset = button.closest('[data-free-focus-id]')?.getBoundingClientRect().right - bounds.right;
+              const opacity = getComputedStyle(button).opacity;
+              if (button.isConnected && !button.disabled && opacity === '1' && currentInset === inset
+                && bounds.width === width && bounds.height === height) return [];
+              return [{label: button.getAttribute('aria-label'), inset, currentInset, width: bounds.width,
+                height: bounds.height, connected: button.isConnected, disabled: button.disabled, opacity}];
+            }),
             focused: document.activeElement === items[0].button,
             editorOpen: Boolean(document.querySelector('.tools-pomodoro-editor')),
             calls: globalThis.__PATINA_FREE_FOCUS_CASE.calls.length,

@@ -931,11 +931,14 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
 
   await runTest("Tools settings saves immediately, retains committed values on failure and completes after closing", async () => {
     const triggerLabel = COPY["zh-CN"].tools.settingsTitle;
+    await waitForExpression(client, sessionId, `Boolean(document.querySelector(
+      'main[data-presented-view="tools"][data-view-transition-state="settled"] .tools-section-settings-tab'))`);
     assert.equal(await evaluate(client!, sessionId, `
       (() => {
         const trigger = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(triggerLabel))} + ']');
         if (!(trigger instanceof HTMLButtonElement)) return false;
         trigger.focus();
+        if (document.activeElement !== trigger) return false;
         trigger.click();
         return true;
       })()
