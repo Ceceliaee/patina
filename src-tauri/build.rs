@@ -106,6 +106,7 @@ const APP_COMMANDS: &[&str] = &[
     "cmd_open_storage_directory",
     "cmd_delete_sessions_before",
     "cmd_delete_sessions_by_exe_names",
+    "cmd_classification_object_deletion",
     "cmd_delete_sessions_by_exe_names_between",
     "cmd_delete_web_activity_segments_by_domain",
     "cmd_save_remote_backup_settings",

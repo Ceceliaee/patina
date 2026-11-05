@@ -1,6 +1,7 @@
 pub mod activity_read_model;
 pub mod app_settings_service;
 pub mod backup;
+pub(crate) mod classification_deletion;
 pub mod classification_service;
 pub mod export;
 pub mod icon_cache_service;

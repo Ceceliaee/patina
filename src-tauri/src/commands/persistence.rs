@@ -6,6 +6,42 @@ use crate::data::user_data_maintenance;
 use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
 
 #[tauri::command]
+pub async fn cmd_classification_object_deletion<R: Runtime>(
+    app: AppHandle<R>,
+    window: WebviewWindow<R>,
+    target: crate::data::classification_deletion::Target,
+    confirmed: Option<crate::data::classification_deletion::Impact>,
+) -> Result<crate::data::classification_deletion::Impact, String> {
+    crate::commands::window_guard::require_main_window_string(&window)?;
+    let pool = crate::data::sqlite_pool::wait_for_sqlite_pool(&app).await?;
+    let apply = confirmed.is_some();
+    let tracking =
+        app.state::<crate::engine::tracking::runtime_snapshot::TrackingRuntimeSnapshotState>();
+    let _transition = if apply {
+        Some(tracking.transition.lock().await)
+    } else {
+        None
+    };
+    let result = crate::data::classification_deletion::run(&pool, &target, confirmed).await?;
+    if apply {
+        if let crate::data::classification_deletion::Target::App(key) = &target {
+            if let Some(active) = tracking.snapshot().and_then(|s| s.active_session) {
+                use crate::domain::tracking::resolve_app_override_executable;
+                if resolve_app_override_executable(&active.exe_name)
+                    == resolve_app_override_executable(key)
+                {
+                    tracking.replace_active_session(None);
+                }
+            }
+        }
+        app.state::<crate::engine::tracking::title_state::TitleRecordingRuntimeState>()
+            .invalidate_app_overrides();
+        crate::engine::tools::notify_activity_reminder_change(&app);
+    }
+    Ok(result)
+}
+
+#[tauri::command]
 pub async fn cmd_delete_sessions_before<R: Runtime>(
     cutoff_time: i64,
     app: AppHandle<R>,
