@@ -45,11 +45,28 @@ export async function runFreeFocusScenarios({ client, sessionId, runTest }: Brow
       assert.equal(await evaluate(client, sessionId, `document.querySelector('.tools-free-focus-content form input').value`), '');
       assert.equal(await evaluate(client, sessionId, `Boolean(document.querySelector('[data-free-focus-id] .lucide-fast-forward'))`), false);
       for (const error of ['synthetic action failure', null]) {
+        await waitForExpression(client, sessionId, `[...document.querySelectorAll('.tools-section-pane, .tools-mode-content-pane')]
+          .every(pane => pane.getAnimations().every(animation => animation.playState !== 'running'))
+          && !document.querySelector('[data-free-focus-id] button[aria-busy]')`, undefined, 'free focus actions ready to measure');
         await evaluate(client, sessionId, `(()=>{const f=globalThis.__PATINA_FREE_FOCUS_CASE;f.hold=true;f.error=${JSON.stringify(error)};f.release=null;f.calls=[];
+          const b=document.querySelector('[data-free-focus-id] button:has(.lucide-play)');b.focus();
           globalThis.__PATINA_FREE_BUTTONS=[...document.querySelectorAll('[data-free-focus-id] button')].map(button=>({button,x:button.getBoundingClientRect().x}));
-          const b=document.querySelector('[data-free-focus-id] button:has(.lucide-play)');b.focus();b.click()})()`);
+          b.click()})()`);
         await waitForExpression(client, sessionId, `Boolean(globalThis.__PATINA_FREE_FOCUS_CASE.release) && document.activeElement?.getAttribute('aria-busy')==='true'`);
-        assert.equal(await evaluate(client, sessionId, `(()=>{const items=globalThis.__PATINA_FREE_BUTTONS;items.forEach(({button})=>button.click());return items.every(({button,x})=>button.isConnected&&!button.disabled&&getComputedStyle(button).opacity==='1'&&button.getBoundingClientRect().x===x)&&document.activeElement===items[0].button&&!document.querySelector('.tools-pomodoro-editor')&&globalThis.__PATINA_FREE_FOCUS_CASE.calls.length===1})()`), true, 'pending free focus controls retain focus and appearance without duplicate writes');
+        const pending = await evaluate(client, sessionId, `(() => {
+          const items = globalThis.__PATINA_FREE_BUTTONS;
+          items.forEach(({button}) => button.click());
+          return {
+            changedButtons: items.filter(({button, x}) => !button.isConnected || button.disabled
+              || getComputedStyle(button).opacity !== '1' || button.getBoundingClientRect().x !== x
+            ).map(({button, x}) => ({label: button.getAttribute('aria-label'), x, currentX: button.getBoundingClientRect().x,
+              connected: button.isConnected, disabled: button.disabled, opacity: getComputedStyle(button).opacity})),
+            focused: document.activeElement === items[0].button,
+            editorOpen: Boolean(document.querySelector('.tools-pomodoro-editor')),
+            calls: globalThis.__PATINA_FREE_FOCUS_CASE.calls.length,
+          };
+        })()`);
+        assert.deepEqual(pending, { changedButtons: [], focused: true, editorOpen: false, calls: 1 });
         await evaluate(client, sessionId, `globalThis.__PATINA_FREE_FOCUS_CASE.hold=false;globalThis.__PATINA_FREE_FOCUS_CASE.release()`);
         await waitForExpression(client, sessionId, `!document.querySelector('[data-free-focus-id] button[aria-busy]')`);
         assert.equal(await evaluate(client, sessionId, `document.querySelector('[data-free-focus-id] .tools-pomodoro-task-time strong').textContent`), '00:23');
