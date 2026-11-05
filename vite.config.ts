@@ -39,6 +39,7 @@ export default defineConfig({
           const normalizedId = id.replaceAll("\\", "/");
           // Keep shared identity rules separate from whichever read gateway gains a consumer.
           if (normalizedId.endsWith("/src/shared/classification/appClassification.ts")) return "appClassification";
+          if (normalizedId.endsWith("/src/shared/classification/objectColor.ts")) return "objectColor";
           if (normalizedId.endsWith("/src/platform/browser/browserStorageGateway.ts")) return "browserStorage";
           const localeResourceMatch = normalizedId.match(
             /\/src\/shared\/i18n\/generated\/locales\/([^/?]+)\.ts(?:\?.*)?$/,

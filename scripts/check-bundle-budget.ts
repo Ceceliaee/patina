@@ -26,7 +26,8 @@ const NON_DATA_PRIMARY_LAZY_ROUTES_GZIP_BUDGET_KI_B = 86.5;
 // Timed reminder flow: docs/archive/2026-11-01-timed-reminder-bundle-decision.md.
 // Recurring reminder controls: docs/archive/2026-11-01-recurring-reminders-bundle-decision.md.
 // Software notification delivery: docs/archive/2026-11-04-tools-notification-bundle-decision.md.
-const TOTAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 413;
+// Icon extraction and theme adaptation: docs/archive/2026-11-05-activity-color-bundle-decision.md.
+const TOTAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 416.5;
 
 const INITIAL_CHUNK_BUDGETS = [
   { label: "index", pattern: /^index-.*\.js$/, gzipKiB: 65 },
@@ -39,6 +40,7 @@ const INITIAL_CHUNK_BUDGETS = [
   // locale chunk. Initial and total graph budgets remain unchanged.
   { label: "localization", pattern: /^runtime-.*\.js$/, gzipKiB: 7.65 },
   { label: "classification", pattern: /^appClassification-.*\.js$/, gzipKiB: 6 },
+  { label: "object color", pattern: /^objectColor-.*\.js$/, gzipKiB: 0.316 },
 ] as const;
 
 // Website scope and exact-domain controls add 0.12–0.15 KiB per locale.
@@ -119,7 +121,7 @@ const LAZY_SHARED_UI_CHUNK_BUDGETS = [
   { label: "requested app icons", pattern: /^useRequestedAppIcons-.*\.js$/, gzipKiB: 0.55 },
   { label: "settings runtime adapter", pattern: /^settingsRuntimeAdapterService-.*\.js$/, gzipKiB: 3 },
   { label: "duration formatting", pattern: /^durationFormatting-.*\.js$/, gzipKiB: 0.2 },
-  { label: "domain color", pattern: /^domainColor-.*\.js$/, gzipKiB: 0.43 },
+  { label: "icon representative", pattern: /^iconRepresentative-.*\.js$/, gzipKiB: 3 },
 ] as const;
 
 // Unowned fragments remain tightly bounded after route, secondary-runtime, and
