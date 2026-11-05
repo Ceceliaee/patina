@@ -1,3 +1,4 @@
+import { objectColor } from "../classification/objectColor.ts";
 import { AppClassification } from "../classification/appClassification.ts";
 import { isAnonymousActivity } from "../classification/anonymousActivity.ts";
 import { resolveAppIconKeys } from "../classification/appIconIdentity.ts";
@@ -344,16 +345,11 @@ function resolveAppSourceColor(
   iconThemeColors: Record<string, string>,
 ) {
   const parent = AppClassification.resolveStatisticalApp(session.appKey);
-  if (parent !== session.appKey) return AppClassification.getUserOverride(parent)?.color
-    ?? iconThemeColors[parent] ?? AppClassification.mapApp(parent).color;
-  const overrideColor = AppClassification.getUserOverride(session.appKey)?.color
-    ?? AppClassification.getUserOverride(session.exeName)?.color;
-  const mapped = AppClassification.mapApp(session.appKey, { appName: session.displayName });
-
-  return overrideColor
-    ?? iconThemeColors[session.appKey]
-    ?? iconThemeColors[session.exeName]
-    ?? mapped.color;
+  const mapped = AppClassification.mapApp(parent, { appName: session.displayName });
+  const own = parent === session.appKey;
+  const override = AppClassification.getUserOverride(parent)?.color ?? (own ? AppClassification.getUserOverride(session.exeName)?.color : null);
+  const icon = iconThemeColors[parent] ?? (own ? iconThemeColors[session.exeName] : undefined);
+  return objectColor("app", parent, override, icon, mapped.category, mapped.color);
 }
 
 export function buildAppTimelineSources(

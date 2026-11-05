@@ -1,3 +1,4 @@
+import { useActivityDisplayColor } from "../../../shared/hooks/useActivityDisplayColor.ts";
 import AnonymousActivityIcon from "../../../shared/components/AnonymousActivityIcon.tsx";
 import AnonymousActivityName from "../../../shared/components/AnonymousActivityName.tsx";
 import { formatDuration } from "../services/historyFormatting.ts";
@@ -37,6 +38,7 @@ export default function HistoryTimelineLaneList({
   sourceIcons,
   interactionActive,
 }: Props) {
+  const displayColor = useActivityDisplayColor();
   return (
     <section className="history-timeline-lanes" aria-label={title}>
       <h3 className="history-timeline-lanes-title">{title}</h3>
@@ -73,7 +75,7 @@ export default function HistoryTimelineLaneList({
                     ) : (
                       <span
                         className="history-timeline-lane-dot"
-                        style={{ backgroundColor: lane.color, ...(anonymous ? ANONYMOUS_ACTIVITY_STYLE : {}) }}
+                        style={{ backgroundColor: displayColor(lane.color), ...(anonymous ? ANONYMOUS_ACTIVITY_STYLE : {}) }}
                         aria-hidden="true"
                       />
                     )}

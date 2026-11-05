@@ -61,8 +61,6 @@ export function mergeWebActivityTimelineItemsByDomain<
   mergeThresholdSecs: number,
   mergeItems: (current: T, next: T) => T,
 ): T[] {
-  if (items.length === 0) return [];
-
   const mergeThresholdMs = Math.max(0, mergeThresholdSecs) * 1000;
   const ordered = items
     .slice()

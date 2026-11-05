@@ -1,3 +1,4 @@
+import { useActivityDisplayColor } from "../../../shared/hooks/useActivityDisplayColor.ts";
 import AnonymousActivityName from "../../../shared/components/AnonymousActivityName.tsx";
 import { AnonymousActivityIndicator } from "../../../shared/components/AnonymousActivityIcon.tsx";
 import { useLocaleText } from "../../../shared/i18n/index.ts";
@@ -106,6 +107,7 @@ export default function HistoryDayDistributionPanel({
   onQuickClassificationPreload,
   onQuickClassificationOpen,
 }: HistoryDayDistributionPanelProps) {
+  const displayColor = useActivityDisplayColor();
   const UI_TEXT = useLocaleText();
   return (
     <>
@@ -220,7 +222,7 @@ export default function HistoryDayDistributionPanel({
                     ) : (
                       <span
                         className="h-2.5 w-2.5 shrink-0 rounded-full"
-                        style={{ backgroundColor: item.color, ...(item.category === "anonymous" ? ANONYMOUS_ACTIVITY_STYLE : {}) }}
+                        style={{ backgroundColor: displayColor(item.color), ...(item.category === "anonymous" ? ANONYMOUS_ACTIVITY_STYLE : {}) }}
                         aria-hidden="true"
                       />
                     )}
@@ -248,7 +250,7 @@ export default function HistoryDayDistributionPanel({
                   <div
                     className="history-day-distribution-progress h-full rounded-full"
                     style={{
-                      backgroundColor: item.color,
+                      backgroundColor: displayColor(item.color, "panelTrack"),
                       ...(isAnonymousActivity(item.key) || item.category === "anonymous" ? ANONYMOUS_ACTIVITY_STYLE : {}),
                       width: `${item.percentage}%`,
                     }}

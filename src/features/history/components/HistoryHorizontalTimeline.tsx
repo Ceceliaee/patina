@@ -1,3 +1,4 @@
+import { useActivityDisplayColor } from "../../../shared/hooks/useActivityDisplayColor.ts";
 import { useLocale, useLocaleText, type Locale } from "../../../shared/i18n/index.ts";
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import {
@@ -72,6 +73,7 @@ export default function HistoryHorizontalTimeline({
   emptyMessage,
   interactionActive = false,
 }: Props) {
+  const displayColor = useActivityDisplayColor();
   const UI_TEXT = useLocaleText();
   const locale = useLocale();
   const copy = UI_TEXT.history.horizontalTimeline;
@@ -113,7 +115,7 @@ export default function HistoryHorizontalTimeline({
         <span key={item.key} className="history-horizontal-timeline-legend-more-tooltip-item">
           <span
             className="history-horizontal-timeline-legend-more-tooltip-dot"
-            style={{ backgroundColor: item.color, ...(item.category === "anonymous" ? ANONYMOUS_ACTIVITY_STYLE : {}) }}
+            style={{ backgroundColor: displayColor(item.color), ...(item.category === "anonymous" ? ANONYMOUS_ACTIVITY_STYLE : {}) }}
           />
           <span className="history-horizontal-timeline-legend-more-tooltip-label">
             {item.label}
@@ -150,7 +152,7 @@ export default function HistoryHorizontalTimeline({
                   <span key={item.key} className="history-horizontal-timeline-legend-item">
                     <span
                       className="history-horizontal-timeline-legend-dot"
-                      style={{ backgroundColor: item.color, ...(item.category === "anonymous" ? ANONYMOUS_ACTIVITY_STYLE : {}) }}
+                      style={{ backgroundColor: displayColor(item.color), ...(item.category === "anonymous" ? ANONYMOUS_ACTIVITY_STYLE : {}) }}
                       aria-hidden="true"
                     />
                     <span className="history-horizontal-timeline-legend-label">{item.label}</span>
@@ -201,7 +203,7 @@ export default function HistoryHorizontalTimeline({
             locale,
           )} - ${formatTimelineTime(segment.endTime, viewModel, locale)} ${formatDuration(segment.duration)}`;
           const tooltipContentStyle: TooltipContentStyle = {
-            "--tooltip-color": segmentColor,
+            "--tooltip-color": displayColor(segmentColor),
           };
 
           return (

@@ -1,7 +1,7 @@
 import { resolveWebOwner, webDisplayDomain, webGroupIcon, webLinkParent } from "../classification/webLinks.ts";
 import { AppClassification } from "../classification/appClassification.ts";
 import { isAnonymousActivity } from "../classification/anonymousActivity.ts";
-import { resolveStableDomainColor } from "../classification/domainColor.ts";
+import { objectColor } from "../classification/objectColor.ts";
 import type { AppCategory } from "../classification/categoryTokens.ts";
 import type { UiText } from "../i18n/index.ts";
 import type {
@@ -105,12 +105,8 @@ function resolveWebColor(
   iconThemeColors: Record<string, string>,
 ): string {
   const owner = resolveWebOwner(normalizedDomain, overrides);
-  const overrideColor = overrides[owner]?.color;
-  if (overrideColor) return overrideColor;
-  const iconColor = iconThemeColors[owner];
-  if (iconColor) return iconColor;
-  if (category !== "other") return AppClassification.getCategoryColor(category);
-  return resolveStableDomainColor(owner);
+  return objectColor("web", owner, overrides[owner]?.color, iconThemeColors[owner], category,
+    AppClassification.getCategoryColor(category));
 }
 
 function preferFaviconUrl(current: string | null, candidate: string | null): string | null {

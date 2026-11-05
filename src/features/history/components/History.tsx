@@ -1,3 +1,4 @@
+import { objectColor } from "../../../shared/classification/objectColor.ts";
 import type { Locale, UiText } from "../../../shared/i18n/index.ts";
 import { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef, } from "react";
 import type { CSSProperties } from "react";
@@ -8,7 +9,7 @@ import {
   formatDuration,
   formatTime,
 } from "../services/historyFormatting";
-import { useIconThemeColors } from "../../../shared/hooks/useIconThemeColors";
+import { useIconThemeColors, useIconThemeColorSnapshot } from "../../../shared/hooks/useIconThemeColors";
 import { useRequestedAppIcons } from "../../../shared/hooks/useRequestedAppIcons.ts";
 import {
   buildHistoryReadModel,
@@ -296,16 +297,14 @@ export default function History({
     if (!webActivityEnabled) return {};
     return buildWebDomainIconMap(visibleDayWebSegments, webDomainOverrides, webDomainFavicons);
   }, [visibleDayWebSegments, webActivityEnabled, webDomainFavicons, webDomainOverrides]);
-  const webDomainIconThemeColors = useIconThemeColors(webDomainIcons);
+  const { colors: webDomainIconThemeColors, ready: webColorsReady } = useIconThemeColorSnapshot(webDomainIcons);
   const webSnapshotReady = visibleDayWebSegments.length > 0
     || contentState === "ready"
     || contentState === "empty"
     || contentState === "error";
   const webVisualsReady = webSnapshotReady
     && webFaviconsReady
-    && Object.keys(webDomainIcons).every((domain) => (
-      Boolean(webDomainIconThemeColors[domain])
-    ));
+    && webColorsReady;
   const [timelineDialogOpen, setTimelineDialogOpen] = useState(false);
   const [timelineDialogMode, setTimelineDialogMode] = useState<TimelineDialogMode>("app");
   const [timelineDialogSyncedHeight, setTimelineDialogSyncedHeight] = useState<number | null>(null);
@@ -646,7 +645,7 @@ export default function History({
         const mapped = AppClassification.mapApp(app.exeName, { appName: app.appName });
         const appOverride = AppClassification.getUserOverride(app.exeName);
         const overrideColor = appOverride?.color;
-        const accentColor = overrideColor ?? iconThemeColors[app.exeName] ?? mapped.color;
+        const accentColor = objectColor("app", app.exeName, overrideColor, iconThemeColors[app.exeName], mapped.category, mapped.color);
         const appName = historyAppDisplayName(app.exeName, app.appName, UI_TEXT);
         return {
           key: app.exeName,

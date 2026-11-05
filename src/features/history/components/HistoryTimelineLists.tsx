@@ -1,3 +1,5 @@
+import { useActivityDisplayColor } from "../../../shared/hooks/useActivityDisplayColor.ts";
+import { objectColor } from "../../../shared/classification/objectColor.ts";
 import AnonymousActivityIcon from "../../../shared/components/AnonymousActivityIcon.tsx";
 import AnonymousActivityName from "../../../shared/components/AnonymousActivityName.tsx";
 import { useLocale, useLocaleText } from "../../../shared/i18n/index.ts";
@@ -49,6 +51,7 @@ export function HistoryTimelineList({
   className = "",
   onToggleSessionDetails,
 }: HistoryTimelineListProps) {
+  const displayColor = useActivityDisplayColor();
   const UI_TEXT = useLocaleText();
   const locale = useLocale();
   if (loading) {
@@ -69,7 +72,7 @@ export function HistoryTimelineList({
           const mapped = AppClassification.mapApp(session.exeName, { appName: session.displayName });
           const displayExe = AppClassification.resolveStatisticalApp(session.exeName);
           const overrideColor = AppClassification.getUserOverride(displayExe)?.color;
-          const accentColor = overrideColor ?? iconThemeColors[displayExe] ?? mapped.color;
+          const accentColor = objectColor("app", displayExe, overrideColor, iconThemeColors[displayExe], mapped.category, mapped.color);
           const titleSamples = session.titleSamples.length > 0
             ? session.titleSamples
             : (session.displayTitle ? [session.displayTitle] : []);
@@ -91,7 +94,7 @@ export function HistoryTimelineList({
             >
               <div
                 className="w-1 self-stretch rounded-full flex-shrink-0"
-                style={{ backgroundColor: accentColor }}
+                style={{ backgroundColor: displayColor(accentColor) }}
               />
               <div className="w-8 h-8 rounded-[8px] bg-[var(--qp-bg-panel)] border border-[var(--qp-border-subtle)] flex items-center justify-center flex-shrink-0 overflow-hidden p-1.5">
                 {mapped.category === "anonymous" ? <AnonymousActivityIcon size={18}  /> : icons[displayExe] ? (
@@ -163,6 +166,7 @@ export function HistoryWebTimelineList({
   className = "",
   onToggleSessionDetails,
 }: HistoryWebTimelineListProps) {
+  const displayColor = useActivityDisplayColor();
   const UI_TEXT = useLocaleText();
   const locale = useLocale();
   if (loading) {
@@ -193,7 +197,7 @@ export function HistoryWebTimelineList({
             >
               <div
                 className="w-1 self-stretch rounded-full flex-shrink-0"
-                style={{ backgroundColor: item.color }}
+                style={{ backgroundColor: displayColor(item.color) }}
               />
               <div className="w-8 h-8 rounded-[8px] bg-[var(--qp-bg-panel)] border border-[var(--qp-border-subtle)] flex items-center justify-center flex-shrink-0 overflow-hidden p-1.5">
                 {item.category === "anonymous" ? <AnonymousActivityIcon size={15} /> : item.faviconUrl ? (
