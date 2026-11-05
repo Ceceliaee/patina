@@ -1002,6 +1002,35 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
     );
   });
 
+  await runTest("category create and rename wait for IME composition before committing Enter", async () => {
+    await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === '管理分类').click()`);
+    const manager = ".qp-category-dialog-surface";
+    const input = ".qp-dialog-input";
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('${manager}'))`);
+    for (const [index, name] of ["输入法分类", "输入法重命名"].entries()) {
+      await evaluate(client!, sessionId, index === 0
+        ? `document.querySelector('${manager} .qp-dialog-action.qp-button-primary').click()`
+        : `Array.from(document.querySelectorAll('${manager} .qp-category-management-grid > *')).find(n => n.textContent.includes('输入法分类')).querySelector('.qp-icon-action-dimmed').click()`);
+      await waitForExpression(client!, sessionId, `document.activeElement?.matches('${input}')`);
+      await evaluate(client!, sessionId, `(() => {
+        const el = document.querySelector('${input}');
+        el.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, ${jsonString(name)});
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      })()`);
+      await waitForExpression(client!, sessionId, `!document.querySelector('${input}').closest('[role="dialog"]').querySelector('.qp-button-primary').disabled`);
+      assert.equal(await evaluate(client!, sessionId, `document.querySelector('${input}').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', isComposing: true, cancelable: true, bubbles: true }))`), true);
+      await evaluate(client!, sessionId, `new Promise(resolve => requestAnimationFrame(resolve))`);
+      assert.equal(await evaluate(client!, sessionId, `document.activeElement?.matches('${input}')`), true);
+      await evaluate(client!, sessionId, `document.querySelector('${input}').dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }))`);
+      await client!.command("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, sessionId);
+      await client!.command("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, sessionId);
+      await waitForExpression(client!, sessionId, `!document.querySelector('${input}') && document.querySelector('${manager}').textContent.includes(${jsonString(name)})`);
+    }
+    await evaluate(client!, sessionId, `document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true}))`);
+    await waitForExpression(client!, sessionId, `!document.querySelector('${manager}')`);
+  });
+
   await runTest("classification catalog searches all history and pages beyond the old limit", async () => {
     const settingsBefore = await evaluate(client!, sessionId, `localStorage.getItem('__time_tracker_smoke_settings')`);
     try {

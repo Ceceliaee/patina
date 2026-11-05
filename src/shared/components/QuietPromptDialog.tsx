@@ -69,7 +69,7 @@ export default function QuietPromptDialog({
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key === "Enter" && !confirmDisabled) {
+          if (event.key === "Enter" && !event.nativeEvent.isComposing && !confirmDisabled) {
             event.preventDefault();
             onConfirm();
           }
