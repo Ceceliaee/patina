@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { resolveAppIconKeys } from "../src/shared/classification/appIconIdentity.ts";
-import { resolveStableDomainColor } from "../src/shared/classification/domainColor.ts";
+import { objectColor } from "../src/shared/classification/objectColor.ts";
 import { formatExecutableFallbackName } from "../src/shared/classification/executableDisplayName.ts";
 import {
   countInclusiveLocalDays,
@@ -44,10 +44,25 @@ test("local date range primitives preserve inclusive and ISO boundary semantics"
 });
 
 test("domain colors are stable, normalized-input sensitive, and palette bounded", () => {
-  const first = resolveStableDomainColor("example.com");
-  assert.equal(resolveStableDomainColor("example.com"), first);
+  const first = objectColor("web", "example.com", null, null, "other", undefined);
+  assert.equal(objectColor("web", "example.com", null, null, "other", undefined), first);
   assert.match(first, /^#[0-9A-F]{6}$/);
-  assert.notEqual(resolveStableDomainColor("another.example"), first);
+  assert.notEqual(objectColor("web", "another.example", null, null, "other", undefined), first);
+});
+
+test("applications and websites share the override, icon, category and fallback order", () => {
+  for (const kind of ["app", "web"] as const) {
+    const owner = kind === "app" ? "Editor.exe" : "Editor.example";
+    const resolve = (override?: string, icon?: string) =>
+      objectColor(kind, owner, override, icon, "development", "#123456");
+    assert.equal(resolve("#654321", "#135790"), "#654321");
+    assert.equal(resolve(undefined, "#135790"), "#135790");
+    assert.equal(resolve(), "#123456");
+    const fallback = objectColor(kind, owner, null, null, "other", "#123456");
+    assert.equal(objectColor(kind, owner.toLowerCase(), null, null, "other", undefined), fallback);
+    assert.notEqual(fallback, "#123456");
+    assert.equal(objectColor(kind, "activity:anonymous", "#654321", null, "anonymous", undefined), "#8F98A8");
+  }
 });
 
 test("app icon identity keeps raw, normalized, and canonical lookup aliases together", () => {

@@ -1,3 +1,5 @@
+import { useActivityDisplayColor } from "../../../shared/hooks/useActivityDisplayColor.ts";
+import { objectColor } from "../../../shared/classification/objectColor.ts";
 import AnonymousActivityName from "../../../shared/components/AnonymousActivityName.tsx";
 import { AnonymousActivityIndicator } from "../../../shared/components/AnonymousActivityIcon.tsx";
 import { useLocaleText } from "../../../shared/i18n/index.ts";
@@ -84,6 +86,7 @@ function DashboardFocusDonut({
 }: {
   categoryDist: DashboardReadModel["categoryDist"];
 }) {
+  const displayColor = useActivityDisplayColor();
   const UI_TEXT = useLocaleText();
   const total = categoryDist.reduce((sum, item) => sum + Math.max(0, item.value), 0);
   const anonymousPatternId = useId();
@@ -122,7 +125,7 @@ function DashboardFocusDonut({
             cy={DONUT_CENTER}
             fill="none"
             r={DONUT_RADIUS}
-            stroke={item.category === "anonymous" ? `url(#${anonymousPatternId})` : item.color || "var(--qp-accent-default)"}
+            stroke={item.category === "anonymous" ? `url(#${anonymousPatternId})` : displayColor(item.color) || "var(--qp-accent-default)"}
             strokeDasharray={`${dashLength} ${DONUT_CIRCUMFERENCE - dashLength}`}
             strokeDashoffset={dashOffset}
             strokeWidth={DONUT_STROKE_WIDTH}
@@ -144,6 +147,7 @@ export default function Dashboard({
   onOverridesChanged,
   onQuickActionError,
 }: Props) {
+  const displayColor = useActivityDisplayColor();
   const UI_TEXT = useLocaleText();
   const { refreshKey, mappingVersion, mergeThresholdSecs, trackerHealth } = runtime;
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -280,7 +284,7 @@ export default function Dashboard({
                     <div className="min-w-0 flex items-center gap-2">
                       <span
                         className="dashboard-focus-ranking-dot"
-                        style={{ backgroundColor: cat.color || "var(--qp-accent-default)", ...(cat.category === "anonymous" ? ANONYMOUS_ACTIVITY_STYLE : {}) }}
+                        style={{ backgroundColor: displayColor(cat.color) || "var(--qp-accent-default)", ...(cat.category === "anonymous" ? ANONYMOUS_ACTIVITY_STYLE : {}) }}
                       />
                       <span className="dashboard-focus-ranking-name qp-weight-medium text-[var(--qp-text-secondary)]">{cat.name}</span>
                     </div>
@@ -361,7 +365,7 @@ export default function Dashboard({
                 const isUnclassified = effectiveCategory === "other";
                 const anonymous = isAnonymousActivity(app.exeName);
                 const displayName = anonymous ? UI_TEXT.common.anonymousActivity : appOverride?.displayName?.trim() || app.name;
-                const accentColor = overrideColor ?? iconThemeColors[app.exeName] ?? app.color;
+                const accentColor = objectColor("app", app.exeName, overrideColor, iconThemeColors[app.exeName], effectiveCategory, AppClassification.getCategoryColor(effectiveCategory));
                 const createDetailRequest = () => ({
                     target: createDestinationDetailTarget({
                       mode: "app",
@@ -465,7 +469,7 @@ export default function Dashboard({
                         <div
                           className="dashboard-top-app-progress h-full rounded-full"
                           style={{
-                            backgroundColor: accentColor,
+                            backgroundColor: displayColor(accentColor, "elevatedTrack"),
                             ...(anonymous ? ANONYMOUS_ACTIVITY_STYLE : {}),
                             width: `${app.percentage}%`,
                           }}

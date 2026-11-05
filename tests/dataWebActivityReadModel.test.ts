@@ -29,6 +29,7 @@ import {
   rememberDataDestinationSessionOptions,
   rememberDataDestinationSessionSelectionRevision,
   rememberDataDestinationSessionSelectionState,
+  resolveDataDestinationSessionOptions,
   resetDataDestinationSessionSelectionStateForTests,
 } from "../src/features/data/services/dataDestinationSessionState.ts";
 import {
@@ -288,6 +289,21 @@ await runTest("destination session selection stays in memory without exposing mu
     getDataDestinationSessionOptions("app", ["cursor.exe"])[0]?.displayName,
     "Cursor",
   );
+});
+
+await runTest("out-of-range website selection retains its icon and uses the current color settings", () => {
+  const current = {
+    key: "archive.example", identityKeys: ["archive.example"], normalizedDomain: "archive.example",
+    displayName: "Archive", secondaryText: "archive.example", classificationCategory: "office" as const,
+    iconUrl: null, totalDuration: 0, percentage: 0, averageDuration: 0, activeDayCount: 0,
+  };
+  rememberDataDestinationSessionOptions("web", [{
+    ...current, classificationCategory: "development", overrideColor: "#AA3344", iconUrl: "saved-icon",
+  }]);
+  const [selected] = resolveDataDestinationSessionOptions("web", [current], []);
+  assert.equal(selected.iconUrl, "saved-icon");
+  assert.equal(selected.overrideColor, undefined);
+  assert.equal(selected.classificationCategory, "office");
 });
 
 await runTest("destination series keep app colors and one stable line style", () => {

@@ -90,6 +90,10 @@ export function resolveDataDestinationSessionOptions(
   const availableByKey = new Map(availableOptions.map((option) => [option.key, option]));
   return currentOptions.map((current) => ({
     ...cloneOption(availableByKey.get(current.key) ?? sessionOptionRegistry[mode].get(current.key) ?? current),
+    overrideColor: current.overrideColor,
+    classificationCategory: current.classificationCategory,
+    accentColor: current.accentColor,
+    unclassified: current.unclassified,
     totalDuration: current.totalDuration,
     percentage: current.percentage,
     averageDuration: current.averageDuration,

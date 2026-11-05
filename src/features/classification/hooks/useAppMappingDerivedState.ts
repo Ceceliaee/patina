@@ -3,7 +3,7 @@ import { useCallback, useMemo } from "react";
 import { useLocale, useLocaleText } from "../../../shared/i18n/index.ts";
 import { useIconThemeColors } from "../../../shared/hooks/useIconThemeColors";
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
-import { resolveStableDomainColor } from "../../../shared/classification/domainColor.ts";
+import { objectColor } from "../../../shared/classification/objectColor.ts";
 import {
   isExtendedCategory,
   normalizeCategoryLabelInput,
@@ -153,9 +153,8 @@ export function useAppMappingDerivedState({
 
   const resolveCandidateColor = useCallback((candidate: ObservedAppCandidate) => {
     const overrideColor = draftOverrides[candidate.exeName]?.color;
-    if (overrideColor) return overrideColor;
     const mappedCategory = resolveMappedCategory(candidate);
-    return iconThemeColors[candidate.exeName] ?? resolveCategoryColor(mappedCategory);
+    return objectColor("app", candidate.exeName, overrideColor, iconThemeColors[candidate.exeName], mappedCategory, resolveCategoryColor(mappedCategory));
   }, [draftOverrides, iconThemeColors, resolveCategoryColor, resolveMappedCategory]);
 
   const resolveWebDomainCategory = useCallback((candidate: ObservedWebDomainCandidate): UserAssignableAppCategory => (
@@ -197,14 +196,8 @@ export function useAppMappingDerivedState({
 
   const resolveWebDomainColor = useCallback((candidate: ObservedWebDomainCandidate) => {
     const override = draftWebDomainOverrides[candidate.normalizedDomain];
-    if (override?.color) return override.color;
-    const iconColor = webDomainIconThemeColors[candidate.normalizedDomain];
-    if (iconColor) return iconColor;
     const category = resolveWebDomainCategory(candidate);
-    if (category !== "other") {
-      return resolveCategoryColor(category);
-    }
-    return resolveStableDomainColor(candidate.normalizedDomain);
+    return objectColor("web", candidate.normalizedDomain, override?.color, webDomainIconThemeColors[candidate.normalizedDomain], category, resolveCategoryColor(category));
   }, [draftWebDomainOverrides, resolveCategoryColor, resolveWebDomainCategory, webDomainIconThemeColors]);
 
   const resolveWebDomainEnabled = useCallback((candidate: ObservedWebDomainCandidate) => (

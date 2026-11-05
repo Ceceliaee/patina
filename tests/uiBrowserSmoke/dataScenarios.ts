@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { activityDisplayColor } from "../../src/shared/colors/displayColor.ts";
 import { getLocaleText, loadLocaleText } from "../../src/shared/i18n/runtime.ts";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
 import { runDataLoadingLayoutScenario } from "./dataLoadingLayoutScenario.ts";
@@ -4707,12 +4708,20 @@ async function runDataScenarioSet(
   });
 
   await runTest("data web analysis stays readable in English dark mode and restores locale state", async () => {
+    const setSystemTheme = (value: string) => client!.command("Emulation.setEmulatedMedia", {
+      features: [{ name: "prefers-color-scheme", value }],
+    }, sessionId);
+    await setSystemTheme("dark");
     await evaluate(client!, sessionId, `
       (() => {
         const key = "__time_tracker_smoke_settings";
         const settings = JSON.parse(localStorage.getItem(key) ?? "{}");
         settings.language = "en-US";
-        settings.theme_mode = "dark";
+        settings.theme_mode = "system";
+        for (const exe of ["cursor.exe", "deep-research-workbench.exe"]) {
+          const key = "__app_override::" + exe;
+          settings[key] = JSON.stringify({ ...JSON.parse(settings[key] ?? "{}"), color: "#082040" });
+        }
         settings.web_activity_enabled = "1";
         localStorage.setItem(key, JSON.stringify(settings));
         globalThis.__PATINA_RELOAD_MARKER = true;
@@ -4740,6 +4749,20 @@ async function runDataScenarioSet(
       45_000,
       "destination panel is ready before switching to web mode",
     );
+    await evaluate(client!, sessionId, `document.querySelector('.data-destination-mode button').click()`);
+    const app = `Array.from(document.querySelectorAll('.data-app-option')).find(option =>
+      /cursor|deep-research-workbench/i.test(option.dataset.destinationKey))`;
+    await waitForExpression(client!, sessionId, `Boolean(${app})`);
+    await evaluate(client!, sessionId, `(${app}).click()`);
+    for (const mode of ["light", "dark"] as const) {
+      await setSystemTheme(mode);
+      await waitForExpression(client!, sessionId, `document.documentElement.dataset.theme === "${mode}"`);
+      const panel = String(await evaluate(client!, sessionId,
+        `getComputedStyle(document.documentElement).getPropertyValue('--qp-bg-panel').trim()`));
+      const expected = activityDisplayColor("#082040", panel, mode);
+      await waitForExpression(client!, sessionId, `document.querySelector('.data-app-chart .qp-native-trend-line')?.getAttribute('stroke') === "${expected}"`);
+      assert.equal(await evaluate(client!, sessionId, `(${app}).style.getPropertyValue('--data-series-color')`), expected);
+    }
     await evaluate(client!, sessionId, `
       Array.from(document.querySelectorAll('[aria-label="Select time destination type"] button'))
         .find((node) => node.textContent?.trim() === "Web")?.click()
@@ -4836,10 +4859,17 @@ async function runDataScenarioSet(
         const settings = JSON.parse(localStorage.getItem(key) ?? "{}");
         settings.language = "zh-CN";
         settings.theme_mode = "light";
+        for (const exe of ["cursor.exe", "deep-research-workbench.exe"]) {
+          const key = "__app_override::" + exe;
+          const override = JSON.parse(settings[key]);
+          delete override.color;
+          settings[key] = JSON.stringify(override);
+        }
         localStorage.setItem(key, JSON.stringify(settings));
         globalThis.__PATINA_RELOAD_MARKER = true;
       })()
     `);
+    await client!.command("Emulation.setEmulatedMedia", { features: [] }, sessionId);
     await client!.command("Emulation.setDeviceMetricsOverride", {
       width: 1280,
       height: 820,

@@ -1,3 +1,4 @@
+import { useActivityDisplayColor } from "../../../shared/hooks/useActivityDisplayColor.ts";
 import AnonymousActivityName from "../../../shared/components/AnonymousActivityName.tsx";
 import AnonymousActivityIcon, { AnonymousActivityIndicator } from "../../../shared/components/AnonymousActivityIcon.tsx";
 import { useLocaleText } from "../../../shared/i18n/index.ts";
@@ -98,6 +99,7 @@ function getOptionInitial(displayName: string) {
 }
 
 function DataAppTrendPanel(props: DataAppTrendPanelProps) {
+  const displayColor = useActivityDisplayColor();
   const presentation = useDataPresentation(props, props.ready, props.refreshing && !props.errorMessage, props.destinationMode);
   const retainingPresentation = presentation !== props;
   const {
@@ -272,7 +274,7 @@ function DataAppTrendPanel(props: DataAppTrendPanelProps) {
                     data-selection-key={option.key}
                     key={option.key}
                     style={{
-                      "--data-category-color": option.accentColor,
+                      "--data-category-color": option.accentColor && displayColor(option.accentColor),
                     } as CSSProperties}
                     aria-hidden
                   >
@@ -400,7 +402,7 @@ function DataAppTrendPanel(props: DataAppTrendPanelProps) {
                     className={`data-app-option ${isSelected ? "data-app-option-selected" : ""}`}
                     data-destination-key={option.key}
                     style={series ? {
-                      "--data-series-color": series.color,
+                      "--data-series-color": displayColor(series.color),
                     } as CSSProperties : undefined}
                     onMouseDown={(event) => handleDetailIntent(option, event)}
                     onClick={(event) => onOptionSelect(option.key, event.ctrlKey)}
@@ -427,7 +429,7 @@ function DataAppTrendPanel(props: DataAppTrendPanelProps) {
                       data-destination-detail-trigger={canOpenDetails ? "" : undefined}
                       data-category-marker={option.accentColor ? "" : undefined}
                       style={option.accentColor ? {
-                        "--data-category-color": option.accentColor,
+                        "--data-category-color": option.accentColor && displayColor(option.accentColor),
                       } as CSSProperties : undefined}
                       aria-hidden
                     >

@@ -46,6 +46,7 @@ import { registerDataHeavyCacheClearer } from "./dataCacheLifecycle.ts";
 import { touchBoundedDataCacheEntry } from "./dataLruCache.ts";
 
 interface DataWebDomainOption {
+  overrideColor?: string | null;
   normalizedDomain: string;
   displayName: string;
   category: AppCategory;
@@ -281,6 +282,7 @@ function buildDomainAggregates({
     category: isAnonymousActivity(normalizedDomain) ? "anonymous" as const : overrides[normalizedDomain]?.category ?? "other",
     unclassified: !isAnonymousActivity(normalizedDomain) && (!overrides[normalizedDomain]?.category
       || overrides[normalizedDomain]?.category === "other"),
+    overrideColor: overrides[normalizedDomain]?.color,
     faviconUrl: favicons[normalizedDomain] ?? null,
     totalDuration: bucket.totalDuration,
     percentage: totalWebDuration > 0 ? (bucket.totalDuration / totalWebDuration) * 100 : 0,
@@ -310,6 +312,7 @@ export function buildDataWebTrendViewModel(
       category: input.overrides[domain]?.category ?? "other",
       unclassified: !input.overrides[domain]?.category
         || input.overrides[domain]?.category === "other",
+      overrideColor: input.overrides[domain]?.color,
       faviconUrl: input.favicons[domain] ?? null,
       totalDuration: 0,
       percentage: 0,

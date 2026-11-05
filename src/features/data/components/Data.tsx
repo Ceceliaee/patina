@@ -1,11 +1,10 @@
 import { useLocaleText, type UiText } from "../../../shared/i18n/index.ts";
 import { type MouseEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, } from "react";
 import { BarChart3 } from "lucide-react";
-import { OTHER_CATEGORY_FIXED_COLOR } from "../../../shared/classification/categoryTokens.ts";
+import { objectColor } from "../../../shared/classification/objectColor.ts";
 import { isAnonymousActivity } from "../../../shared/classification/anonymousActivity.ts";
 
 import {
-  getIconThemeFallbackColor,
   useIconThemeColors,
 } from "../../../shared/hooks/useIconThemeColors.ts";
 import { useRequestedAppIcons } from "../../../shared/hooks/useRequestedAppIcons.ts";
@@ -603,6 +602,7 @@ export default function Data({
       identityKeys: [domain.normalizedDomain],
       normalizedDomain: domain.normalizedDomain,
       classificationCategory: domain.category,
+      overrideColor: domain.overrideColor,
       unclassified: domain.unclassified,
       displayName: domain.displayName,
       secondaryText: isAnonymousActivity(domain.normalizedDomain) ? "" : domain.normalizedDomain,
@@ -628,12 +628,10 @@ export default function Data({
   useEffect(() => {
     rememberDataDestinationSessionOptions("web", resolvedWebPanelSelectedOptions);
   }, [resolvedWebPanelSelectedOptions]);
-  const destinationIconSources = useMemo<Record<string, string>>(() => {
-    return buildDataDestinationIconSources(appAllPanelOptions, webAllPanelOptions);
-  }, [
-    appAllPanelOptions,
-    webAllPanelOptions,
-  ]);
+  const destinationIconSources = useMemo(() => buildDataDestinationIconSources(
+    [...appAllPanelOptions, ...appPanelSelectedOptions],
+    [...webAllPanelOptions, ...resolvedWebPanelSelectedOptions],
+  ), [appAllPanelOptions, appPanelSelectedOptions, webAllPanelOptions, resolvedWebPanelSelectedOptions]);
   const destinationIconColors = useIconThemeColors(destinationIconSources);
 
   const webDestinationReadyForPresentation = Boolean(webTrendViewModel) && webHeatmapReady;
@@ -686,43 +684,14 @@ export default function Data({
     () => destinationViewModel?.chartRows ?? [],
     [destinationViewModel],
   );
-  const destinationTrendSeries = useMemo(() => (
-    buildDataDestinationTrendSeries(
-      destinationPanelSelectedOptions,
-      (option) => {
-        if (isCategoryDestination && option.accentColor) {
-          return option.accentColor;
-        }
-        const colorKey = `${isWebDestination ? "web" : "app"}:${option.key}`;
-        return destinationIconColors[colorKey] ?? getIconThemeFallbackColor(colorKey);
-      },
-    )
-  ), [
-    destinationIconColors,
-    destinationPanelSelectedOptions,
-    isCategoryDestination,
-    isWebDestination,
-  ]);
-  const resolveDestinationOptionColor = useCallback((
-    option: DataDestinationTrendOption,
-    mode: DataDestinationMode = presentedDestinationMode,
-  ) => {
-    const selectedSeries = destinationTrendSeries.find((series) => (
-      series.key === option.key && mode === presentedDestinationMode
-    ));
-    if (isAnonymousActivity(option.key)) return OTHER_CATEGORY_FIXED_COLOR;
-    if (option.accentColor) {
-      return selectedSeries?.color ?? option.accentColor;
-    }
-    const colorKey = `${mode}:${option.key}`;
-    return selectedSeries?.color
-      ?? destinationIconColors[colorKey]
-      ?? getIconThemeFallbackColor(colorKey);
-  }, [
-    destinationIconColors,
-    destinationTrendSeries,
-    presentedDestinationMode,
-  ]);
+  const resolveDestinationOptionColor = useCallback((option: DataDestinationTrendOption, mode: DataDestinationMode = presentedDestinationMode) => {
+    if (mode === "category") return option.accentColor ?? AppClassification.getCategoryColor(option.classificationCategory ?? "other");
+    const category = option.classificationCategory ?? "other";
+    return objectColor(mode, option.exeName ?? option.normalizedDomain ?? option.key, option.overrideColor,
+      destinationIconColors[mode + ":" + option.key], category, AppClassification.getCategoryColor(category));
+  }, [destinationIconColors, presentedDestinationMode]);
+  const destinationTrendSeries = useMemo(() => buildDataDestinationTrendSeries(destinationPanelSelectedOptions, resolveDestinationOptionColor),
+    [destinationPanelSelectedOptions, resolveDestinationOptionColor]);
   const destinationChartAxis = destinationViewModel?.chartAxis ?? DEFAULT_DATA_APP_CHART_AXIS;
   const destinationPeakDay = destinationViewModel?.peakDay ?? null;
   const destinationSummary = destinationViewModel?.summary

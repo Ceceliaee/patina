@@ -34,6 +34,7 @@ export function toAppPanelOption(
     identityKeys: app.sourceAppKeys?.length ? [...app.sourceAppKeys] : [app.appKey],
     exeName: app.exeName,
     classificationCategory: mapped.category,
+    overrideColor: AppClassification.getUserOverride(app.exeName)?.color,
     unclassified: mapped.category === "other",
     displayName: app.appName,
     secondaryText: isAnonymousActivity(app.exeName) ? "" : app.exeName,

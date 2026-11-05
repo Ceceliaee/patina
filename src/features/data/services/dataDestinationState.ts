@@ -14,6 +14,7 @@ export interface DataDestinationTrendOption {
   classificationCategory?: AppCategory;
   unclassified?: boolean;
   accentColor?: string;
+  overrideColor?: string | null;
   displayName: string;
   secondaryText: string;
   iconUrl: string | null;
