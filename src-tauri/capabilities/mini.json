@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "mini",
-  "description": "Independent mini window with tracking and tool projections plus session-scoped control of its displayed timer.",
+  "description": "Independent mini window with read-only activity and tool status plus session-scoped navigation to main tools.",
   "windows": ["mini"],
   "permissions": ["core:event:allow-listen", "core:event:allow-unlisten", "mini-window-commands"]
 }

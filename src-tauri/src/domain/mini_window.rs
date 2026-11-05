@@ -102,26 +102,8 @@ pub fn clamp_rect(rect: Rect, work: Rect) -> Rect {
 }
 
 pub fn bounds(placement: &Placement, expanded: bool, work: Rect, dpi: f64) -> Rect {
-    bounds_with_tools(placement, expanded, work, dpi, 0)
-}
-
-pub fn bounds_with_tools(
-    placement: &Placement,
-    expanded: bool,
-    work: Rect,
-    dpi: f64,
-    rows: u8,
-) -> Rect {
     let (width, height) = if expanded || placement.edge.is_none() {
-        (
-            PANEL_WIDTH,
-            PANEL_HEIGHT
-                + if rows == 0 {
-                    0.0
-                } else {
-                    6.0 + 36.0 * f64::from(rows.min(2))
-                },
-        )
+        (PANEL_WIDTH, PANEL_HEIGHT)
     } else if placement.edge == Some(Edge::Top) {
         (112.0, 24.0)
     } else {

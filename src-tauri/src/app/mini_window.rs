@@ -4,7 +4,7 @@ mod watcher;
 
 use crate::data::mini_window_store;
 use crate::domain::mini_window::transition::{visual_geometry, Transition, VisualGeometry};
-use crate::domain::mini_window::{bounds_with_tools, Edge, Interaction, Page, Preferences};
+use crate::domain::mini_window::{bounds, Edge, Interaction, Page, Preferences};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
 use std::time::Instant;
@@ -103,10 +103,8 @@ impl Session {
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Action {
-    ToolControl {
-        tool: crate::domain::mini_window::content::MiniToolKind,
-        id: i64,
-        resume: bool,
+    OpenTools {
+        section: super::main_window::tools_navigation::ToolsSection,
     },
     CyclePage {
         forward: bool,
@@ -199,12 +197,10 @@ fn layout<R: Runtime>(app: &AppHandle<R>, state: &mut Session, focus: bool) -> R
             state.preferences.held || state.preferences.placement.edge.is_none();
     }
     state.suppressed = suppressed;
-    let rows = content::current_status(app).row_count();
     let visual = visual_geometry(
         &state.preferences.placement,
         affinity.work_area,
         monitor.scale_factor(),
-        rows,
     );
     let animate = !state.suppressed
         && !state.interaction.dragging
@@ -218,20 +214,18 @@ fn layout<R: Runtime>(app: &AppHandle<R>, state: &mut Session, focus: bool) -> R
     if state.suppressed {
         return window.hide().map_err(|e| e.to_string());
     }
-    let rect = bounds_with_tools(
+    let rect = bounds(
         &state.preferences.placement,
         true,
         affinity.work_area,
         monitor.scale_factor(),
-        rows,
     );
     native::apply_bounds(&window, rect)?;
-    let surface = bounds_with_tools(
+    let surface = bounds(
         &state.preferences.placement,
         state.transition.surface_expanded(),
         affinity.work_area,
         monitor.scale_factor(),
-        rows,
     );
     // Keep the WebView viewport and handle coordinates stable across hover.
     // The native region releases desktop input without resizing the renderer.
@@ -281,8 +275,8 @@ pub async fn action<R: Runtime + 'static>(
     let mut persist = false;
     let mut focus = false;
     match action {
-        Action::ToolControl { tool, id, resume } => {
-            content::control_tool(app, tool, id, resume).await?;
+        Action::OpenTools { section } => {
+            super::main_window::tools_navigation::open(app, section)?;
         }
         Action::CyclePage { forward } => {
             state.preferences.page = state.preferences.page.cycle(forward);

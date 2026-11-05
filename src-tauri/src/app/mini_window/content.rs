@@ -1,4 +1,4 @@
-use crate::domain::mini_window::content::{self, MiniStatusSnapshot, MiniToolKind, MiniToolState};
+use crate::domain::mini_window::content::{self, MiniStatusSnapshot};
 use crate::domain::tracking::TrackingStatusSnapshot;
 use crate::engine::tools::ToolsRuntimeState;
 use crate::engine::tracking::runtime_snapshot::{
@@ -13,54 +13,6 @@ pub(super) fn current_status<R: Runtime>(app: &AppHandle<R>) -> MiniStatusSnapsh
         app.state::<ToolsRuntimeState>().snapshot(),
         chrono::Utc::now().timestamp_millis(),
     )
-}
-
-pub(super) async fn control_tool<R: Runtime>(
-    app: &AppHandle<R>,
-    kind: MiniToolKind,
-    id: i64,
-    resume: bool,
-) -> Result<(), String> {
-    let status = current_status(app);
-    let expected = if resume {
-        MiniToolState::Paused
-    } else {
-        MiniToolState::Running
-    };
-    if !status
-        .tools
-        .iter()
-        .any(|tool| tool.kind == kind && tool.id == id && tool.state == expected)
-    {
-        return Err("Mini tool state changed".into());
-    }
-    match kind {
-        MiniToolKind::Pomodoro => {
-            use crate::domain::tools::PomodoroTaskAction;
-            super::super::tools::pomodoro_task(
-                app,
-                if resume {
-                    PomodoroTaskAction::Resume { id }
-                } else {
-                    PomodoroTaskAction::Pause { id }
-                },
-            )
-            .await?;
-        }
-        MiniToolKind::FreeFocus => {
-            use crate::domain::free_focus::FreeFocusAction;
-            super::super::tools::free_focus(
-                app,
-                if resume {
-                    FreeFocusAction::Resume { id }
-                } else {
-                    FreeFocusAction::Pause { id }
-                },
-            )
-            .await?;
-        }
-    }
-    Ok(())
 }
 
 #[derive(Clone, Debug, Serialize)]

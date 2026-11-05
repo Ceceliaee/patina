@@ -105,3 +105,14 @@ pub fn cmd_mark_main_window_ready(
 pub async fn cmd_show_main_window(app: tauri::AppHandle) {
     crate::app::tray::show_main_window(&app, main_window::MainWindowShowReason::Mini);
 }
+
+#[tauri::command]
+pub fn cmd_take_main_tools_target(
+    window: WebviewWindow,
+) -> Result<Option<main_window::tools_navigation::ToolsSection>, String> {
+    super::window_guard::require_main_window_string(&window)?;
+    Ok(window
+        .app_handle()
+        .state::<main_window::tools_navigation::ToolsNavigationState>()
+        .take())
+}

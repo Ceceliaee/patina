@@ -12,6 +12,7 @@ use tauri::{
 };
 
 mod recovery;
+pub(crate) mod tools_navigation;
 
 pub(crate) const MAIN_WINDOW_LABEL: &str = "main";
 

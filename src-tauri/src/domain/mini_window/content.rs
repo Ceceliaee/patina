@@ -43,12 +43,6 @@ pub struct MiniReminderProjection {
     pub scheduled_at: i64,
 }
 
-impl MiniStatusSnapshot {
-    pub fn row_count(&self) -> u8 {
-        self.tools.len().min(1) as u8 + u8::from(self.reminder.is_some())
-    }
-}
-
 const COMPLETED_TOOL_VISIBLE_MS: i64 = 5_000;
 
 pub fn build_mini_status_snapshot(
@@ -233,7 +227,7 @@ mod tests {
             ..ToolsRuntimeSnapshot::default()
         };
         let status = build_mini_status_snapshot(tools.clone(), 0);
-        assert_eq!(status.row_count(), 1);
+        assert!(status.tools.is_empty());
         assert_eq!(status.reminder.unwrap().id, 2);
         tools.reminders.retain(|reminder| reminder.id != 2);
         assert_eq!(
@@ -244,7 +238,7 @@ mod tests {
             3
         );
         tools.reminders.clear();
-        assert_eq!(build_mini_status_snapshot(tools, 0).row_count(), 0);
+        assert!(build_mini_status_snapshot(tools, 0).reminder.is_none());
     }
 
     #[test]

@@ -80,6 +80,7 @@ fn register_managed_state_and_plugins(
         .manage(BackgroundEntryState::default())
         .manage(AppRestartState::default())
         .manage(MainWindowLifecycleState::default())
+        .manage(crate::app::main_window::tools_navigation::ToolsNavigationState::default())
         .manage(crate::app::webview_recovery::WebviewRecoveryState::default())
         .manage(crate::app::mini_window::MiniWindowState::default())
         .manage(TrackingRuntimeSnapshotState::default())
@@ -195,6 +196,7 @@ fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Build
         commands::window::cmd_e2e_destroy_hidden_main_window,
         commands::window::cmd_get_main_window_render_token,
         commands::window::cmd_mark_main_window_ready,
+        commands::window::cmd_take_main_tools_target,
         commands::update::cmd_get_update_snapshot,
         commands::update::cmd_check_for_updates,
         commands::update::cmd_download_update,
