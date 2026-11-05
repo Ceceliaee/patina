@@ -16,52 +16,6 @@ const ICON_THEME_CACHE_LIMIT = 256;
 const ICON_THEME_CACHE = new Map<string, string | null>();
 const ICON_THEME_IN_FLIGHT = new Map<string, Promise<string | null>>();
 const ICON_SAMPLE_SIZE = 48;
-const ALPHA_MIN = 48;
-const NEAR_WHITE_BRIGHTNESS_MIN = 235;
-const NEAR_WHITE_CHROMA_MAX = 20;
-const EDGE_WIDTH = 3;
-const EDGE_BACKGROUND_BRIGHTNESS_MIN = 190;
-const EDGE_BACKGROUND_SATURATION_MAX = 0.3;
-const EDGE_BACKGROUND_DISTANCE_MAX = 28;
-const EDGE_BACKGROUND_MIN_SHARE = 0.35;
-const EDGE_DARK_PROTECTION_BRIGHTNESS = 120;
-const BACKGROUND_RAMP_BRIGHTNESS_MIN = 210;
-const BACKGROUND_RAMP_SATURATION_MAX = 0.18;
-const BACKGROUND_RAMP_DISTANCE_MAX = 72;
-const DOMINANT_BACKGROUND_BRIGHTNESS_MIN = 190;
-const DOMINANT_BACKGROUND_SATURATION_MAX = 0.22;
-const DOMINANT_BACKGROUND_MIN_SHARE = 0.45;
-const DOMINANT_BACKGROUND_MIN_CANVAS_SHARE = 0.25;
-const BUCKET_SIZE = 24;
-const FALLBACK_PALETTE = [
-  "#3B82F6",
-  "#10B981",
-  "#F59E0B",
-  "#EF4444",
-  "#8B5CF6",
-  "#EC4899",
-  "#14B8A6",
-  "#64748B",
-];
-
-type Rgb = {
-  r: number;
-  g: number;
-  b: number;
-};
-
-type ColorBucket = {
-  weight: number;
-  rSum: number;
-  gSum: number;
-  bSum: number;
-  count: number;
-};
-
-function rgbToHex(r: number, g: number, b: number) {
-  const toHex = (value: number) => value.toString(16).padStart(2, "0");
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-}
 
 const URL_SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:/i;
 
@@ -74,250 +28,6 @@ function toImageSource(icon: string) {
   return `data:image/png;base64,${trimmed}`;
 }
 
-function toBucketKey(r: number, g: number, b: number) {
-  const bucket = (value: number) => Math.floor(value / BUCKET_SIZE);
-  return `${bucket(r)}-${bucket(g)}-${bucket(b)}`;
-}
-
-function colorBrightness({ r, g, b }: Rgb) {
-  return (r + g + b) / 3;
-}
-
-function colorChroma({ r, g, b }: Rgb) {
-  return Math.max(r, g, b) - Math.min(r, g, b);
-}
-
-function colorSaturation({ r, g, b }: Rgb) {
-  const max = Math.max(r, g, b);
-  if (max === 0) return 0;
-  return (max - Math.min(r, g, b)) / max;
-}
-
-function colorDistance(left: Rgb, right: Rgb) {
-  const dr = left.r - right.r;
-  const dg = left.g - right.g;
-  const db = left.b - right.b;
-  return Math.sqrt((dr * dr) + (dg * dg) + (db * db));
-}
-
-function pixelOffset(x: number, y: number, size: number) {
-  return ((y * size) + x) * 4;
-}
-
-function isNearWhiteOrGray(color: Rgb) {
-  return colorBrightness(color) > NEAR_WHITE_BRIGHTNESS_MIN
-    && colorChroma(color) < NEAR_WHITE_CHROMA_MAX;
-}
-
-function isLightNeutralBackgroundLike(color: Rgb) {
-  return colorBrightness(color) > DOMINANT_BACKGROUND_BRIGHTNESS_MIN
-    && colorSaturation(color) < DOMINANT_BACKGROUND_SATURATION_MAX;
-}
-
-function isEdgePixel(x: number, y: number, size: number) {
-  return x < EDGE_WIDTH
-    || y < EDGE_WIDTH
-    || x >= size - EDGE_WIDTH
-    || y >= size - EDGE_WIDTH;
-}
-
-function centerWeightForPixel(x: number, y: number, size: number) {
-  const center = (size - 1) / 2;
-  if (center <= 0) return 1;
-
-  const dx = (x - center) / center;
-  const dy = (y - center) / center;
-  const normalizedDistance = Math.min(1, Math.sqrt((dx * dx) + (dy * dy)) / Math.SQRT2);
-  return 1.2 - (0.4 * normalizedDistance);
-}
-
-function addBucketPixel(
-  buckets: Map<string, ColorBucket>,
-  color: Rgb,
-  weight: number,
-) {
-  const key = toBucketKey(color.r, color.g, color.b);
-  const existing = buckets.get(key) ?? { weight: 0, rSum: 0, gSum: 0, bSum: 0, count: 0 };
-  existing.weight += weight;
-  existing.rSum += color.r * weight;
-  existing.gSum += color.g * weight;
-  existing.bSum += color.b * weight;
-  existing.count += 1;
-  buckets.set(key, existing);
-}
-
-function averageBucketColor(bucket: ColorBucket): Rgb {
-  return {
-    r: Math.round(bucket.rSum / bucket.weight),
-    g: Math.round(bucket.gSum / bucket.weight),
-    b: Math.round(bucket.bSum / bucket.weight),
-  };
-}
-
-function detectLightEdgeBackground(data: Uint8ClampedArray, size: number): Rgb | null {
-  const buckets = new Map<string, ColorBucket>();
-  let edgePixelCount = 0;
-
-  for (let y = 0; y < size; y += 1) {
-    for (let x = 0; x < size; x += 1) {
-      if (!isEdgePixel(x, y, size)) continue;
-
-      const offset = pixelOffset(x, y, size);
-      const a = data[offset + 3];
-      if (a < ALPHA_MIN) continue;
-
-      const color = {
-        r: data[offset],
-        g: data[offset + 1],
-        b: data[offset + 2],
-      };
-      edgePixelCount += 1;
-      addBucketPixel(buckets, color, 1);
-    }
-  }
-
-  let selected: ColorBucket | null = null;
-  for (const bucket of buckets.values()) {
-    if (!selected || bucket.count > selected.count) {
-      selected = bucket;
-    }
-  }
-
-  if (!selected) return null;
-  if (selected.count / edgePixelCount < EDGE_BACKGROUND_MIN_SHARE) return null;
-
-  const edgeColor = averageBucketColor(selected);
-  const edgeBrightness = colorBrightness(edgeColor);
-  if (edgeBrightness < EDGE_DARK_PROTECTION_BRIGHTNESS) return null;
-  if (
-    edgeBrightness > EDGE_BACKGROUND_BRIGHTNESS_MIN
-    && colorSaturation(edgeColor) < EDGE_BACKGROUND_SATURATION_MAX
-  ) {
-    return edgeColor;
-  }
-
-  return null;
-}
-
-function detectDominantLightBackground(data: Uint8ClampedArray, size: number): Rgb | null {
-  const buckets = new Map<string, ColorBucket>();
-  let opaquePixelCount = 0;
-
-  for (let y = 0; y < size; y += 1) {
-    for (let x = 0; x < size; x += 1) {
-      const offset = pixelOffset(x, y, size);
-      const a = data[offset + 3];
-      if (a < ALPHA_MIN) continue;
-
-      const color = {
-        r: data[offset],
-        g: data[offset + 1],
-        b: data[offset + 2],
-      };
-      opaquePixelCount += 1;
-      addBucketPixel(buckets, color, 1);
-    }
-  }
-
-  let selected: ColorBucket | null = null;
-  for (const bucket of buckets.values()) {
-    if (!selected || bucket.count > selected.count) {
-      selected = bucket;
-    }
-  }
-
-  if (!selected || opaquePixelCount === 0) return null;
-  if (selected.count / opaquePixelCount < DOMINANT_BACKGROUND_MIN_SHARE) return null;
-  if (selected.count / (size * size) < DOMINANT_BACKGROUND_MIN_CANVAS_SHARE) return null;
-
-  const color = averageBucketColor(selected);
-  if (colorBrightness(color) < EDGE_DARK_PROTECTION_BRIGHTNESS) return null;
-  if (isLightNeutralBackgroundLike(color)) {
-    return color;
-  }
-
-  return null;
-}
-
-function isBackgroundColor(color: Rgb, backgrounds: Rgb[]) {
-  return backgrounds.some((background) => (
-    colorDistance(color, background) <= EDGE_BACKGROUND_DISTANCE_MAX
-  ));
-}
-
-function isBackgroundRampColor(color: Rgb, backgrounds: Rgb[]) {
-  if (
-    colorBrightness(color) <= BACKGROUND_RAMP_BRIGHTNESS_MIN
-    || colorSaturation(color) >= BACKGROUND_RAMP_SATURATION_MAX
-  ) {
-    return false;
-  }
-
-  return backgrounds.some((background) => (
-    isLightNeutralBackgroundLike(background)
-    && colorDistance(color, background) <= BACKGROUND_RAMP_DISTANCE_MAX
-  ));
-}
-
-function selectPrimaryBucket(buckets: Map<string, ColorBucket>, backgrounds: Rgb[]) {
-  let selected: ColorBucket | null = null;
-  for (const bucket of buckets.values()) {
-    const color = averageBucketColor(bucket);
-    if (isBackgroundColor(color, backgrounds)) continue;
-    if (!selected || bucket.weight > selected.weight) {
-      selected = bucket;
-    }
-  }
-  return selected;
-}
-
-function chooseDominantColor(data: Uint8ClampedArray, size: number) {
-  if (size <= 0 || data.length < size * size * 4) return null;
-
-  const backgrounds = [
-    detectLightEdgeBackground(data, size),
-    detectDominantLightBackground(data, size),
-  ].filter((background): background is Rgb => background !== null);
-  const buckets = new Map<string, ColorBucket>();
-
-  for (let y = 0; y < size; y += 1) {
-    for (let x = 0; x < size; x += 1) {
-      const offset = pixelOffset(x, y, size);
-      const color = {
-        r: data[offset],
-        g: data[offset + 1],
-        b: data[offset + 2],
-      };
-      const a = data[offset + 3];
-      if (a < ALPHA_MIN) continue;
-      if (isNearWhiteOrGray(color)) continue;
-      if (isBackgroundRampColor(color, backgrounds)) continue;
-      if (isBackgroundColor(color, backgrounds)) continue;
-
-      const alphaWeight = a / 255;
-      const pixelWeight = alphaWeight * centerWeightForPixel(x, y, size);
-      addBucketPixel(buckets, color, pixelWeight);
-    }
-  }
-
-  const selected = selectPrimaryBucket(buckets, backgrounds);
-  if (!selected) return null;
-
-  const color = averageBucketColor(selected);
-  return rgbToHex(color.r, color.g, color.b);
-}
-
-function fallbackThemeColor(identifier: string) {
-  let hash = 0;
-  for (const char of identifier.trim().toLowerCase()) {
-    hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
-  }
-  return FALLBACK_PALETTE[hash % FALLBACK_PALETTE.length];
-}
-
-export function getIconThemeFallbackColor(identifier: string) {
-  return fallbackThemeColor(identifier);
-}
 
 function rememberThemeColor(imageSource: string, color: string | null) {
   ICON_THEME_CACHE.delete(imageSource);
@@ -329,14 +39,14 @@ function rememberThemeColor(imageSource: string, color: string | null) {
   }
 }
 
-function readCachedThemeColor(identifier: string, iconData: string): string | null {
+function readCachedThemeColor(iconData: string): string | null {
   const imageSource = toImageSource(iconData);
   if (!imageSource) return null;
 
   const extractedColor = ICON_THEME_CACHE.get(imageSource);
   if (extractedColor !== undefined) {
     rememberThemeColor(imageSource, extractedColor);
-    return extractedColor ?? fallbackThemeColor(identifier);
+    return extractedColor;
   }
 
   try {
@@ -355,7 +65,7 @@ function readCachedThemeColor(identifier: string, iconData: string): string | nu
 function readCachedThemeColors(icons: Record<string, string>): Record<string, string> {
   const colors: Record<string, string> = {};
   for (const [identifier, iconData] of Object.entries(icons)) {
-    const color = readCachedThemeColor(identifier, iconData);
+    const color = readCachedThemeColor(iconData);
     if (color) colors[identifier] = color;
   }
   return colors;
@@ -371,7 +81,7 @@ export async function prewarmIconThemeColors(
   // A caller's icon set can exceed the shared cache; retain every result for this call.
   const colors: Record<string, string> = {};
   await Promise.all(Object.entries(icons).map(async ([identifier, iconData]) => {
-    const color = await resolveThemeColor(identifier, iconData);
+    const color = await resolveThemeColor(iconData);
     if (color) colors[identifier] = color;
   }));
   return colors;
@@ -418,19 +128,19 @@ async function extractDominantColor(iconData: string): Promise<string | null> {
     return null;
   }
 
-  return chooseDominantColor(data, size);
+  const { iconRepresentative } = await import("../colors/iconRepresentative.ts");
+  return iconRepresentative(data, size)?.color ?? null;
 }
 
 async function resolveThemeColor(
-  identifier: string,
   iconData: string,
   extractor: (value: string) => Promise<string | null> = extractDominantColor,
 ): Promise<string | null> {
   const imageSource = toImageSource(iconData);
   if (!imageSource) return null;
 
-  const cachedColor = readCachedThemeColor(identifier, iconData);
-  if (cachedColor) return cachedColor;
+  const cachedColor = readCachedThemeColor(iconData);
+  if (cachedColor || ICON_THEME_CACHE.has(imageSource)) return cachedColor;
 
   let pending = ICON_THEME_IN_FLIGHT.get(imageSource);
   if (!pending) {
@@ -459,8 +169,7 @@ async function resolveThemeColor(
     pending = created;
   }
 
-  const extractedColor = await pending;
-  return extractedColor ?? fallbackThemeColor(identifier);
+  return pending;
 }
 
 function resetThemeColorCaches() {
@@ -474,13 +183,21 @@ export function configureIconThemeColorPersistence(
   iconThemeColorPersistence = persistence ?? NO_ICON_THEME_COLOR_PERSISTENCE;
 }
 
-export function useIconThemeColors(icons: Record<string, string>) {
-  const [resolved, setResolved] = useState(() => ({ icons, colors: readCachedThemeColors(icons) }));
-  const colors = useMemo(() => (
-    resolved.icons === icons ? resolved.colors : readCachedThemeColors(icons)
-  ), [resolved, icons]);
+export function useIconThemeColorSnapshot(icons: Record<string, string>) {
+  const [resolved, setResolved] = useState<{
+    icons: Record<string, string>;
+    colors: Record<string, string>;
+  } | null>(null);
+  const cached = useMemo(() => {
+    const colors = readCachedThemeColors(icons);
+    const ready = Object.entries(icons).every(([key, icon]) => (
+      colors[key] || !icon.trim() || ICON_THEME_CACHE.has(toImageSource(icon))
+    ));
+    return { colors, ready };
+  }, [icons]);
 
   useEffect(() => {
+    if (cached.ready) return;
     let cancelled = false;
     void prewarmIconThemeColors(icons).then((nextColors) => {
       if (!cancelled) setResolved({ icons, colors: nextColors });
@@ -489,16 +206,16 @@ export function useIconThemeColors(icons: Record<string, string>) {
     return () => {
       cancelled = true;
     };
-  }, [icons]);
+  }, [cached, icons]);
 
-  return colors;
+  return resolved?.icons === icons ? { colors: resolved.colors, ready: true } : cached;
+}
+
+export function useIconThemeColors(icons: Record<string, string>) {
+  return useIconThemeColorSnapshot(icons).colors;
 }
 
 export const __iconThemeColorInternals = {
-  chooseDominantColor,
-  detectDominantLightBackground,
-  detectLightEdgeBackground,
-  fallbackThemeColor,
   readCachedThemeColors,
   resetThemeColorCaches,
   resolveThemeColor,

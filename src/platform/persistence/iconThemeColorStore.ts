@@ -1,4 +1,4 @@
-const ICON_THEME_COLOR_STORAGE_KEY = "patina.icon-theme-colors.v1";
+const ICON_THEME_COLOR_STORAGE_KEY = "patina.icon-theme-colors.v2";
 const ICON_THEME_COLOR_CACHE_LIMIT = 512;
 const ICON_SOURCE_FINGERPRINT_CACHE_LIMIT = 256;
 const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/i;

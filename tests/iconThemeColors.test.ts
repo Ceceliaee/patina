@@ -1,3 +1,6 @@
+import { colorContrast } from "../src/shared/colors/oklab.ts";
+import { activityDisplayColor } from "../src/shared/colors/displayColor.ts";
+import { iconRepresentative } from "../src/shared/colors/iconRepresentative.ts";
 import assert from "node:assert/strict";
 import {
   __iconThemeColorInternals,
@@ -53,72 +56,43 @@ async function runTest(name: string, fn: () => void | Promise<void>) {
   console.log(`PASS ${name}`);
 }
 
-await runTest("transparent pixels do not pollute icon theme color", () => {
+await runTest("transparent padding and empty icons", () => {
   const data = createIcon([0, 0, 0, 0]);
+  assert.equal(iconRepresentative(data, SIZE), null);
   fillRect(data, 14, 14, 20, 20, [69, 135, 244]);
-
-  assert.equal(__iconThemeColorInternals.chooseDominantColor(data, SIZE), "#4587f4");
+  assert.deepEqual(iconRepresentative(data, SIZE), { kind: "color", color: "#4587F4" });
 });
 
-await runTest("light edge background is removed before choosing the subject color", () => {
-  const data = createIcon([220, 210, 190]);
-  fillRect(data, 12, 12, 24, 24, [255, 105, 154]);
-
-  assert.equal(__iconThemeColorInternals.chooseDominantColor(data, SIZE), "#ff699a");
+await runTest("monochrome plates distinguish dark icons and light icons with a darker subject", () => {
+  const dark = createIcon([0, 0, 0]);
+  fillRect(dark, 16, 20, 16, 8, [255, 255, 255]);
+  assert.deepEqual(iconRepresentative(dark, SIZE), { kind: "dark", color: "#000000" });
+  const light = createIcon([255, 255, 255]);
+  fillRect(light, 14, 14, 20, 20, [42, 42, 42]);
+  assert.deepEqual(iconRepresentative(light, SIZE), { kind: "light", color: "#2A2A2A" });
 });
 
-await runTest("dark edge color is protected as a possible subject color", () => {
-  const data = createIcon([0, 1, 1]);
-  fillRect(data, 18, 18, 12, 12, [255, 105, 154]);
-
-  assert.equal(__iconThemeColorInternals.chooseDominantColor(data, SIZE), "#000101");
+await runTest("single hue and multiple hues use separate inclusive area thresholds", () => {
+  const data = createIcon([76, 76, 76]);
+  fillRect(data, 0, 0, 4, 48, [255, 0, 0]);
+  assert.equal(iconRepresentative(data, SIZE)?.kind, "dark");
+  fillRect(data, 4, 0, 1, 48, [255, 0, 0]);
+  assert.equal(iconRepresentative(data, SIZE)?.kind, "color");
+  fillRect(data, 4, 0, 4, 48, [0, 255, 0]);
+  fillRect(data, 8, 0, 4, 48, [0, 0, 255]);
+  assert.equal(iconRepresentative(data, SIZE)?.kind, "color");
+  fillRect(data, 11, 0, 1, 48, [76, 76, 76]);
+  assert.equal(iconRepresentative(data, SIZE)?.kind, "dark");
 });
 
-await runTest("near-white background is filtered without removing colored subjects", () => {
-  const data = createIcon([246, 246, 244]);
-  fillRect(data, 12, 12, 24, 24, [82, 82, 82]);
-
-  assert.equal(__iconThemeColorInternals.chooseDominantColor(data, SIZE), "#525252");
-});
-
-await runTest("light background ramps do not beat a darker neutral subject", () => {
-  const data = createIcon([254, 254, 254]);
-  fillRect(data, 8, 8, 32, 32, [226, 226, 226]);
-  fillRect(data, 18, 18, 12, 12, [82, 82, 82]);
-
-  assert.equal(__iconThemeColorInternals.chooseDominantColor(data, SIZE), "#525252");
-});
-
-await runTest("dominant light neutral background is filtered even when it is padded away from edges", () => {
-  const data = createIcon([0, 0, 0, 0]);
-  fillRect(data, 8, 8, 32, 32, [226, 226, 226]);
-  fillRect(data, 16, 16, 16, 16, [82, 82, 82]);
-
-  assert.equal(__iconThemeColorInternals.chooseDominantColor(data, SIZE), "#525252");
-});
-
-await runTest("light neutral buckets cannot beat smaller subject buckets", () => {
-  const data = createIcon([0, 0, 0, 0]);
-  fillRect(data, 0, 0, 24, 48, [226, 226, 226]);
-  fillRect(data, 24, 0, 18, 48, [218, 218, 218]);
-  fillRect(data, 18, 16, 12, 16, [82, 82, 82]);
-
-  assert.equal(__iconThemeColorInternals.chooseDominantColor(data, SIZE), "#525252");
-});
-
-await runTest("light neutral subject survives when there is no background evidence", () => {
-  const data = createIcon([0, 0, 0, 0]);
-  fillRect(data, 14, 14, 20, 20, [205, 190, 200]);
-
-  assert.equal(__iconThemeColorInternals.chooseDominantColor(data, SIZE), "#cdbec8");
-});
-
-await runTest("fallback colors are stable and come from the fixed palette", () => {
-  const first = __iconThemeColorInternals.fallbackThemeColor("example.com");
-  const second = __iconThemeColorInternals.fallbackThemeColor("example.com");
-
-  assert.equal(first, second);
-  assert.match(first, /^#[0-9A-F]{6}$/);
+await runTest("display colors meet the theme minimum and retain passing originals", () => {
+  for (const [mode, background, target] of [["light", "#FFFFFF", 2], ["dark", "#2D2D2D", 3]] as const) {
+    for (const source of ["#FFFFFF", "#000000", "#07254D", "#BFE99C", "#555555"]) {
+      const color = activityDisplayColor(source, background, mode);
+      assert.ok(colorContrast(color, background) >= target);
+      if (colorContrast(source, background) >= target) assert.equal(color, source);
+    }
+  }
 });
 
 await runTest("resolved icon colors are synchronously reusable on remount", async () => {
@@ -128,7 +102,6 @@ await runTest("resolved icon colors are synchronously reusable on remount", asyn
 
   assert.deepEqual(__iconThemeColorInternals.readCachedThemeColors(icons), {});
   await __iconThemeColorInternals.resolveThemeColor(
-    "example.exe",
     icons["example.exe"],
     async () => {
       extractionCount += 1;
@@ -155,8 +128,8 @@ await runTest("matching concurrent icon color requests share one extraction", as
     return extraction;
   };
 
-  const first = __iconThemeColorInternals.resolveThemeColor("first.exe", "shared-icon", extractor);
-  const second = __iconThemeColorInternals.resolveThemeColor("second.exe", "shared-icon", extractor);
+  const first = __iconThemeColorInternals.resolveThemeColor("shared-icon", extractor);
+  const second = __iconThemeColorInternals.resolveThemeColor("shared-icon", extractor);
   await Promise.resolve();
   assert.equal(extractionCount, 1);
 
@@ -167,7 +140,6 @@ await runTest("matching concurrent icon color requests share one extraction", as
 await runTest("cached icon colors are scoped to the current icon source", async () => {
   __iconThemeColorInternals.resetThemeColorCaches();
   await __iconThemeColorInternals.resolveThemeColor(
-    "example.exe",
     "old-icon",
     async () => "#123456",
   );
@@ -184,17 +156,15 @@ await runTest("cached icon colors are scoped to the current icon source", async 
 
 await runTest("failed icon extraction fallbacks remain stable across remounts", async () => {
   __iconThemeColorInternals.resetThemeColorCaches();
-  const expected = __iconThemeColorInternals.fallbackThemeColor("example.exe");
   const resolved = await __iconThemeColorInternals.resolveThemeColor(
-    "example.exe",
     "broken-icon",
     async () => null,
   );
 
-  assert.equal(resolved, expected);
+  assert.equal(resolved, null);
   assert.deepEqual(
     __iconThemeColorInternals.readCachedThemeColors({ "example.exe": "broken-icon" }),
-    { "example.exe": expected },
+    {},
   );
 });
 
@@ -207,24 +177,24 @@ await runTest("successful and failed source entries evict old values while retai
       return extracted;
     };
     for (let index = 0; index < 256; index += 1) {
-      await __iconThemeColorInternals.resolveThemeColor("app", `source-${index}`, extractor);
+      await __iconThemeColorInternals.resolveThemeColor(`source-${index}`, extractor);
     }
-    const expected = extracted ?? __iconThemeColorInternals.fallbackThemeColor("app");
+    const expected = extracted ? { app: extracted } : {};
     assert.deepEqual(
       __iconThemeColorInternals.readCachedThemeColors({ app: "source-0" }),
-      { app: expected },
+      expected,
     );
-    await __iconThemeColorInternals.resolveThemeColor("app", "source-256", extractor);
+    await __iconThemeColorInternals.resolveThemeColor("source-256", extractor);
     assert.deepEqual(__iconThemeColorInternals.readCachedThemeColors({ app: "source-1" }), {});
     assert.deepEqual(
       __iconThemeColorInternals.readCachedThemeColors({ app: "source-0" }),
-      { app: expected },
+      expected,
     );
     assert.deepEqual(
       __iconThemeColorInternals.readCachedThemeColors({ app: "source-256" }),
-      { app: expected },
+      expected,
     );
-    await __iconThemeColorInternals.resolveThemeColor("app", "source-1", extractor);
+    await __iconThemeColorInternals.resolveThemeColor("source-1", extractor);
     assert.equal(extractions, 258, "an evicted source is extracted again");
   }
 });
@@ -233,20 +203,19 @@ await runTest("one failed source serves new identifiers without retaining per-id
   __iconThemeColorInternals.resetThemeColorCaches();
   let extractions = 0;
   for (let index = 0; index < 600; index += 1) {
-    const identifier = `app-${index}.exe`;
     assert.equal(
-      await __iconThemeColorInternals.resolveThemeColor(identifier, "shared-broken-source", async () => {
+      await __iconThemeColorInternals.resolveThemeColor("shared-broken-source", async () => {
         extractions += 1;
         return null;
       }),
-      __iconThemeColorInternals.fallbackThemeColor(identifier),
+      null,
     );
   }
   assert.equal(extractions, 1);
   const freshIdentifier = "not-previously-requested.exe";
   assert.deepEqual(
     __iconThemeColorInternals.readCachedThemeColors({ [freshIdentifier]: "shared-broken-source" }),
-    { [freshIdentifier]: __iconThemeColorInternals.fallbackThemeColor(freshIdentifier) },
+    {},
   );
 });
 
@@ -257,13 +226,13 @@ await runTest("reset isolates unresolved extraction and persistence from the new
   try {
     let releaseOld!: (color: string) => void;
     let releaseNew!: (color: string) => void;
-    const old = __iconThemeColorInternals.resolveThemeColor("app", "shared", () => new Promise((resolve) => {
+    const old = __iconThemeColorInternals.resolveThemeColor("shared", () => new Promise((resolve) => {
       releaseOld = resolve;
     }));
     await Promise.resolve();
     __iconThemeColorInternals.resetThemeColorCaches();
     let newExtractions = 0;
-    const next = __iconThemeColorInternals.resolveThemeColor("app", "shared", () => {
+    const next = __iconThemeColorInternals.resolveThemeColor("shared", () => {
       newExtractions += 1;
       return new Promise((resolve) => { releaseNew = resolve; });
     });
@@ -272,7 +241,7 @@ await runTest("reset isolates unresolved extraction and persistence from the new
     assert.equal(await old, "#111111");
     assert.deepEqual(__iconThemeColorInternals.readCachedThemeColors({ app: "shared" }), {});
     assert.deepEqual(persisted, []);
-    const concurrent = __iconThemeColorInternals.resolveThemeColor("second", "shared", async () => {
+    const concurrent = __iconThemeColorInternals.resolveThemeColor("shared", async () => {
       newExtractions += 1;
       return "#333333";
     });
@@ -318,9 +287,9 @@ await runTest("prewarming more sources than the cache retains returns every requ
       __iconThemeColorInternals.resetThemeColorCaches();
       const icons = Object.fromEntries(Array.from({ length: 300 }, (_, index) => [`app-${index}`, `${sourceKind}-${index}`]));
       const colors = await prewarmIconThemeColors(icons);
-      assert.equal(Object.keys(colors).length, 300);
+      assert.equal(Object.keys(colors).length, sourceKind === "valid" ? 300 : 0);
       for (const identifier of Object.keys(icons)) {
-        assert.equal(colors[identifier], sourceKind === "valid" ? "#4587f4" : __iconThemeColorInternals.fallbackThemeColor(identifier));
+        assert.equal(colors[identifier], sourceKind === "valid" ? "#4587F4" : undefined);
       }
       assert.deepEqual(__iconThemeColorInternals.readCachedThemeColors({ first: icons["app-0"] }), {});
     }
@@ -356,7 +325,6 @@ await runTest("extracted colors survive a rebuilt WebView and invalidate when th
     __iconThemeColorInternals.resetThemeColorCaches();
 
     await __iconThemeColorInternals.resolveThemeColor(
-      "example.exe",
       "stable-icon",
       async () => "#123456",
     );
