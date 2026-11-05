@@ -52,7 +52,7 @@ export async function verifyToolNotificationRuntime(session: RuntimeSession) {
     assert.equal(await evaluate(notification!, "!!document.querySelector('main.qp-canvas,.qp-app-frame,.mini-tools')"), false);
     assert.equal(await evaluate(notification!, "document.activeElement === document.body"), true, "passive notification must not autofocus its dialog");
     const assigned = await evaluate(notification!, "window.__TAURI_INTERNALS__.invoke('cmd_get_tool_presentation')") as { alert: { id: string } };
-    for (const command of ["cmd_get_tools_snapshot", "cmd_commit_app_settings", "cmd_save_tool_notification_preferences", "cmd_create_reminder", "cmd_get_setting_rows", "cmd_restore_backup", "cmd_reveal_webdav_backup_secret", "plugin:sql|load", "cmd_show_main_window", "cmd_e2e_destroy_hidden_main_window"]) {
+    for (const command of ["cmd_get_tools_snapshot", "cmd_commit_app_settings", "cmd_save_tool_notification_preferences", "cmd_create_reminder", "cmd_get_setting_rows", "cmd_restore_backup", "cmd_classification_object_deletion", "cmd_reveal_webdav_backup_secret", "plugin:sql|load", "cmd_show_main_window", "cmd_e2e_destroy_hidden_main_window"]) {
       const error = await evaluate(notification!, `window.__TAURI_INTERNALS__.invoke(${JSON.stringify(command)},{}).then(()=>null,e=>String(e))`);
       assert.match(String(error), /not allowed|permission|denied/i);
     }

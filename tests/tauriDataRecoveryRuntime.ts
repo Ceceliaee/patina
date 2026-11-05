@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 import { readRuntimeDatabaseRows } from "./runtimeDatabase.ts";
 import { verifyAnonymousActivityRuntime } from "./tauriAnonymousActivityRuntime.ts";
@@ -19,6 +20,15 @@ export async function run(session: RuntimeSession) {
   let client = session.client!;
   try {
     await session.show();
+    const cleanupDb = new DatabaseSync(join(root, "data", "patina.db"));
+    try {
+      cleanupDb.exec("PRAGMA busy_timeout=5000; INSERT INTO sessions(app_name,exe_name,start_time,end_time,duration) VALUES ('Test','cleanup-test.exe',100,200,100),('Test','cleanup-test.exe',300,400,100)");
+      const remaining = cleanupDb.prepare("SELECT start_time FROM sessions WHERE exe_name='cleanup-test.exe' ORDER BY start_time");
+      await evaluate(client, `window.__TAURI_INTERNALS__.invoke('cmd_delete_sessions_by_exe_names_between',{exeNames:['cleanup-test.exe'],startTime:100,endTime:200})`);
+      assert.deepEqual(remaining.all().map(row => row.start_time), [300]);
+      await evaluate(client, `window.__TAURI_INTERNALS__.invoke('cmd_delete_sessions_by_exe_names',{exeNames:['cleanup-test.exe']})`);
+      assert.deepEqual(remaining.all(), []);
+    } finally { cleanupDb.close(); }
     await verifyWebLinksRuntime(expression => evaluate(client, expression));
     await verifyAutomaticGroupingBackupRuntime(expression => evaluate(client, expression), root);
     const storage = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_get_storage_snapshot")`);

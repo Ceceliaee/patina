@@ -25,6 +25,9 @@ const DYNAMIC_INVOKE_ALLOWLIST = new Map([
 
 // Commands intentionally invoked by Rust runtime, auxiliary windows, or tests rather than src/platform.
 const RUNTIME_ONLY_COMMANDS = new Map<string, string>([
+  ["cmd_delete_sessions_by_exe_names", "native data-recovery exercises executable-scoped cleanup"],
+  ["cmd_delete_sessions_by_exe_names_between", "native data-recovery exercises time-bounded executable cleanup"],
+  ["cmd_delete_web_activity_segments_by_domain", "native runtime verifies exact web-history deletion independently of classification"],
   [
     "cmd_get_activity_read_model_status",
     "isolated Tauri runtime smoke waits for read-model projection convergence",
@@ -45,6 +48,7 @@ const SENSITIVE_CALLER_GUARD_COMMANDS = new Set([
   "cmd_get_remote_backup_config_snapshot",
   "cmd_reveal_webdav_backup_secret",
   "cmd_delete_sessions_before",
+  "cmd_classification_object_deletion",
   "cmd_delete_sessions_by_exe_names",
   "cmd_delete_sessions_by_exe_names_between",
   "cmd_delete_web_activity_segments_by_domain",
@@ -323,7 +327,7 @@ function runSelfTest() {
     "#[tauri::command]\nasync fn cmd_known() {}\n#[tauri::command]\nfn cmd_typed() {}\ngenerate_handler![commands::cmd_known, commands::cmd_typed]",
   );
   const commandSet = new Set(["cmd_known", "cmd_typed"]);
-  const failures = validate({
+  const fixture = {
     called: frontend.called,
     dynamicCalls: [],
     declared: rust.declared,
@@ -336,7 +340,18 @@ function runSelfTest() {
     miniCapabilityPermissions: new Set(MINI_CAPABILITY_ALLOWLIST),
     mainCapabilityPermissions: new Set(["main-window-commands"]),
     callerGuarded: new Set(SENSITIVE_CALLER_GUARD_COMMANDS),
-  });
+  };
+  const failures = validate(fixture);
+  const deletion = "cmd_classification_object_deletion";
+  const guards = new Set(SENSITIVE_CALLER_GUARD_COMMANDS);
+  guards.delete(deletion);
+  const commands = new Set([...commandSet, deletion]);
+  const withoutDeletionGuard = validate({ ...fixture, called: commands, declared: commands,
+    registered: commands, appManifest: commands, mainPermission: commands, callerGuarded: guards });
+  if (withoutDeletionGuard.length !== 1 || withoutDeletionGuard[0] !==
+    "sensitive command is missing a main-window caller guard: cmd_classification_object_deletion") {
+    throw new Error("IPC self-test did not detect removal of the classification deletion caller guard alone");
+  }
   if (failures.length > 0 || frontend.dynamicCalls[0] !== "src/platform/demo.ts:proxy") {
     throw new Error(`IPC contract self-test failed: ${failures.join("; ")}`);
   }

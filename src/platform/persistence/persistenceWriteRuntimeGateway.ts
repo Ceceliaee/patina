@@ -4,28 +4,6 @@ export async function deleteSessionsBefore(cutoffTime: number): Promise<void> {
   await invokeWithCommandError("cmd_delete_sessions_before", { cutoffTime });
 }
 
-export async function deleteSessionsByExeNames(exeNames: string[]): Promise<void> {
-  await invokeWithCommandError("cmd_delete_sessions_by_exe_names", { exeNames });
-}
-
-export async function deleteSessionsByExeNamesBetween(
-  exeNames: string[],
-  startTime: number,
-  endTime: number,
-): Promise<void> {
-  await invokeWithCommandError("cmd_delete_sessions_by_exe_names_between", {
-    exeNames,
-    startTime,
-    endTime,
-  });
-}
-
-export async function deleteWebActivitySegmentsByDomain(
-  normalizedDomain: string,
-): Promise<void> {
-  await invokeWithCommandError("cmd_delete_web_activity_segments_by_domain", { normalizedDomain });
-}
-
 export async function saveRemoteBackupLastBackupAt(timestampMs: number): Promise<void> {
   await invokeWithCommandError("cmd_save_remote_backup_last_backup_at", { timestampMs });
 }
