@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 
 export async function verifyWebDavRuntime(evaluate: (expression: string) => Promise<unknown>) {
@@ -93,6 +93,22 @@ export async function verifyWebDavRuntime(evaluate: (expression: string) => Prom
     assert.equal(existsSync(downloaded.path), false, "unsupported download must clean its local temporary file");
     assert.deepEqual(files.get("/dav/runtime/new/Patina/工作备份.zip"), Buffer.from("unsupported file"), "rejection must preserve remote bytes");
     files.set("/dav/runtime/new/Patina/工作备份.zip", originalFile);
+    const indexBeforeDigest = files.get(indexPath)!;
+    const digestIndex = JSON.parse(indexBeforeDigest.toString());
+    const selected = digestIndex.backups.find((entry: { id: string }) => entry.id === first.entry.id);
+    selected.archiveSha256 = createHash("sha256").update(originalFile).digest("hex");
+    files.set(indexPath, Buffer.from(JSON.stringify(digestIndex)));
+    const matching = await invoke("cmd_download_webdav_backup", { config, id: first.entry.id }) as typeof downloaded;
+    assert.equal(matching.preview.hash, selected.archiveSha256);
+    await invoke("cmd_delete_remote_backup_temp", { path: matching.path });
+    files.set("/dav/runtime/new/Patina/工作备份.zip", files.get("/dav/runtime/new/Patina/another backup.zip")!);
+    await assert.rejects(invoke("cmd_download_webdav_backup", { config, id: first.entry.id }), /digest differs/);
+    assert.equal(existsSync(downloaded.path), false);
+    files.set("/dav/runtime/new/Patina/工作备份.zip", originalFile);
+    selected.archiveSha256 = "broken";
+    files.set(indexPath, Buffer.from(JSON.stringify(digestIndex)));
+    await assert.rejects(invoke("cmd_download_webdav_backup", { config, id: first.entry.id }), /digest differs/);
+    files.set(indexPath, indexBeforeDigest);
     const priorCalls = calls.length;
     await assert.rejects(invoke("cmd_upload_webdav_backup", { config, fileName: "../outside.zip" }), /webdav_invalid_file_name/);
     assert.equal(calls.length, priorCalls);

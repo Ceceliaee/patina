@@ -605,7 +605,17 @@ pub async fn download_webdav_backup(
     }
     let local_path_string = local_path.to_string_lossy().to_string();
     let preview = match backup::preview_backup(local_path_string.clone()).await {
-        Ok(preview) => preview,
+        Ok(preview) => {
+            if let Some(expected) = &entry.archive_sha256 {
+                if !expected.eq_ignore_ascii_case(&preview.hash) {
+                    remove_temp_backup_file(&local_path, &temp_dir)?;
+                    return Err("downloaded backup digest differs from the WebDAV index"
+                        .to_string()
+                        .into());
+                }
+            }
+            preview
+        }
         Err(error) => {
             let _ = remove_temp_backup_file(&local_path, &temp_dir);
             return Err(error);
