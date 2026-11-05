@@ -20,6 +20,8 @@ pub(crate) async fn measure() -> Vec<serde_json::Value> {
             schema::WEB_ACTIVITY_SCHEMA_SQL,
             schema::WEB_FAVICON_CACHE_SCHEMA_SQL,
             schema::WEB_ACTIVITY_REVISION_SCHEMA_SQL,
+            schema::IMPORT_DATA_SCHEMA_SQL,
+            schema::IMPORT_DATA_ISOLATION_SCHEMA_SQL,
             schema::ACTIVITY_READ_MODELS_SCHEMA_SQL,
             crate::data::repositories::anonymous_activity::SCHEMA_SQL,
         ] {
