@@ -119,7 +119,9 @@ export async function verifyMiniWindowRuntime(main: CdpConnection, port: number,
     const original = await probe.request("sample");
     assert.equal(original.foreground, original.inputTarget, "native input target must receive focus");
     assert.notEqual(original.foreground, original.mini, "native input target must really be foreground");
-    await probe.request("move", original.x + 400, original.y + 400);
+    const workCenterX = Math.round((original.workRect.Left + original.workRect.Right) / 2);
+    const workCenterY = Math.round((original.workRect.Top + original.workRect.Bottom) / 2);
+    await probe.request("move", workCenterX, workCenterY);
     await waitFor("native leave collapse", isCollapsed, 3_000);
     let handle = await probe.request("sample");
     assert.deepEqual(handle.canvas, original.canvas, "hover collapse must preserve the WebView canvas position and size");
@@ -127,12 +129,12 @@ export async function verifyMiniWindowRuntime(main: CdpConnection, port: number,
     assert.equal((await probe.request("sample", original.x + 50, original.y + 100)).hitMini, false, "former panel area must pass input to the desktop");
     for (const edge of ["left", "right"] as const) {
       await action({ kind: "place", edge });
-      await waitFor("side collapse", isCollapsed, 3_000);
+      await waitFor(`${edge} side collapse with the cursor at the work area center`, isCollapsed, 3_000);
       const side = await probe.request("sample");
       assert.ok(side.width < side.height, "side handle must use a vertical native region");
       await probe.request("move", side.x + 1, side.y + Math.floor(side.height / 2));
       await waitFor("side hover reveal", async () => (await state()).expanded, 3_000);
-      await probe.request("move", handle.x + 400, handle.y + 400);
+      await probe.request("move", workCenterX, workCenterY);
     }
     // Extend only the protocol sampling window; normal timing remains covered by
     // browser transitions and the full native hover budget below.
