@@ -96,7 +96,7 @@ async fn pause(
     Ok(())
 }
 
-pub(super) async fn pause_active(
+pub(crate) async fn pause_active(
     tx: &mut Transaction<'_, Sqlite>,
     now_ms: i64,
 ) -> Result<(), String> {

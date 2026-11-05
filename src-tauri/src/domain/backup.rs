@@ -64,6 +64,7 @@ pub struct BackupWebFaviconCache {
 
 #[derive(Clone, Debug)]
 pub struct BackupToolReminder {
+    pub restore_key: Option<String>,
     pub label: String,
     pub scheduled_at: i64,
     pub created_at: i64,

@@ -31,7 +31,7 @@ export function verifyDatabase(dbPath: string) {
     "db.close()",
     "assert integrity == 'ok', integrity",
     "assert value == ('77',), value",
-    "assert migration == (25,), migration",
+    "assert migration == (26,), migration",
     "assert states == {'app_catalog': 'ready', 'activity_hourly': 'ready'}, states",
     "assert scheduled == (0, 'weekly', 5, 1260, 1), scheduled",
     "assert {'target_kind', 'target_identity'} <= scheduled_columns, scheduled_columns",

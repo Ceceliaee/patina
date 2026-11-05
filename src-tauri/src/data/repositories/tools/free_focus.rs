@@ -49,7 +49,7 @@ async fn read(tx: &mut Transaction<'_, Sqlite>, id: i64) -> Result<FreeFocusTask
         .ok_or_else(|| "free focus unavailable".into())
 }
 
-pub(super) async fn pause_active(tx: &mut Transaction<'_, Sqlite>, now: i64) -> Result<(), String> {
+pub(crate) async fn pause_active(tx: &mut Transaction<'_, Sqlite>, now: i64) -> Result<(), String> {
     let rows =
         sqlx::query("SELECT * FROM tool_free_focus WHERE status='running' AND deleted_at IS NULL")
             .fetch_all(&mut **tx)

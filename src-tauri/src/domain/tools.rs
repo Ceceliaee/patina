@@ -330,7 +330,7 @@ impl ToolPomodoroRun {
             .unwrap_or_else(|| self.phase_duration_ms());
         match (self.status, self.phase_started_at) {
             (PomodoroStatus::Running, Some(started_at)) => {
-                base_remaining.saturating_sub(now_ms.saturating_sub(started_at))
+                base_remaining.saturating_sub(now_ms.saturating_sub(started_at).max(0))
             }
             _ => base_remaining,
         }

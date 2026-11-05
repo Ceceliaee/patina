@@ -22,28 +22,100 @@ fn persist_restore_marker(db_path: &Path, rollback_path: &Path) -> Result<PathBu
         .file_name()
         .and_then(|name| name.to_str())
         .ok_or_else(|| "restore rollback path has no valid file name".to_string())?;
-    let mut marker = fs::OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .open(&marker_path)
+    let mut marker = tempfile::Builder::new()
+        .prefix(".patina-marker-")
+        .tempfile_in(marker_path.parent().expect("marker has a parent"))
         .map_err(|error| format!("failed to create restore recovery marker: {error}"))?;
     marker
         .write_all(rollback_name.as_bytes())
-        .and_then(|_| marker.sync_all())
+        .and_then(|_| marker.as_file().sync_all())
         .map_err(|error| format!("failed to persist restore recovery marker: {error}"))?;
+    marker
+        .persist_noclobber(&marker_path)
+        .map_err(|error| format!("failed to publish restore recovery marker: {error}"))?;
     Ok(marker_path)
 }
 
-pub(super) fn recover_interrupted_db_restore(db_path: &Path) -> Result<(), String> {
+fn regular_restore_file(path: &Path) -> std::io::Result<bool> {
+    let metadata = fs::symlink_metadata(path)?;
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        if metadata.file_attributes() & 0x400 != 0 {
+            return Ok(false);
+        }
+    }
+    Ok(metadata.is_file())
+}
+
+// Older versions could stop while writing the marker, before moving the original.
+// Only a single matching staging file and no rollback file establish that layout.
+async fn verify_unpublished_restore(db: &Path, partial: &str) -> Result<(), String> {
+    let ambiguous =
+        "restore marker is incomplete; preserve the database and recovery files for inspection";
+    let mut staging = None;
+    for entry in fs::read_dir(db.parent().ok_or(ambiguous)?).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let name = entry.file_name();
+        let name = name.to_string_lossy().to_ascii_lowercase();
+        if name.starts_with(".patina-restore-rollback-") {
+            return Err(ambiguous.into());
+        }
+        if let Some(suffix) = name.strip_prefix(".patina-restore-staging-") {
+            let stamp = suffix.strip_suffix(".db").ok_or(ambiguous)?;
+            if stamp.is_empty()
+                || !stamp.bytes().all(|b| b.is_ascii_digit())
+                || !regular_restore_file(&entry.path()).map_err(|e| e.to_string())?
+                || staging
+                    .replace(format!(".patina-restore-rollback-{suffix}"))
+                    .is_some()
+            {
+                return Err(ambiguous.into());
+            }
+        }
+    }
+    if !staging.is_some_and(|name| name.starts_with(partial))
+        || !regular_restore_file(db).map_err(|e| e.to_string())?
+    {
+        return Err(ambiguous.into());
+    }
+    let options = sqlx::sqlite::SqliteConnectOptions::new()
+        .filename(db)
+        .read_only(true);
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(options)
+        .await
+        .map_err(|e| format!("{ambiguous}: {e}"))?;
+    let result = async {
+        let checks: Vec<String> = sqlx::query_scalar("PRAGMA integrity_check").fetch_all(&pool).await?;
+        let tables: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('sessions','settings')").fetch_one(&pool).await?;
+        Ok::<_, sqlx::Error>(checks == ["ok"] && tables == 2)
+    }.await;
+    pool.close().await;
+    if !result.map_err(|e| format!("{ambiguous}: {e}"))? {
+        return Err(ambiguous.into());
+    }
+    Ok(())
+}
+
+pub(super) async fn recover_interrupted_db_restore(db_path: &Path) -> Result<(), String> {
     let marker_path = restore_marker_path(db_path)?;
-    if !marker_path.exists() {
-        return Ok(());
+    match regular_restore_file(&marker_path) {
+        Ok(true) => {}
+        Ok(false) => return Err("unexpected restore marker file type".into()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(format!("failed to inspect restore marker: {e}")),
     }
     let rollback_name = fs::read_to_string(&marker_path)
         .map_err(|error| format!("failed to read restore recovery marker: {error}"))?;
-    let rollback_name = rollback_name.trim();
+    let rollback_name = rollback_name.as_str();
+    if !rollback_name.ends_with(".db") {
+        verify_unpublished_restore(db_path, rollback_name).await?;
+        return fs::remove_file(&marker_path).map_err(|e| e.to_string());
+    }
     if !rollback_name.starts_with(".patina-restore-rollback-")
+        || rollback_name.contains(':')
         || rollback_name.contains('/')
         || rollback_name.contains('\\')
     {
@@ -53,7 +125,16 @@ pub(super) fn recover_interrupted_db_restore(db_path: &Path) -> Result<(), Strin
         .parent()
         .ok_or_else(|| "sqlite database path has no parent directory".to_string())?
         .join(rollback_name);
-    if rollback_path.exists() {
+    let has_rollback = match regular_restore_file(&rollback_path) {
+        Ok(true) => true,
+        Ok(false) => return Err("unexpected restore rollback file type".into()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+        Err(e) => return Err(format!("failed to inspect restore rollback: {e}")),
+    };
+    if !has_rollback && !regular_restore_file(db_path).map_err(|e| e.to_string())? {
+        return Err("missing original database during restore recovery".into());
+    }
+    if has_rollback {
         remove_sqlite_sidecars(db_path)?;
         if db_path.exists() {
             fs::remove_file(db_path).map_err(|error| {
@@ -227,6 +308,80 @@ mod tests {
     use sqlx::{Executor, Row};
     use std::panic::AssertUnwindSafe;
 
+    #[tokio::test]
+    async fn interrupted_marker_publication_preserves_original_across_restarts() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("patina.db");
+        let marker = restore_marker_path(&db).unwrap();
+        let rollback = dir.path().join(".patina-restore-rollback-123.db");
+        let staging = dir.path().join(".patina-restore-staging-123.db");
+        let pool = open_single_connection_sqlite_pool(&db, true).await.unwrap();
+        prepare_pool_schema(&pool, &db).await.unwrap();
+        pool.execute("INSERT INTO settings VALUES ('identity','original')")
+            .await
+            .unwrap();
+        checkpoint_sqlite_pool(&pool).await.unwrap();
+        pool.close().await;
+        fs::copy(&db, &staging).unwrap();
+        let staged = open_single_connection_sqlite_pool(&staging, false)
+            .await
+            .unwrap();
+        staged
+            .execute("UPDATE settings SET value='candidate' WHERE key='identity'")
+            .await
+            .unwrap();
+        staged.close().await;
+        fs::write(dir.path().join(".patina-marker-unpublished"), b"partial").unwrap();
+        for partial in [
+            None,
+            Some(""),
+            Some(".patina-restore-rollback-1"),
+            Some(".patina-restore-rollback-123.db"),
+        ] {
+            if let Some(name) = partial {
+                fs::write(&marker, name).unwrap();
+            }
+            for _ in 0..2 {
+                recover_interrupted_db_restore(&db).await.unwrap();
+                let pool = open_single_connection_sqlite_pool(&db, false)
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    sqlx::query_scalar::<_, String>(
+                        "SELECT value FROM settings WHERE key='identity'"
+                    )
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap(),
+                    "original"
+                );
+                assert_eq!(
+                    sqlx::query_scalar::<_, String>("PRAGMA integrity_check")
+                        .fetch_one(&pool)
+                        .await
+                        .unwrap(),
+                    "ok"
+                );
+                pool.close().await;
+            }
+        }
+        fs::write(&marker, "").unwrap();
+        fs::copy(&db, &rollback).unwrap();
+        assert!(recover_interrupted_db_restore(&db).await.is_err());
+        assert!(persist_restore_marker(&db, &rollback).is_err());
+        assert_eq!(fs::read(&marker).unwrap(), b"");
+        fs::remove_file(&rollback).unwrap();
+        fs::write(&marker, "../../outside.db").unwrap();
+        assert!(recover_interrupted_db_restore(&db).await.is_err());
+        assert!(marker.exists() && staging.exists() && db.exists());
+        fs::remove_file(&marker).unwrap();
+        persist_restore_marker(&db, &rollback).unwrap();
+        fs::rename(&db, &rollback).unwrap();
+        recover_interrupted_db_restore(&db).await.unwrap();
+        recover_interrupted_db_restore(&db).await.unwrap();
+        assert!(db.exists() && !rollback.exists());
+    }
+
     #[cfg(target_os = "windows")]
     #[tokio::test]
     async fn locked_restore_marker_prevents_publishing_the_replacement_pool() {
@@ -265,8 +420,8 @@ mod tests {
             drop(marker_lock);
 
             // A failed prepare must release candidate handles so startup can roll back immediately.
-            recover_interrupted_db_restore(&db_path).unwrap();
-            recover_interrupted_db_restore(&db_path).unwrap();
+            recover_interrupted_db_restore(&db_path).await.unwrap();
+            recover_interrupted_db_restore(&db_path).await.unwrap();
             let recovered = open_single_connection_sqlite_pool(&db_path, false).await.unwrap();
             opened_pools.push(recovered.clone());
             assert_eq!(sqlx::query_scalar::<_, String>("SELECT value FROM settings WHERE key = 'restore_identity'")
@@ -275,7 +430,7 @@ mod tests {
                 .await.unwrap();
             checkpoint_sqlite_pool(&recovered).await.unwrap();
             recovered.close().await;
-            recover_interrupted_db_restore(&db_path).unwrap();
+            recover_interrupted_db_restore(&db_path).await.unwrap();
             let reopened = open_single_connection_sqlite_pool(&db_path, false).await.unwrap();
             opened_pools.push(reopened.clone());
             assert_eq!(sqlx::query_scalar::<_, String>("SELECT value FROM settings WHERE key = 'after_recovery'")
@@ -297,7 +452,7 @@ mod tests {
             checkpoint_sqlite_pool(&committed).await.unwrap();
             committed.close().await;
             // Even if obsolete rollback cleanup is delayed, startup must retain committed writes.
-            recover_interrupted_db_restore(&db_path).unwrap();
+            recover_interrupted_db_restore(&db_path).await.unwrap();
             let restarted = open_single_connection_sqlite_pool(&db_path, false).await.unwrap();
             opened_pools.push(restarted.clone());
             assert_eq!(sqlx::query_scalar::<_, String>("SELECT value FROM settings WHERE key='restore_identity'")
@@ -324,8 +479,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn interrupted_database_replacement_restores_the_original_file() {
+    #[tokio::test]
+    async fn interrupted_database_replacement_restores_the_original_file() {
         let suffix = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -340,7 +495,7 @@ mod tests {
         fs::write(&rollback_path, b"original database").unwrap();
         persist_restore_marker(&db_path, &rollback_path).unwrap();
 
-        recover_interrupted_db_restore(&db_path).unwrap();
+        recover_interrupted_db_restore(&db_path).await.unwrap();
 
         assert_eq!(fs::read(&db_path).unwrap(), b"original database");
         assert!(!rollback_path.exists());
@@ -392,8 +547,8 @@ mod tests {
             fs::write(format!("{}-wal", db_path.display()), b"candidate WAL must not be replayed").unwrap();
             fs::write(format!("{}-shm", db_path.display()), b"candidate shared memory").unwrap();
 
-            recover_interrupted_db_restore(&db_path).unwrap();
-            recover_interrupted_db_restore(&db_path).unwrap();
+            recover_interrupted_db_restore(&db_path).await.unwrap();
+            recover_interrupted_db_restore(&db_path).await.unwrap();
             assert!(!rollback_path.exists());
             assert!(!restore_marker_path(&db_path).unwrap().exists());
             assert!(!PathBuf::from(format!("{}-wal", db_path.display())).exists());

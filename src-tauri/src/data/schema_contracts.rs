@@ -37,6 +37,17 @@ pub async fn has_reminder_recurrence_schema(pool: &Pool<Sqlite>) -> Result<bool,
         && columns.contains("recurrence_anchor_at"))
 }
 
+pub async fn has_reminder_identity_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let columns = table_columns(pool, "tool_reminder_identities").await?;
+    if !columns.contains("reminder_id") || !columns.contains("restore_key") {
+        return Ok(false);
+    }
+    sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pragma_index_list('tool_reminder_identities') WHERE name='idx_tool_reminder_restore_key' AND [unique]=1)
+        AND EXISTS(SELECT 1 FROM pragma_index_info('idx_tool_reminder_restore_key') WHERE name='restore_key')
+        AND EXISTS(SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='trg_tool_reminder_identity' AND tbl_name='tool_reminders')")
+        .fetch_one(pool).await.map_err(|e| e.to_string())
+}
+
 pub async fn has_free_focus_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
     let columns = table_columns(pool, "tool_free_focus").await?;
     Ok([
@@ -398,10 +409,15 @@ pub(super) async fn schema_revision_limit(pool: &Pool<Sqlite>) -> Result<usize, 
             revision_limit == crate::data::schema::POMODORO_TASKS_MIGRATION_VERSION as usize
                 && has_pomodoro_completions_schema(pool).await?,
         );
-    Ok(revision_limit
+    let revision_limit = revision_limit
         + usize::from(
             revision_limit == crate::data::schema::POMODORO_COMPLETIONS_MIGRATION_VERSION as usize
                 && has_free_focus_schema(pool).await?,
+        );
+    Ok(revision_limit
+        + usize::from(
+            revision_limit == crate::data::schema::FREE_FOCUS_MIGRATION_VERSION as usize
+                && has_reminder_identity_schema(pool).await?,
         ))
 }
 

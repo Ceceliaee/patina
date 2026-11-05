@@ -26,7 +26,7 @@ pub(crate) async fn register_sqlite_pool(state: &AppSqlitePool, pool: Pool<Sqlit
         previous.close().await;
     }
 }
-const VALIDATED_SCHEMA_MIGRATION_HEAD: i64 = schema::FREE_FOCUS_MIGRATION_VERSION;
+const VALIDATED_SCHEMA_MIGRATION_HEAD: i64 = schema::REMINDER_IDENTITY_MIGRATION_VERSION;
 mod activity_read_model_schema;
 pub(super) mod import_schema;
 mod maintenance;
@@ -155,7 +155,7 @@ where
 
 pub async fn initialize_app_sqlite<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     let db_path = resolve_product_db_path(app)?;
-    restore::recover_interrupted_db_restore(&db_path)?;
+    restore::recover_interrupted_db_restore(&db_path).await?;
     let pool = open_single_connection_sqlite_pool(&db_path, true).await?;
 
     prepare_pool_schema(&pool, &db_path).await?;
@@ -762,6 +762,7 @@ async fn has_current_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
     let checks = [
         schema_contracts::has_pomodoro_tasks_schema(pool).await?,
         schema_contracts::has_free_focus_schema(pool).await?,
+        schema_contracts::has_reminder_identity_schema(pool).await?,
         schema_contracts::has_pomodoro_completions_schema(pool).await?,
         schema_contracts::has_retired_timer(pool).await?,
         schema_contracts::has_unique_activity_reminder_targets(pool).await?,

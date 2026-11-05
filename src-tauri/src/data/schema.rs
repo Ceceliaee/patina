@@ -44,6 +44,20 @@ pub const TIMER_RETIREMENT_MIGRATION_VERSION: i64 = 22;
 pub const POMODORO_TASKS_MIGRATION_VERSION: i64 = 23;
 pub const POMODORO_COMPLETIONS_MIGRATION_VERSION: i64 = 24;
 pub const FREE_FOCUS_MIGRATION_VERSION: i64 = 25;
+pub const REMINDER_IDENTITY_MIGRATION_VERSION: i64 = 26;
+pub const REMINDER_IDENTITY_SQL: &str = "
+CREATE TABLE IF NOT EXISTS tool_reminder_identities (
+ reminder_id INTEGER PRIMARY KEY REFERENCES tool_reminders(id) ON DELETE CASCADE,
+ restore_key TEXT NOT NULL CHECK(restore_key <> '')
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tool_reminder_restore_key ON tool_reminder_identities(restore_key);
+INSERT INTO tool_reminder_identities(reminder_id,restore_key)
+ SELECT id,lower(hex(randomblob(16))) FROM tool_reminders
+ WHERE NOT EXISTS (SELECT 1 FROM tool_reminder_identities WHERE reminder_id=id);
+CREATE TRIGGER IF NOT EXISTS trg_tool_reminder_identity AFTER INSERT ON tool_reminders BEGIN
+ INSERT INTO tool_reminder_identities(reminder_id,restore_key) VALUES(NEW.id,lower(hex(randomblob(16))));
+END;
+";
 pub const FREE_FOCUS_SQL: &str = "
 CREATE TABLE IF NOT EXISTS tool_free_focus (
  id INTEGER PRIMARY KEY AUTOINCREMENT, label TEXT NOT NULL DEFAULT '',
@@ -1308,6 +1322,11 @@ pub fn tracker_migrations() -> Vec<Migration> {
             version: FREE_FOCUS_MIGRATION_VERSION,
             description: "free focus with configurable breaks",
             sql: FREE_FOCUS_SQL,
+        },
+        Migration {
+            version: REMINDER_IDENTITY_MIGRATION_VERSION,
+            description: "stable timed reminder restore identity",
+            sql: REMINDER_IDENTITY_SQL,
         },
     ]
 }

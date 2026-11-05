@@ -253,3 +253,116 @@ async fn snapshot_merge_preserves_all_record_domains_and_rolls_back_late_failure
         std::panic::resume_unwind(panic);
     }
 }
+
+#[tokio::test]
+async fn running_focus_merge_seals_elapsed_at_backup_without_displacing_target() {
+    let dir = tests::SnapshotTestDirectory::new("focus-progress-merge");
+    let source_path = dir.0.join("source.db");
+    let target_path = dir.0.join("target.db");
+    let source = crate::data::sqlite_pool::open_single_connection_sqlite_pool(&source_path, true)
+        .await
+        .unwrap();
+    let target = crate::data::sqlite_pool::open_single_connection_sqlite_pool(&target_path, true)
+        .await
+        .unwrap();
+    for (pool, path) in [(&source, &source_path), (&target, &target_path)] {
+        crate::data::sqlite_pool::prepare_pool_schema(pool, path)
+            .await
+            .unwrap();
+    }
+    source.execute("INSERT INTO tool_free_focus(label,rest_mode,rest_minutes,rest_ratio,phase,status,elapsed_ms,rest_remaining_ms,started_at,created_at,updated_at)
+        VALUES ('Fresh','fixed',1,2,'focus','running',0,0,1000,1,1),('Resumed','fixed',1,2,'focus','running',2000,0,1000,2,2),
+        ('Break','fixed',1,2,'break','running',900,700000,1000,3,3),('Expired','fixed',1,2,'break','running',0,100,1000,4,4),
+        ('Reversed','fixed',1,2,'focus','running',3,0,700000,5,5),('Missing','fixed',1,2,'focus','running',19,0,NULL,6,6);
+        INSERT INTO tool_pomodoro_runs(phase,status,cycle_index,focus_ms,short_break_ms,long_break_ms,long_break_every,phase_started_at,phase_remaining_ms,completed_focus_count,created_at,updated_at)
+        VALUES('focus','running',1,900000,60000,120000,4,1000,900000,0,1,1)").await.unwrap();
+    target.execute("INSERT INTO tool_free_focus(label,rest_mode,rest_minutes,rest_ratio,phase,status,started_at,created_at,updated_at)
+        VALUES ('Local','fixed',1,2,'focus','running',10,200,200)").await.unwrap();
+    let archive = dir.0.join("focus.zip");
+    write_snapshot_archive(&source, &archive, "test")
+        .await
+        .unwrap();
+    source.close().await;
+    // Use a deterministic export time on the extracted candidate.
+    for strategy in [RestoreStrategy::Replace, RestoreStrategy::Merge] {
+        let extracted = extract_snapshot_archive(&archive, true).await.unwrap();
+        let pool = open_snapshot_pool(&extracted.db_path, false).await.unwrap();
+        restore::prepare_snapshot_restore(&pool, 601000, strategy)
+            .await
+            .unwrap();
+        let status: String =
+            sqlx::query_scalar("SELECT status FROM tool_free_focus WHERE label='Fresh'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        if strategy == RestoreStrategy::Replace {
+            assert_eq!(status, "running");
+            pool.close().await;
+            continue;
+        }
+        assert_eq!(status, "paused");
+        pool.close().await;
+        for _ in 0..2 {
+            let pool = open_snapshot_pool(&extracted.db_path, false).await.unwrap();
+            restore::merge_snapshot_backup(pool, &target).await.unwrap();
+        }
+    }
+    let clocks:Vec<(String,i64,i64)>=sqlx::query_as("SELECT label,elapsed_ms,rest_remaining_ms FROM tool_free_focus WHERE status='paused' AND started_at IS NULL ORDER BY created_at").fetch_all(&target).await.unwrap();
+    assert_eq!(
+        clocks,
+        vec![
+            ("Fresh".into(), 600000, 0),
+            ("Resumed".into(), 602000, 0),
+            ("Break".into(), 900, 100000),
+            ("Expired".into(), 0, 0),
+            ("Reversed".into(), 3, 0),
+            ("Missing".into(), 19, 0)
+        ]
+    );
+    let tomato: (String, i64) =
+        sqlx::query_as("SELECT status,phase_remaining_ms FROM tool_pomodoro_runs")
+            .fetch_one(&target)
+            .await
+            .unwrap();
+    assert_eq!(tomato, ("paused".into(), 300000));
+    let active: Vec<String> =
+        sqlx::query_scalar("SELECT label FROM tool_free_focus WHERE status='running'")
+            .fetch_all(&target)
+            .await
+            .unwrap();
+    assert_eq!(active, ["Local"]);
+    target.close().await;
+}
+
+#[tokio::test]
+async fn pre_identity_snapshot_replay_preserves_independent_reminders() {
+    let dir = tests::SnapshotTestDirectory::new("legacy-reminder-identity");
+    let path = dir.0.join("legacy.db");
+    let source = crate::data::sqlite_pool::open_single_connection_sqlite_pool(&path, true)
+        .await
+        .unwrap();
+    crate::data::sqlite_pool::prepare_pool_schema(&source, &path)
+        .await
+        .unwrap();
+    source.execute("DROP TRIGGER trg_tool_reminder_identity; DROP TABLE tool_reminder_identities; DELETE FROM _sqlx_migrations WHERE version=26;
+        INSERT INTO tool_reminders(label,scheduled_at,created_at,status) VALUES ('A',60000,1000,'scheduled'),('A',60000,1000,'scheduled');").await.unwrap();
+    let archive = dir.0.join("old.zip");
+    write_snapshot_archive(&source, &archive, "test")
+        .await
+        .unwrap();
+    source.close().await;
+    let target = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+    crate::data::sqlite_pool::prepare_pool_schema(&target, Path::new(":memory:"))
+        .await
+        .unwrap();
+    target.execute("INSERT INTO tool_reminders(label,scheduled_at,created_at,status) VALUES('A',60000,1000,'scheduled')").await.unwrap();
+    for _ in 0..2 {
+        let candidate = prepare_snapshot_backup(&archive, RestoreStrategy::Merge)
+            .await
+            .unwrap();
+        let pool = open_snapshot_pool(&candidate.db_path, false).await.unwrap();
+        restore::merge_snapshot_backup(pool, &target).await.unwrap();
+    }
+    assert_eq!(count_table(&target, "tool_reminders").await.unwrap(), 3);
+    target.close().await;
+}

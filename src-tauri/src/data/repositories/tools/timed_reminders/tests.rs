@@ -6,6 +6,9 @@ async fn database() -> SqlitePool {
     let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
     pool.execute(schema::TOOLS_TABLES_SCHEMA_SQL).await.unwrap();
     pool.execute(schema::REMINDER_RECURRENCE_SQL).await.unwrap();
+    pool.execute(crate::data::schema::REMINDER_IDENTITY_SQL)
+        .await
+        .unwrap();
     pool
 }
 
@@ -309,4 +312,45 @@ async fn recurring_reminder_reopen_recovers_pending_confirmation_and_backup_keep
     );
     pool.close().await;
     std::fs::remove_file(path).unwrap();
+}
+
+#[tokio::test]
+async fn merge_after_recurrence_advances_keeps_one_future_firing() {
+    let pool = database().await;
+    let rule = Some(ReminderRecurrence::Interval { minutes: 5 });
+    let row = create_reminder(&pool, "A", 60000, rule.clone(), 1000)
+        .await
+        .unwrap();
+    let old = backup_restore::fetch_all_reminders_for_backup(&pool)
+        .await
+        .unwrap();
+    assert_eq!(fire(&pool, 60000).await.len(), 1);
+    resolve_reminder_alert(&pool, row.id, 60000, None, 61000)
+        .await
+        .unwrap();
+    update_reminder(&pool, row.id, "Renamed", 360000, true, rule, 61000)
+        .await
+        .unwrap();
+    for _ in 0..2 {
+        let mut tx = pool.begin().await.unwrap();
+        backup_restore::insert_missing_for_restore(&mut tx, &old, &[], &[])
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+    }
+    let current = fetch_reminder_by_id(&pool, row.id).await.unwrap();
+    assert_eq!(
+        (current.label.as_str(), current.scheduled_at),
+        ("Renamed", 360000)
+    );
+    assert!(fire(&pool, 62000).await.is_empty());
+    assert_eq!(fire(&pool, 360000).await.len(), 1);
+    assert_eq!(
+        backup_restore::fetch_all_reminders_for_backup(&pool)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    pool.close().await;
 }

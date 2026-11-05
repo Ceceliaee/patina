@@ -22,10 +22,32 @@ pub(in crate::data::backup) async fn prepare_snapshot_backup(
         return Err(extracted.preview.restore_message.clone());
     }
 
+    // A pre-identity snapshot has no portable lineage. Replaying the same
+    // source database must converge without conflating rows from different databases.
+    let old_source = if extracted.preview.schema_version
+        < crate::data::schema::REMINDER_IDENTITY_MIGRATION_VERSION as u32
+    {
+        Some(super::sha256_file(&extracted.db_path)?)
+    } else {
+        None
+    };
     let candidate_pool = open_single_connection_sqlite_pool(&extracted.db_path, false).await?;
     if let Err(error) = prepare_pool_schema(&candidate_pool, &extracted.db_path).await {
         candidate_pool.close().await;
         return Err(error);
+    }
+    if let Some(source) = old_source {
+        if let Err(error) =
+            sqlx::query("UPDATE tool_reminder_identities SET restore_key=? || ':' || reminder_id")
+                .bind(source)
+                .execute(&candidate_pool)
+                .await
+        {
+            candidate_pool.close().await;
+            return Err(format!(
+                "failed to identify historical snapshot reminders: {error}"
+            ));
+        }
     }
     if let Err(error) = super::validate_current_schema(&candidate_pool).await {
         candidate_pool.close().await;
@@ -82,6 +104,12 @@ pub(super) async fn prepare_snapshot_restore(
     }
     .await;
     sealed.map_err(|error| format!("failed to seal interrupted backup activity: {error}"))?;
+    if strategy == RestoreStrategy::Merge {
+        let mut tx = candidate_pool.begin().await.map_err(|e| e.to_string())?;
+        repositories::tools::free_focus::pause_active(&mut tx, cutoff).await?;
+        repositories::tools::pomodoro_tasks::pause_active(&mut tx, cutoff).await?;
+        tx.commit().await.map_err(|e| e.to_string())?;
+    }
     if strategy == RestoreStrategy::Replace {
         let mut tx = candidate_pool
             .begin()

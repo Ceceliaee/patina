@@ -33,6 +33,9 @@ async fn setup_test_db() -> SqlitePool {
     pool.execute(crate::data::schema::REMINDER_RECURRENCE_SQL)
         .await
         .unwrap();
+    pool.execute(crate::data::schema::REMINDER_IDENTITY_SQL)
+        .await
+        .unwrap();
     pool.execute(db_schema::ACTIVITY_REMINDER_UNIQUE_TARGET_SQL)
         .await
         .unwrap();

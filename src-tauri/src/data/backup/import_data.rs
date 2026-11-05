@@ -275,6 +275,9 @@ mod tests {
         pool.execute(crate::data::schema::REMINDER_RECURRENCE_SQL)
             .await
             .unwrap();
+        pool.execute(crate::data::schema::REMINDER_IDENTITY_SQL)
+            .await
+            .unwrap();
         pool.execute(crate::data::schema::ACTIVITY_REMINDER_UNIQUE_TARGET_SQL)
             .await
             .unwrap();

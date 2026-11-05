@@ -10,8 +10,15 @@ pub async fn fetch_all_reminders_for_backup(
         } else {
             "NULL AS recurrence, NULL AS recurrence_anchor_at"
         };
+    let identity_column = if crate::data::schema_contracts::has_reminder_identity_schema(pool)
+        .await?
+    {
+        "(SELECT restore_key FROM tool_reminder_identities WHERE reminder_id=tool_reminders.id) AS restore_key"
+    } else {
+        "NULL AS restore_key"
+    };
     let rows = sqlx::query(&format!(
-        "SELECT id, label, scheduled_at, created_at, status, fired_at, cancelled_at, {recurrence_columns}
+        "SELECT {identity_column}, id, label, scheduled_at, created_at, status, fired_at, cancelled_at, {recurrence_columns}
          FROM tool_reminders
          ORDER BY id ASC"
     ))
@@ -21,8 +28,10 @@ pub async fn fetch_all_reminders_for_backup(
 
     rows.into_iter()
         .map(|row| {
+            let restore_key = row.get("restore_key");
             let reminder = super::read::map_reminder_row(row)?;
             Ok(BackupToolReminder {
+                restore_key,
                 label: reminder.label,
                 scheduled_at: reminder.scheduled_at,
                 created_at: reminder.created_at,
@@ -118,39 +127,42 @@ pub async fn insert_missing_for_restore(
         if let Some(rule) = &reminder.recurrence {
             rule.validate()?;
         }
-        let exists: Option<i64> = sqlx::query_scalar(
-            "SELECT id FROM tool_reminders
-             WHERE label = ? AND scheduled_at = ? AND created_at = ?
-             LIMIT 1",
+        let key = reminder
+            .restore_key
+            .as_deref()
+            .filter(|key| !key.is_empty())
+            .ok_or("backup reminder has no restore identity")?;
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM tool_reminder_identities WHERE restore_key=?)",
         )
-        .bind(&reminder.label)
-        .bind(reminder.scheduled_at)
-        .bind(reminder.created_at)
-        .fetch_optional(&mut **tx)
+        .bind(key)
+        .fetch_one(&mut **tx)
         .await
-        .map_err(|error| format!("failed to inspect tool reminder merge: {error}"))?;
-        if exists.is_none() {
-            let inserted = sqlx::query(
-                "INSERT INTO tool_reminders (label, scheduled_at, created_at, status, fired_at, cancelled_at)
-                 VALUES (?, ?, ?, ?, ?, ?)",
-            )
-            .bind(&reminder.label)
-            .bind(reminder.scheduled_at)
-            .bind(reminder.created_at)
-            .bind(&reminder.status)
-            .bind(reminder.fired_at)
-            .bind(reminder.cancelled_at)
-            .execute(&mut **tx)
-            .await
-            .map_err(|error| format!("failed to merge restore tool reminders: {error}"))?;
-            super::timed_reminders::save_recurrence(
-                tx,
-                inserted.last_insert_rowid(),
-                reminder.recurrence.as_ref(),
-                reminder.recurrence_anchor_at,
-            )
-            .await?;
+        .map_err(|e| e.to_string())?;
+        if exists {
+            continue;
         }
+        let id = sqlx::query("INSERT INTO tool_reminders(label,scheduled_at,created_at,status,fired_at,cancelled_at) VALUES(?,?,?,?,?,?)")
+            .bind(&reminder.label).bind(reminder.scheduled_at).bind(reminder.created_at)
+            .bind(&reminder.status).bind(reminder.fired_at).bind(reminder.cancelled_at)
+            .execute(&mut **tx).await.map_err(|e| e.to_string())?.last_insert_rowid();
+        let updated =
+            sqlx::query("UPDATE tool_reminder_identities SET restore_key=? WHERE reminder_id=?")
+                .bind(key)
+                .bind(id)
+                .execute(&mut **tx)
+                .await
+                .map_err(|e| e.to_string())?;
+        if updated.rows_affected() != 1 {
+            return Err("restored reminder identity missing".into());
+        }
+        super::timed_reminders::save_recurrence(
+            tx,
+            id,
+            reminder.recurrence.as_ref(),
+            reminder.recurrence_anchor_at,
+        )
+        .await?;
     }
 
     let latest_legacy = pomodoro_runs
