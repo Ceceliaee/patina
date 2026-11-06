@@ -2,6 +2,7 @@ import { Pause, PencilLine, Play, Square, Trash2 } from "lucide-react";
 import { useState } from "react";
 import QuietButton from "../../../shared/components/QuietButton.tsx";
 import QuietIconAction from "../../../shared/components/QuietIconAction.tsx";
+import FocusHistoryButton from "./FocusHistoryButton.tsx";
 import { useLocaleText } from "../../../shared/i18n/index.ts";
 import type { FreeFocusAction, FreeFocusSettings, FreeFocusTask } from "../../../shared/types/tools.ts";
 import { freeFocusTime } from "../services/freeFocusViewModel.ts";
@@ -38,7 +39,9 @@ export default function FreeFocusContent({ tasks, nowMs, busy, onAction }: Props
               : idle ? text.tools.freeFocusStart : text.tools.freeFocusResume;
             return <article key={task.id} className="tools-reminder-row tools-pomodoro-task-row" role="listitem" aria-label={name} data-free-focus-id={task.id}>
               <div className="tools-reminder-row-main tools-pomodoro-task-details"><strong title={name}>{name}</strong>
-                <div className="tools-pomodoro-task-time"><strong>{freeFocusTime(task, nowMs)}</strong><span>{completed ? text.tools.pomodoroStatus.completed : idle ? text.tools.pomodoroStatus.idle : task.phase === "break" ? text.tools.freeFocusRest : text.tools.pomodoroPhase.focus}</span></div>
+                <div className="tools-pomodoro-task-time"><strong>{freeFocusTime(task, nowMs)}</strong>
+                  <FocusHistoryButton kind="free" id={task.id} name={name} updatedAt={task.updatedAt}
+                    status={completed ? text.tools.pomodoroStatus.completed : idle ? text.tools.pomodoroStatus.idle : task.phase === "break" ? text.tools.freeFocusRest : text.tools.pomodoroPhase.focus} /></div>
               </div>
               <div className="tools-action-row tools-pomodoro-task-actions">
                 {!running || task.phase === "break" ? <QuietIconAction busy={busy} title={runTitle} icon={running ? <Pause size={16} /> : <Play size={16} />} onClick={() => void onAction({ kind: running ? "pause" : "resume", id: task.id })} /> : null}

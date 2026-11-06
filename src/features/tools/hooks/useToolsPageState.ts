@@ -2,7 +2,6 @@ import type { ReminderRecurrence } from "../../../shared/types/tools.ts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocale, type UiText } from "../../../shared/i18n/index.ts";
 import type {
-  StartPomodoroInput,
   PomodoroTaskAction,
   FreeFocusAction,
   ActivityReminderTarget,
@@ -12,7 +11,6 @@ import type {
   ToolsRuntimeSnapshot,
 } from "../../../shared/types/tools.ts";
 import type {
-  PomodoroViewModel,
   ReminderRowViewModel,
   ActivityReminderRuleRowViewModel,
   ToolsSection,
@@ -25,9 +23,7 @@ import {
   loadActivityReminderWebCandidates,
   subscribeActivityReminderTargetCandidateInvalidation,
 } from "../services/activityReminderTargetCandidates.ts";
-import { buildToolsViewModelLabels } from "../services/toolsLabels.ts";
 import {
-  buildPomodoroViewModel,
   buildReminderRows,
   buildActivityReminderRuleRows,
 } from "../services/toolsViewModel.ts";
@@ -177,11 +173,7 @@ export function useToolsPageState({
     void activateActivityReminderMode(mode);
   }, [activateActivityReminderMode]);
 
-  const labels = useMemo(() => buildToolsViewModelLabels(uiText), [uiText]);
-  const inactivePomodoroViewModel = useMemo<PomodoroViewModel>(
-    () => buildPomodoroViewModel(DEFAULT_SNAPSHOT, DEFAULT_SNAPSHOT.sampledAtMs, labels),
-    [labels],
-  );
+
   const reminderRows = useMemo(
     () => activeSection === "reminders" ? buildReminderRows(snapshot) : EMPTY_REMINDER_ROWS,
     [activeSection, snapshot],
@@ -192,12 +184,7 @@ export function useToolsPageState({
       : EMPTY_ACTIVITY_REMINDER_RULE_ROWS,
     [activeSection, locale, snapshot],
   );
-  const pomodoroViewModel = useMemo(
-    () => activeSection === "pomodoro"
-      ? buildPomodoroViewModel(snapshot, nowMs, labels)
-      : inactivePomodoroViewModel,
-    [activeSection, inactivePomodoroViewModel, labels, nowMs, snapshot],
-  );
+
 
   const executeAction = useCallback(async (
     actionKey: string,
@@ -274,22 +261,7 @@ export function useToolsPageState({
     () => ToolsRuntimeService.disableActivityReminderRule(id),
   ), [runAction]);
 
-  const startPomodoro = useCallback((input?: Partial<StartPomodoroInput>) => runAction(
-    "start-pomodoro",
-    () => ToolsRuntimeService.startPomodoro({
-      focusMs: (input?.focusMs ?? snapshot.settings.pomodoroFocusMinutes * 60_000),
-      shortBreakMs: (input?.shortBreakMs ?? snapshot.settings.pomodoroShortBreakMinutes * 60_000),
-      longBreakMs: (input?.longBreakMs ?? snapshot.settings.pomodoroLongBreakMinutes * 60_000),
-      longBreakEvery: input?.longBreakEvery ?? snapshot.settings.pomodoroLongBreakEvery,
-    }),
-  ), [runAction, snapshot.settings]);
-  const pausePomodoro = useCallback(() => runAction("pause-pomodoro", ToolsRuntimeService.pausePomodoro), [runAction]);
-  const resumePomodoro = useCallback(() => runAction("resume-pomodoro", ToolsRuntimeService.resumePomodoro), [runAction]);
-  const skipPomodoroPhase = useCallback(
-    () => runAction("skip-pomodoro-phase", ToolsRuntimeService.skipPomodoroPhase),
-    [runAction],
-  );
-  const resetPomodoro = useCallback(() => runAction("reset-pomodoro", ToolsRuntimeService.resetPomodoro), [runAction]);
+
 
   return {
     freeFocus: (action: FreeFocusAction) => executeAction(`free-focus:${action.kind}:${action.id ?? "new"}`, () => ToolsRuntimeService.freeFocus(action)),
@@ -308,7 +280,7 @@ export function useToolsPageState({
     retryActivityReminderCandidates,
     reminderRows,
     activityReminderRuleRows,
-    pomodoroViewModel,
+
     createReminder,
     cancelReminder,
     updateReminder,
@@ -316,11 +288,7 @@ export function useToolsPageState({
     disableActivityReminderRule,
     setActivityReminderEnabled,
     updateActivityReminderLimit,
-    startPomodoro,
-    pausePomodoro,
-    resumePomodoro,
-    skipPomodoroPhase,
-    resetPomodoro,
+
     retryLoad: refreshSnapshot,
   };
 }

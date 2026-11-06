@@ -201,10 +201,13 @@ function tauriStubFor(path: string) {
         }
 
         if (isMiniSmoke && command === "cmd_get_mini_activity_snapshot") {
-          const { miniActivityFixture } = await import("/tests/uiBrowserSmoke/miniActivityFixture.ts");
+          const { miniActivityFixture, combinedMiniActivityFixture } = await import("/tests/uiBrowserSmoke/miniActivityFixture.ts");
           const bootstrap = await invoke("cmd_get_mini_bootstrap_snapshot");
-          const snapshot = miniActivityFixture(payload.kind, bootstrap);
-          return await globalThis.__PATINA_MINI_ACTIVITY_HOOK?.(snapshot) ?? snapshot;
+          const activity = miniActivityFixture("activity", bootstrap);
+          const daily = miniActivityFixture("today", bootstrap);
+          const [recent, today] = await Promise.all([activity, daily].map(async snapshot =>
+            await globalThis.__PATINA_MINI_ACTIVITY_HOOK?.(snapshot) ?? snapshot));
+          return combinedMiniActivityFixture(recent, today);
         }
         if (isMiniSmoke && command === "cmd_get_mini_presentation_snapshot") {
           const toolCount = Math.max(0, Math.min(1, Number(miniParams.get("miniTools") ?? 0)));
@@ -475,6 +478,12 @@ function tauriStubFor(path: string) {
           const fixture = globalThis.__PATINA_TOOLS_ACTION_CASE;
           fixture.calls.push(command);
           throw fixture.error;
+        }
+        if (command === "cmd_get_focus_history") {
+          const history = globalThis.__PATINA_FOCUS_HISTORY;
+          if (!history) return [];
+          if (history.error) throw new Error("history unavailable");
+          return history[payload.kind + ":" + payload.id] ?? [];
         }
         if (command === "cmd_get_tools_snapshot") {
           if (globalThis.__PATINA_FREE_FOCUS_CASE) return globalThis.__PATINA_FREE_FOCUS_CASE.snapshot;

@@ -41,6 +41,10 @@ export async function runFreeFocusScenarios({ client, sessionId, runTest }: Brow
       await evaluate(client, sessionId, `globalThis.__PATINA_FREE_FOCUS_CASE.error=null;globalThis.__PATINA_FREE_FOCUS_CASE.snapshot.free_focus_tasks=[${JSON.stringify(task)}]`);
       await click('.tools-free-focus-content button[type="submit"]');
       await waitForExpression(client, sessionId, `Boolean(document.querySelector('[data-free-focus-id="1"]'))`);
+      await click('[data-free-focus-id="1"] .tools-history-trigger');
+      await waitForExpression(client,sessionId,`document.querySelector('[role="dialog"]')?.textContent.includes('暂无专注记录')`);
+      assert.equal(await evaluate(client,sessionId,`globalThis.__PATINA_INVOKED_COMMANDS.some(c=>c.command==='cmd_get_focus_history'&&c.payload.kind==='free'&&c.payload.id===1)`),true);
+      await escape(); await waitForExpression(client,sessionId,`!document.querySelector('[role="dialog"]')`);
       assert.equal(await evaluate(client, sessionId, `document.querySelector('[data-free-focus-id] .tools-pomodoro-task-time strong').textContent`), '00:23');
       assert.equal(await evaluate(client, sessionId, `document.querySelector('.tools-free-focus-content form input').value`), '');
       assert.equal(await evaluate(client, sessionId, `Boolean(document.querySelector('[data-free-focus-id] .lucide-fast-forward'))`), false);
@@ -50,7 +54,7 @@ export async function runFreeFocusScenarios({ client, sessionId, runTest }: Brow
           && !document.querySelector('[data-free-focus-id] button[aria-busy]')`, undefined, 'free focus actions ready to measure');
         await evaluate(client, sessionId, `(()=>{const f=globalThis.__PATINA_FREE_FOCUS_CASE;f.hold=true;f.error=${JSON.stringify(error)};f.release=null;f.calls=[];
           const b=document.querySelector('[data-free-focus-id] button:has(.lucide-play)');b.focus();
-          globalThis.__PATINA_FREE_BUTTONS=[...document.querySelectorAll('[data-free-focus-id] button')].map(button => {
+          globalThis.__PATINA_FREE_BUTTONS=[...document.querySelectorAll('[data-free-focus-id] .tools-pomodoro-task-actions button')].map(button => {
             const bounds = button.getBoundingClientRect();
             return {button, inset: button.closest('[data-free-focus-id]').getBoundingClientRect().right - bounds.right,
               width: bounds.width, height: bounds.height};

@@ -28,6 +28,24 @@ export async function runPomodoroScenarios({ client, sessionId, runTest }: Brows
       await waitForExpression(client, sessionId, `document.documentElement.dataset.pomodoroReload!=='pending' && Boolean(document.querySelector('[data-pomodoro-task-id="42"]'))`);
       await evaluate(client, sessionId, `globalThis.__PATINA_POMODORO_CASE=${JSON.stringify(pomodoroFixture())}; globalThis.__PATINA_POMODORO_CALLS=[];`);
       assert.equal(await evaluate(client, sessionId, `Boolean(document.querySelector('#tools-pomodoro-focus'))`), false);
+      await evaluate(client, sessionId, `globalThis.__PATINA_FOCUS_HISTORY={error:true};
+        localStorage.setItem('__patina_navigation_held_commands',JSON.stringify(['cmd_get_focus_history']));
+        const trigger=document.querySelector('[data-pomodoro-task-id="42"] .tools-history-trigger');trigger.focus();trigger.click();`);
+      await waitForExpression(client,sessionId,`globalThis.__PATINA_NAVIGATION_PENDING?.length>0`);
+      assert.equal(await evaluate(client,sessionId,`Boolean(document.querySelector('.tools-history-dialog'))`), false, 'pending history does not paint a smaller placeholder dialog');
+      await evaluate(client,sessionId,`localStorage.removeItem('__patina_navigation_held_commands');globalThis.__PATINA_NAVIGATION_PENDING.splice(0).forEach(resolve=>resolve())`);
+      await waitForExpression(client, sessionId, `Boolean(document.querySelector('[role="dialog"] [role="alert"]'))`);
+      await evaluate(client, sessionId, `globalThis.__PATINA_FOCUS_HISTORY={'pomodoro:42':[{
+        key:'earlier',startedAt:1000,outcome:'completed',spans:[{phase:'short_break',cycle:1,rounds:4,startedAt:2000,endedAt:4000,phaseFinishedAt:4000}]
+      }]};document.querySelector('[role="dialog"] [role="alert"] button').click();`);
+      await waitForExpression(client, sessionId, `Boolean(document.querySelector('.tools-history-group'))`);
+      assert.equal(await evaluate(client, sessionId, `document.querySelectorAll('.tools-history-group[open]').length`), 0);
+      await evaluate(client, sessionId, `document.querySelector('.tools-history-group > summary').click()`);
+      await waitForExpression(client, sessionId, `document.querySelector('.tools-history-group[open]')?.textContent.includes('短休息')`);
+      const historyWidth = await evaluate(client, sessionId, `document.querySelector('.tools-history-dialog').offsetWidth`);
+      await client.command('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27},sessionId);
+      await waitForExpression(client, sessionId,`!document.querySelector('[role="dialog"]') && document.activeElement?.matches('.tools-history-trigger')`);
+      await evaluate(client,sessionId,`delete globalThis.__PATINA_FOCUS_HISTORY`);
       await evaluate(client, sessionId, `document.querySelector('.tools-pomodoro-settings-trigger').click()`);
       await waitForExpression(client, sessionId, `document.activeElement?.id==='tools-pomodoro-focus'`);
       await evaluate(client, sessionId, `(()=>{const i=document.querySelector('#tools-pomodoro-focus');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,'45');i.dispatchEvent(new Event('input',{bubbles:true}));})()`);
@@ -54,7 +72,7 @@ export async function runPomodoroScenarios({ client, sessionId, runTest }: Brows
       assert.equal(await evaluate(client, sessionId, `globalThis.__PATINA_POMODORO_CASE.pomodoro_tasks.every(t=>t.run.status==='idle')`), true);
       await fill('New task draft');
       await evaluate(client, sessionId, `globalThis.__PATINA_POMODORO_HOLD=true;globalThis.__PATINA_POMODORO_CALLS=[];
-        globalThis.__PATINA_FOCUS_BUTTONS=[...document.querySelectorAll('[data-pomodoro-task-id] button')].map(button=>({button,x:button.getBoundingClientRect().x}));
+        globalThis.__PATINA_FOCUS_BUTTONS=[...document.querySelectorAll('[data-pomodoro-task-id] .tools-pomodoro-task-actions button')].map(button=>({button,x:button.getBoundingClientRect().x}));
         {const b=document.querySelector('[data-pomodoro-task-id="42"] .tools-pomodoro-run-button');b.focus();b.click()}`);
       await waitForExpression(client, sessionId, `Boolean(globalThis.__PATINA_POMODORO_RELEASE) && document.activeElement?.getAttribute('aria-busy')==='true'`);
       assert.equal(await evaluate(client, sessionId, `(()=>{const items=globalThis.__PATINA_FOCUS_BUTTONS;items.forEach(({button})=>button.click());return items.every(({button,x})=>button.isConnected&&!button.disabled&&getComputedStyle(button).opacity==='1'&&button.getBoundingClientRect().x===x)&&document.activeElement===items[0].button&&!document.querySelector('.tools-pomodoro-editor')&&globalThis.__PATINA_POMODORO_CALLS.length===1})()`), true, 'pending actions keep both rows stable and block duplicate or edit actions');
@@ -75,6 +93,7 @@ export async function runPomodoroScenarios({ client, sessionId, runTest }: Brows
       const escape = async () => client.command('Input.dispatchKeyEvent', {type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27}, sessionId);
       await openEditor();
       assert.equal(await evaluate(client, sessionId, `document.querySelector('.tools-pomodoro-editor input').value`), 'Reading');
+      assert.equal(historyWidth, await evaluate(client, sessionId, `document.querySelector('.tools-pomodoro-editor').closest('[role="dialog"]').offsetWidth`), 'history and edit dialogs share the same width');
       assert.equal(await evaluate(client, sessionId, `document.querySelector('#tools-pomodoro-name').value`), 'New task draft');
       await evaluate(client, sessionId, `document.querySelector('.tools-pomodoro-editor .tools-pomodoro-settings-trigger').click()`);
       await waitForExpression(client, sessionId, `document.activeElement?.id==='tools-pomodoro-focus'`);
@@ -143,11 +162,11 @@ export async function runPomodoroScenarios({ client, sessionId, runTest }: Brows
       assert.equal(await evaluate(client, sessionId, `globalThis.__PATINA_POMODORO_CASE.current_pomodoro.id`), 43);
       await evaluate(client, sessionId, `(()=>{const s=globalThis.__PATINA_POMODORO_CASE,t=s.pomodoro_tasks[0];t.completed_groups=2;Object.assign(t.run,{status:'completed',phase:'long_break',cycle_index:4,phase_remaining_ms:0,phase_started_at:null,phase_paused_at:null,completed_focus_count:8});s.current_pomodoro=t.run;localStorage.setItem('__time_tracker_tools_snapshot_override',JSON.stringify(s));document.documentElement.dataset.completedReload='1';location.reload()})()`);
       await waitForExpression(client, sessionId, `!document.documentElement.dataset.completedReload && document.querySelector('.tools-pomodoro-completed-badge')?.textContent==='2'`);
-      assert.equal(await evaluate(client, sessionId, `document.querySelector('.tools-pomodoro-task-time > span').textContent`), '已完成');
+      assert.equal(await evaluate(client, sessionId, `document.querySelector('.tools-history-trigger').textContent`), '已完成');
       assert.equal(await evaluate(client, sessionId, `document.querySelector('.tools-pomodoro-task-time > strong').textContent`), '00:00');
       assert.equal(await evaluate(client, sessionId, `Boolean(document.querySelector('.tools-pomodoro-task-actions .lucide-fast-forward'))`), false);
       await evaluate(client, sessionId, `globalThis.__PATINA_POMODORO_CASE=JSON.parse(localStorage.getItem('__time_tracker_tools_snapshot_override'));globalThis.__PATINA_POMODORO_CALLS=[];document.querySelector('.tools-pomodoro-run-button').click()`);
-      await waitForExpression(client, sessionId, `globalThis.__PATINA_POMODORO_CASE.current_pomodoro.status==='running' && document.querySelector('.tools-pomodoro-task-time > span').textContent==='专注'`);
+      await waitForExpression(client, sessionId, `globalThis.__PATINA_POMODORO_CASE.current_pomodoro.status==='running' && document.querySelector('.tools-history-trigger').textContent==='专注'`);
       assert.equal(await evaluate(client, sessionId, `document.querySelector('.tools-pomodoro-completed-badge').textContent`), '2');
       assert.equal(await evaluate(client, sessionId, `globalThis.__PATINA_POMODORO_CASE.current_pomodoro.cycle_index`), 1);
     } finally {

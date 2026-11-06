@@ -1,5 +1,6 @@
 import { Badge, Pause, PencilLine, Play, Trash2 } from "lucide-react";
 import QuietIconAction from "../../../shared/components/QuietIconAction.tsx";
+import FocusHistoryButton from "./FocusHistoryButton.tsx";
 import QuietTooltip from "../../../shared/components/QuietTooltip.tsx";
 import { useLocaleText } from "../../../shared/i18n/index.ts";
 import type { PomodoroTaskAction, ToolPomodoroTask, ToolsRuntimeSnapshot } from "../../../shared/types/tools.ts";
@@ -35,9 +36,8 @@ export default function PomodoroTaskRow({ task, snapshot, nowMs, disabled, onEdi
       </QuietTooltip> : null}
       <div className="tools-pomodoro-task-time">
         <strong>{view.remainingLabel}</strong>
-        <span>{completed ? UI_TEXT.tools.pomodoroStatus.completed : idle ? UI_TEXT.tools.pomodoroStatus.idle : view.phaseLabel}</span>
-        <span aria-hidden="true">·</span>
-        <span>{view.cycleLabel}</span>
+        <FocusHistoryButton kind="pomodoro" id={run.id} name={name} updatedAt={run.updatedAt}
+          status={completed ? UI_TEXT.tools.pomodoroStatus.completed : idle ? UI_TEXT.tools.pomodoroStatus.idle : view.phaseLabel} />
       </div>
     </div>
     <div className="tools-action-row tools-pomodoro-task-actions">

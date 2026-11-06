@@ -97,7 +97,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
       await waitForExpression(client!, sessionId, `
         Boolean(document.querySelector(${jsonString(pauseSelector)}))
           && !document.querySelector(${jsonString(startSelector)})
-          && document.querySelector('.tools-pomodoro-task-time > span')?.textContent === ${jsonString(COPY["zh-CN"].tools.pomodoroPhase.focus)}
+          && document.querySelector('.tools-history-trigger')?.textContent === ${jsonString(COPY["zh-CN"].tools.pomodoroPhase.focus)}
       `, 10_000, "the backend reconciliation event must restore the actual running Pomodoro");
       await evaluate(client!, sessionId, `
         globalThis.__PATINA_TOOLS_ACTION_CASE.error = "ordinary database write failed";
@@ -109,7 +109,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
       `, 10_000, "ordinary Tools write failure must retain the existing retry advice");
       assert.deepEqual(await evaluate(client!, sessionId, `({
         calls: globalThis.__PATINA_TOOLS_ACTION_CASE.calls,
-        running: document.querySelector('.tools-pomodoro-task-time > span')?.textContent,
+        running: document.querySelector('.tools-history-trigger')?.textContent,
         diagnostic: document.body.innerText.includes("ordinary database write failed"),
       })`), { calls: ["cmd_pomodoro_task", "cmd_pomodoro_task"], running: COPY["zh-CN"].tools.pomodoroPhase.focus, diagnostic: false });
     } finally {

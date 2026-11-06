@@ -367,7 +367,8 @@
   gap: 12px;
 }
 
-.qp-dialog-surface:has(.tools-reminder-editor, .tools-pomodoro-editor) {
+.qp-dialog-surface:has(.tools-reminder-editor, .tools-pomodoro-editor),
+.qp-dialog-surface.tools-history-dialog {
   max-width: 400px;
 }
 
@@ -831,13 +832,18 @@
   line-height: var(--qp-line-height-compact);
   font-weight: var(--qp-font-weight-emphasis);
 }
-.tools-pomodoro-task-time > span {
-  margin-top: 0;
-  color: var(--qp-text-secondary);
-  font-size: var(--qp-font-size-caption);
-  line-height: var(--qp-line-height-caption);
-}
+
 .tools-pomodoro-task-time { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; white-space: nowrap; }
+.tools-history-trigger { display: inline-flex; align-items: center; gap: 2px; border: 0; border-radius: var(--qp-radius-button); padding: 2px 3px; background: transparent; color: var(--qp-text-secondary); font-size: var(--qp-font-size-caption); cursor: pointer; }
+.tools-history-trigger:hover { background: var(--qp-bg-elevated); }
+.tools-history-group { border-top: 1px solid var(--qp-border-subtle); padding-block: 8px; }
+.tools-history-group summary { cursor: pointer; }
+.tools-history-group small { color: var(--qp-text-secondary); font-size: var(--qp-font-size-caption); margin-inline-start: 8px; }
+.tools-history-group > summary small { float: inline-end; }
+.tools-history-phase { padding: 8px 0 0 12px; }
+.tools-history-phase > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; }
+.tools-history-phase time, .tools-history-phase details { color: var(--qp-text-secondary); font-size: var(--qp-font-size-caption); font-variant-numeric: tabular-nums; }
+.tools-history-phase details time { display: block; padding-inline-start: 12px; }
 .tools-pomodoro-task-time > strong {
   font-size: var(--qp-font-size-body);
   line-height: var(--qp-line-height-body);
@@ -990,13 +996,7 @@
 }
 
 .tools-usage-alert-surface {
-  --tools-alert-width: 486px;
-  width: min(var(--tools-alert-width), calc(100vw - 32px));
-}
-
-.tools-usage-alert-extend,
-.tools-timed-alert-surface {
-  --tools-alert-width: 400px;
+  --tools-alert-width: 420px;
   width: min(var(--tools-alert-width), calc(100vw - 32px));
 }
 
@@ -1013,6 +1013,13 @@
 .tools-usage-alert-limit .qp-dialog-heading {
   width: 100%;
 }
+
+.tools-usage-steps-dialog > .qp-dialog-body { margin-top: 0; }
+.tools-usage-steps { position: relative; display: grid; overflow: clip; }
+.tools-usage-steps > div { grid-area: 1 / 1; min-width: 0; overflow-wrap: anywhere; }
+.tools-usage-steps > [inert] { position: absolute; inset: 0 0 auto; visibility: hidden; opacity: 0; }
+.tools-usage-steps > .tools-usage-step-limit { align-self: center; text-align: center; }
+.tools-usage-steps .qp-dialog-title + :is(.tools-usage-alert-options, .tools-usage-alert-summary) { margin-top: 12px; }
 
 .tools-usage-alert-identity {
   display: flex;
@@ -1162,8 +1169,26 @@
 .tools-notification-settings[aria-busy="true"] .qp-segmented-filter-item:disabled,
 .tools-notification-settings[aria-busy="true"] .qp-select-trigger:disabled { opacity: 1; cursor: progress; }
 html[data-window-label="tool-notification"], body[data-window-label="tool-notification"], #root[data-window-label="tool-notification"] { background: transparent; min-width: 0; overflow: hidden; }
-body[data-window-label="tool-notification"] .qp-dialog-backdrop { background: transparent; padding: 2px; align-items: flex-start; animation: none; }
-body[data-window-label="tool-notification"] .qp-dialog-surface { width: min(var(--tools-alert-width), calc(100vw - 4px)); margin: 0; max-height: calc(100vh - 4px); overflow-y: auto; animation: none; }
+body[data-window-label="tool-notification"] .qp-dialog-backdrop {
+  background: transparent;
+  padding: 2px;
+  align-items: flex-start;
+  animation: none;
+  overflow: auto;
+  scrollbar-width: none;
+}
+body[data-window-label="tool-notification"] .qp-dialog-surface {
+  width: min(var(--tools-alert-width), calc(100vw - 4px));
+  margin: 0;
+  max-height: none;
+  animation: none;
+}
+body[data-window-label="tool-notification"] .qp-dialog-backdrop:has(> .tools-usage-steps-dialog) {
+  flex-direction: column-reverse;
+  align-items: center;
+  justify-content: flex-start;
+}
+body[data-window-label="tool-notification"] .tools-usage-steps-dialog { flex: none; }
 @media (max-width: 440px) {
   .tools-notification-setting-row { align-items: stretch; flex-direction: column; gap: 12px; }
   .tools-notification-setting-row > :last-child { align-self: flex-end; }
