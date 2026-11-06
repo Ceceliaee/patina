@@ -90,7 +90,7 @@ async function prepareNavigationView(view: View) {
   }
 }
 
-export function useAppShellRenderedView(currentView: View) {
+export function useAppShellRenderedView(currentView: View, foregroundReady: boolean) {
   const [renderedView, setRenderedView] = useState<View>("dashboard");
   const [presentedView, setPresentedView] = useState<View>(renderedView);
   const [content, setContent] = useState({ view: renderedView, ready: false });
@@ -138,6 +138,7 @@ export function useAppShellRenderedView(currentView: View) {
 
   return {
     outletProps: {
+      foregroundReady,
       onPresentedViewChange: setPresentedView,
       renderedView,
       contentReady: (renderedView !== "history" && renderedView !== "data")

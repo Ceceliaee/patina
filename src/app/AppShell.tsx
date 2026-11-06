@@ -109,7 +109,7 @@ export default function AppShellContent({
     useState<ColorSchemePreview | null>(null);
   const [historyDateRequest, setHistoryDateRequest] = useState<HistoryDateRequest | null>(null);
   const [toolsInitialTarget, setToolsInitialTarget] = useState<ToolsOpenTarget | null>(null);
-  const viewPresentation = useAppShellRenderedView(currentView);
+  const viewPresentation = useAppShellRenderedView(currentView, appWindowState.isForegroundReady);
   const { presentedView } = viewPresentation;
   const {
     isForegroundReady,

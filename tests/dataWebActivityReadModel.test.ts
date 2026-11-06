@@ -8,6 +8,7 @@ import {
   getDataWebActivitySnapshotCacheStats,
   loadDataWebActivitySnapshot as loadDataWebActivitySnapshotRaw,
   loadDataWebHeatmapSnapshot,
+  toWebPanelOption,
 } from "../src/features/data/services/dataWebActivityReadModel.ts";
 import type { DataWebActivitySnapshotDependencies } from "../src/features/data/services/dataWebActivitySnapshotDependencies.ts";
 import {
@@ -1404,7 +1405,13 @@ await runTest("website snapshot binds rules to aggregates and heatmap selection"
   assert.equal(snapshot.records.reduce((sum, row) => sum + row.durationMs, 0), 3000);
   assert.equal(snapshot.records.filter(row => row.normalizedDomain === webGroupKey("example.com")).reduce((sum, row) => sum + row.durationMs, 0), 2000);
   const trend = buildDataWebTrendViewModel({ ...snapshot, selectedDomains: [webGroupKey("example.com")] });
-  assert.ok(JSON.stringify(trend).includes('Website'));
+  const selected = toWebPanelOption(trend.selectedDomains[0]);
+  assert.equal(selected.key, webGroupKey("example.com"));
+  assert.equal(selected.displayName, "Website");
+  assert.equal(selected.secondaryText, "example.com");
+  const independent = trend.domainOptions.find(option => option.normalizedDomain === "mail.example.com")!;
+  assert.equal(toWebPanelOption(independent).secondaryText, "mail.example.com");
+  assert.equal(toWebPanelOption({ ...independent, normalizedDomain: "activity:anonymous" }).secondaryText, "");
   const heatmap = buildDataWebActivityHeatmap({ selection: 2026, nowMs, normalizedDomains: [webGroupKey("example.com")], records: snapshot.records, earliestRecordedStartMs: dayStart });
   assert.equal(heatmap.flatMap(week => week.cells).reduce((sum, day) => sum + day.duration, 0), 2000);
   assert.deepEqual(snapshot.domainCoverage.find(row => row.normalizedDomain === webGroupKey("example.com")), { normalizedDomain: webGroupKey("example.com"), earliestRecordedStartMs: dayStart });

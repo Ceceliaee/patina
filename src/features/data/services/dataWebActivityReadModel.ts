@@ -25,7 +25,7 @@ import {
   type DataDestinationTrendChartRow,
   type DataTrendViewModel,
 } from "./dataReadModel.ts";
-import type { DataDestinationTrendSummary } from "./dataDestinationState.ts";
+import type { DataDestinationTrendOption, DataDestinationTrendSummary } from "./dataDestinationState.ts";
 import {
   buildHeatmapFromDailyDurations,
   getHeatmapRange,
@@ -57,6 +57,17 @@ interface DataWebDomainOption {
   averageDuration: number;
   activeDayCount: number;
   earliestRecordedStartMs: number | null;
+}
+
+export function toWebPanelOption(domain: DataWebDomainOption): DataDestinationTrendOption {
+  const key = domain.normalizedDomain;
+  return {
+    key, identityKeys: [key], normalizedDomain: key,
+    classificationCategory: domain.category, overrideColor: domain.overrideColor, unclassified: domain.unclassified,
+    displayName: domain.displayName, secondaryText: isAnonymousActivity(key) ? "" : webDisplayDomain(key),
+    iconUrl: domain.faviconUrl, totalDuration: domain.totalDuration, percentage: domain.percentage,
+    averageDuration: domain.averageDuration, activeDayCount: domain.activeDayCount,
+  };
 }
 
 interface DataWebDomainAggregate extends DataWebDomainOption {

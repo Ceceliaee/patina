@@ -109,6 +109,8 @@ export async function verifyRestoredBackgroundPolicy(
   try {
     await waitFor("restored main is interactive after ready", () => evaluate(client,
       'window.__TAURI_INTERNALS__.invoke("plugin:window|is_visible", { label: "main" })'), 10_000);
+    assert.equal(await evaluate(client, 'document.querySelector("main.qp-canvas")?.dataset.presentedView'), "history",
+      "the hidden main must finish restoring History before it can be revealed");
     assert.equal(Number(await evaluate(client, "window.__PATINA_MAIN_WINDOW_GENERATION__")), generation + 1,
       "repeated Mini requests must share one new main-window generation");
     const snapshot = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_get_history_range_rows", {
@@ -128,5 +130,30 @@ export async function verifyRestoredBackgroundPolicy(
       destroyElapsedMs, readyElapsedMs, trackerPersistedAfterDestruction: true,
     }));
     return client;
-  } catch (error) { client.close(); throw error; }
+  } catch (error) {
+    const state = await evaluate(client, `({
+      generation: window.__PATINA_MAIN_WINDOW_GENERATION__,
+      label: window.__TAURI_INTERNALS__.metadata.currentWindow.label,
+      documentReady: document.readyState,
+      title: document.title,
+      shell: Boolean(document.querySelector(".qp-app-frame")),
+      rootChild: document.getElementById("root")?.firstElementChild?.tagName,
+      viewport: [innerWidth, innerHeight],
+      visibility: document.visibilityState,
+      canvas: {...document.querySelector("main.qp-canvas")?.dataset},
+      requestedView: localStorage.getItem("patina:last-active-view"),
+      liveness: typeof window.__PATINA_MAIN_WINDOW_LIVENESS_REQUEST__,
+      theme: document.documentElement.dataset.theme,
+    })`).catch(() => null);
+    const detach = client.onMessage(message => {
+      if (message.method === "Runtime.exceptionThrown" || message.method === "Runtime.consoleAPICalled") {
+        console.error("Restored main renderer message", JSON.stringify(message.params).slice(0, 3000));
+      }
+    });
+    await client.command("Runtime.enable").catch(() => null);
+    detach();
+    console.error("Restored main diagnostics", state);
+    client.close();
+    throw error;
+  }
 }

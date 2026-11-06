@@ -1751,6 +1751,7 @@ async function runDataScenarioSet(
     assert.deepEqual(webState.headerOrder, ["range"]);
     assert.equal(webState.modePressed, "网页");
     assert.equal(webState.domains.length, 2);
+    assert.ok(webState.domains.some(row => /% · research\.example/.test(row)));
     assert.equal(webState.hasHeatmapScope, false);
     assert.equal(webState.destinationHeatmapTitle, "网页热力图");
     assert.equal(webState.destinationHeatmapHasSubtitle, false);

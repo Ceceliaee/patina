@@ -12,7 +12,6 @@ import { useLocaleText } from "../../../shared/i18n/index.ts";
 import type { AppLanguage } from "../../../shared/settings/appSettings.ts";
 import type {
   DataDestinationMode,
-  DataDestinationTrendOption,
   DataWebTrendPresentation,
 } from "../services/dataDestinationState.ts";
 import {
@@ -29,6 +28,7 @@ import {
   getCachedDataWebTrendSnapshot,
   loadDataWebActivitySnapshot,
   loadDataWebHeatmapSnapshot,
+  toWebPanelOption,
   type DataWebHeatmapSnapshot,
   type DataWebTrendSnapshot,
 } from "../services/dataWebActivityReadModel.ts";
@@ -266,52 +266,18 @@ export function useDataWebActivityRuntime({
       : null
   ), [displayTrendSnapshot, selectedDomains, uiLanguage, UI_TEXT]);
   const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
-  const filteredDomains = useMemo(() => (
-    trendViewModel?.domainOptions.filter((domain) => (
-      !normalizedQuery
-      || domain.displayName.toLocaleLowerCase().includes(normalizedQuery)
-      || domain.normalizedDomain.toLocaleLowerCase().includes(normalizedQuery)
-    )) ?? []
-  ), [normalizedQuery, trendViewModel]);
-
+  const allPanelOptions = useMemo(() => (
+    trendViewModel?.domainOptions.map(toWebPanelOption) ?? []
+  ), [trendViewModel?.domainOptions]);
+  const panelOptions = useMemo(() => normalizedQuery ? allPanelOptions.filter(option => (
+    option.displayName.toLocaleLowerCase().includes(normalizedQuery)
+    || option.secondaryText.toLocaleLowerCase().includes(normalizedQuery)
+  )) : allPanelOptions, [allPanelOptions, normalizedQuery]);
   const selectedTrendDomains = useMemo(
     () => trendViewModel?.selectedDomains ?? [],
     [trendViewModel?.selectedDomains],
   );
-  const panelOptions = useMemo<DataDestinationTrendOption[]>(() => (
-    filteredDomains.map((domain) => ({
-      key: domain.normalizedDomain,
-      identityKeys: [domain.normalizedDomain],
-      normalizedDomain: domain.normalizedDomain,
-      classificationCategory: domain.category,
-      overrideColor: domain.overrideColor,
-      unclassified: domain.unclassified,
-      displayName: domain.displayName,
-      secondaryText: domain.normalizedDomain,
-      iconUrl: domain.faviconUrl,
-      totalDuration: domain.totalDuration,
-      percentage: domain.percentage,
-      averageDuration: domain.averageDuration,
-      activeDayCount: domain.activeDayCount,
-    }))
-  ), [filteredDomains]);
-  const selectedPanelOptions = useMemo<DataDestinationTrendOption[]>(() => (
-    selectedTrendDomains.map((domain) => ({
-      key: domain.normalizedDomain,
-      identityKeys: [domain.normalizedDomain],
-      normalizedDomain: domain.normalizedDomain,
-      classificationCategory: domain.category,
-      overrideColor: domain.overrideColor,
-      unclassified: domain.unclassified,
-      displayName: domain.displayName,
-      secondaryText: domain.normalizedDomain,
-      iconUrl: domain.faviconUrl,
-      totalDuration: domain.totalDuration,
-      percentage: domain.percentage,
-      averageDuration: domain.averageDuration,
-      activeDayCount: domain.activeDayCount,
-    }))
-  ), [selectedTrendDomains]);
+  const selectedPanelOptions = useMemo(() => selectedTrendDomains.map(toWebPanelOption), [selectedTrendDomains]);
 
   const presentedHeatmapState = resolveDataWebHeatmapRequestState(
     heatmapState,
@@ -398,6 +364,7 @@ export function useDataWebActivityRuntime({
     heatmapLoading: heatmapColdLoading,
     heatmapReady,
     heatmapRows,
+    allPanelOptions,
     panelOptions,
     retry,
     searchQuery,

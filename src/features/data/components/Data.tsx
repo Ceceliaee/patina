@@ -2,7 +2,6 @@ import { useLocaleText, type UiText } from "../../../shared/i18n/index.ts";
 import { type MouseEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, } from "react";
 import { BarChart3 } from "lucide-react";
 import { objectColor } from "../../../shared/classification/objectColor.ts";
-import { isAnonymousActivity } from "../../../shared/classification/anonymousActivity.ts";
 
 import {
   useIconThemeColors,
@@ -530,6 +529,7 @@ export default function Data({
     heatmapLoading: webHeatmapLoading,
     heatmapReady: webHeatmapReady,
     heatmapRows: webHeatmapRows,
+    allPanelOptions: webAllPanelOptions,
     panelOptions: webPanelOptions,
     searchQuery: webSearchQuery,
     selectedPanelOptions: webPanelSelectedOptions,
@@ -596,23 +596,6 @@ export default function Data({
       categoryAllPanelOptions,
     )
   ), [categoryAllPanelOptions, UI_TEXT, visibleCategoryTrendViewModel?.selectedCategories]);
-  const webAllPanelOptions = useMemo<DataDestinationTrendOption[]>(() => (
-    (webTrendViewModel?.domainOptions ?? []).map((domain) => ({
-      key: domain.normalizedDomain,
-      identityKeys: [domain.normalizedDomain],
-      normalizedDomain: domain.normalizedDomain,
-      classificationCategory: domain.category,
-      overrideColor: domain.overrideColor,
-      unclassified: domain.unclassified,
-      displayName: domain.displayName,
-      secondaryText: isAnonymousActivity(domain.normalizedDomain) ? "" : domain.normalizedDomain,
-      iconUrl: domain.faviconUrl,
-      totalDuration: domain.totalDuration,
-      percentage: domain.percentage,
-      averageDuration: domain.averageDuration,
-      activeDayCount: domain.activeDayCount,
-    }))
-  ), [webTrendViewModel?.domainOptions]);
   const resolvedWebPanelSelectedOptions = useMemo<DataDestinationTrendOption[]>(() => (
     resolveDataDestinationSessionOptions("web", webPanelSelectedOptions, webAllPanelOptions)
   ), [webAllPanelOptions, webPanelSelectedOptions]);

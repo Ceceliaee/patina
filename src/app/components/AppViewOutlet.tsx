@@ -12,6 +12,7 @@ interface AppViewOutletProps {
   onPresentedViewChange?: (view: View) => void;
   renderedView: View;
   contentReady?: boolean;
+  foregroundReady: boolean;
   uiText: UiText;
   views: Record<View, ReactNode>;
 }
@@ -20,6 +21,7 @@ export default function AppViewOutlet({
   onPresentedViewChange,
   renderedView,
   contentReady = true,
+  foregroundReady,
   uiText,
   views,
 }: AppViewOutletProps) {
@@ -49,7 +51,9 @@ export default function AppViewOutlet({
       setOutgoingView(null);
     };
 
-    if (document.visibilityState === "hidden") {
+    // A rebuilt native window can still be hidden while WebView2 reports a visible document.
+    // Its history/data reads wait for the foreground, so finish the hidden handoff before reveal.
+    if (!foregroundReady) {
       queueMicrotask(finishTransition);
       return undefined;
     }
@@ -69,7 +73,7 @@ export default function AppViewOutlet({
       window.cancelAnimationFrame(animationFrameId);
       window.clearTimeout(fallbackTimerId);
     };
-  }, [contentReady, displayedView, onPresentedViewChange, outgoingView, renderedView]);
+  }, [contentReady, displayedView, foregroundReady, onPresentedViewChange, outgoingView, renderedView]);
 
   const transitionActive = outgoingView !== null;
 
