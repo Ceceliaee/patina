@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { qualityCargoEnv, qualityCargoProfile } from "./run-cargo-quality.ts";
 
 // This opt-in gate restores exact source bytes even when compilation or the
 // behavioral assertion fails. Never run it concurrently with another Rust build.
@@ -13,9 +14,9 @@ assert.equal(text.split(search).length, 2, "native mutation anchor drifted");
 const output = resolve("artifacts/quality-9plus/native-mutation");
 mkdirSync(output, { recursive: true });
 function run(label: string) {
-  const result = spawnSync("cargo", ["test", "--manifest-path", "src-tauri/Cargo.toml", "--locked", "--offline", "--lib",
+  const result = spawnSync("cargo", ["test", "--profile", qualityCargoProfile, "--manifest-path", "src-tauri/Cargo.toml", "--locked", "--offline", "--lib",
     "sqlite_failure_and_cleanup_failure_have_distinct_commit_outcomes", "--", "--nocapture"],
-  { encoding: "utf8", windowsHide: true, maxBuffer: 16 * 1024 * 1024 });
+  { env: qualityCargoEnv(), encoding: "utf8", windowsHide: true, maxBuffer: 16 * 1024 * 1024 });
   writeFileSync(`${output}/${label}.log`, String(result.stdout ?? "") + String(result.stderr ?? "") + String(result.error ?? ""), "utf8");
   if (result.error) throw result.error;
   return result;

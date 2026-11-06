@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { qualityCargoEnv, qualityCargoProfile } from "../run-cargo-quality.ts";
 import { sourceFingerprint } from "../coverage/source-fingerprint.ts";
 
 // Each case owns one bounded native test process. This does not launch Patina,
@@ -30,14 +31,14 @@ const selected = process.argv.slice(2);
 assert(selected.length > 0 && selected.every(name => cases.has(name)),
   `Choose cases: ${[...cases.keys()].join(", ")}; file accepts PATINA_ICON_RESOURCE_PATH`);
 const fingerprint = sourceFingerprint(["src-tauri/src/", "src-tauri/Cargo.toml",
-  "src-tauri/Cargo.lock", "src-tauri/build.rs", "scripts/perf/helper-resources.ts"]);
+  "src-tauri/Cargo.lock", "src-tauri/build.rs", "scripts/perf/helper-resources.ts", "scripts/run-cargo-quality.ts"]);
 const root = resolve("artifacts/runtime-reliability", `helper-resources-${Date.now()}`);
 mkdirSync(root, { recursive: true });
 const sha = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 console.log(`Native resource evidence: ${root}`);
-const build = spawnSync("cargo", ["test", "--locked", "--manifest-path", "src-tauri/Cargo.toml",
+const build = spawnSync("cargo", ["test", "--profile", qualityCargoProfile, "--locked", "--manifest-path", "src-tauri/Cargo.toml",
   "--lib", "--no-run", "--message-format=json"], {
-  encoding: "utf8", windowsHide: true, timeout: 600_000, maxBuffer: 32 * 1024 * 1024,
+  env: qualityCargoEnv(), encoding: "utf8", windowsHide: true, timeout: 600_000, maxBuffer: 32 * 1024 * 1024,
 });
 writeFileSync(join(root, "build.jsonl"), build.stdout ?? "");
 writeFileSync(join(root, "build.stderr.log"), build.stderr ?? "");
@@ -52,9 +53,9 @@ const frozen = join(root, "resource-tests.exe");
 copyFileSync(executable, frozen);
 let probeExecutable: string | undefined;
 if (selected.includes("shell-cached")) {
-  const app = spawnSync("cargo", ["build", "--locked", "--manifest-path",
+  const app = spawnSync("cargo", ["build", "--profile", qualityCargoProfile, "--locked", "--manifest-path",
     "src-tauri/Cargo.toml", "--message-format=json"], {
-    encoding: "utf8", windowsHide: true, timeout: 600_000, maxBuffer: 32 * 1024 * 1024,
+    env: qualityCargoEnv(), encoding: "utf8", windowsHide: true, timeout: 600_000, maxBuffer: 32 * 1024 * 1024,
   });
   writeFileSync(join(root, "probe-build.jsonl"), app.stdout ?? "");
   writeFileSync(join(root, "probe-build.stderr.log"), app.stderr ?? "");

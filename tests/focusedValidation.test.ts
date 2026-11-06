@@ -19,7 +19,7 @@ assert.throws(() => assertBrowserSelection("free-focus", 9, 9), /zero selected/)
 assertBrowserSelection("startup", 9, 9);
 
 assert.deepEqual(focusedRustArguments(["--filter", "data::", "--exact"]),
-  ["test", "--manifest-path", "src-tauri/Cargo.toml", "--locked", "--offline", "--lib", "data::", "--", "--exact"]);
+    ["test", "--profile", "validation", "--manifest-path", "src-tauri/Cargo.toml", "--locked", "--offline", "--lib", "data::", "--", "--exact"]);
 assert.ok(focusedRustArguments(["--filter", "lifecycle", "--test", "native_probe_lifecycle"]).includes("native_probe_lifecycle"));
 for (const args of [[], ["--filter"], ["--filter", " "], ["--filter", "x", "--filter", "y"], ["--filter", "x", "--ignored"], ["--filter", "x", "--test", "a", "--test", "b"], ["--filter", "x", "--exact", "--exact"]]) {
   assert.throws(() => focusedRustArguments(args));

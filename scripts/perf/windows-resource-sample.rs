@@ -1,5 +1,4 @@
-//! Windows-only diagnostic: cargo run --manifest-path src-tauri/Cargo.toml
-//! --example windows-resource-sample -- <PID> <new-output.jsonl> [seconds] [interval] [scenario]
+//! Windows-only diagnostic: `pnpm run perf:resources <PID> <new-output.jsonl> [seconds] [interval] [scenario]`
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
 use std::{

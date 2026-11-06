@@ -1,10 +1,11 @@
 import { spawnSync } from "node:child_process";
+import { qualityCargoEnv, qualityCargoProfile } from "../run-cargo-quality.ts";
 import { createBenchmarkMeasurement, printBenchmarkReport } from "./benchmarkUtils.ts";
 
 const result = spawnSync("cargo", [
-  "test", "--manifest-path", "src-tauri/Cargo.toml", "--locked",
+  "test", "--profile", qualityCargoProfile, "--manifest-path", "src-tauri/Cargo.toml", "--locked",
   "catalog_capacity_report", "--", "--ignored", "--nocapture",
-], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
+], { env: qualityCargoEnv(), encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
 if (result.error) throw result.error;
 if (result.status !== 0) throw new Error(result.stdout + result.stderr);
 const line = result.stdout.split(/\r?\n/).find((value) => value.startsWith("PATINA_CATALOG_BENCH="));

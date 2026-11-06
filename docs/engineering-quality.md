@@ -155,7 +155,9 @@ JS 离线审计只接受最近 24 小时内成功联网审计生成、且 SHA-25
 
 默认 CI gate 与 release workflow 必须覆盖 `pnpm run check:full` 的全部检查；工作流可拆分为独立 job 执行，具体编排由 `.github/workflows/` 拥有。
 
-Rust 质量构建默认使用独立的 `src-tauri/target/quality`，避免覆盖正在运行的开发版；显式 `CARGO_TARGET_DIR` 仍由调用环境负责。不得通过停止用户开发实例来解决验证产物锁定。
+日常 `tauri dev` 使用 Cargo 的 `dev` 配置，保留增量编译和完整调试信息。直接执行 `cargo test` 使用 `test` 配置，关闭增量编译并保留回溯所需的行号。仓库的质量检查、性能工具和原生验收统一使用继承这些设置的 `validation` 配置。Cargo 仍复用未改变的依赖；修改 crate 后会重新编译该 crate。
+
+普通质量命令默认共享 `src-tauri/target/quality`，显式设置的 `CARGO_TARGET_DIR` 优先。原生验收和覆盖率分别使用独立目录，以隔离桌面测试配置和带计数器的构建。保持正在运行的开发实例可用；验收报告和已冻结的运行包按各自的证据要求保留。
 
 #### 机器门禁与升级保护
 

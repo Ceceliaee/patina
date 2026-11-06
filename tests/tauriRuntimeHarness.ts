@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { build, preview, type PreviewServer } from "vite";
 import { sourceFingerprint } from "../scripts/coverage/source-fingerprint.ts";
+import { qualityCargoProfile } from "../scripts/run-cargo-quality.ts";
 import { createRuntimeJob, onRuntimeCancellation } from "./tauriRuntimeProcess.ts";
 import { RuntimeReport } from "./tauriRuntimeReport.ts";
 import { assertIsolatedTempPath, CdpConnection, waitFor } from "./uiBrowserSmoke/browserHarness.ts";
@@ -30,7 +31,13 @@ function assetsHash(root: string) {
   for(const file of entries) digest.update(relative(root, file)).update("\0").update(readFileSync(file));
   return digest.digest("hex");
 }
-export const runtimeInstrumentation = () => JSON.stringify(["RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "RUSTC_WORKSPACE_WRAPPER", "RUSTC_WRAPPER", "RUSTUP_TOOLCHAIN", "CARGO_BUILD_TARGET", "PATINA_COVERAGE_TARGET_DIR"].map(name => [name, process.env[name] ?? ""]));
+export function runtimeInstrumentation() {
+  const names = ["RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "RUSTC_WORKSPACE_WRAPPER", "RUSTC_WRAPPER",
+    "RUSTUP_TOOLCHAIN", "CARGO_BUILD_TARGET", "PATINA_COVERAGE_TARGET_DIR", "CARGO_INCREMENTAL",
+    ...Object.keys(process.env).map(name => name.toUpperCase())
+      .filter(name => /^CARGO_PROFILE_(DEV|TEST|VALIDATION)_/.test(name)).sort()];
+  return JSON.stringify([qualityCargoProfile, ...names.map(name => [name, process.env[name] ?? ""])]);
+}
 export async function reserveRuntimePort() {
   return new Promise<number>((resolve, reject) => {
     const server = createServer(); server.once("error", reject);
@@ -96,11 +103,11 @@ export async function prepareRuntime(report: RuntimeReport): Promise<PreparedRun
   // Never remove a lock belonging to an interrupted or concurrent preparation.
   mkdirSync(lock);
   try {
-    await runBackgroundCommand("cargo", ["build", "--manifest-path", "src-tauri/Cargo.toml", "--bin", "patina", "--locked", "--offline"], {
+    await runBackgroundCommand("cargo", ["build", "--profile", qualityCargoProfile, "--manifest-path", "src-tauri/Cargo.toml", "--bin", "patina", "--locked", "--offline"], {
       ...process.env, CARGO_TARGET_DIR: target, TAURI_CONFIG: config,
     });
     const binary = join(directory, "patina.exe");
-    copyFileSync(join(target, "debug", "patina.exe"), binary);
+    copyFileSync(join(target, qualityCargoProfile, "patina.exe"), binary);
     assert.deepEqual(runtimeSourceFingerprint(), before, "Source changed during runtime preparation");
     const result: PreparedRuntime = {
       format: 1, directory, binary, frontend, frontendPort, config, fingerprint: before,

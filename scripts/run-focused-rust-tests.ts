@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { qualityCargoEnv, qualityCargoProfile } from "./run-cargo-quality.ts";
 
 export function focusedRustArguments(args: string[]) {
   let filter: string | undefined;
@@ -22,7 +23,7 @@ export function focusedRustArguments(args: string[]) {
     } else throw new Error(`Unknown focused Rust argument: ${argument}`);
   }
   assert.ok(filter, "--filter is required; use check:rust for complete validation");
-  return ["test", "--manifest-path", "src-tauri/Cargo.toml", "--locked", "--offline",
+  return ["test", "--profile", qualityCargoProfile, "--manifest-path", "src-tauri/Cargo.toml", "--locked", "--offline",
     ...(target ? ["--test", target] : ["--lib"]), filter, "--", ...(exact ? ["--exact"] : [])];
 }
 
@@ -38,7 +39,7 @@ export function assertFocusedRustResult(status: number | null, output: string) {
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const args = focusedRustArguments(process.argv.slice(2));
   const result = spawnSync("cargo", args, {
-    env: { ...process.env, CARGO_TARGET_DIR: process.env.CARGO_TARGET_DIR ?? resolve("src-tauri/target/quality") },
+    env: qualityCargoEnv(),
     encoding: "utf8", windowsHide: true, shell: false, maxBuffer: 16 * 1024 * 1024,
     stdio: ["inherit", "pipe", "inherit"],
   });

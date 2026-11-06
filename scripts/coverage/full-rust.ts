@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join, normalize, relative, resolve } from "node:path";
+import { qualityCargoEnv, qualityCargoProfile } from "../run-cargo-quality.ts";
 import { sourceFingerprint } from "./source-fingerprint.ts";
 
 const base = resolve("artifacts/coverage-full");
 mkdirSync(base, { recursive: true });
 const output = mkdtempSync(join(base, "rust-"));
-const fingerprint = sourceFingerprint(["src-tauri/src/", "src-tauri/Cargo.toml", "src-tauri/Cargo.lock", "src-tauri/build.rs", "tests/", "scripts/coverage/", "src/"]);
+const fingerprint = sourceFingerprint(["src-tauri/src/", "src-tauri/Cargo.toml", "src-tauri/Cargo.lock", "src-tauri/build.rs", "tests/", "scripts/coverage/", "scripts/run-cargo-quality.ts", "src/"]);
 const profiles = join(output, "profiles");
 mkdirSync(profiles);
 let sequence = 0;
@@ -31,8 +32,8 @@ const wrapper = join(base, "instrument-rustc" + executable);
 run("rustc", ["scripts/coverage/instrument-rustc.rs", "-o", wrapper]);
 const env = { ...process.env, CARGO_TARGET_DIR: target, RUSTC_WORKSPACE_WRAPPER: wrapper,
   LLVM_PROFILE_FILE: join(profiles, "unit-%p-%m.profraw") };
-const manifest = ["--manifest-path", "src-tauri/Cargo.toml", "--locked", "--offline"];
-run("cargo", ["run", ...manifest, "--example", "coverage-source-scope", "--", resolve("src-tauri/src"), join(output, "scope.json")]);
+const manifest = ["--profile", qualityCargoProfile, "--manifest-path", "src-tauri/Cargo.toml", "--locked", "--offline"];
+run("cargo", ["run", ...manifest, "--example", "coverage-source-scope", "--", resolve("src-tauri/src"), join(output, "scope.json")], qualityCargoEnv());
 const unitLog = run("cargo", ["test", ...manifest, "--lib", "--message-format=json"], env);
 const artifacts = unitLog.split(/\r?\n/).filter(line => line.startsWith("{")).map(line => JSON.parse(line));
 const unit = artifacts.find(item => item.reason === "compiler-artifact" && item.profile.test && item.target.name === "patina_lib")?.executable;
@@ -47,7 +48,7 @@ assert.ok(desktopProfiles.length > 0, "Real Tauri process produced no native cou
 const allProfiles = [...unitProfiles, ...desktopProfiles].map(p => join(profiles, p));
 const profdata = join(output, "all.profdata");
 run(llvmProfdata, ["merge", "-sparse", ...allProfiles, "-o", profdata]);
-const lcov = run(llvmCov, ["export", "-format=lcov", unit, "-object", join(target, "debug", "patina" + executable), `-instr-profile=${profdata}`]);
+const lcov = run(llvmCov, ["export", "-format=lcov", unit, "-object", join(target, qualityCargoProfile, "patina" + executable), `-instr-profile=${profdata}`]);
 writeFileSync(join(output, "coverage.lcov"), lcov, "utf8");
 const scope = JSON.parse(readFileSync(join(output, "scope.json"), "utf8"));
 const canon = (p: string) => normalize(p.startsWith("\\\\?\\") ? p.slice(4) : p).toLowerCase();

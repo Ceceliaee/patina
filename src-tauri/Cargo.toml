@@ -15,6 +15,13 @@ edition = "2021"
 name = "patina_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[profile.test]
+incremental = false
+debug = "line-tables-only"
+
+[profile.validation]
+inherits = "test"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

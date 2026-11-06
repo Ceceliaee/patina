@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { qualityCargoEnv, qualityCargoProfile } from "../run-cargo-quality.ts";
 
 const marker = "PATINA_QUERY_PLAN_REPORT_JSON:";
 
@@ -46,6 +47,7 @@ function extractJsonAfterMarker(output: string): string | null {
 
 const result = spawnSync("cargo", [
   "test",
+  "--profile", qualityCargoProfile,
   "--manifest-path",
   "src-tauri/Cargo.toml",
   "--locked",
@@ -54,6 +56,7 @@ const result = spawnSync("cargo", [
   "--ignored",
   "--nocapture",
 ], {
+  env: qualityCargoEnv(),
   encoding: "utf8",
 });
 

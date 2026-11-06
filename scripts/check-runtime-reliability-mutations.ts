@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { qualityCargoEnv, qualityCargoProfile } from "./run-cargo-quality.ts";
 
 // Exclusive opt-in build: each mutant restores exact source bytes in finally.
 // The helper-crash test owns its Job, so assertion failure still reaps descendants.
@@ -55,8 +56,8 @@ const cases = [
 const output = resolve("artifacts/runtime-reliability/mutations");
 mkdirSync(output, { recursive: true });
 function run(label: string, args: string[]) {
-  const result = spawnSync("cargo", ["test", "--manifest-path", "src-tauri/Cargo.toml", "--locked", "--offline", ...args],
-    { encoding: "utf8", windowsHide: true, timeout: 600_000, maxBuffer: 16 * 1024 * 1024 });
+  const result = spawnSync("cargo", ["test", "--profile", qualityCargoProfile, "--manifest-path", "src-tauri/Cargo.toml", "--locked", "--offline", ...args],
+    { env: qualityCargoEnv(), encoding: "utf8", windowsHide: true, timeout: 600_000, maxBuffer: 16 * 1024 * 1024 });
   const log = String(result.stdout ?? "") + String(result.stderr ?? "") + String(result.error ?? "");
   writeFileSync(resolve(output, `${label}.log`), log, "utf8");
   if (result.error) throw result.error;

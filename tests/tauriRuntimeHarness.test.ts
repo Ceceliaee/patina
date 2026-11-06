@@ -90,6 +90,14 @@ try {
   const manifest = join(preparedRoot, "manifest.json");
   const save = (value: unknown) => writeFileSync(manifest, JSON.stringify(value));
   save(valid); assert.deepEqual(readPreparedRuntime(manifest), valid);
+  const previousDebug = process.env.CARGO_PROFILE_TEST_DEBUG;
+  try {
+    process.env.CARGO_PROFILE_TEST_DEBUG = previousDebug === "full" ? "none" : "full";
+    assert.throws(() => readPreparedRuntime(manifest), /Runtime instrumentation changed/);
+  } finally {
+    if (previousDebug === undefined) delete process.env.CARGO_PROFILE_TEST_DEBUG;
+    else process.env.CARGO_PROFILE_TEST_DEBUG = previousDebug;
+  }
   const blocker = createServer();
   await new Promise<void>((resolve, reject) => { blocker.once("error", reject); blocker.listen(0, "127.0.0.1", resolve); });
   const address = blocker.address(); assert.ok(address && typeof address === "object");
