@@ -22,11 +22,8 @@ async fn mini_activity_separates_day_aggregate_from_exact_recent_facts() {
       ('Earlier','earlier.exe',1000,61000,60000),('Recent','recent.exe',9400000,9700000,300000);
       INSERT INTO anonymous_activity(id,start_time,end_time,observed_until,is_web) VALUES('anonymous',9800000,9860000,9860000,0);
       INSERT INTO settings(key,value) VALUES('web_activity_token','private-token'),('remote_status_bridge_token','private-remote');").await.unwrap();
-    let today = load(&pool, MiniActivityKind::Today, 10_000_000, (0, 86_400_000))
-        .await
-        .unwrap();
-    assert!(today.sessions.is_empty() && today.web.is_none());
-    let aggregate = today.aggregate.unwrap();
+    let recent = load(&pool, 10_000_000, (0, 86_400_000)).await.unwrap();
+    let aggregate = &recent.aggregate;
     assert_eq!(
         aggregate
             .records
@@ -35,32 +32,29 @@ async fn mini_activity_separates_day_aggregate_from_exact_recent_facts() {
             .sum::<i64>(),
         420_000
     );
-    let recent = load(
-        &pool,
-        MiniActivityKind::Activity,
-        10_000_000,
-        (0, 86_400_000),
-    )
-    .await
-    .unwrap();
-    assert_eq!((recent.start_ms, recent.end_ms), (6_400_000, 10_000_000));
+    assert_eq!(
+        (recent.recent_start_ms, recent.sampled_at_ms),
+        (6_400_000, 10_000_000)
+    );
     assert_eq!(recent.sessions.len(), 2);
-    assert!(recent.aggregate.is_none() && recent.web.is_none());
+    assert!(recent.web.is_none());
     let json = serde_json::to_string(&recent).unwrap();
     assert!(
         !json.contains("private-token")
             && !json.contains("private-remote")
-            && !json.contains("earlier.exe")
+            && recent
+                .sessions
+                .iter()
+                .all(|row| row.exe_name != "earlier.exe")
     );
     assert!(json.contains("activity:anonymous"));
     pool.execute("DELETE FROM read_model_state WHERE model_name='activity_hourly'")
         .await
         .unwrap();
-    let fallback = load(&pool, MiniActivityKind::Today, 10_000_000, (0, 86_400_000))
+    let fallback = load(&pool, 10_000_000, (0, 86_400_000))
         .await
         .unwrap()
-        .aggregate
-        .unwrap();
+        .aggregate;
     assert_eq!(
         fallback
             .records
@@ -70,6 +64,31 @@ async fn mini_activity_separates_day_aggregate_from_exact_recent_facts() {
         420_000
     );
     assert_eq!(fallback.read_path, "facts");
+}
+
+#[tokio::test]
+async fn mini_icons_only_include_current_members_and_their_display_parents() {
+    let pool = pool().await;
+    pool.execute(
+        "INSERT INTO sessions(app_name,exe_name,start_time,end_time,duration)
+        VALUES('Steam','steamwebhelper.exe',9000000,9100000,100000),
+        ('Editor','ÉDITEUR',9200000,9300000,100000);
+        INSERT INTO settings(key,value) VALUES('__app_link::steam.exe','games.exe'),
+        ('__app_link::éditeur','editor-group.exe'),('__app_link::unused.exe','unrelated.exe');
+        INSERT INTO icon_cache(exe_name,icon_base64) VALUES('games.exe','a'),('unrelated.exe','b'),
+        ('steamwebhelper.exe','c'),('activity:anonymous','d'),('editor-group.exe','e')",
+    )
+    .await
+    .unwrap();
+    let snapshot = load(&pool, 10_000_000, (0, 86_400_000)).await.unwrap();
+    assert_eq!(
+        snapshot
+            .icons
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        ["editor-group.exe", "games.exe", "steamwebhelper.exe"]
+    );
 }
 
 #[tokio::test]
@@ -84,16 +103,14 @@ async fn mini_activity_handles_midnight_and_different_local_day_lengths() {
     for hours in [23, 24, 25] {
         let today = load(
             &pool,
-            MiniActivityKind::Today,
             86_400_000,
             (86_400_000, 86_400_000 + hours * 3_600_000),
         )
         .await
         .unwrap();
-        assert!(today.aggregate.unwrap().records.is_empty());
+        assert!(today.aggregate.records.is_empty());
         let recent = load(
             &pool,
-            MiniActivityKind::Activity,
             87_000_000,
             (86_400_000, 86_400_000 + hours * 3_600_000),
         )
@@ -102,35 +119,19 @@ async fn mini_activity_handles_midnight_and_different_local_day_lengths() {
         assert_eq!(recent.sessions.len(), 1);
         assert!(recent.sessions[0].start_time < 86_400_000);
     }
-    assert!(load(&pool, MiniActivityKind::Today, -1, (0, 86_400_000))
-        .await
-        .is_err());
+    assert!(load(&pool, -1, (0, 86_400_000)).await.is_err());
 }
 
 #[tokio::test]
 async fn mini_activity_loads_web_only_for_enabled_web_mode() {
     let pool = pool().await;
     pool.execute("INSERT INTO settings(key,value) VALUES('history_timeline_mode','web'),('web_activity_enabled','1'),('web_activity_token','private-token')").await.unwrap();
-    let web = load(
-        &pool,
-        MiniActivityKind::Activity,
-        10_000_000,
-        (0, 86_400_000),
-    )
-    .await
-    .unwrap();
+    let web = load(&pool, 10_000_000, (0, 86_400_000)).await.unwrap();
     assert!(web.web.is_some() && web.sessions.is_empty() && web.icons.is_empty());
     pool.execute("UPDATE settings SET value='0' WHERE key='web_activity_enabled'")
         .await
         .unwrap();
-    let app = load(
-        &pool,
-        MiniActivityKind::Activity,
-        10_000_000,
-        (0, 86_400_000),
-    )
-    .await
-    .unwrap();
+    let app = load(&pool, 10_000_000, (0, 86_400_000)).await.unwrap();
     assert!(app.web.is_none() && !app.bootstrap.settings.web_activity_available);
 }
 
@@ -170,16 +171,11 @@ async fn mini_activity_web_metadata_matches_main_without_unrelated_catalog_entri
     let main = web_links::snapshot_range(&pool, 6_400_000, 10_000_000, 10_000_000)
         .await
         .unwrap();
-    let mini = load(
-        &pool,
-        MiniActivityKind::Activity,
-        10_000_000,
-        (0, 86_400_000),
-    )
-    .await
-    .unwrap()
-    .web
-    .unwrap();
+    let mini = load(&pool, 10_000_000, (0, 86_400_000))
+        .await
+        .unwrap()
+        .web
+        .unwrap();
     assert_eq!(
         serde_json::to_value(&mini.segments).unwrap(),
         serde_json::to_value(&main.segments).unwrap()

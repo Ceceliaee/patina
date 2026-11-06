@@ -7,26 +7,24 @@ import { useLocaleText } from "../../shared/i18n/index.ts";
 import type { TrackerHealthSnapshot } from "../../shared/types/tracking.ts";
 import { formatMiniActivityDuration } from "./miniActivityViewModel.ts";
 import { useMiniActivity } from "./useMiniActivity.ts";
+import { formatLocalDateKey } from "../../shared/lib/localDate.ts";
 
 function clockLabel(value: number) {
-  const date = new Date(value);
-  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  return new Date(value).toTimeString().slice(0, 5);
 }
 
 function rangeLabel(start: number, end: number, sampledAt: number) {
-  const showDate = new Date(start).toDateString() !== new Date(end).toDateString()
-    || new Date(start).toDateString() !== new Date(sampledAt).toDateString();
-  const label = (value: number) => {
-    const date = new Date(value);
-    return `${showDate ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")} ` : ""}${clockLabel(value)}`;
-  };
-  return `${label(start)}–${label(end)}`;
+  const startDay = formatLocalDateKey(new Date(start));
+  const endDay = formatLocalDateKey(new Date(end));
+  const showDate = startDay !== endDay || startDay !== formatLocalDateKey(new Date(sampledAt));
+  const label = (value: number, day: string) => (showDate ? day + " " : "") + clockLabel(value);
+  return `${label(start, startDay)}–${label(end, endDay)}`;
 }
 
-export default function MiniActivityContent({ page, health }: { page: "activity"; health: TrackerHealthSnapshot }) {
+export default function MiniActivityContent({ health }: { health: TrackerHealthSnapshot }) {
   const displayColor = useActivityDisplayColor();
   const text = useLocaleText();
-  const { view, today, failed, retry } = useMiniActivity(page, health);
+  const { view, today, failed, retry } = useMiniActivity(health);
   const [tip, setTip] = useState<{ scope: string; key: string; anchor: HTMLButtonElement } | null>(null);
   const positionDetail = (detail: HTMLDivElement | null) => {
     if (!detail) return;
@@ -57,6 +55,10 @@ export default function MiniActivityContent({ page, health }: { page: "activity"
   };
   // Resolve from this snapshot, so a refresh keeps the open detail without stale names.
   const currentDetail = () => tip?.scope === scope ? details[tip.key] : null;
+  const dailyDuration = formatMiniActivityDuration(today.total);
+  const segmentBounds = (item: { startRatio: number; widthRatio: number }) => ({
+    left: `${item.startRatio * 100}%`, width: `${Math.max(0, item.widthRatio) * 100}%`,
+  });
   return <div className="mini-content mini-activity-content" data-mini-page={view.kind}
     data-display-mode={view.mode} onKeyDown={event => {
       if (event.key === "Escape" && currentDetail()) { event.preventDefault(); event.stopPropagation(); setTip(null); }
@@ -82,18 +84,18 @@ export default function MiniActivityContent({ page, health }: { page: "activity"
       if (!(event.target instanceof Element) || !event.target.closest("button,.mini-detail")) setTip(null);
     }}>
     <div className="mini-summary mini-daily-summary">
-      <div className="mini-daily-total"><span className="mini-duration" aria-label={`${text.date.today} ${text.dashboard.total} ${formatMiniActivityDuration(today.total)}`}>{formatMiniActivityDuration(today.total)}</span></div>
+      <div className="mini-daily-total"><span className="mini-duration" aria-label={`${text.date.today} ${text.dashboard.total} ${dailyDuration}`}>{dailyDuration}</span></div>
       <span className="mini-daily-range">{today.period ? `${clockLabel(today.period.startMs)}–${clockLabel(today.period.endMs)}` : "—"}</span>
     </div>
       <QuietTimelineTrack className="mini-timeline"
         axisTicks={[0, 1].map(ratio => ({ ratio, label: clockLabel(view.timeline.viewportStartMs + ratio * view.timeline.viewportDurationMs) }))}>
         <div className="mini-timeline-paint" aria-hidden="true">
           {view.timeline.segments.map(item => <span key={item.id}
-            style={{ left: `${item.startRatio * 100}%`, width: `${Math.max(0, item.widthRatio) * 100}%`,
+            style={{ ...segmentBounds(item),
               backgroundColor: displayColor(item.color, "canvasTrack"), backgroundImage: item.category === "anonymous" ? ANONYMOUS_ACTIVITY_BACKGROUND : undefined }} />)}
         </div>
         {view.timeline.segments.map(item => <button key={item.id} type="button" className="mini-timeline-segment"
-          style={{ left: `${item.startRatio * 100}%`, width: `${Math.max(0, item.widthRatio) * 100}%` }}
+          style={segmentBounds(item)}
           {...detailProps(item.id, item.label, [{ key: item.id, name: rangeLabel(item.startTime, item.endTime, view.sampledAtMs),
             value: formatMiniActivityDuration(item.duration), color: item.color }])} />)}
       </QuietTimelineTrack>

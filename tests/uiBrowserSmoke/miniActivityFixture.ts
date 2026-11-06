@@ -33,3 +33,9 @@ export function miniActivityFixture(kind: MiniActivityPage, bootstrap: unknown) 
       projectionRowCount: 0, factRowCount: records.length, hasActiveSession: false } : null,
     sessions: kind === "today" || webMode ? [] : sessions, web };
 }
+
+export function combinedMiniActivityFixture(activity: ReturnType<typeof miniActivityFixture>, today: ReturnType<typeof miniActivityFixture>) {
+  return { sampled_at_ms: activity.sampled_at_ms, day_start_ms: today.start_ms, day_end_ms: today.end_ms,
+    recent_start_ms: activity.start_ms, bootstrap: activity.bootstrap, aggregate: today.aggregate,
+    sessions: activity.sessions, icons: activity.icons, web: activity.web };
+}

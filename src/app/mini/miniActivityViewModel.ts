@@ -1,5 +1,4 @@
 import type { MiniActivitySnapshot } from "../../platform/desktop/miniActivityRuntimeGateway.ts";
-import { AppClassification } from "../../shared/classification/appClassification.ts";
 import type { UiText } from "../../shared/i18n/index.ts";
 import type { TrackerHealthSnapshot } from "../../shared/types/tracking.ts";
 import { compileForRange, materializeLiveSessions } from "../../shared/lib/readModelCore.ts";
@@ -7,7 +6,6 @@ import { buildHourlyCategoryActivity } from "../../shared/lib/hourlyActivityComp
 import { buildAppTimelineSources, buildHistoryTimelineViewModelFromSources } from "../../shared/lib/activityTimelineCompiler.ts";
 import { buildHistoryWebTimelineSources, buildWebDomainIconMap, buildWebDomainDistribution } from "../../shared/lib/webActivityViewModel.ts";
 import { resolveAppIconKeys } from "../../shared/classification/appIconIdentity.ts";
-import { applyMiniBootstrapSnapshot } from "./miniBootstrapService.ts";
 
 export function miniActivityIcons(snapshot: MiniActivitySnapshot): Record<string, string> {
   const favicons = snapshot.web ? Object.fromEntries(Object.entries(snapshot.web.overrides)
@@ -22,7 +20,6 @@ export function miniActivityIcons(snapshot: MiniActivitySnapshot): Record<string
 
 export function buildMiniActivityViewModel(snapshot: MiniActivitySnapshot, health: TrackerHealthSnapshot,
   text: UiText, colors: Record<string, string> = {}) {
-  applyMiniBootstrapSnapshot(snapshot.bootstrap);
   const range = { startMs: snapshot.startMs, endMs: Math.min(snapshot.endMs, snapshot.sampledAtMs) };
   const records = snapshot.records.map((row, index) => ({ ...row, id: -index - 1, windowTitle: "",
     duration: row.endTime - row.startTime, continuityGroupStartTime: row.startTime }));
@@ -30,17 +27,13 @@ export function buildMiniActivityViewModel(snapshot: MiniActivitySnapshot, healt
     : materializeLiveSessions(snapshot.sessions, health, snapshot.sampledAtMs), range, 0);
   if (snapshot.kind === "today") {
     const hourly = buildHourlyCategoryActivity(compiled);
-    const categories = hourly.series.filter(item => item.totalMinutes > 0 && item.category !== null)
-      .map(item => ({ key: item.category!, name: AppClassification.getCategoryLabel(item.category!, text),
-        color: item.color, duration: item.totalMinutes * 60_000 }))
-      .sort((a, b) => b.duration - a.duration || a.key.localeCompare(b.key));
     return { kind: "today" as const, sampledAtMs: snapshot.sampledAtMs,
-      total: categories.reduce((total, item) => total + item.duration, 0),
+      total: hourly.series.reduce((total, item) => total + (item.category === null ? 0 : item.totalMinutes * 60_000), 0),
       period: compiled.reduce<{ startMs: number; endMs: number } | null>((period, item) => ({
         startMs: Math.min(period?.startMs ?? item.startTime, item.startTime),
         endMs: Math.max(period?.endMs ?? item.startTime, item.endTime ?? snapshot.sampledAtMs),
       }), null),
-      mode: snapshot.bootstrap.settings.hourlyActivityChartMode, hourly, categories };
+      hourly };
   }
   const icons = miniActivityIcons(snapshot);
   const appColors = { ...colors };

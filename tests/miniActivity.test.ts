@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { parseMiniActivitySnapshot } from "../src/platform/desktop/miniActivityRuntimeGateway.ts";
 import { buildMiniActivityViewModel, miniActivityIcons } from "../src/app/mini/miniActivityViewModel.ts";
+import { applyMiniBootstrapSnapshot } from "../src/app/mini/miniBootstrapService.ts";
 import { getLocaleText } from "../src/shared/i18n/runtime.ts";
 import { ANONYMOUS_ACTIVITY_KEY } from "../src/shared/classification/anonymousActivity.ts";
 import { startHistoryTimelinePreference } from "../src/features/history/services/historyTimelinePreferenceService.ts";
 import type { ActivityTimelineMode } from "../src/shared/settings/activityDisplaySettings.ts";
-import { miniActivityFixture } from "./uiBrowserSmoke/miniActivityFixture.ts";
+import { combinedMiniActivityFixture, miniActivityFixture } from "./uiBrowserSmoke/miniActivityFixture.ts";
 import { CategoryColorRegistry } from "../src/shared/classification/categoryColorRegistry.ts";
 
 const text = getLocaleText("zh-CN");
@@ -37,39 +38,41 @@ const bootstrap = {
     key: `__app_override::${["editor", "browser", "chat", "other"][index]}.exe`, value: JSON.stringify({ category }),
   })), app_links: [], category_settings: [],
 };
-const today = parseMiniActivitySnapshot(miniActivityFixture("today", bootstrap), "today");
+const raw = combinedMiniActivityFixture(miniActivityFixture("activity", bootstrap), miniActivityFixture("today", bootstrap));
+const { today, activity: recent } = parseMiniActivitySnapshot(raw);
+applyMiniBootstrapSnapshot(today.bootstrap);
 const todayView = buildMiniActivityViewModel(today, health, text);
 assert.equal(todayView.kind, "today");
 assert.equal(todayView.total, 206 * 60_000);
 if (todayView.kind !== "today") throw new Error("Unexpected page");
-assert.deepEqual(todayView.categories.map(item => item.duration / 60_000), [118, 46, 28, 14]);
+assert.deepEqual(todayView.hourly.series.map(item => item.totalMinutes), [118, 46, 28, 14]);
 assert.equal(todayView.hourly.points.reduce((sum, point) => sum + point.minutes, 0), 206);
 assert.deepEqual(todayView.period, { startMs: today.sampledAtMs - 206 * 60_000, endMs: today.sampledAtMs });
 assert.equal(buildMiniActivityViewModel({ ...today, records: [] }, health, text).total, 0);
 const emptyToday = buildMiniActivityViewModel({ ...today, records: [] }, health, text);
 assert.equal(emptyToday.kind === "today" && emptyToday.period, null);
 const dayStart = today.startMs;
+const hiddenBootstrap = { ...today.bootstrap, appOverrides: [...today.bootstrap.appOverrides,
+  { key: "__app_override::excluded.exe", value: JSON.stringify({ track: false }) }] };
+applyMiniBootstrapSnapshot(hiddenBootstrap);
 const clippedToday = buildMiniActivityViewModel({ ...today, records: [
   { ...today.records[0], startTime: dayStart - 60_000, endTime: dayStart + 60_000 },
   { ...today.records[1], startTime: dayStart + 120_000, endTime: dayStart + 180_000 },
   { ...today.records[2], exeName: "excluded.exe", startTime: dayStart + 240_000, endTime: dayStart + 300_000 },
-], bootstrap: { ...today.bootstrap, appOverrides: [...today.bootstrap.appOverrides,
-  { key: "__app_override::excluded.exe", value: JSON.stringify({ track: false }) }] } }, health, text);
+], bootstrap: hiddenBootstrap }, health, text);
 if (clippedToday.kind !== "today") throw new Error("Unexpected page");
 assert.equal(clippedToday.total, 120_000, "today excludes previous-day time, gaps and hidden activity");
 assert.deepEqual(clippedToday.period, { startMs: dayStart, endMs: dayStart + 180_000 });
-for (const invalid of [null, {}, { ...miniActivityFixture("today", bootstrap), sampled_at_ms: NaN },
-  { ...miniActivityFixture("today", bootstrap), kind: "activity" },
-  { ...miniActivityFixture("today", bootstrap), aggregate: null }]) {
-  assert.throws(() => parseMiniActivitySnapshot(invalid, "today"));
+for (const invalid of [null, {}, { ...raw, sampled_at_ms: NaN }, { ...raw, recent_start_ms: raw.sampled_at_ms },
+  { ...raw, day_end_ms: raw.sampled_at_ms }, { ...raw, aggregate: null }]) {
+  assert.throws(() => parseMiniActivitySnapshot(invalid));
 }
 console.log("PASS Mini today preserves exact category totals, hourly totals and rejects invalid snapshots");
 
-const recent = parseMiniActivitySnapshot(miniActivityFixture("activity", bootstrap), "activity");
 for (const invalidRow of [{ end_time: 0 }, { duration: -1 }, { origin: { toString: () => "native" } }]) {
-  const raw = miniActivityFixture("activity", bootstrap);
-  assert.throws(() => parseMiniActivitySnapshot({ ...raw, sessions: [{ ...raw.sessions[0], ...invalidRow }] }, "activity"));
+  assert.throws(() => parseMiniActivitySnapshot({ ...raw, sessions: [{ ...raw.sessions[0], ...invalidRow }] }));
 }
+applyMiniBootstrapSnapshot(recent.bootstrap);
 const recentView = buildMiniActivityViewModel(recent, health, text);
 if (recentView.kind !== "activity") throw new Error("Unexpected page");
 assert.equal(recentView.total, 56 * 60_000);
@@ -94,11 +97,11 @@ if (cross.kind !== "activity") throw new Error("Unexpected page");
 assert.ok(cross.timeline.segments[0].startTime < new Date(2026, 9, 28).getTime());
 console.log("PASS Mini rolling hour preserves real gaps and includes the previous local day");
 
+applyMiniBootstrapSnapshot(hiddenBootstrap);
 const privateView = buildMiniActivityViewModel({ ...recent, sessions: [
   { ...recent.sessions[0], exeName: ANONYMOUS_ACTIVITY_KEY, appName: "", windowTitle: "" },
   { ...recent.sessions[1], exeName: "excluded.exe", appName: "Secret" },
-], bootstrap: { ...recent.bootstrap, appOverrides: [...recent.bootstrap.appOverrides,
-  { key: "__app_override::excluded.exe", value: JSON.stringify({ track: false }) }] } }, health, text);
+], bootstrap: hiddenBootstrap }, health, text);
 assert.equal(privateView.total, 36 * 60_000);
 assert.equal(JSON.stringify(privateView).includes("Secret"), false);
 assert.equal(JSON.stringify(privateView).includes("excluded.exe"), false);
@@ -108,20 +111,22 @@ assert.deepEqual(miniActivityIcons({ ...recent, icons: {
 } }), { local: "data:image/png;base64,eA==" });
 console.log("PASS Mini excludes hidden identities and does not request remote icons");
 
-const webRaw = { ...miniActivityFixture("activity", bootstrap), sessions: [], bootstrap: {
+const webRaw = { ...raw, sessions: [], bootstrap: {
   ...bootstrap, settings: { ...bootstrap.settings, history_timeline_mode: "web", web_activity_available: true },
 }, web: { domains: ["a.example.test", "b.example.test"], roots: { "a.example.test": "example.test", "b.example.test": "example.test" },
   rules: { "example.test": { version: 2, exceptions: [], displayName: "Grouped site" } }, overrides: {}, totals: {}, favicons: {},
   segments: ["a", "b"].map((prefix, index) => ({ id: index + 1, domain: `${prefix}.example.test`, normalizedDomain: `${prefix}.example.test`,
     browserClientId: "fixture", browserKind: "chromium", browserExeName: "browser.exe", url: null, title: null,
     startTime: recent.startMs + index * 600_000, endTime: recent.startMs + (index + 1) * 600_000, duration: 600_000 })) } };
-const webView = buildMiniActivityViewModel(parseMiniActivitySnapshot(webRaw, "activity"), health, text);
+const webSnapshot = parseMiniActivitySnapshot(webRaw).activity;
+applyMiniBootstrapSnapshot(webSnapshot.bootstrap);
+const webView = buildMiniActivityViewModel(webSnapshot, health, text);
 if (webView.kind !== "activity") throw new Error("Unexpected page");
 assert.equal(webView.total, 1_200_000);
 assert.equal(webView.leaders.length, 1);
 assert.equal(webView.leaders[0].label, "Grouped site");
 assert.equal(webView.leaders[0].duration, webView.total);
-assert.throws(() => parseMiniActivitySnapshot({ ...webRaw, sessions: miniActivityFixture("activity", bootstrap).sessions }, "activity"));
+assert.throws(() => parseMiniActivitySnapshot({ ...webRaw, sessions: raw.sessions }));
 console.log("PASS Mini website ranking follows grouping without mixing browser application time");
 
 let saved: ActivityTimelineMode = "app";

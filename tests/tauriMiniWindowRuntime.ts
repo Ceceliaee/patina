@@ -11,7 +11,7 @@ import { miniFeedbackSamples } from "./tauriRuntimeOptions.ts";
 interface Diagnostics {
   process_id: number;
   webview_window_labels: string[];
-  mini_window: { detector_ticks: number; workers: number };
+  mini_window: { detector_ticks: number; monitor_queries: number; workers: number };
   process_resources: { handle_count: number; thread_count: number; private_usage_bytes: number; gdi_objects: number; user_objects: number };
   webview_recovery: Array<{ label: string; registration: number; last_failure: string | null }>;
 }
@@ -505,6 +505,9 @@ export async function verifyMiniWindowRuntime(main: CdpConnection, port: number,
     // Status events may read snapshots; the content contract checks timer cleanup.
     await delay(1_000);
     const idleAfter = await diagnostics();
+    const detectorTicks = idleAfter.mini_window.detector_ticks - idleBefore.mini_window.detector_ticks;
+    const monitorQueries = idleAfter.mini_window.monitor_queries - idleBefore.mini_window.monitor_queries;
+    assert.ok(detectorTicks > 0 && monitorQueries < detectorTicks, "stationary Mini must reuse its selected display between environment checks");
     await sampleResources("handle-after");
     stopReads();
     const idleReveals = await evaluate(mini!, `globalThis.__miniIdleObserver.disconnect();globalThis.__miniIdleReveals`);
@@ -562,9 +565,7 @@ export async function verifyMiniWindowRuntime(main: CdpConnection, port: number,
     assert.equal((await state()).epoch, miniEpochBeforeRelease);
     assert.equal(await evaluate(mini!, `Boolean(document.querySelector('.mini-content')) && !document.querySelector('.qp-app-frame')`), true);
     assert.ok(await evaluate(mini!, `window.__TAURI_INTERNALS__.invoke('cmd_get_mini_presentation_snapshot')`), "mini must read current status and tools without main");
-    for (const kind of ["today", "activity"]) {
-      assert.ok(await evaluate(mini!, `window.__TAURI_INTERNALS__.invoke('cmd_get_mini_activity_snapshot',{kind:'${kind}'})`), "Mini statistics must remain readable without main");
-    }
+    assert.ok(await evaluate(mini!, "window.__TAURI_INTERNALS__.invoke('cmd_get_mini_activity_snapshot')"), "Mini statistics must remain readable without main");
     const miniOnlyTree = resourceCycles ? processTree(baseline.process_id) : null;
     await evaluate(mini!, `document.querySelector('button[aria-label="打开主窗口"]').click()`);
     main = await waitFor("mini recreates main on explicit request", () => connectMini(port, "main"), 15_000);

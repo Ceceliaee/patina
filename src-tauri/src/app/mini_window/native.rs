@@ -24,6 +24,9 @@ pub(super) fn monitor<R: Runtime>(
     app: &AppHandle<R>,
     placement: &Placement,
 ) -> Result<Monitor, String> {
+    app.state::<super::MiniWindowState>()
+        .monitor_queries
+        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let monitors = app.available_monitors().map_err(|e| e.to_string())?;
     let saved = placement
         .monitor
@@ -116,6 +119,9 @@ pub(super) fn create<R: Runtime + 'static>(
     let window = builder.build().map_err(|e| e.to_string())?;
     let owner = app.clone();
     window.on_window_event(move |event| {
+        if matches!(event, tauri::WindowEvent::ScaleFactorChanged { .. }) {
+            owner.state::<super::MiniWindowState>().changed.notify_one();
+        }
         if let tauri::WindowEvent::CloseRequested { api, .. } = event {
             api.prevent_close();
             let app = owner.clone();

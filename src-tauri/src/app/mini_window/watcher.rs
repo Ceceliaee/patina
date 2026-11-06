@@ -32,6 +32,7 @@ pub(super) async fn run<R: Runtime + 'static>(app: AppHandle<R>, epoch: u64) {
     owner.workers.fetch_add(1, Ordering::Relaxed);
     let _worker = Worker(&owner.workers);
     let mut last_environment = Instant::now() - Duration::from_secs(1);
+    let mut current_monitor = None;
     let mut power_revision = owner.power_revision.load(Ordering::Acquire);
     loop {
         let interval = {
@@ -73,7 +74,14 @@ pub(super) async fn run<R: Runtime + 'static>(app: AppHandle<R>, epoch: u64) {
                     state.preferences.placement.monitor.clone(),
                     native::rect(&window).ok(),
                 );
-                if let Err(error) = layout(&app, &mut state, false) {
+                let layout_result =
+                    native::monitor(&app, &state.preferences.placement).and_then(|monitor| {
+                        super::layout_on_monitor(&app, &mut state, false, &monitor)?;
+                        current_monitor = Some((native::affinity(&monitor), monitor));
+                        Ok(())
+                    });
+                if let Err(error) = layout_result {
+                    current_monitor = None;
                     changed |= !state.failed;
                     state.failed = true;
                     eprintln!("[mini] layout failed: {error}");
@@ -91,6 +99,7 @@ pub(super) async fn run<R: Runtime + 'static>(app: AppHandle<R>, epoch: u64) {
             } else if state.interaction.dragging {
                 if !crate::platform::windows::input::is_primary_mouse_button_down() {
                     state.interaction.dragging = false;
+                    current_monitor = None;
                     if let Ok((rect, monitor)) = native::rect(&window).and_then(|rect| {
                         native::release_monitor(&app, rect).map(|monitor| (rect, monitor))
                     }) {
@@ -130,11 +139,17 @@ pub(super) async fn run<R: Runtime + 'static>(app: AppHandle<R>, epoch: u64) {
                     || state.menu
                     || state.touch
                     || crate::platform::windows::input::is_primary_mouse_button_down();
-                if let (Ok(monitor), Ok(cursor)) = (
-                    native::monitor(&app, &state.preferences.placement),
-                    app.cursor_position(),
-                ) {
-                    let work = native::affinity(&monitor).work_area;
+                if current_monitor.as_ref().is_none_or(|(affinity, _)| {
+                    state.preferences.placement.monitor.as_ref() != Some(affinity)
+                }) {
+                    current_monitor = native::monitor(&app, &state.preferences.placement)
+                        .ok()
+                        .map(|monitor| (native::affinity(&monitor), monitor));
+                }
+                if let (Some((affinity, monitor)), Ok(cursor)) =
+                    (current_monitor.as_ref(), app.cursor_position())
+                {
+                    let work = affinity.work_area;
                     let point = Point::new(cursor.x.round() as i32, cursor.y.round() as i32);
                     let near = if state.transition.surface_expanded() {
                         native::rect(&window).is_ok_and(|rect| rect.contains_point(point))
@@ -153,7 +168,7 @@ pub(super) async fn run<R: Runtime + 'static>(app: AppHandle<R>, epoch: u64) {
                         )
                     };
                     if state.interaction.tick(near, true, Instant::now()) {
-                        let _ = layout(&app, &mut state, false);
+                        let _ = super::layout_on_monitor(&app, &mut state, false, monitor);
                         changed = true;
                     }
                 }
@@ -170,6 +185,9 @@ pub(super) async fn run<R: Runtime + 'static>(app: AppHandle<R>, epoch: u64) {
                 Duration::from_millis(75)
             }
         };
-        tokio::select! { _ = tokio::time::sleep(interval) => {}, _ = owner.changed.notified() => {} }
+        tokio::select! {
+            _ = tokio::time::sleep(interval) => (),
+            _ = owner.changed.notified() => current_monitor = None,
+        }
     }
 }

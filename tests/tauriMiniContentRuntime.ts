@@ -69,12 +69,11 @@ export async function verifyMiniContentRuntime(client: CdpConnection, miniClient
   await miniClient.command("Page.reload", { ignoreCache: true });
   await waitFor("Mini page survives WebView restart", () => evaluate(miniClient,
     `Boolean(document.querySelector('[data-mini-page="activity"]'))`), 10_000);
-  for (const kind of ["today", "activity"]) {
-    const snapshot = await invokeMini("cmd_get_mini_activity_snapshot", { kind }) as { kind: string; sampled_at_ms: number; bootstrap: unknown };
-    assert.equal(snapshot.kind, kind);
-    assert.ok(Number.isSafeInteger(snapshot.sampled_at_ms));
-    assert.ok(snapshot.bootstrap);
-  }
+  const snapshot = await invokeMini("cmd_get_mini_activity_snapshot") as { sampled_at_ms: number; recent_start_ms: number; day_start_ms: number; day_end_ms: number; bootstrap: unknown; aggregate: unknown };
+  assert.ok(Number.isSafeInteger(snapshot.sampled_at_ms));
+  assert.equal(snapshot.recent_start_ms, snapshot.sampled_at_ms - 3_600_000);
+  assert.ok(snapshot.day_start_ms <= snapshot.sampled_at_ms && snapshot.sampled_at_ms < snapshot.day_end_ms);
+  assert.ok(snapshot.bootstrap && snapshot.aggregate);
   await assert.rejects(() => evaluate(client, `window.__TAURI_INTERNALS__.invoke('cmd_get_mini_activity_snapshot',{kind:'today'})`));
   await assert.rejects(() => invokeMini("cmd_commit_app_settings", { mutations: [{ key: "history_timeline_mode", value: "app" }] }));
   await assert.rejects(() => invokeMini("cmd_migrate_history_timeline_mode", { legacyMode: "app" }));

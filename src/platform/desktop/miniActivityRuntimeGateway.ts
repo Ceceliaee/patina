@@ -8,37 +8,45 @@ import { parseMiniBootstrapSnapshot } from "./miniContentRuntimeGateway.ts";
 
 export type MiniActivityPage = "today" | "activity";
 
-export function parseMiniActivitySnapshot(value: unknown, kind: MiniActivityPage) {
-  if (!isPlainRecord(value) || value.kind !== kind || !Number.isSafeInteger(value.sampled_at_ms)
-    || !Number.isSafeInteger(value.start_ms) || !Number.isSafeInteger(value.end_ms)
-    || !isPlainRecord(value.icons) || !Object.values(value.icons).every(icon => typeof icon === "string")) {
-    throw new Error("Invalid Mini activity snapshot");
-  }
-  const sampledAtMs = value.sampled_at_ms as number;
-  const startMs = value.start_ms as number;
-  const endMs = value.end_ms as number;
-  const bootstrap = parseMiniBootstrapSnapshot(value.bootstrap);
-  if (!bootstrap || sampledAtMs < 0 || startMs > sampledAtMs || endMs < sampledAtMs || startMs >= endMs
-    || (kind === "today" && endMs === sampledAtMs)
-    || (kind === "activity" && (endMs !== sampledAtMs || startMs !== Math.max(0, sampledAtMs - 3_600_000)))) {
-    throw new Error("Invalid Mini activity range");
-  }
-  const aggregate = kind === "today" ? parseActivityAggregateRange(value.aggregate) : null;
-  const web = kind === "activity" && bootstrap.timelineMode === "web" ? parseWebGroupedRange(value.web, sampledAtMs) : null;
-  const sessions = parseHistoryRangeRows(value.sessions, sampledAtMs);
-  if ((kind === "today" && (sessions.length || value.web !== null))
-    || (kind === "activity" && value.aggregate !== null)
-    || (kind === "activity" && bootstrap.timelineMode !== "web" && value.web !== null)
-    || (web && sessions.length)) throw new Error("Mixed Mini activity sources");
-  return { kind, sampledAtMs, startMs, endMs, bootstrap, sessions, web,
-    records: aggregate?.records.map(row => row.anonymous ? { ...row, exeName: ANONYMOUS_ACTIVITY_KEY } : row) ?? [],
-    sourceRevision: aggregate?.sourceRevision ?? null,
-    icons: value.icons as Record<string, string>,
-  };
+export interface MiniActivitySnapshot {
+  kind: MiniActivityPage;
+  sampledAtMs: number;
+  startMs: number;
+  endMs: number;
+  bootstrap: NonNullable<ReturnType<typeof parseMiniBootstrapSnapshot>>;
+  sessions: ReturnType<typeof parseHistoryRangeRows>;
+  web: ReturnType<typeof parseWebGroupedRange> | null;
+  records: ReturnType<typeof parseActivityAggregateRange>["records"];
+  icons: Record<string, string>;
 }
 
-export type MiniActivitySnapshot = ReturnType<typeof parseMiniActivitySnapshot>;
+export function parseMiniActivitySnapshot(raw: unknown) {
+  if (!isPlainRecord(raw) || ![raw.sampled_at_ms, raw.day_start_ms, raw.day_end_ms, raw.recent_start_ms].every(Number.isSafeInteger)
+    || !isPlainRecord(raw.icons) || !Object.values(raw.icons).every(icon => typeof icon === "string")) {
+    throw new Error("Invalid Mini activity snapshot");
+  }
+  const sampledAtMs = raw.sampled_at_ms as number;
+  const dayStart = raw.day_start_ms as number;
+  const dayEnd = raw.day_end_ms as number;
+  const recentStart = raw.recent_start_ms as number;
+  const bootstrap = parseMiniBootstrapSnapshot(raw.bootstrap);
+  if (!bootstrap || sampledAtMs < 0 || dayStart > sampledAtMs || dayEnd <= sampledAtMs
+    || recentStart !== Math.max(0, sampledAtMs - 3_600_000) || recentStart >= sampledAtMs) {
+    throw new Error("Invalid Mini activity range");
+  }
+  const aggregate = parseActivityAggregateRange(raw.aggregate);
+  const sessions = parseHistoryRangeRows(raw.sessions, sampledAtMs);
+  const web = bootstrap.timelineMode === "web" ? parseWebGroupedRange(raw.web, sampledAtMs) : null;
+  if ((web && sessions.length) || (!web && raw.web !== null)) throw new Error("Mixed Mini activity sources");
+  const records = aggregate.records.map(row => row.anonymous ? { ...row, exeName: ANONYMOUS_ACTIVITY_KEY } : row);
+  const common = { sampledAtMs, bootstrap };
+  const today: MiniActivitySnapshot = { ...common, kind: "today", startMs: dayStart, endMs: dayEnd, sessions: [], web: null,
+    records, icons: {} };
+  const activity: MiniActivitySnapshot = { ...common, kind: "activity", startMs: recentStart, endMs: sampledAtMs,
+    sessions, web, records: [], icons: raw.icons as Record<string, string> };
+  return { activity, today };
+}
 
-export async function getMiniActivitySnapshot(kind: MiniActivityPage): Promise<MiniActivitySnapshot> {
-  return parseMiniActivitySnapshot(await invoke<unknown>("cmd_get_mini_activity_snapshot", { kind }), kind);
+export async function getMiniActivitySnapshot() {
+  return parseMiniActivitySnapshot(await invoke<unknown>("cmd_get_mini_activity_snapshot"));
 }

@@ -5,12 +5,11 @@ use tauri::{AppHandle, Runtime, WebviewWindow};
 pub async fn cmd_get_mini_activity_snapshot(
     app: AppHandle,
     window: WebviewWindow,
-    kind: crate::data::repositories::mini_activity::MiniActivityKind,
 ) -> Result<crate::data::repositories::mini_activity::MiniActivitySnapshot, String> {
     if window.label() != "mini" {
         return Err("Mini window access denied".into());
     }
-    crate::data::mini_window_store::load_activity(&app, kind).await
+    crate::data::mini_window_store::load_activity(&app).await
 }
 
 #[tauri::command]

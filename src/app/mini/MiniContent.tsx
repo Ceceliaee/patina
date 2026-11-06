@@ -9,5 +9,5 @@ export default function MiniContent({ tracking }: {
   if (!tracking.presentationReady) return <div className="mini-content mini-empty" role={tracking.presentationFailed ? "alert" : "status"}>
     {tracking.presentationFailed ? <><span>{text.miniWindow.failed}</span><button className="qp-button qp-button-secondary" onClick={tracking.retry}>{text.common.retry}</button></> : text.common.loading}
   </div>;
-  return <MiniActivityContent page="activity" health={tracking.trackerHealth} />;
+  return <MiniActivityContent health={tracking.trackerHealth} />;
 }

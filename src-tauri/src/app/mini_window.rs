@@ -16,6 +16,7 @@ pub struct MiniWindowState {
     inner: Mutex<Session>,
     changed: Notify,
     pub(super) detector_ticks: AtomicU64,
+    monitor_queries: AtomicU64,
     pub(super) workers: AtomicU64,
     power: AtomicU8,
     power_revision: AtomicU64,
@@ -26,12 +27,14 @@ pub(crate) use watcher::register_power_handler;
 #[derive(Clone, Debug, Serialize)]
 pub struct Diagnostics {
     pub detector_ticks: u64,
+    pub monitor_queries: u64,
     pub workers: u64,
 }
 impl MiniWindowState {
     pub fn diagnostics(&self) -> Diagnostics {
         Diagnostics {
             detector_ticks: self.detector_ticks.load(Ordering::Relaxed),
+            monitor_queries: self.monitor_queries.load(Ordering::Relaxed),
             workers: self.workers.load(Ordering::Relaxed),
         }
     }
@@ -183,13 +186,22 @@ pub async fn open<R: Runtime + 'static>(app: &AppHandle<R>) -> Result<(), String
 }
 
 fn layout<R: Runtime>(app: &AppHandle<R>, state: &mut Session, focus: bool) -> Result<(), String> {
+    let monitor = native::monitor(app, &state.preferences.placement)?;
+    layout_on_monitor(app, state, focus, &monitor)
+}
+
+fn layout_on_monitor<R: Runtime>(
+    app: &AppHandle<R>,
+    state: &mut Session,
+    focus: bool,
+    monitor: &tauri::Monitor,
+) -> Result<(), String> {
     let window = app
         .get_webview_window("mini")
         .ok_or("Mini window is closed")?;
-    let monitor = native::monitor(app, &state.preferences.placement)?;
-    let affinity = native::affinity(&monitor);
+    let affinity = native::affinity(monitor);
     let suppressed = app.state::<MiniWindowState>().power.load(Ordering::Acquire) != 0
-        || native::fullscreen(&window, &monitor);
+        || native::fullscreen(&window, monitor);
     if suppressed != state.suppressed {
         state.reset_protection();
         state.interaction.dragging = false;

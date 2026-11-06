@@ -27,7 +27,7 @@ public static class MiniProbe {
   public static System.Threading.Tasks.Task<string> ReadLineAsync() { return System.Threading.Tasks.Task.Run(() => Console.ReadLine()); }
   [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr context);
   [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
-  [DllImport("user32.dll")] public static extern bool SetPhysicalCursorPos(int x,int y);
+  [DllImport("user32.dll", SetLastError=true)] public static extern bool SetPhysicalCursorPos(int x,int y);
   [DllImport("user32.dll", SetLastError=true)] public static extern IntPtr OpenInputDesktop(uint flags,bool inherit,uint access);
   [DllImport("user32.dll")] public static extern bool CloseDesktop(IntPtr desktop);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern bool GetUserObjectInformation(IntPtr handle,int index,StringBuilder info,uint length,out uint needed);
@@ -92,6 +92,14 @@ $form.Width=320; $form.Height=180
 $form.ShowInTaskbar=$false
 $form.Show()
 $backdropBounds=$form.Bounds; $backdropBorder=$form.FormBorderStyle; $backdropColor=$form.BackColor
+function Move-MiniProbeCursor([int]$x,[int]$y) {
+  $placed=New-Object MiniProbe+Point
+  $moved=[MiniProbe]::SetPhysicalCursorPos($x,$y)
+  $errorCode=[Runtime.InteropServices.Marshal]::GetLastWin32Error()
+  if (-not [MiniProbe]::GetPhysicalCursorPos([ref]$placed) -or $placed.X -ne $x -or $placed.Y -ne $y) {
+    throw "Input position unavailable: expected ($x,$y), observed ($($placed.X),$($placed.Y)), SetPhysicalCursorPos=$moved win32=$errorCode; stopping injection"
+  }
+}
 function Focus-MiniProbeInput {
   $form.Show()
   $form.TopMost=$true
@@ -104,8 +112,11 @@ function Focus-MiniProbeInput {
     $point.X=[int](($bounds.Left+$bounds.Right)/2); $point.Y=[int](($bounds.Top+$bounds.Bottom)/2)
     $hit=[MiniProbe]::WindowFromPoint($point)
     if ($hit -ne $form.Handle -and -not [MiniProbe]::IsChild($form.Handle,$hit)) { throw 'Input environment unavailable: owned focus target is covered' }
+    $form.Activate()
+    [System.Windows.Forms.Application]::DoEvents()
     $previousForeground=[MiniProbe]::GetForegroundWindow()
-    if (-not [MiniProbe]::SetPhysicalCursorPos($point.X,$point.Y)) { throw 'Cannot move to owned input target' }
+    Move-MiniProbeCursor $point.X $point.Y
+    if ($previousForeground -eq $form.Handle) { return }
     [MiniProbe]::mouse_event(2,0,0,0,[UIntPtr]::Zero)
     [MiniProbe]::mouse_event(4,0,0,0,[UIntPtr]::Zero)
     # Mouse activation is queued; observe its completion without injecting another click.
@@ -151,7 +162,16 @@ try {
       [void][MiniProbe]::SendMessage($powerHandle,$message,[IntPtr]$value,[IntPtr]::Zero)
     }
     if ($request.op -eq 'native-close') { [void][MiniProbe]::SendMessage($miniHandle,0x112,[IntPtr]0xF060,[IntPtr]::Zero) }
-    if ($request.op -eq 'move' -or $request.op -eq 'down' -or $request.op -eq 'up') { [void][MiniProbe]::SetPhysicalCursorPos([int]$request.x,[int]$request.y) }
+    if ($request.op -in @('move','down','up')) { Move-MiniProbeCursor $request.x $request.y }
+    if ($request.op -eq 'down') {
+      $point=New-Object MiniProbe+Point; $point.X=$request.x; $point.Y=$request.y
+      $hit=[MiniProbe]::WindowFromPoint($point); [uint32]$hitPid=0
+      [void][MiniProbe]::GetWindowThreadProcessId($hit,[ref]$hitPid)
+      $webviewChild=$miniHandle -ne [IntPtr]::Zero -and [MiniProbe]::IsChild($miniHandle,$hit)
+      if ($hitPid -ne ${processId} -and -not $webviewChild -and $hit -ne $form.Handle -and -not [MiniProbe]::IsChild($form.Handle,$hit)) {
+        throw 'Input precondition changed: button target is outside the isolated windows; stopping injection'
+      }
+    }
     if ($request.op -eq 'down') { $buttonDown=$true; [MiniProbe]::mouse_event(2,0,0,0,[UIntPtr]::Zero) }
     if ($request.op -eq 'up') { [MiniProbe]::mouse_event(4,0,0,0,[UIntPtr]::Zero); $buttonDown=$false }
     if ($request.op -eq 'focus') { Focus-MiniProbeInput; $inputStarted=$true }

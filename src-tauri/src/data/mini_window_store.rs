@@ -4,12 +4,15 @@ use tauri::{AppHandle, Runtime};
 
 pub async fn load_activity<R: Runtime>(
     app: &AppHandle<R>,
-    kind: super::repositories::mini_activity::MiniActivityKind,
 ) -> Result<super::repositories::mini_activity::MiniActivitySnapshot, String> {
     let pool = wait_for_sqlite_pool(app).await?;
     let now = crate::platform::clock::unix_timestamp_millis_i64();
     let day = crate::platform::clock::local_day_range_at(now)?;
-    super::repositories::mini_activity::load(&pool, kind, now, day).await
+    let snapshot = super::repositories::mini_activity::load(&pool, now, day).await?;
+    if snapshot.aggregate.maintenance_pending {
+        super::activity_read_model::wake_worker(app);
+    }
+    Ok(snapshot)
 }
 
 pub async fn load<R: Runtime>(app: &AppHandle<R>) -> Result<Preferences, String> {

@@ -4,10 +4,11 @@ import { onAppSettingsChanged } from "../../platform/runtime/appSettingsEventGat
 import { onTrackingDataChanged } from "../../platform/runtime/trackingRuntimeGateway.ts";
 import { prewarmIconThemeColors } from "../../shared/hooks/useIconThemeColors.ts";
 import { useLocaleText } from "../../shared/i18n/index.ts";
+import { applyMiniBootstrapSnapshot } from "./miniBootstrapService.ts";
 import type { TrackerHealthSnapshot } from "../../shared/types/tracking.ts";
 import { buildMiniActivityViewModel, miniActivityIcons, type MiniActivityViewModel } from "./miniActivityViewModel.ts";
 
-export function useMiniActivity(page: "activity", health: TrackerHealthSnapshot) {
+export function useMiniActivity(health: TrackerHealthSnapshot) {
   const text = useLocaleText();
   const [content, setContent] = useState<{
     view: MiniActivityViewModel;
@@ -41,23 +42,20 @@ export function useMiniActivity(page: "activity", health: TrackerHealthSnapshot)
         try {
           const startedAt = Date.now();
           const startedTick = performance.now();
-          const startedDay = new Date(startedAt).toDateString();
-          const startedOffset = new Date(startedAt).getTimezoneOffset();
-          const [snapshot, dailySnapshot] = await Promise.all([
-            getMiniActivitySnapshot(page),
-            getMiniActivitySnapshot("today"),
-          ]);
+          const startedDate = new Date(startedAt);
+          const { activity: snapshot, today: dailySnapshot } = await getMiniActivitySnapshot();
           const colors = await prewarmIconThemeColors(miniActivityIcons(snapshot));
           if (!active || version !== generation) continue;
           const finishedAt = Date.now();
-          if (new Date(finishedAt).toDateString() !== startedDay
-            || new Date(finishedAt).getTimezoneOffset() !== startedOffset
-            || Math.abs(finishedAt - startedAt - (performance.now() - startedTick)) > 2_000
-            || (snapshot.sampledAtMs < dailySnapshot.startMs || snapshot.sampledAtMs >= dailySnapshot.endMs)) {
+          const finishedDate = new Date(finishedAt);
+          if (finishedDate.toDateString() !== startedDate.toDateString()
+            || finishedDate.getTimezoneOffset() !== startedDate.getTimezoneOffset()
+            || Math.abs(finishedAt - startedAt - (performance.now() - startedTick)) > 2_000) {
             setContent(null);
             dirty = true;
             continue;
           }
+          applyMiniBootstrapSnapshot(snapshot.bootstrap);
           const today = buildMiniActivityViewModel(dailySnapshot, healthRef.current, text);
           if (today.kind !== "today") throw new Error("Missing Mini daily summary");
           const next = buildMiniActivityViewModel(snapshot, healthRef.current, text, colors);
@@ -92,6 +90,6 @@ export function useMiniActivity(page: "activity", health: TrackerHealthSnapshot)
       if (active) { setFailed(true); console.warn("mini:activity-subscription", error); }
     });
     return () => { active = false; generation += 1; clearTimeout(timer); unlisteners.forEach(off => off()); };
-  }, [page, text, retryVersion]);
+  }, [text, retryVersion]);
   return { view: content?.view ?? null, today: content?.today ?? null, failed, retry: () => setRetryVersion(value => value + 1) };
 }
