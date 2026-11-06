@@ -943,7 +943,7 @@ export const LOCALE_SOURCE_REVIEWS = {
     "tools.activityReminderDelete": "db398b4ff7d37bf8",
     "tools.activityReminderEditTitle": "c39e1591236d8409",
     "tools.reminderEditTitle": "1feb8aa838fd94b7",
-    "tools.usageLimitSummary": "c801908d30c5977e",
+    "tools.usageLimitSummary": "bb4898342d6f5582",
     "tools.reminderSnooze": "691f873790f2f6cb",
     "tools.reminderConfirmComplete": "4de0ef1dfeac7943",
     "tools.reminderCompleted": "cd008a306777a18a",
@@ -1011,7 +1011,12 @@ export const LOCALE_SOURCE_REVIEWS = {
     "mapping.deletionSharedReminders": "ca33f561a556328d",
     "mapping.deletionPendingChanges": "daffc9f95be74319",
     "mapping.objectDeleted": "8cf90ef8839bb186",
-    "mapping.deleteObjectDetail": "b7945f27d33937d0"
+    "mapping.deleteObjectDetail": "b7945f27d33937d0",
+    "tools.focusDetails": "0a18ea3692d0c99f",
+    "tools.focusHistoryEmpty": "c637e27239c198db",
+    "tools.focusHistoryError": "ee8509e191f98aae",
+    "tools.focusHistoryOpen": "e4f73c35da043ee9",
+    "tools.focusHistoryEnded": "5f5887c7e4471247"
   },
   "es": {
     "about.description": "9e6291ff14b79ed3",
@@ -1956,7 +1961,7 @@ export const LOCALE_SOURCE_REVIEWS = {
     "tools.activityReminderDelete": "db398b4ff7d37bf8",
     "tools.activityReminderEditTitle": "c39e1591236d8409",
     "tools.reminderEditTitle": "1feb8aa838fd94b7",
-    "tools.usageLimitSummary": "c801908d30c5977e",
+    "tools.usageLimitSummary": "bb4898342d6f5582",
     "tools.reminderSnooze": "691f873790f2f6cb",
     "tools.reminderConfirmComplete": "4de0ef1dfeac7943",
     "tools.reminderCompleted": "cd008a306777a18a",
@@ -2024,7 +2029,12 @@ export const LOCALE_SOURCE_REVIEWS = {
     "mapping.deletionSharedReminders": "ca33f561a556328d",
     "mapping.deletionPendingChanges": "daffc9f95be74319",
     "mapping.objectDeleted": "8cf90ef8839bb186",
-    "mapping.deleteObjectDetail": "b7945f27d33937d0"
+    "mapping.deleteObjectDetail": "b7945f27d33937d0",
+    "tools.focusDetails": "0a18ea3692d0c99f",
+    "tools.focusHistoryEmpty": "c637e27239c198db",
+    "tools.focusHistoryError": "ee8509e191f98aae",
+    "tools.focusHistoryOpen": "e4f73c35da043ee9",
+    "tools.focusHistoryEnded": "5f5887c7e4471247"
   },
   "ru-RU": {
     "about.description": "9e6291ff14b79ed3",
@@ -2969,7 +2979,7 @@ export const LOCALE_SOURCE_REVIEWS = {
     "tools.activityReminderDelete": "db398b4ff7d37bf8",
     "tools.activityReminderEditTitle": "c39e1591236d8409",
     "tools.reminderEditTitle": "1feb8aa838fd94b7",
-    "tools.usageLimitSummary": "c801908d30c5977e",
+    "tools.usageLimitSummary": "bb4898342d6f5582",
     "tools.reminderSnooze": "691f873790f2f6cb",
     "tools.reminderConfirmComplete": "4de0ef1dfeac7943",
     "tools.reminderCompleted": "cd008a306777a18a",
@@ -3037,6 +3047,11 @@ export const LOCALE_SOURCE_REVIEWS = {
     "mapping.deletionSharedReminders": "ca33f561a556328d",
     "mapping.deletionPendingChanges": "daffc9f95be74319",
     "mapping.objectDeleted": "8cf90ef8839bb186",
-    "mapping.deleteObjectDetail": "b7945f27d33937d0"
+    "mapping.deleteObjectDetail": "b7945f27d33937d0",
+    "tools.focusDetails": "0a18ea3692d0c99f",
+    "tools.focusHistoryEmpty": "c637e27239c198db",
+    "tools.focusHistoryError": "ee8509e191f98aae",
+    "tools.focusHistoryOpen": "e4f73c35da043ee9",
+    "tools.focusHistoryEnded": "5f5887c7e4471247"
   }
 } as const;

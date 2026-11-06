@@ -1,5 +1,10 @@
 // zh-CN tools locale resource. Pure data only.
 export const MESSAGES = {
+  "tools.focusDetails": "任务详情",
+  "tools.focusHistoryEmpty": "暂无专注记录",
+  "tools.focusHistoryError": "专注记录读取失败",
+  "tools.focusHistoryOpen": "进行中",
+  "tools.focusHistoryEnded": "已结束",
   "tools.notificationGroup": "通知",
   "tools.notificationDelivery": "通知方式",
   "tools.notificationSoftware": "软件通知",
@@ -69,7 +74,7 @@ export const MESSAGES = {
   "tools.usageExtendToday": "今日使用不受限",
   "tools.usageExtensionDuration": "延时时长",
   "tools.usageExtendTitle": {"$type": "message", "body": {"$op": "concat", "parts": ["延时使用「", {"$op": "arg", "name": "value"}, "」"]}},
-  "tools.usageLimitSummary": {"$type": "message", "body": {"$op": "concat", "parts": ["已使用 ", {"$op": "arg", "name": "value"}, "，可用时长到达限制"]}},
+  "tools.usageLimitSummary": {"$type": "message", "body": {"$op": "concat", "parts": ["已使用 ", {"$op": "arg", "name": "value"}, "，到达限制"]}},
   "tools.actionFailed": "操作失败，可稍后重试。",
   "tools.activityReminderCandidatesLoadFailed": "目标不可用。",
   "tools.activityReminderDisable": "停用",

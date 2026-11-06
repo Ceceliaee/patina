@@ -1,5 +1,10 @@
 // es locale resource. Pure data only.
 export const MESSAGES = {
+  "tools.focusDetails": "Detalles de la tarea",
+  "tools.focusHistoryEmpty": "Aún no hay historial de concentración",
+  "tools.focusHistoryError": "No se pudo cargar el historial",
+  "tools.focusHistoryOpen": "En curso",
+  "tools.focusHistoryEnded": "Finalizada antes de tiempo",
   "tools.notificationGroup": "Notificaciones",
   "tools.notificationDelivery": "Tipo de notificación",
   "tools.notificationSoftware": "Notificación de la app",

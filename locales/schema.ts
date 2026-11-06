@@ -29,6 +29,11 @@ export const MESSAGE_SCHEMA = {
   "tools.pomodoroTimingSettings": {"kind": "string", "params": [], "surface": "frontend", "description": "Popover for per-task focus and break durations."},
   "tools.pomodoroTimingSummary": {"kind": "message", "params": [{"name": "minutes", "type": "number", "optional": false}, {"name": "rounds", "type": "integer", "optional": false}], "surface": "frontend", "description": "Compact focus duration and number of rounds before a long break."},
 
+  "tools.focusDetails": {"kind": "string", "params": [], "surface": "frontend", "description": "Focus history dialog and accessible action."},
+  "tools.focusHistoryEmpty": {"kind": "string", "params": [], "surface": "frontend", "description": "Focus task has no recorded intervals."},
+  "tools.focusHistoryError": {"kind": "string", "params": [], "surface": "frontend", "description": "Failed to read a task's focus history."},
+  "tools.focusHistoryOpen": {"kind": "string", "params": [], "surface": "frontend", "description": "An ongoing session or interval."},
+  "tools.focusHistoryEnded": {"kind": "string", "params": [], "surface": "frontend", "description": "Session ended before completion."},
   "tools.pomodoroTaskCreate": {"kind": "string", "params": [], "surface": "frontend", "description": "Pomodoro task list: pomodoroTaskCreate."},
   "tools.pomodoroTaskEdit": {"kind": "string", "params": [], "surface": "frontend", "description": "Pomodoro task list: pomodoroTaskEdit."},
   "tools.pomodoroTaskName": {"kind": "string", "params": [], "surface": "frontend", "description": "Pomodoro task list: pomodoroTaskName."},

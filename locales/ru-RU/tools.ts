@@ -1,5 +1,10 @@
 // ru-RU locale resource. Pure data only.
 export const MESSAGES = {
+  "tools.focusDetails": "Подробности задачи",
+  "tools.focusHistoryEmpty": "Записей пока нет",
+  "tools.focusHistoryError": "Не удалось загрузить историю",
+  "tools.focusHistoryOpen": "В процессе",
+  "tools.focusHistoryEnded": "Завершено досрочно",
   "tools.notificationGroup": "Уведомления",
   "tools.notificationDelivery": "Способ уведомления",
   "tools.notificationSoftware": "Уведомление приложения",

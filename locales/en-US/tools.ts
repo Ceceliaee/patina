@@ -1,5 +1,10 @@
 // en-US tools locale resource. Pure data only.
 export const MESSAGES = {
+  "tools.focusDetails": "Task details",
+  "tools.focusHistoryEmpty": "No focus history yet",
+  "tools.focusHistoryError": "Could not load focus history",
+  "tools.focusHistoryOpen": "In progress",
+  "tools.focusHistoryEnded": "Ended",
   "tools.notificationGroup": "Notifications",
   "tools.notificationDelivery": "Notification style",
   "tools.notificationSoftware": "App notification",
