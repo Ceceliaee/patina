@@ -10,7 +10,7 @@ export async function runToolNotificationScenarios({ client, sessionId, runTest,
         localStorage.setItem('__time_tracker_smoke_settings',JSON.stringify({language:'zh-CN',theme_mode:'dark'}));
         location.href=${JSON.stringify(appUrl + "?__patinaWindow=tool-notification")}`);
       await waitForExpression(client, sessionId, `document.documentElement.dataset.windowLabel==='tool-notification' && typeof globalThis.__PATINA_EMIT_TAURI_EVENT==='function'`);
-      await client.command("Emulation.setDeviceMetricsOverride", { width: 404, height: 240, deviceScaleFactor: 1.5, mobile: false }, sessionId);
+      await client.command("Emulation.setDeviceMetricsOverride", { width: 364, height: 240, deviceScaleFactor: 1.5, mobile: false }, sessionId);
       await evaluate(client, sessionId, `globalThis.__PATINA_TIMED_REMINDER_CASE = {
         settings: {pomodoro_focus_minutes:25,pomodoro_short_break_minutes:5,pomodoro_long_break_minutes:15,pomodoro_long_break_every:4},
         reminders:[{id:1,label:'Notification',created_at:1,scheduled_at:1000,status:'pending_confirmation',fired_at:1000,cancelled_at:null}],
@@ -20,8 +20,26 @@ export async function runToolNotificationScenarios({ client, sessionId, runTest,
       assert.deepEqual(await evaluate(client, sessionId, `({width:document.querySelector('.tools-timed-alert-surface').getBoundingClientRect().width,
         passive:document.activeElement===document.body,role:document.querySelector('.tools-timed-alert-surface').getAttribute('role'),
         main:!!document.querySelector('main.qp-canvas'), background:getComputedStyle(document.querySelector('.qp-dialog-backdrop')).backgroundColor})`),
-      { width: 400, passive: true, role: "region", main: false, background: "rgba(0, 0, 0, 0)" });
+      { width: 360, passive: true, role: "region", main: false, background: "rgba(0, 0, 0, 0)" });
       const click = (text: string) => evaluate(client, sessionId, `[...document.querySelectorAll('.tools-usage-alert-surface button')].find(b=>b.textContent===${JSON.stringify(text)}).click()`);
+      const timedGeometry = () => evaluate(client, sessionId, `new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => {
+        const card = document.querySelector('.tools-timed-alert-surface');
+        resolve({height: Math.ceil(card.getBoundingClientRect().height), bottom: innerHeight - card.querySelector('footer').getBoundingClientRect().bottom,
+          request: globalThis.__PATINA_INVOKED_COMMANDS.filter(c => c.command === 'cmd_tool_presentation_ready').at(-1).payload});
+      })))`) as Promise<{height:number; bottom:number; request:{height:number; canvasHeight:number}}>;
+      const initialTimedGeometry = await timedGeometry();
+      for (const action of ["稍后提醒", "取消", "稍后提醒", "取消"]) {
+        await click(action);
+        const choosing = action === "稍后提醒";
+        await waitForExpression(client, sessionId, choosing ? `document.activeElement?.value==='5'` : `document.activeElement?.textContent==='稍后提醒'`);
+        const geometry = await timedGeometry();
+        assert.equal(geometry.request.height, geometry.height, "window requests the current step's natural height");
+        assert.equal(geometry.request.canvasHeight, initialTimedGeometry.request.canvasHeight, "only the visible region should resize");
+        assert.equal(geometry.bottom, initialTimedGeometry.bottom, "footer stays anchored while the window resizes");
+        if (choosing) assert.ok(geometry.height > initialTimedGeometry.height);
+        else assert.equal(geometry.height, initialTimedGeometry.height);
+        assert.equal(await evaluate(client, sessionId, `getComputedStyle(document.querySelector('.tools-usage-steps > :not([inert]) .qp-dialog-title')).textAlign`), choosing ? "start" : "center");
+      }
       await click("稍后提醒");
       await waitForExpression(client, sessionId, `document.activeElement?.value==='5'`);
       await evaluate(client, sessionId, `document.querySelector('input[value="15"]').click(); globalThis.__PATINA_TIMED_REMINDER_ACTION_CASE={error:'failure'};
@@ -33,13 +51,60 @@ export async function runToolNotificationScenarios({ client, sessionId, runTest,
       await waitForExpression(client, sessionId, `globalThis.__PATINA_INVOKED_COMMANDS.filter(c=>c.command==='cmd_tool_presentation_ready').at(-1)?.payload.height>240`);
       const height = await evaluate(client, sessionId, `globalThis.__PATINA_INVOKED_COMMANDS.filter(c=>c.command==='cmd_tool_presentation_ready').at(-1).payload.height`) as number;
       assert.ok(height > 240, "expanded choices and errors must request additional native height");
-      await client.command("Emulation.setDeviceMetricsOverride", { width: 404, height: height + 4, deviceScaleFactor: 1.5, mobile: false }, sessionId);
+      const unclipped = `(() => {
+        const surface = document.querySelector('.tools-usage-alert-surface');
+        const backdrop = surface.parentElement;
+        return surface.scrollHeight <= surface.clientHeight &&
+          getComputedStyle(backdrop).scrollbarWidth === 'none' &&
+          surface.querySelector('footer').getBoundingClientRect().bottom <= surface.getBoundingClientRect().bottom;
+      })()`;
+      assert.equal(await evaluate(client, sessionId, unclipped), true, "measure the entire notification even before the window grows");
+      await client.command("Emulation.setDeviceMetricsOverride", { width: 424, height: height + 4, deviceScaleFactor: 1.5, mobile: false }, sessionId);
       await evaluate(client, sessionId, `globalThis.__PATINA_TIMED_REMINDER_ACTION_CASE={}`);
       await click("确认");
       await waitForExpression(client, sessionId, `document.querySelector('.tools-usage-alert-name')?.textContent==='Example'`);
-      await waitForExpression(client, sessionId, `globalThis.__PATINA_INVOKED_COMMANDS.filter(c=>c.command==='cmd_tool_presentation_ready').at(-1).payload.width===486`);
-      await client.command("Emulation.setDeviceMetricsOverride", { width: 490, height: 400, deviceScaleFactor: 2, mobile: false }, sessionId);
-      assert.equal(await evaluate(client, sessionId, `document.querySelector('.tools-usage-alert-surface').getBoundingClientRect().width`), 486);
+      await client.command("Emulation.setDeviceMetricsOverride", { width: 424, height: 400, deviceScaleFactor: 2, mobile: false }, sessionId);
+      let firstHeight: number | undefined;
+      let canvasHeight: number | undefined;
+      let footerBottom: number | undefined;
+      for (const step of ["limit", "extend", "limit", "extend", "limit"]) {
+        if (step === "extend") await click("延时使用");
+        else if (firstHeight !== undefined) await click("取消");
+        await waitForExpression(client, sessionId, `document.querySelector('.tools-usage-alert-${step}')?.getBoundingClientRect().width===420`);
+        if (step === "extend") {
+          const reads = await evaluate(client, sessionId, `globalThis.__PATINA_INVOKED_COMMANDS.filter(c => c.command === 'cmd_get_tool_presentation').length`) as number;
+          await evaluate(client, sessionId, `globalThis.__PATINA_EMIT_TAURI_EVENT('tool-presentation-changed', null)`);
+          await waitForExpression(client, sessionId, `globalThis.__PATINA_INVOKED_COMMANDS.filter(c => c.command === 'cmd_get_tool_presentation').length > ${reads}`);
+        }
+        await waitForExpression(client, sessionId, `globalThis.__PATINA_INVOKED_COMMANDS.filter(c=>c.command==='cmd_tool_presentation_ready').at(-1)?.payload.height===Math.ceil(document.querySelector('.tools-usage-alert-${step}').getBoundingClientRect().height)`);
+        const requestedHeight = await evaluate(client, sessionId, `Math.ceil(document.querySelector('.tools-usage-alert-${step}').getBoundingClientRect().height)`) as number;
+        firstHeight ??= requestedHeight;
+        if (step === "extend") assert.ok(requestedHeight > firstHeight, "extension choices expand the visible card");
+        else assert.equal(requestedHeight, firstHeight, "cancelling restores the compact card");
+        const requestedCanvas = await evaluate(client, sessionId, `globalThis.__PATINA_INVOKED_COMMANDS.filter(c=>c.command==='cmd_tool_presentation_ready').at(-1).payload.canvasHeight`) as number;
+        canvasHeight ??= requestedCanvas;
+        assert.equal(requestedCanvas, canvasHeight, "visible height changes without resizing the native canvas");
+        await client.command("Emulation.setDeviceMetricsOverride", { width: 424, height: canvasHeight + 4, deviceScaleFactor: 2, mobile: false }, sessionId);
+        assert.equal(await evaluate(client, sessionId, `${unclipped} && document.querySelector('.qp-dialog-surface').getBoundingClientRect().bottom <= innerHeight`), true);
+        const bottom = await evaluate(client, sessionId, `document.querySelector('.qp-dialog-actions').getBoundingClientRect().bottom`) as number;
+        footerBottom ??= bottom;
+        assert.equal(bottom, footerBottom, "the action buttons keep their position");
+        assert.deepEqual(await evaluate(client, sessionId, `(() => {
+          const panel = document.querySelector('.tools-usage-steps > :not([inert])');
+          const title = panel.querySelector('.qp-dialog-title');
+          const group = panel.parentElement.getBoundingClientRect();
+          const rect = panel.getBoundingClientRect();
+          return {
+            targetVisible: document.querySelector('.tools-usage-alert-identity').checkVisibility({ visibilityProperty: true }),
+            alignment: getComputedStyle(title).textAlign,
+            centeredVertically: Math.abs(rect.top + rect.bottom - group.top - group.bottom) <= 1,
+            titleFirst: panel.firstElementChild === title,
+          };
+        })()`), step === "limit"
+          ? { targetVisible: true, alignment: "center", centeredVertically: true, titleFirst: false }
+          : { targetVisible: false, alignment: "start", centeredVertically: true, titleFirst: true });
+      }
+      assert.equal(await evaluate(client, sessionId, `globalThis.__PATINA_INVOKED_COMMANDS.filter(c=>c.command==='cmd_tool_presentation_ready').every(c=>c.payload.width===420)`), true);
       const commands = await evaluate(client, sessionId, `globalThis.__PATINA_INVOKED_COMMANDS.map(c=>c.command)`) as string[];
       for (const command of ["cmd_get_tools_snapshot", "cmd_get_dashboard_snapshot", "cmd_get_setting_rows", "cmd_get_activity_reminder_web_candidates"]) assert.ok(!commands.includes(command), `notification must not load ${command}`);
     } finally {

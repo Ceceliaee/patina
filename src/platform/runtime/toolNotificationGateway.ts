@@ -32,6 +32,6 @@ export function onToolPresentationChanged(handler: () => void) {
 export function actOnToolPresentation(alertId: string, action: ToolPresentationAction): Promise<void> {
   return invoke("cmd_tool_presentation_action", { alertId, action });
 }
-export function markToolPresentationReady(alertId: string, width: number, height: number): Promise<void> {
-  return invoke("cmd_tool_presentation_ready", { alertId, width, height });
+export function markToolPresentationReady(alertId: string, width: number, height: number, canvasHeight?: number): Promise<void> {
+  return invoke("cmd_tool_presentation_ready", { alertId, width, height, canvasHeight });
 }

@@ -39,13 +39,13 @@ export async function runTimedReminderScenarios({ client, sessionId, runTest }: 
       assert.deepEqual(await evaluate(client, sessionId, `(() => {
         const dialog = document.querySelector('.tools-timed-alert-surface');
         return { width: getComputedStyle(dialog).width, heading: dialog.querySelector('.qp-dialog-title').textContent,
-          icon: !!dialog.querySelector('svg'), buttons: [...dialog.querySelectorAll('button')].map(b=>b.textContent),
+          icon: !!dialog.querySelector('.tools-usage-steps > :not([inert]) svg'), buttons: [...dialog.querySelectorAll('button')].map(b=>b.textContent),
           time: dialog.querySelector('p').textContent.startsWith('提醒时间：') };
-      })()`), { width: '400px', heading: '起来活动一下', icon: false, buttons: ['稍后提醒', '确认完成'], time: true });
+      })()`), { width: '420px', heading: '起来活动一下', icon: false, buttons: ['稍后提醒', '确认完成'], time: true });
       await click('稍后提醒');
       await waitForExpression(client, sessionId, `document.activeElement?.value === '5'`);
       assert.deepEqual(await evaluate(client, sessionId, `({ width: getComputedStyle(document.querySelector('.tools-timed-alert-surface')).width,
-        options: [...document.querySelectorAll('.tools-usage-alert-option span')].map(item=>item.textContent) })`), { width: '400px', options: ['5 分钟后', '15 分钟后', '30 分钟后'] });
+        options: [...document.querySelectorAll('.tools-usage-alert-option span')].map(item=>item.textContent) })`), { width: '420px', options: ['5 分钟后', '15 分钟后', '30 分钟后'] });
       const point = await evaluate(client, sessionId, `(() => { const r = document.querySelectorAll('.tools-usage-alert-option')[1].getBoundingClientRect(); return { x:r.x+20, y:r.y+20 }; })()`) as {x:number; y:number};
       await client.command('Input.dispatchMouseEvent', { type:'mouseMoved', ...point }, sessionId);
       assert.equal(await evaluate(client, sessionId, `getComputedStyle(document.querySelectorAll('.tools-usage-alert-option')[1]).backgroundColor`), 'rgba(0, 0, 0, 0)');

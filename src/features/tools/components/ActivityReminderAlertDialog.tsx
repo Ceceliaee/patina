@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AppWindow, Check, Globe, Layers } from "lucide-react";
 import QuietButton from "../../../shared/components/QuietButton.tsx";
 import QuietDialog from "../../../shared/components/QuietDialog.tsx";
@@ -42,8 +42,12 @@ export default function ActivityReminderAlertDialog({ details, onAction, notific
     }).catch(() => {});
     return () => { disposed = true; };
   }, [domain]);
-  useEffect(() => {
-    if (step === "extend") selectedRef.current?.focus();
+  const previousStep = useRef(step);
+  useLayoutEffect(() => {
+    if (previousStep.current === step) return;
+    previousStep.current = step;
+    const target = step === "extend" ? selectedRef.current : extendRef.current;
+    target?.focus({ preventScroll: true });
   }, [step]);
 
   const duration = (ms: number) => formatUsageDuration(ms / 60_000, locale);
@@ -51,10 +55,11 @@ export default function ActivityReminderAlertDialog({ details, onAction, notific
   const targetIcon = icon ? <img src={icon} alt="" draggable={false} />
     : details.target.kind === "category" ? <Layers size={28} />
       : details.target.kind === "web" ? <Globe size={28} /> : <AppWindow size={28} />;
-  const cancelExtension = () => {
+  const toggleExtension = () => {
     if (busyRef.current) return;
-    setStep("limit"); setError(null);
-    requestAnimationFrame(() => extendRef.current?.focus());
+    if (step === "limit") setExtension("fifteen_minutes");
+    setStep(step === "limit" ? "extend" : "limit");
+    setError(null);
   };
   const act = async (action: "extend" | "desktop" | "dismiss") => {
     if (busyRef.current) return;
@@ -76,33 +81,39 @@ export default function ActivityReminderAlertDialog({ details, onAction, notific
   return <QuietDialog
     open
     autoFocus={!notification}
-    title={step === "extend" ? text.tools.usageExtendTitle(details.targetLabel) : <>
-      <span className="tools-usage-alert-identity"><span className="tools-usage-alert-icon" aria-hidden>{targetIcon}</span>
-        <span className="tools-usage-alert-name">{details.targetLabel}</span></span>
-      <span>{text.tools.usageLimitReached}</span>
-    </>}
-    surfaceClassName={`tools-usage-alert-surface tools-usage-alert-${step}`}
+    title={<span className="sr-only">{step === "extend" ? text.tools.usageExtendTitle(details.targetLabel)
+      : `${details.targetLabel} ${text.tools.usageLimitReached}`}</span>}
+    surfaceClassName={`tools-usage-alert-surface tools-usage-steps-dialog tools-usage-alert-${step}`}
     closeOnBackdrop={false}
     initialFocusRef={desktopRef}
-    onClose={() => { if (!busyRef.current) { if (step === "extend") cancelExtension(); else void act("dismiss"); } }}
-    actions={step === "limit" ? <>
-      <QuietButton ref={extendRef} size="large" disabled={busy} onClick={() => { setExtension("fifteen_minutes"); setStep("extend"); setError(null); }}>{text.tools.usageExtend}</QuietButton>
-      <QuietButton ref={desktopRef} tone="primary" size="large" busy={busy} onClick={() => void act("desktop")}>{text.tools.usageReturnDesktop}</QuietButton>
-    </> : <>
-      <QuietButton size="large" disabled={busy} onClick={cancelExtension}>{text.common.cancel}</QuietButton>
-      <QuietButton tone="primary" size="large" busy={busy} onClick={() => void act("extend")}>{text.common.confirm}</QuietButton>
+    onClose={() => { if (step === "extend") toggleExtension(); else void act("dismiss"); }}
+    actions={<>
+      <QuietButton ref={extendRef} size="large" disabled={busy} onClick={toggleExtension}>
+        {step === "limit" ? text.tools.usageExtend : text.common.cancel}
+      </QuietButton>
+      <QuietButton ref={desktopRef} tone="primary" size="large" busy={busy} onClick={() => void act(step === "limit" ? "desktop" : "extend")}>
+        {step === "limit" ? text.tools.usageReturnDesktop : text.common.confirm}
+      </QuietButton>
     </>}
   >
-    {step === "limit" ? <p className="tools-usage-alert-summary">{text.tools.usageLimitSummary(duration(details.usageMs))}</p> : null}
-    {step === "extend" ?
-      <fieldset className="tools-usage-alert-options" aria-label={text.tools.usageExtensionDuration} disabled={busy}>
-        {choices.map(choice => <label key={choice.value} className="tools-usage-alert-option">
-          <span>{choice.label}</span>
-          <input ref={choice.value === extension ? selectedRef : undefined} type="radio" name="usage-extension" value={choice.value} checked={extension === choice.value} onChange={() => setExtension(choice.value)} />
-          <Check className="tools-usage-alert-option-check" size={18} aria-hidden />
-        </label>)}
-      </fieldset>
-      : null}
+    <div className="tools-usage-steps">
+      <div className="tools-usage-step-limit" inert={step !== "limit"}>
+        <div className="tools-usage-alert-identity"><span className="tools-usage-alert-icon" aria-hidden>{targetIcon}</span>
+          <span className="tools-usage-alert-name">{details.targetLabel}</span></div>
+        <div className="qp-dialog-title">{text.tools.usageLimitReached}</div>
+        <p className="tools-usage-alert-summary">{text.tools.usageLimitSummary(duration(details.usageMs))}</p>
+      </div>
+      <div inert={step !== "extend"}>
+        <div className="qp-dialog-title">{text.tools.usageExtendTitle(details.targetLabel)}</div>
+        <fieldset className="tools-usage-alert-options" aria-label={text.tools.usageExtensionDuration} disabled={busy}>
+          {choices.map(choice => <label key={choice.value} className="tools-usage-alert-option">
+            <span>{choice.label}</span>
+            <input ref={choice.value === extension ? selectedRef : undefined} type="radio" name="usage-extension" value={choice.value} checked={extension === choice.value} onChange={() => setExtension(choice.value)} />
+            <Check className="tools-usage-alert-option-check" size={18} aria-hidden />
+          </label>)}
+        </fieldset>
+      </div>
+    </div>
     {error ? <p className="tools-usage-alert-error" role="alert">{error}</p> : null}
   </QuietDialog>;
 }

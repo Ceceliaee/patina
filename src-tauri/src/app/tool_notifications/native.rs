@@ -55,17 +55,27 @@ pub(super) fn create<R: Runtime + 'static>(app: &AppHandle<R>) -> Result<(), Str
     Ok(())
 }
 
-pub(super) fn show<R: Runtime>(app: &AppHandle<R>, width: f64, height: f64) -> Result<(), String> {
+pub(super) fn show<R: Runtime>(
+    app: &AppHandle<R>,
+    width: f64,
+    height: f64,
+    canvas_height: Option<f64>,
+) -> Result<(), String> {
     if !width.is_finite() || !(1.0..=4096.0).contains(&width) {
         return Err("Invalid notification width".into());
     }
     if !height.is_finite() || !(1.0..=4096.0).contains(&height) {
         return Err("Invalid notification height".into());
     }
+    let canvas_height = canvas_height.unwrap_or(height);
+    if !canvas_height.is_finite() || !(height..=4096.0).contains(&canvas_height) {
+        return Err("Invalid notification canvas height".into());
+    }
     let window = app
         .get_webview_window(WINDOW_LABEL)
         .ok_or("Notification window is unavailable")?;
-    let monitor = if window.is_visible().unwrap_or(false) {
+    let visible = window.is_visible().map_err(|e| e.to_string())?;
+    let monitor = if visible {
         window.current_monitor().ok().flatten()
     } else {
         crate::platform::windows::notification_window::foreground_point()
@@ -75,19 +85,33 @@ pub(super) fn show<R: Runtime>(app: &AppHandle<R>, width: f64, height: f64) -> R
     .ok_or("No notification display available")?;
     let area = monitor.work_area();
     let scale = monitor.scale_factor();
-    let rect = placement(
-        PhysicalRect::new(
-            area.position.x,
-            area.position.y,
-            area.size.width,
-            area.size.height,
-        ),
-        scale,
-        width,
-        height,
+    let area = PhysicalRect::new(
+        area.position.x,
+        area.position.y,
+        area.size.width,
+        area.size.height,
     );
-    crate::platform::windows::window_activation::position_without_activation(&window, rect)?;
-    crate::platform::windows::notification_window::show_without_activation(&window)
+    let canvas = placement(area, scale, width, canvas_height);
+    let card = placement(area, scale, width, height);
+    let positioned = window
+        .outer_position()
+        .ok()
+        .zip(window.outer_size().ok())
+        .is_some_and(|(p, s)| {
+            (p.x, p.y, s.width, s.height) == (canvas.x, canvas.y, canvas.width, canvas.height)
+        });
+    if !positioned {
+        crate::platform::windows::window_activation::position_without_activation(&window, canvas)?;
+    }
+    // Clip both paint and mouse input to the card. Switching steps can then reuse the WebView at its original size.
+    crate::platform::windows::window_activation::clip_without_activation(
+        &window,
+        PhysicalRect::new(0, card.y - canvas.y, card.width, card.height),
+    )?;
+    if !visible {
+        crate::platform::windows::notification_window::show_without_activation(&window)?;
+    }
+    Ok(())
 }
 
 fn placement(area: PhysicalRect, scale: f64, width: f64, height: f64) -> PhysicalRect {

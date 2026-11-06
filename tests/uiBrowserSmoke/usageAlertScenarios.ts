@@ -40,13 +40,13 @@ export async function runUsageAlertScenarios({ client, sessionId, runTest }: Bro
       `);
       await waitForExpression(client!, sessionId, `!!document.querySelector('.tools-usage-alert-limit')`);
       const usageBackground = await evaluate(client!, sessionId, `getComputedStyle(document.querySelector('.tools-usage-alert-surface')).backgroundColor`);
-      assert.equal(await evaluate(client!, sessionId, `document.querySelector('.tools-usage-alert-summary').textContent`), "已使用 2 小时 43 分钟，可用时长到达限制");
+      assert.equal(await evaluate(client!, sessionId, `document.querySelector('.tools-usage-alert-summary').textContent`), "已使用 2 小时 43 分钟，到达限制");
       assert.equal(await evaluate(client!, sessionId, `document.querySelector('.tools-usage-alert-surface').innerText.includes('Old notification body')`), false);
       assert.equal(await evaluate(client!, sessionId, `document.querySelector('.tools-usage-alert-surface').innerText.includes('Rest a little')`), false);
       assert.equal(await evaluate(client!, sessionId, `document.querySelectorAll('.tools-usage-alert-limit .qp-dialog-body p').length`), 1);
       await click(text.tools.usageExtend);
       await waitForExpression(client!, sessionId, `document.activeElement?.value === 'fifteen_minutes'`);
-      assert.equal(await evaluate(client!, sessionId, `document.querySelectorAll('.tools-usage-alert-extend .qp-dialog-body p').length`), 0);
+      assert.equal(await evaluate(client!, sessionId, `document.querySelector('.tools-usage-alert-extend .tools-usage-alert-summary').closest('[inert]') !== null`), true);
       assert.equal(await evaluate(client!, sessionId, `document.querySelectorAll('.tools-usage-alert-option').length`), 3);
       await waitForMarkedChoice("fifteen_minutes");
       assert.equal(await evaluate(client!, sessionId, `getComputedStyle(document.querySelector('.tools-usage-alert-surface')).backgroundColor`), usageBackground);

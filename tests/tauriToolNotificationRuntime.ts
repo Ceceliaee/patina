@@ -68,16 +68,25 @@ export async function verifyToolNotificationRuntime(session: RuntimeSession) {
     assert.equal(await connectMini(session.devtoolsPort, "main"), null);
     const button = await evaluate(notification!, `(() => { const r=document.querySelector('.tools-usage-alert-surface button').getBoundingClientRect(); return {x:r.x+r.width/2,y:r.y+r.height/2,width:innerWidth}; })()`) as {x:number;y:number;width:number};
     const surface = await probe.request("sample");
-    const x = Math.round(surface.x + button.x * surface.width / button.width);
-    const y = Math.round(surface.y + button.y * surface.width / button.width);
+    const x = Math.round(surface.canvas.x + button.x * surface.canvas.width / button.width);
+    const y = Math.round(surface.canvas.y + button.y * surface.canvas.width / button.width);
     const hit = await probe.request("move", x, y);
     assert.equal(hit.hitMini, true, "native pointer must target the owned notification");
     await probe.request("down", x, y); await probe.request("up", x, y);
     await waitFor("native click opens snooze choices", () => evaluate(notification!, "document.activeElement?.value==='5'"));
-    assert.equal((await probe.request("sample")).foreground, surface.mini);
+    const expanded = await waitFor("snooze expands upward from the same bottom edge", async () => {
+      const sample = await probe.request("sample");
+      return sample.height > surface.height && sample.y + sample.height === surface.y + surface.height ? sample : null;
+    });
+    assert.equal(expanded.foreground, surface.mini);
+    assert.deepEqual(expanded.canvas, surface.canvas, "the WebView canvas stays fixed as the visible card grows");
     await notification!.command("Input.dispatchKeyEvent", {type:"keyDown",key:"Escape",windowsVirtualKeyCode:27});
     await notification!.command("Input.dispatchKeyEvent", {type:"keyUp",key:"Escape",windowsVirtualKeyCode:27});
-    await waitFor("Escape returns from snooze without confirmation", () => evaluate(notification!, "!document.querySelector('input[name=\"reminder-delay\"]')"));
+    await waitFor("Escape returns from snooze without confirmation", () => evaluate(notification!, "!!document.querySelector('input[name=\"reminder-delay\"]')?.closest('[inert]') && document.activeElement === document.querySelector('.qp-dialog-actions button')"));
+    await waitFor("cancelling snooze restores the original notification bounds", async () => {
+      const sample = await probe.request("sample");
+      return sample.visible && sample.height === surface.height && sample.y === surface.y;
+    });
     await probe.request("focus");
     for (let failure = 0; failure < 3; failure++) {
       const crashStart = session.logs.length;

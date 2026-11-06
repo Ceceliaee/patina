@@ -41,6 +41,7 @@ pub async fn cmd_tool_presentation_ready(
     alert_id: String,
     width: f64,
     height: f64,
+    canvas_height: Option<f64>,
 ) -> Result<(), String> {
     tool_notifications::ready(
         window.app_handle(),
@@ -48,6 +49,7 @@ pub async fn cmd_tool_presentation_ready(
         &alert_id,
         width,
         height,
+        canvas_height,
     )
     .await
 }

@@ -326,6 +326,7 @@ pub async fn ready<R: Runtime + 'static>(
     id: &str,
     width: f64,
     height: f64,
+    canvas_height: Option<f64>,
 ) -> Result<(), String> {
     let state = app.state::<State>();
     let _gate = state.gate.lock().await;
@@ -341,7 +342,7 @@ pub async fn ready<R: Runtime + 'static>(
         (!inner.announced).then_some(inner.sound)
     };
     if label == WINDOW_LABEL {
-        native::show(app, width, height)?;
+        native::show(app, width, height, canvas_height)?;
     } else if !app
         .get_webview_window("main")
         .is_some_and(|w| w.is_visible().unwrap_or(false))
