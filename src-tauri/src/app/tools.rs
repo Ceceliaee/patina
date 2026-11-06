@@ -54,6 +54,14 @@ fn store<R: Runtime>(app: &AppHandle<R>) -> SqliteToolsStore<R> {
     SqliteToolsStore::new(app.clone())
 }
 
+pub(crate) async fn focus_history<R: Runtime>(
+    app: &AppHandle<R>,
+    kind: crate::domain::focus_history::FocusKind,
+    id: i64,
+) -> Result<Vec<crate::domain::focus_history::FocusGroup>, String> {
+    store(app).focus_history(kind, id).await
+}
+
 pub(crate) async fn free_focus<R: Runtime>(
     app: &AppHandle<R>,
     action: crate::domain::free_focus::FreeFocusAction,

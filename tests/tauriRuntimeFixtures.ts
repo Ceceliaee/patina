@@ -31,7 +31,7 @@ export function verifyDatabase(dbPath: string) {
     "db.close()",
     "assert integrity == 'ok', integrity",
     "assert value == ('77',), value",
-    "assert migration == (26,), migration",
+    "assert migration == (27,), migration",
     "assert states == {'app_catalog': 'ready', 'activity_hourly': 'ready'}, states",
     "assert scheduled == (0, 'weekly', 5, 1260, 1), scheduled",
     "assert {'target_kind', 'target_identity'} <= scheduled_columns, scheduled_columns",
@@ -45,7 +45,7 @@ export function verifyDatabase(dbPath: string) {
     "assert {'logical_start_date', 'logical_end_date', 'phase', 'status', 'sha256'} <= scheduled_export_run_columns, scheduled_export_run_columns",
     "assert {'recorded_app_catalog', 'activity_hourly_effective', 'activity_summary_dirty_ranges', 'app_catalog_dirty_keys', 'web_activity_revision', 'scheduled_backup_config', 'scheduled_backup_runs', 'scheduled_export_config', 'scheduled_export_runs', 'tool_activity_reminder_states', 'tool_reminder_recurrences'} <= tables, tables",
     "assert not {'tool_timers', 'tool_timer_laps'} & tables, tables",
-    "assert {'tool_pomodoro_tasks', 'tool_pomodoro_task_completions', 'tool_free_focus'} <= tables, tables",
+    "assert {'tool_pomodoro_tasks', 'tool_pomodoro_task_completions', 'tool_free_focus', 'focus_history_groups', 'focus_history_spans'} <= tables, tables",
   ].join("; ");
   const result = spawnSync("python", ["-c", script, dbPath], { encoding: "utf8", windowsHide: true, timeout: 30_000 });
   assert.equal(result.status, 0, `database verification failed: ${result.error?.message || result.stderr || result.stdout}`);

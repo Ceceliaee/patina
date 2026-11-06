@@ -101,6 +101,7 @@ fn register_managed_state_and_plugins(
         .manage(crate::app::scheduled_export::ScheduledExportRuntimeState::default())
         .plugin(autostart_plugin())
         .manage(crate::data::sqlite_pool::AppSqlitePool::default())
+        .manage(crate::data::activity_read_model::ReadModelWake::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -169,6 +170,7 @@ fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Build
         commands::import::cmd_list_import_batches,
         commands::import::cmd_delete_import_batch,
         commands::tools::cmd_get_tools_snapshot,
+        commands::tools::cmd_get_focus_history,
         commands::tools::cmd_get_tool_alerts,
         commands::tools::cmd_dismiss_tool_alert,
         commands::tools::cmd_extend_activity_reminder,

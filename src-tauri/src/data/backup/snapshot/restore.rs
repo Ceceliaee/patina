@@ -132,8 +132,10 @@ pub(super) async fn merge_snapshot_backup(
         i64::MAX,
     )
     .await;
+    let history_result = repositories::tools::focus_history::for_backup(&candidate_pool).await;
     candidate_pool.close().await;
 
+    let mut history = history_result?;
     let records = records_result?;
     let activity_rules = activity_rules_result?;
     let import_backup = import_result?;
@@ -145,7 +147,9 @@ pub(super) async fn merge_snapshot_backup(
         .begin()
         .await
         .map_err(|error| format!("failed to start snapshot merge transaction: {error}"))?;
+    repositories::tools::focus_history::detach_existing_tasks(&mut tx, &mut history).await?;
     merge_backup_records_in_tx(&mut tx, &records).await?;
+    repositories::tools::focus_history::restore(&mut tx, &history).await?;
     crate::data::repositories::tools::merge_activity_reminder_rules(&mut tx, &activity_rules)
         .await?;
     merge_external_import_backup_in_tx(&mut tx, &import_backup).await?;

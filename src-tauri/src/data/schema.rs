@@ -45,6 +45,7 @@ pub const POMODORO_TASKS_MIGRATION_VERSION: i64 = 23;
 pub const POMODORO_COMPLETIONS_MIGRATION_VERSION: i64 = 24;
 pub const FREE_FOCUS_MIGRATION_VERSION: i64 = 25;
 pub const REMINDER_IDENTITY_MIGRATION_VERSION: i64 = 26;
+pub const FOCUS_HISTORY_VERSION: i64 = 27;
 pub const REMINDER_IDENTITY_SQL: &str = "
 CREATE TABLE IF NOT EXISTS tool_reminder_identities (
  reminder_id INTEGER PRIMARY KEY REFERENCES tool_reminders(id) ON DELETE CASCADE,
@@ -1327,6 +1328,11 @@ pub fn tracker_migrations() -> Vec<Migration> {
             version: REMINDER_IDENTITY_MIGRATION_VERSION,
             description: "stable timed reminder restore identity",
             sql: REMINDER_IDENTITY_SQL,
+        },
+        Migration {
+            version: FOCUS_HISTORY_VERSION,
+            description: "record focus task history",
+            sql: include_str!("focus_history.sql"),
         },
     ]
 }

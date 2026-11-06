@@ -13,6 +13,15 @@ impl<R: Runtime> SqliteToolsStore<R> {
         Self { app }
     }
 
+    pub(crate) async fn focus_history(
+        &self,
+        kind: crate::domain::focus_history::FocusKind,
+        id: i64,
+    ) -> Result<Vec<crate::domain::focus_history::FocusGroup>, String> {
+        let pool = wait_for_sqlite_pool(&self.app).await?;
+        tools::focus_history::read(&pool, kind, id).await
+    }
+
     async fn tick_with_pool(
         &self,
         now_ms: i64,

@@ -40,6 +40,7 @@ const APP_COMMANDS: &[&str] = &[
     "cmd_list_import_batches",
     "cmd_delete_import_batch",
     "cmd_get_tools_snapshot",
+    "cmd_get_focus_history",
     "cmd_get_tool_alerts",
     "cmd_dismiss_tool_alert",
     "cmd_extend_activity_reminder",

@@ -372,6 +372,7 @@ pub(super) async fn validate_current_schema(pool: &Pool<Sqlite>) -> Result<(), S
         || !crate::data::schema_contracts::has_web_activity_session_schema(pool).await?
         || !crate::data::schema_contracts::has_activity_reminder_enabled_schema(pool).await?
         || !crate::data::schema_contracts::has_reminder_identity_schema(pool).await?
+        || !crate::data::schema_contracts::has_focus_history(pool).await?
         || !crate::data::schema_contracts::has_reminder_recurrence_schema(pool).await?
         || !crate::data::schema_contracts::has_activity_reminder_extensions_schema(pool).await?
     {

@@ -114,6 +114,19 @@ pub struct StartPomodoroDto {
 }
 
 #[tauri::command]
+pub async fn cmd_get_focus_history(
+    window: tauri::WebviewWindow,
+    kind: crate::domain::focus_history::FocusKind,
+    id: i64,
+) -> Result<Vec<crate::domain::focus_history::FocusGroup>, String> {
+    use tauri::Manager;
+    if window.label() != "main" {
+        return Err("only the main window can read focus history".into());
+    }
+    tools::focus_history(window.app_handle(), kind, id).await
+}
+
+#[tauri::command]
 pub async fn cmd_get_tools_snapshot(app: AppHandle) -> Result<ToolsRuntimeSnapshot, String> {
     tools::get_snapshot(&app).await
 }

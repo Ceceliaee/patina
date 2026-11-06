@@ -37,6 +37,34 @@ pub async fn has_reminder_recurrence_schema(pool: &Pool<Sqlite>) -> Result<bool,
         && columns.contains("recurrence_anchor_at"))
 }
 
+pub async fn has_focus_history(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let groups = table_columns(pool, "focus_history_groups").await?;
+    let spans = table_columns(pool, "focus_history_spans").await?;
+    if !["group_key", "kind", "task_id", "started_at", "outcome"]
+        .iter()
+        .all(|c| groups.contains(*c))
+        || ![
+            "id",
+            "group_key",
+            "phase",
+            "cycle",
+            "rounds",
+            "started_at",
+            "ended_at",
+            "phase_finished_at",
+        ]
+        .iter()
+        .all(|c| spans.contains(*c))
+    {
+        return Ok(false);
+    }
+    sqlx::query_scalar("SELECT COUNT(*)=9 FROM sqlite_master WHERE type='trigger' AND name IN
+        ('focus_history_pomodoro_insert','focus_history_pomodoro_resume','focus_history_pomodoro_transition',
+        'focus_history_free_insert','focus_history_free_resume','focus_history_free_transition',
+        'focus_history_pomodoro_delete','focus_history_pomodoro_tombstone','focus_history_free_delete')")
+        .fetch_one(pool).await.map_err(|e| e.to_string())
+}
+
 pub async fn has_reminder_identity_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
     let columns = table_columns(pool, "tool_reminder_identities").await?;
     if !columns.contains("reminder_id") || !columns.contains("restore_key") {
@@ -414,10 +442,15 @@ pub(super) async fn schema_revision_limit(pool: &Pool<Sqlite>) -> Result<usize, 
             revision_limit == crate::data::schema::POMODORO_COMPLETIONS_MIGRATION_VERSION as usize
                 && has_free_focus_schema(pool).await?,
         );
-    Ok(revision_limit
+    let revision_limit = revision_limit
         + usize::from(
             revision_limit == crate::data::schema::FREE_FOCUS_MIGRATION_VERSION as usize
                 && has_reminder_identity_schema(pool).await?,
+        );
+    Ok(revision_limit
+        + usize::from(
+            revision_limit == crate::data::schema::REMINDER_IDENTITY_MIGRATION_VERSION as usize
+                && has_focus_history(pool).await?,
         ))
 }
 

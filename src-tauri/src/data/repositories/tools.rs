@@ -10,6 +10,7 @@ mod activity_reminders;
 #[cfg(test)]
 mod activity_unique_target_tests;
 mod backup_restore;
+pub(crate) mod focus_history;
 pub(crate) mod free_focus;
 pub(crate) mod notification_preferences;
 pub(crate) mod pomodoro_tasks;

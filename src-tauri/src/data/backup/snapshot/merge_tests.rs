@@ -331,6 +331,19 @@ async fn running_focus_merge_seals_elapsed_at_backup_without_displacing_target()
             .await
             .unwrap();
     assert_eq!(active, ["Local"]);
+    let imported: Vec<(i64, i64)> = sqlx::query_as(
+        "SELECT s.started_at,s.ended_at FROM focus_history_spans s
+        JOIN focus_history_groups g USING(group_key) JOIN tool_free_focus f ON g.task_id=f.id
+        WHERE g.kind='free' AND f.label='Fresh'",
+    )
+    .fetch_all(&target)
+    .await
+    .unwrap();
+    assert_eq!(
+        imported,
+        [(1000, 601000)],
+        "repeated merge keeps one interval on its remapped task"
+    );
     target.close().await;
 }
 
@@ -344,7 +357,7 @@ async fn pre_identity_snapshot_replay_preserves_independent_reminders() {
     crate::data::sqlite_pool::prepare_pool_schema(&source, &path)
         .await
         .unwrap();
-    source.execute("DROP TRIGGER trg_tool_reminder_identity; DROP TABLE tool_reminder_identities; DELETE FROM _sqlx_migrations WHERE version=26;
+    source.execute("DROP TRIGGER trg_tool_reminder_identity; DROP TABLE tool_reminder_identities; DELETE FROM _sqlx_migrations WHERE version>=26;
         INSERT INTO tool_reminders(label,scheduled_at,created_at,status) VALUES ('A',60000,1000,'scheduled'),('A',60000,1000,'scheduled');").await.unwrap();
     let archive = dir.0.join("old.zip");
     write_snapshot_archive(&source, &archive, "test")

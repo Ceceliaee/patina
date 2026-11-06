@@ -113,7 +113,7 @@ async fn legacy_activity_reminder_index_upgrade_preserves_data_and_is_repeatable
                 .fetch_one(&pool)
                 .await
                 .unwrap(),
-            schema::REMINDER_IDENTITY_MIGRATION_VERSION
+            schema::FOCUS_HISTORY_VERSION
         );
         assert_eq!(
             sqlx::query_scalar::<_, String>("SELECT label FROM tool_reminders")
@@ -309,7 +309,7 @@ async fn version_14_upgrade_adds_range_statistics_without_rewriting_existing_mig
                 .fetch_one(&pool)
                 .await
                 .unwrap(),
-            schema::REMINDER_IDENTITY_MIGRATION_VERSION
+            schema::FOCUS_HISTORY_VERSION
         );
         assert_eq!(
             sqlx::query_scalar::<_, i64>("SELECT SUM(duration) FROM sessions")

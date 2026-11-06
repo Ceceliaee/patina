@@ -59,6 +59,12 @@ export async function verifyMiniToolStatusRuntime(session: RuntimeSession) {
     await invoke("cmd_pomodoro_task", { action: { kind: "pause", id: timerId } });
     await fit(1);
     await invoke("cmd_pomodoro_task", { action: { kind: "resume", id: timerId } });
+    const groups = await invoke("cmd_get_focus_history", {kind:"pomodoro", id:timerId}) as Array<{spans:Array<{startedAt:number;endedAt:number|null}>}>;
+    assert.equal(groups.length, 1);
+    assert.equal(groups[0].spans.length, 2);
+    assert.ok(groups[0].spans[0].endedAt !== null && groups[0].spans[0].endedAt <= groups[0].spans[1].startedAt);
+    assert.equal(groups[0].spans[1].endedAt, null);
+    await assert.rejects(() => invokeMini("cmd_get_focus_history",{kind:"pomodoro", id:timerId}));
     await fit(2);
     await invoke("cmd_cancel_reminder", { reminderId: reminders[1] });
     await waitFor("next native reminder replaces earliest", () => evaluate(mini, `Array.from(document.querySelectorAll('[data-titlebar-tools-status] button')).at(-1)?.getAttribute('aria-label').includes('Mini later')`));
