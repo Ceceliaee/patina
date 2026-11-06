@@ -46,6 +46,7 @@ export function createProcessMeasurement(RUNTIME_BINARY_PATH: string) {
     privateUsageBytes: number;
     cpuTimeMs: number;
     coverage: "root_only" | "root_and_descendants" | "incomplete_tree";
+    processes: Array<{ pid: number; startedAt: string; name: string; handles: number; threads: number; privateBytes: number; workingSetBytes: number }>;
     rootThreads: RuntimeThreadSnapshot[];
   };
 
@@ -89,7 +90,7 @@ export function createProcessMeasurement(RUNTIME_BINARY_PATH: string) {
     $workingSet = 0L
     $privateUsage = 0L
     $cpuTime = 0.0
-    $measured = 0
+    $inventory = [Collections.Generic.List[object]]::new()
     foreach ($id in $ids) {
       try {
         $process = Get-Process -Id $id -ErrorAction Stop
@@ -97,10 +98,12 @@ export function createProcessMeasurement(RUNTIME_BINARY_PATH: string) {
         $workingSet += [long]$process.WorkingSet64
         $privateUsage += [long]$process.PrivateMemorySize64
         $cpuTime += $process.TotalProcessorTime.TotalMilliseconds
-        $measured += 1
+        $inventory.Add([pscustomobject]@{pid=$id; startedAt=$process.StartTime.ToUniversalTime().ToString('o')
+          name=$process.ProcessName; handles=$process.HandleCount; threads=$process.Threads.Count
+          privateBytes=$process.PrivateMemorySize64; workingSetBytes=$process.WorkingSet64})
       } catch {}
     }
-    if ($coverage -eq 'root_and_descendants' -and $measured -ne $ids.Count) { $coverage = 'incomplete_tree' }
+    if ($coverage -eq 'root_and_descendants' -and $inventory.Count -ne $ids.Count) { $coverage = 'incomplete_tree' }
     Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
@@ -136,7 +139,8 @@ public static class RuntimeThreadDetails {
     [pscustomobject]@{
       rootPid = [int]$rootProcess.Id
       rootStartTicks = $rootProcess.StartTime.ToUniversalTime().Ticks.ToString()
-      processCount = $measured
+      processCount = $inventory.Count
+      processes = $inventory.ToArray()
       workingSetBytes = $workingSet
       privateUsageBytes = $privateUsage
       cpuTimeMs = $cpuTime

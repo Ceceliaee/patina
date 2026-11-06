@@ -224,10 +224,12 @@ async fn production_maintainer_compresses_fragmentation_without_changing_facts()
         insert_fragment_fixture(&pool, count).await;
         let before = load_range(&pool, 0, HOUR_MS, &[]).await.unwrap();
         assert_eq!(before.read_path, "facts");
+        assert!(before.maintenance_pending);
         assert_eq!(total(&before), 1_800_000);
         drain(&pool).await;
         let after = load_range(&pool, 0, HOUR_MS, &[]).await.unwrap();
         assert_eq!(after.read_path, "projection");
+        assert!(!after.maintenance_pending);
         assert_eq!(total(&after), 1_800_000);
         assert_eq!(after.projection_row_count, 1, "F{count}");
         assert_eq!(after.records.len(), 1, "F{count}");

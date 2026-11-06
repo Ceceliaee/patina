@@ -29,7 +29,7 @@ pub(crate) fn spawn_tracking_runtime_restart_loop<R: Runtime + 'static>(
 ) {
     tauri::async_runtime::spawn(async move {
         let mut retry_delay = RestartBackoff::new();
-        let mut tools_started = false;
+        let mut background_tasks_started = false;
         loop {
             let data = match crate::data::tracking_runtime::shared_from_app(&app).await {
                 Ok(data) => data,
@@ -44,11 +44,11 @@ pub(crate) fn spawn_tracking_runtime_restart_loop<R: Runtime + 'static>(
                 tracking_startup::initialize_tracker(&app, data.as_ref())
                     .await
                     .map_err(|error| format!("tracker initialization failed: {error}"))?;
-                // Usage checks must see recovered native and web sessions,
-                // otherwise unclosed records include time spent offline.
-                if !tools_started {
+                // Expiry and usage checks depend on recovery having sealed interrupted sessions.
+                if !background_tasks_started {
+                    crate::app::web_activity::spawn_observation_expiry(app.clone());
                     spawn_tools_runtime_restart_loop(app.clone());
-                    tools_started = true;
+                    background_tasks_started = true;
                 }
                 tracking_runtime::run(app.clone(), runtime_health.clone(), data).await
             })

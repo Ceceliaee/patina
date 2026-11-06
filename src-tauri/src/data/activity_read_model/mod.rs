@@ -11,11 +11,15 @@ use crate::data::sqlite_pool::{optimize_query_statistics, wait_for_sqlite_pool};
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Row, Sqlite};
 use std::collections::BTreeMap;
-use tauri::{AppHandle, Runtime};
+use std::sync::{Arc, Weak};
+use std::time::Instant;
+use tauri::{AppHandle, Manager, Runtime};
 use tokio::time::{sleep, Duration};
 
 const WORKER_ACTIVE_DELAY: Duration = Duration::from_millis(50);
 const WORKER_IDLE_DELAY: Duration = Duration::from_secs(3);
+const MAX_IDLE_DELAY: Duration = Duration::from_secs(12);
+const STATISTICS_RECHECK: Duration = Duration::from_secs(3600);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -59,6 +63,8 @@ pub struct ActivityAggregateRecordDto {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ActivityAggregateRangeDto {
+    #[serde(skip)]
+    pub(crate) maintenance_pending: bool,
     pub records: Vec<ActivityAggregateRecordDto>,
     pub read_path: &'static str,
     pub fallback_reason: Option<&'static str>,
@@ -98,6 +104,7 @@ pub async fn load_activity_aggregate_range<R: Runtime>(
 ) -> Result<ActivityAggregateRangeDto, String> {
     if end_ms <= start_ms {
         return Ok(ActivityAggregateRangeDto {
+            maintenance_pending: false,
             records: Vec::new(),
             read_path: "projection",
             fallback_reason: None,
@@ -118,6 +125,9 @@ pub async fn load_activity_aggregate_range<R: Runtime>(
         bucket_boundaries_ms.as_deref().unwrap_or(&[]),
     )
     .await?;
+    if response.maintenance_pending {
+        wake_worker(app);
+    }
     if let Some(boundaries) = bucket_boundaries_ms {
         response.records =
             aggregate_records_into_boundaries(response.records, start_ms, end_ms, &boundaries)?;
@@ -239,13 +249,25 @@ pub async fn invalidate_all(pool: &Pool<Sqlite>, reason: &'static str) -> Result
         .map_err(|error| format!("failed to commit read model invalidation: {error}"))
 }
 
+#[derive(Default)]
+pub(crate) struct ReadModelWake(tokio::sync::Notify);
+
+pub(crate) fn wake_worker<R: Runtime>(app: &AppHandle<R>) {
+    if let Some(wake) = app.try_state::<ReadModelWake>() {
+        wake.0.notify_one();
+    }
+}
+
 pub fn spawn_background_worker<R: Runtime + 'static>(app: AppHandle<R>) {
     tauri::async_runtime::spawn(async move {
+        let wake = app.state::<ReadModelWake>();
+        let mut schedule = MaintenanceSchedule::default();
+        let mut idle_delay = WORKER_IDLE_DELAY;
         loop {
             let pool = wait_for_sqlite_pool(&app).await;
             let result = match pool {
                 Ok(pool) => {
-                    let result = maintain_once(&pool).await;
+                    let result = schedule.tick(&pool).await;
                     if result.is_err() {
                         let _ = record_maintenance_failure(&pool).await;
                     }
@@ -254,21 +276,67 @@ pub fn spawn_background_worker<R: Runtime + 'static>(app: AppHandle<R>) {
                 Err(error) => Err(error),
             };
             match result {
-                Ok(did_work) => {
-                    sleep(if did_work {
-                        WORKER_ACTIVE_DELAY
-                    } else {
-                        WORKER_IDLE_DELAY
-                    })
-                    .await;
+                Ok(true) => {
+                    idle_delay = WORKER_IDLE_DELAY;
+                    sleep(WORKER_ACTIVE_DELAY).await;
+                }
+                Ok(false) => {
+                    tokio::select! {
+                        _ = sleep(idle_delay) => idle_delay = (idle_delay * 2).min(MAX_IDLE_DELAY),
+                        _ = wake.0.notified() => idle_delay = WORKER_IDLE_DELAY,
+                    }
                 }
                 Err(error) => {
+                    idle_delay = WORKER_IDLE_DELAY;
                     eprintln!("[read-model] background maintenance failed: {error}");
                     sleep(WORKER_IDLE_DELAY).await;
                 }
             }
         }
     });
+}
+
+#[derive(Default)]
+struct MaintenanceSchedule {
+    pool_options: Weak<sqlx::sqlite::SqliteConnectOptions>,
+    pending_statistics: bool,
+    next_statistics: Option<Instant>,
+    retry_after: Option<Instant>,
+}
+
+impl MaintenanceSchedule {
+    async fn tick(&mut self, pool: &Pool<Sqlite>) -> Result<bool, String> {
+        let identity = Arc::downgrade(&pool.connect_options());
+        if !self.pool_options.ptr_eq(&identity) {
+            *self = Self {
+                pool_options: identity,
+                ..Default::default()
+            };
+        }
+        let did_work = maintain_once(pool).await?;
+        if did_work {
+            self.pending_statistics = true;
+            return Ok(true);
+        }
+        let now = Instant::now();
+        if self.retry_after.is_some_and(|retry| now < retry)
+            || (!self.pending_statistics && self.next_statistics.is_some_and(|due| now < due))
+        {
+            return Ok(false);
+        }
+        match optimize_query_statistics(pool).await {
+            Ok(()) => {
+                self.pending_statistics = false;
+                self.next_statistics = Some(now + STATISTICS_RECHECK);
+                self.retry_after = None;
+            }
+            Err(error) => {
+                self.retry_after = Some(now + Duration::from_secs(60));
+                eprintln!("[sql] query statistics optimization deferred: {error}");
+            }
+        }
+        Ok(false)
+    }
 }
 
 async fn record_maintenance_failure(pool: &Pool<Sqlite>) -> Result<(), String> {
@@ -291,13 +359,7 @@ pub(crate) async fn maintain_once(pool: &Pool<Sqlite>) -> Result<bool, String> {
     if catalog::maintain_once(pool).await? {
         return Ok(true);
     }
-    if hourly::maintain_once(pool).await? {
-        return Ok(true);
-    }
-    if let Err(error) = optimize_query_statistics(pool).await {
-        eprintln!("[sql] query statistics optimization deferred: {error}");
-    }
-    Ok(false)
+    hourly::maintain_once(pool).await
 }
 
 pub(crate) fn now_ms() -> i64 {
@@ -330,6 +392,7 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(empty_samples, 0);
+        let mut schedule = MaintenanceSchedule::default();
         for (offset, count) in [(0, 1000), (1000, 20000)] {
             sqlx::query(
                 "WITH RECURSIVE n(i) AS (VALUES(0) UNION ALL SELECT i+1 FROM n WHERE i+1<?)
@@ -344,7 +407,7 @@ mod tests {
             .unwrap();
             let mut idle = false;
             for _ in 0..1000 {
-                if !maintain_once(&pool).await.unwrap() {
+                if !schedule.tick(&pool).await.unwrap() {
                     idle = true;
                     break;
                 }
@@ -400,7 +463,9 @@ mod tests {
                 pending.is_empty(),
                 "unchanged closed history must not request repeated ANALYZE: {pending:?}"
             );
-            assert!(!maintain_once(&pool).await.unwrap());
+            let due = schedule.next_statistics;
+            assert!(!schedule.tick(&pool).await.unwrap());
+            assert_eq!(schedule.next_statistics, due);
         }
         assert!(!maintain_once(&pool).await.unwrap());
         assert_eq!(
@@ -421,10 +486,12 @@ mod tests {
             .await
             .unwrap_err()
             .contains("readonly"));
+        schedule.pending_statistics = true;
         assert!(
-            !maintain_once(&pool).await.unwrap(),
+            !schedule.tick(&pool).await.unwrap(),
             "optimization failure is not a read-model failure"
         );
+        assert!(schedule.retry_after.is_some());
         let after: Vec<(String, String, Option<String>)> = sqlx::query_as(
             "SELECT model_name,state,last_error_code FROM read_model_state ORDER BY model_name",
         )
@@ -433,6 +500,28 @@ mod tests {
         .unwrap();
         assert_eq!(after, before);
         pool.close().await;
+
+        let replacement = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        crate::data::sqlite_pool::prepare_pool_schema(
+            &replacement,
+            std::path::Path::new("replacement.db"),
+        )
+        .await
+        .unwrap();
+        for _ in 0..20 {
+            if !schedule.tick(&replacement).await.unwrap() {
+                break;
+            }
+        }
+        assert!(
+            schedule.next_statistics.is_some() && schedule.retry_after.is_none(),
+            "a replaced pool must run its own statistics maintenance immediately"
+        );
+        replacement.close().await;
     }
 
     #[test]

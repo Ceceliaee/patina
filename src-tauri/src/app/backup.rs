@@ -32,6 +32,7 @@ pub(crate) async fn restore_backup_and_refresh(
         .await
         .map_err(|error| format!("failed to stop tracking before restore: {error}"))?;
     backup::restore_prepared_backup(prepared, &app).await?;
+    crate::data::activity_read_model::wake_worker(&app);
     // Restored privacy settings must take effect before tracking resumes.
     title_state.set_enabled(false);
     title_state.invalidate_app_overrides();

@@ -20,8 +20,6 @@ const WEB_ACTIVITY_BRIDGE_HTTP_HEADER_MAX_BYTES: usize = 16 * 1024;
 const WEB_ACTIVITY_BRIDGE_MAX_ACTIVE_CLIENTS: usize = 8;
 const WEB_ACTIVITY_BRIDGE_CLIENT_TIMEOUT_MS: u64 = 10_000;
 pub const WEB_ACTIVITY_BRIDGE_SETTINGS_CHANGED_EVENT: &str = "app-settings-changed";
-pub const WEB_ACTIVITY_BRIDGE_ACTIVE_WINDOW_EVENT: &str = "active-window-changed";
-pub const WEB_ACTIVITY_BRIDGE_TRACKING_DATA_EVENT: &str = "tracking-data-changed";
 
 pub type WebActivityBridgeHttpFuture =
     Pin<Box<dyn Future<Output = WebActivityBridgeHttpResponse> + Send>>;

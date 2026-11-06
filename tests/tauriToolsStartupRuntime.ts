@@ -83,8 +83,9 @@ export async function run(session: RuntimeSession) {
   const usageAlerts = recovered.filter(alert => alert.activity_reminder).map(alert => alert.activity_reminder!);
   assert.deepEqual(usageAlerts.map(alert => [alert.target_label, alert.usage_ms]),
     todayUsage >= 60_000 ? [["Today App", todayUsage]] : [], "only real usage above the daily allowance may trigger a limit alert");
-  const verify = new DatabaseSync(databasePath, { readOnly: true });
+  const verify = new DatabaseSync(databasePath, { readOnly: true, timeout: 5_000 });
   try {
+    verify.exec("BEGIN");
     assert.deepEqual({ ...verify.prepare("SELECT end_time, duration FROM sessions WHERE exe_name = 'overnight.exe'").get() },
       { end_time: lastSample, duration: 120_000 });
     const web = verify.prepare("SELECT end_time, duration FROM web_activity_segments WHERE browser_client_id = 'startup-fixture'").get()!;
@@ -94,6 +95,7 @@ export async function run(session: RuntimeSession) {
     assert.ok(Number(web.duration) >= 120_000 && Number(web.duration) < 180_000);
     assert.equal(verify.prepare("SELECT COUNT(*) AS count FROM tool_activity_reminder_rules WHERE label_snapshot LIKE 'Overnight %' AND last_fired_date_key IS NOT NULL").get()!.count, 0);
     assert.equal(verify.prepare("SELECT last_fired_date_key FROM tool_activity_reminder_rules WHERE exe_name = 'under-limit.exe'").get()!.last_fired_date_key, null);
+    verify.exec("COMMIT");
   } finally { verify.close(); }
   console.log("PASS tools startup waits for recovery; overnight downtime and shortened extensions cannot trigger early alerts; due reminders still fire");
   await verifyToolNotificationRuntime(session);

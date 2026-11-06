@@ -37,14 +37,6 @@ pub(crate) async fn seal_active_segment_for_app<R: Runtime>(
     web_activity_engine::seal_active_segment(&store, now_ms).await
 }
 
-async fn expire_observation_for_app<R: Runtime>(
-    app: &AppHandle<R>,
-    now_ms: i64,
-) -> Result<bool, String> {
-    let store = SqliteWebActivityStore::from_app(app).await?;
-    web_activity_engine::expire_active_segment(&store, now_ms).await
-}
-
 pub async fn handle_http_request<R: Runtime>(
     app: AppHandle<R>,
     request: WebActivityBridgeHttpRequest,
@@ -121,6 +113,9 @@ pub async fn handle_http_request<R: Runtime>(
         Ok(change) => {
             let changed = change.changed();
             if changed {
+                app.state::<WebActivityRuntimeState>()
+                    .expiry_changed
+                    .notify_one();
                 emit_web_activity_changed(&app, now_ms);
             }
             if let WebActivityChange::TargetChanged { normalized_domain } = change {
@@ -147,42 +142,44 @@ pub async fn handle_http_request<R: Runtime>(
     }
 }
 
-pub fn spawn_foreground_sync<R: Runtime + 'static>(app: AppHandle<R>) {
-    let gate = app.state::<WebActivityRuntimeState>().maintenance.clone();
-    let Ok(guard) = gate.try_lock_owned() else {
-        return;
-    };
-    tauri::async_runtime::spawn(async move {
-        let _guard = guard;
-        if let Err(error) = sync_foreground_state(app).await {
-            eprintln!("[web-activity] failed to sync foreground state: {error}");
-        }
-    });
-}
-
 pub fn spawn_observation_expiry<R: Runtime + 'static>(app: AppHandle<R>) {
     tauri::async_runtime::spawn(async move {
+        use std::time::Duration;
+        let state = app.state::<WebActivityRuntimeState>();
         loop {
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-            spawn_foreground_sync(app.clone());
+            let delay = match next_expiry_delay(&app).await {
+                Ok(delay) => delay,
+                Err(error) => {
+                    eprintln!("[web-activity] expiry check failed: {error}");
+                    tokio::time::sleep(Duration::from_secs(3)).await;
+                    continue;
+                }
+            };
+            tokio::select! {
+                _ = state.expiry_changed.notified() => (),
+                _ = tokio::time::sleep(delay) => (),
+            }
         }
     });
 }
 
-pub async fn sync_foreground_state<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
-    if app
-        .state::<crate::engine::tracking::runtime_snapshot::TrackingRuntimeSnapshotState>()
-        .snapshot()
-        .is_none()
-    {
-        return Ok(());
-    }
+async fn next_expiry_delay<R: Runtime>(app: &AppHandle<R>) -> Result<std::time::Duration, String> {
+    use std::time::Duration;
+    // A fresh pool read also reconciles a replaced database and wall-clock adjustments.
+    let reconcile = Duration::from_secs(60);
+    let store = SqliteWebActivityStore::from_app(app).await?;
+    let Some(deadline) = store.next_expiry().await? else {
+        return Ok(reconcile);
+    };
     let now_ms = crate::app::runtime::now_ms() as i64;
-    if expire_observation_for_app(&app, now_ms).await? {
-        emit_web_activity_changed(&app, now_ms);
-        crate::engine::tools::notify_activity_reminder_web_transition(&app, None);
+    if deadline > now_ms {
+        return Ok(reconcile.min(Duration::from_millis((deadline - now_ms) as u64)));
     }
-    Ok(())
+    if web_activity_engine::expire_active_segment(&store, now_ms).await? {
+        emit_web_activity_changed(app, now_ms);
+        crate::engine::tools::notify_activity_reminder_web_transition(app, None);
+    }
+    Ok(Duration::ZERO)
 }
 
 pub async fn get_bridge_snapshot<R: Runtime>(

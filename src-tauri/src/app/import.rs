@@ -56,6 +56,7 @@ async fn with_import_policy_refresh<T>(
 }
 
 fn emit_refresh<R: Runtime>(app: &AppHandle<R>, reason: &str) {
+    crate::data::activity_read_model::wake_worker(app);
     if let Err(error) = tracking_runtime::emit_tracking_data_changed(app, reason, now_ms()) {
         eprintln!("[import] data committed but refresh event failed: {error}");
     }

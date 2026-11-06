@@ -3,8 +3,7 @@ use crate::domain::settings::WebActivityBridgeSettings;
 use crate::engine::web_activity::WebActivityRuntimeState;
 use crate::platform::web_activity_bridge::{
     WebActivityBridgeHttpRequest, WebActivityBridgeHttpResponse, WebActivityBridgeRuntimeDeps,
-    WebActivityBridgeRuntimeState, WEB_ACTIVITY_BRIDGE_ACTIVE_WINDOW_EVENT,
-    WEB_ACTIVITY_BRIDGE_SETTINGS_CHANGED_EVENT, WEB_ACTIVITY_BRIDGE_TRACKING_DATA_EVENT,
+    WebActivityBridgeRuntimeState, WEB_ACTIVITY_BRIDGE_SETTINGS_CHANGED_EVENT,
 };
 use std::future::Future;
 use std::pin::Pin;
@@ -41,16 +40,6 @@ fn register_event_handlers<R: Runtime + 'static>(app: AppHandle<R>) {
                 }
             }
         });
-    });
-
-    let active_window_app = app.clone();
-    app.listen_any(WEB_ACTIVITY_BRIDGE_ACTIVE_WINDOW_EVENT, move |_| {
-        crate::app::web_activity::spawn_foreground_sync(active_window_app.clone());
-    });
-
-    let tracking_data_app = app.clone();
-    app.listen_any(WEB_ACTIVITY_BRIDGE_TRACKING_DATA_EVENT, move |_| {
-        crate::app::web_activity::spawn_foreground_sync(tracking_data_app.clone());
     });
 }
 

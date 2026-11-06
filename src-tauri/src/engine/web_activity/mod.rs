@@ -57,7 +57,7 @@ struct WebActivityClientSnapshot {
 #[derive(Debug, Default)]
 pub struct WebActivityRuntimeState {
     inner: Mutex<WebActivityClientSnapshot>,
-    pub(crate) maintenance: std::sync::Arc<tokio::sync::Mutex<()>>,
+    pub(crate) expiry_changed: tokio::sync::Notify,
     ingest: tokio::sync::Mutex<()>,
 }
 

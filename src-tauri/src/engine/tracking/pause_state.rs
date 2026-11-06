@@ -7,12 +7,26 @@ pub struct TrackingPauseRuntimeSnapshot {
     pub last_verified_at_ms: Option<i64>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct TrackingPauseRuntimeState {
     inner: Mutex<Option<TrackingPauseRuntimeSnapshot>>,
+    paused: tokio::sync::watch::Sender<bool>,
+}
+
+impl Default for TrackingPauseRuntimeState {
+    fn default() -> Self {
+        Self {
+            inner: Mutex::default(),
+            paused: tokio::sync::watch::channel(true).0,
+        }
+    }
 }
 
 impl TrackingPauseRuntimeState {
+    pub fn subscribe(&self) -> tokio::sync::watch::Receiver<bool> {
+        self.paused.subscribe()
+    }
+
     pub async fn initialize(
         &self,
         data: &dyn TrackingDataStore,
@@ -54,21 +68,16 @@ impl TrackingPauseRuntimeState {
     }
 
     fn replace(&self, tracking_paused: bool, verified_at_ms: Option<i64>) {
-        match self.inner.lock() {
-            Ok(mut guard) => {
-                *guard = Some(TrackingPauseRuntimeSnapshot {
-                    tracking_paused,
-                    last_verified_at_ms: verified_at_ms,
-                });
-            }
-            Err(poisoned) => {
-                let mut guard = poisoned.into_inner();
-                *guard = Some(TrackingPauseRuntimeSnapshot {
-                    tracking_paused,
-                    last_verified_at_ms: verified_at_ms,
-                });
-            }
-        }
+        let mut guard = self.inner.lock().unwrap_or_else(|error| error.into_inner());
+        *guard = Some(TrackingPauseRuntimeSnapshot {
+            tracking_paused,
+            last_verified_at_ms: verified_at_ms,
+        });
+        self.paused.send_if_modified(|old| {
+            let changed = *old != tracking_paused;
+            *old = tracking_paused;
+            changed
+        });
     }
 }
 

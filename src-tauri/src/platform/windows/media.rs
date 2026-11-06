@@ -8,7 +8,9 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex, OnceLock,
 };
-use tokio::time::{sleep, timeout, Duration};
+#[cfg(test)]
+use tokio::time::sleep;
+use tokio::time::{timeout, Duration};
 use windows::Media::Control::{
     GlobalSystemMediaTransportControlsSession, GlobalSystemMediaTransportControlsSessionManager,
     GlobalSystemMediaTransportControlsSessionPlaybackStatus,
@@ -21,7 +23,10 @@ const MEDIA_SNAPSHOT_TTL_MS: i64 = 15_000;
 const MEDIA_RECONCILE_INTERVAL_SECS: u64 = 10;
 const MEDIA_PROBE_LOG_THROTTLE_MS: i64 = 60_000;
 
-static MEDIA_SIGNAL_SOURCE: OnceLock<Arc<MediaSignalSourceState>> = OnceLock::new();
+static MEDIA_SIGNAL_SOURCE: OnceLock<(
+    MediaSignalSourceState,
+    super::signal_sampling::SignalSampling,
+)> = OnceLock::new();
 
 #[derive(Debug)]
 struct MediaSnapshot {
@@ -40,14 +45,23 @@ struct MediaProbeInFlightGuard {
     probe_in_flight: Arc<AtomicBool>,
 }
 
-pub fn start_signal_source() {
-    let state = MEDIA_SIGNAL_SOURCE
-        .get_or_init(|| Arc::new(MediaSignalSourceState::new()))
-        .clone();
-
-    tauri::async_runtime::spawn(async move {
-        state.run().await;
-    });
+pub fn start_signal_source(paused: tokio::sync::watch::Receiver<bool>) {
+    if MEDIA_SIGNAL_SOURCE
+        .set((
+            MediaSignalSourceState::new(),
+            super::signal_sampling::SignalSampling::new(paused),
+        ))
+        .is_ok()
+    {
+        let (state, sampling) = MEDIA_SIGNAL_SOURCE
+            .get()
+            .expect("signal source initialized");
+        tauri::async_runtime::spawn(
+            sampling.run(Duration::from_secs(MEDIA_RECONCILE_INTERVAL_SECS), || {
+                state.reconcile_once()
+            }),
+        );
+    }
 }
 
 pub async fn get_sustained_participation_signal(
@@ -57,9 +71,13 @@ pub async fn get_sustained_participation_signal(
         return SustainedParticipationSignalSnapshot::default();
     }
 
-    let Some(state) = MEDIA_SIGNAL_SOURCE.get() else {
+    let Some((state, sampling)) = MEDIA_SIGNAL_SOURCE.get() else {
         return SustainedParticipationSignalSnapshot::default();
     };
+
+    if !sampling.current() {
+        return SustainedParticipationSignalSnapshot::default();
+    }
 
     state.resolve_signal_for_window(window, now_ms())
 }
@@ -73,13 +91,6 @@ impl MediaSignalSourceState {
                 signal: SustainedParticipationSignalSnapshot::default(),
             }),
             probe_in_flight: Arc::new(AtomicBool::new(false)),
-        }
-    }
-
-    async fn run(&self) {
-        loop {
-            self.reconcile_once().await;
-            sleep(Duration::from_secs(MEDIA_RECONCILE_INTERVAL_SECS)).await;
         }
     }
 

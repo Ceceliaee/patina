@@ -31,6 +31,17 @@ export async function run(session: RuntimeSession) {
   let client = session.client!;
   try {
     await session.show();
+    const expiryObservation = () => evaluate(client,
+      `window.__TAURI_INTERNALS__.invoke("cmd_get_resource_diagnostics").then(d => ({
+        samples: d.native_probes.find(p => p.kind === "foreground").succeeded,
+        writes: d.database_timings.find(p => p.phase === "web-expiry-update").ended
+      }))`) as Promise<{ samples: number; writes: number }>;
+    const idleStart = await expiryObservation();
+    const idleEnd = await waitFor("three actual foreground observations in the fresh profile", async () => {
+      const snapshot = await expiryObservation();
+      return snapshot.samples >= idleStart.samples + 3 ? snapshot : null;
+    }, 20_000);
+    assert.equal(idleEnd.writes, idleStart.writes, "ordinary tracking must not issue empty web expiry updates");
     await verifyMiniToolStatusRuntime(session);
     client = session.client!;
     await verifySqlBoundaryRuntime(expression => evaluate(client, expression), root);

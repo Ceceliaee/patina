@@ -11,6 +11,7 @@ pub(crate) mod native_probe;
 pub mod packaged_app;
 pub mod power;
 pub mod resource;
+mod signal_sampling;
 pub mod tray_icon_theme;
 pub(crate) mod webview_health;
 pub mod window_activation;

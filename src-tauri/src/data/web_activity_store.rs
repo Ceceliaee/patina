@@ -17,6 +17,12 @@ impl SqliteWebActivityStore {
     pub async fn from_app<R: Runtime>(app: &AppHandle<R>) -> Result<Self, String> {
         Ok(Self::new(wait_for_sqlite_pool(app).await?))
     }
+
+    pub async fn next_expiry(&self) -> Result<Option<i64>, String> {
+        web_activity::next_expiry(&self.pool)
+            .await
+            .map_err(|error| error.to_string())
+    }
 }
 
 impl WebActivityStore for SqliteWebActivityStore {

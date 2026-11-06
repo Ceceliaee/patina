@@ -5,8 +5,9 @@ use sqlx::{Executor, SqlitePool};
 use std::panic::AssertUnwindSafe;
 
 async fn settle(pool: &SqlitePool) {
+    let mut schedule = super::super::MaintenanceSchedule::default();
     for _ in 0..100 {
-        if !super::super::maintain_once(pool).await.unwrap() {
+        if !schedule.tick(pool).await.unwrap() {
             return;
         }
     }

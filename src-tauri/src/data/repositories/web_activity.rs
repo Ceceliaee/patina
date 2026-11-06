@@ -258,7 +258,19 @@ pub async fn seal_interrupted_segments(
     Ok(result.rows_affected() > 0)
 }
 
+pub(crate) async fn next_expiry(pool: &Pool<Sqlite>) -> Result<Option<i64>, sqlx::Error> {
+    let updated: Option<i64> =
+        sqlx::query_scalar("SELECT updated_at FROM web_activity_segments WHERE end_time IS NULL")
+            .fetch_optional(pool)
+            .await?;
+    // The observation remains valid at the exact TTL boundary.
+    Ok(updated.map(|ms| ms.saturating_add(WEB_ACTIVITY_OBSERVATION_TTL_MS + 1)))
+}
+
 pub async fn expire_active_segment(pool: &Pool<Sqlite>, now_ms: i64) -> Result<bool, sqlx::Error> {
+    let _timing = crate::data::sqlite_pool::diagnostics::start(
+        crate::data::sqlite_pool::diagnostics::Phase::WebExpiryWrite,
+    );
     let result = sqlx::query("UPDATE web_activity_segments SET end_time = MAX(start_time, updated_at + ?), duration = MAX(0, updated_at + ? - start_time) WHERE end_time IS NULL AND updated_at + ? < ?")
         .bind(WEB_ACTIVITY_OBSERVATION_TTL_MS).bind(WEB_ACTIVITY_OBSERVATION_TTL_MS).bind(WEB_ACTIVITY_OBSERVATION_TTL_MS).bind(now_ms)
         .execute(pool).await?;
@@ -717,10 +729,29 @@ mod tests {
     }
 
     #[test]
+    fn late_expiry_after_renewal_leaves_the_current_observation_open() {
+        tauri::async_runtime::block_on(async {
+            let pool = setup_test_db().await;
+            let page = input("example.test", "Page");
+            upsert_active_segment(&pool, &page, 2_000).await.unwrap();
+            let first = next_expiry(&pool).await.unwrap().unwrap();
+            upsert_active_segment(&pool, &page, 29_000).await.unwrap();
+            assert!(!expire_active_segment(&pool, first).await.unwrap());
+            assert_eq!(next_expiry(&pool).await.unwrap(), Some(74_001));
+            super::super::sessions::end_active_sessions(&pool, 32_000)
+                .await
+                .unwrap();
+            assert_eq!(next_expiry(&pool).await.unwrap(), None);
+            assert!(!expire_active_segment(&pool, 74_001).await.unwrap());
+        });
+    }
+
+    #[test]
     fn observations_expire_without_bridging_a_gap_and_duplicate_requests_are_idempotent() {
         tauri::async_runtime::block_on(async {
             let pool = setup_test_db().await;
             let page = input("example.test", "Page");
+            assert_eq!(next_expiry(&pool).await.unwrap(), None);
             assert!(upsert_active_segment(&pool, &page, 2_000)
                 .await
                 .unwrap()
@@ -729,8 +760,10 @@ mod tests {
                 .await
                 .unwrap()
                 .changed());
+            assert_eq!(next_expiry(&pool).await.unwrap(), Some(47_001));
             assert!(!expire_active_segment(&pool, 47_000).await.unwrap());
             assert!(expire_active_segment(&pool, 47_001).await.unwrap());
+            assert_eq!(next_expiry(&pool).await.unwrap(), None);
             assert!(!expire_active_segment(&pool, 48_000).await.unwrap());
             assert!(upsert_active_segment(&pool, &page, 602_000)
                 .await

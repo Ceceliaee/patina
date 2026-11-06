@@ -15,7 +15,7 @@ use std::sync::{
 };
 use tokio::{
     task::spawn_blocking,
-    time::{sleep, timeout, Duration},
+    time::{timeout, Duration},
 };
 use windows::Win32::Media::Audio::{AudioSessionStateActive, IAudioSessionControl2};
 use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED};
@@ -26,7 +26,10 @@ const AUDIO_RECONCILE_INTERVAL_SECS: u64 = 10;
 const AUDIO_SESSION_LIMIT: usize = 64;
 const AUDIO_PROBE_LOG_THROTTLE_MS: i64 = 60_000;
 
-static AUDIO_SIGNAL_SOURCE: OnceLock<Arc<AudioSignalSourceState>> = OnceLock::new();
+static AUDIO_SIGNAL_SOURCE: OnceLock<(
+    AudioSignalSourceState,
+    super::signal_sampling::SignalSampling,
+)> = OnceLock::new();
 
 #[derive(Debug)]
 struct AudioSignalSourceState {
@@ -38,14 +41,23 @@ struct AudioProbeInFlightGuard {
     probe_in_flight: Arc<AtomicBool>,
 }
 
-pub fn start_signal_source() {
-    let state = AUDIO_SIGNAL_SOURCE
-        .get_or_init(|| Arc::new(AudioSignalSourceState::new()))
-        .clone();
-
-    tauri::async_runtime::spawn(async move {
-        state.run().await;
-    });
+pub fn start_signal_source(paused: tokio::sync::watch::Receiver<bool>) {
+    if AUDIO_SIGNAL_SOURCE
+        .set((
+            AudioSignalSourceState::new(),
+            super::signal_sampling::SignalSampling::new(paused),
+        ))
+        .is_ok()
+    {
+        let (state, sampling) = AUDIO_SIGNAL_SOURCE
+            .get()
+            .expect("signal source initialized");
+        tauri::async_runtime::spawn(
+            sampling.run(Duration::from_secs(AUDIO_RECONCILE_INTERVAL_SECS), || {
+                state.reconcile_once()
+            }),
+        );
+    }
 }
 
 pub async fn get_sustained_participation_signal(
@@ -56,9 +68,13 @@ pub async fn get_sustained_participation_signal(
     }
 
     let now_ms = now_ms();
-    let Some(state) = AUDIO_SIGNAL_SOURCE.get() else {
+    let Some((state, sampling)) = AUDIO_SIGNAL_SOURCE.get() else {
         return SustainedParticipationSignalSnapshot::default();
     };
+
+    if !sampling.current() {
+        return SustainedParticipationSignalSnapshot::default();
+    }
 
     state.resolve_signal_for_window(window, now_ms)
 }
@@ -68,13 +84,6 @@ impl AudioSignalSourceState {
         Self {
             snapshot: Mutex::new(AudioSnapshot::unknown(now_ms(), AUDIO_SNAPSHOT_TTL_MS)),
             probe_in_flight: Arc::new(AtomicBool::new(false)),
-        }
-    }
-
-    async fn run(&self) {
-        loop {
-            self.reconcile_once().await;
-            sleep(Duration::from_secs(AUDIO_RECONCILE_INTERVAL_SECS)).await;
         }
     }
 

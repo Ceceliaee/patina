@@ -538,6 +538,7 @@ pub(crate) async fn load_range_in_tx(
     let active_start = active_start.into_iter().chain(anonymous_start).min();
 
     let mut fact_intervals = Vec::new();
+    let mut maintenance_pending = !ready;
     let mut outside_projection_coverage = false;
     if !ready {
         fact_intervals.push(Interval { start_ms, end_ms });
@@ -593,6 +594,7 @@ pub(crate) async fn load_range_in_tx(
         .fetch_all(&mut **tx)
         .await
         .map_err(|error| format!("failed to inspect dirty activity overlaps: {error}"))?;
+        maintenance_pending |= !dirty_rows.is_empty();
         for dirty in dirty_rows {
             fact_intervals.push(Interval {
                 start_ms: start_ms.max(dirty.get("start_ms")),
@@ -703,6 +705,7 @@ pub(crate) async fn load_range_in_tx(
         Some("partial_dirty_or_active")
     };
     Ok(ActivityAggregateRangeDto {
+        maintenance_pending: maintenance_pending || projection_unavailable,
         records,
         read_path: if fact_intervals.is_empty() {
             "projection"

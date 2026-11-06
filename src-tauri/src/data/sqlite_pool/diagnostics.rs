@@ -12,6 +12,7 @@ pub(crate) enum Phase {
     ReadModel,
     Maintenance,
     Backup,
+    WebExpiryWrite,
 }
 
 #[derive(Default)]
@@ -22,7 +23,7 @@ struct Counter {
     max_us: AtomicU64,
 }
 
-static COUNTERS: std::sync::LazyLock<[Counter; 6]> =
+static COUNTERS: std::sync::LazyLock<[Counter; 7]> =
     std::sync::LazyLock::new(|| std::array::from_fn(|_| Counter::default()));
 
 pub(crate) struct Timer<'a> {
@@ -76,6 +77,7 @@ pub(crate) fn snapshot() -> Vec<Snapshot> {
         "read-model",
         "maintenance",
         "backup",
+        "web-expiry-update",
     ]
     .into_iter()
     .zip(COUNTERS.iter())
