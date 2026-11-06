@@ -134,8 +134,18 @@ export function buildPomodoroViewModel(
   };
 }
 
+export function earliestScheduledReminder(snapshot: ToolsRuntimeSnapshot) {
+  let earliest: ToolsRuntimeSnapshot["reminders"][number] | null = null;
+  for (const item of snapshot.reminders) {
+    if (item.status === "scheduled" && (!earliest || item.scheduledAt < earliest.scheduledAt
+      || (item.scheduledAt === earliest.scheduledAt && item.id < earliest.id))) earliest = item;
+  }
+  return earliest;
+}
+
 export function buildToolsStatusChipViewModels(
   snapshot: ToolsRuntimeSnapshot, nowMs: number, labels: ToolsViewModelLabels,
+  reminder = earliestScheduledReminder(snapshot),
 ): ToolStatusChipViewModel[] {
   const run = snapshot.currentPomodoro;
   let updatedAt = run?.status === "running" ? run.updatedAt : -Infinity;
@@ -151,7 +161,5 @@ export function buildToolsStatusChipViewModels(
       valueMs: free.phase === "focus" ? free.elapsedMs + delta : Math.max(0, free.restRemainingMs - delta),
       countingUp: free.phase === "focus" };
   }
-  const reminder = snapshot.reminders.filter(item => item.status === "scheduled")
-    .sort((a, b) => a.scheduledAt - b.scheduledAt || a.id - b.id)[0] ?? null;
   return buildToolStatusEntries({ timer, reminder }, 0, nowMs, labels);
 }

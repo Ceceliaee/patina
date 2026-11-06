@@ -3,23 +3,13 @@ import { useLocaleText } from "../../../shared/i18n/index.ts";
 import type { ToolsRuntimeSnapshot } from "../../../shared/types/tools.ts";
 import { buildToolsViewModelLabels } from "../services/toolsLabels.ts";
 import { toolsRuntimeSnapshotStore } from "../services/toolsRuntimeSnapshotStore.ts";
-import { buildToolsStatusChipViewModels } from "../services/toolsViewModel.ts";
+import { buildToolsStatusChipViewModels, earliestScheduledReminder } from "../services/toolsViewModel.ts";
+import { startStatusClock } from "../services/toolStatusEntries.ts";
 import type { ToolsOpenTarget } from "../types.ts";
 import ToolStatusButtons from "./ToolStatusButtons.tsx";
 
 interface ToolsStatusEntryProps {
   onOpenSection: (target: ToolsOpenTarget) => void;
-}
-
-function hasToolsStatusChip(snapshot: ToolsRuntimeSnapshot | null) {
-  return Boolean(
-    snapshot
-    && (
-      snapshot.currentPomodoro?.status === "running"
-      || snapshot.freeFocusTasks.some(task => task.status === "running")
-      || snapshot.reminders.some(reminder => reminder.status === "scheduled")
-    ),
-  );
 }
 
 export default function ToolsStatusEntry({
@@ -29,24 +19,19 @@ export default function ToolsStatusEntry({
   const [snapshot, setSnapshot] = useState<ToolsRuntimeSnapshot | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const labels = useMemo(() => buildToolsViewModelLabels(uiText), [uiText]);
-  const shouldRefreshClock = hasToolsStatusChip(snapshot);
+  const reminder = useMemo(() => snapshot ? earliestScheduledReminder(snapshot) : null, [snapshot]);
+  const due = reminder?.scheduledAt ?? null;
+  const running = snapshot?.currentPomodoro?.status === "running"
+    || Boolean(snapshot?.freeFocusTasks.some(task => task.status === "running"));
 
   useEffect(() => {
-    if (!shouldRefreshClock) {
-      return undefined;
-    }
-
-    const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
-    return () => window.clearInterval(timer);
-  }, [shouldRefreshClock]);
+    if (running || due !== null) return startStatusClock(running, due, setNowMs);
+  }, [running, due]);
 
   useEffect(() => {
-    let cancelled = false;
     const unsubscribe = toolsRuntimeSnapshotStore.subscribe((nextSnapshot) => {
-      if (!cancelled) {
-        setNowMs(Date.now());
-        setSnapshot(nextSnapshot);
-      }
+      setNowMs(Date.now());
+      setSnapshot(nextSnapshot);
     });
 
     void toolsRuntimeSnapshotStore.refreshSnapshot()
@@ -54,17 +39,14 @@ export default function ToolsStatusEntry({
         console.warn("load tools runtime snapshot failed", error);
       });
 
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
+    return unsubscribe;
   }, []);
 
   const statusChips = useMemo(() => (
     snapshot
-      ? buildToolsStatusChipViewModels(snapshot, nowMs, labels)
+      ? buildToolsStatusChipViewModels(snapshot, nowMs, labels, reminder)
       : []
-  ), [labels, nowMs, snapshot]);
+  ), [labels, nowMs, snapshot, reminder]);
 
   return <ToolStatusButtons entries={statusChips} onOpenSection={onOpenSection} />;
 }

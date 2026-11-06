@@ -5,7 +5,7 @@ import { emit } from "@tauri-apps/api/event";
 import { parseNotificationPreferences, parseToolPresentation } from "../src/platform/runtime/toolNotificationGateway.ts";
 import { toolPresentationStore } from "../src/features/tools/services/toolPresentationStore.ts";
 import { formatUsageDuration } from "../src/features/tools/services/toolsLabels.ts";
-import { buildToolStatusEntries } from "../src/features/tools/services/toolStatusEntries.ts";
+import { buildToolStatusEntries, nextStatusClockDelay, startStatusClock } from "../src/features/tools/services/toolStatusEntries.ts";
 import {
   buildActivityReminderRuleRows,
   buildPomodoroViewModel,
@@ -31,7 +31,7 @@ import {
 } from "../src/platform/runtime/toolsRawDtos.ts";
 import { createToolsRuntimeGateway } from "../src/platform/runtime/toolsRuntimeGateway.ts";
 import type { ToolsRuntimeSnapshot } from "../src/shared/types/tools.ts";
-import { MemoryStorage, withWindowStorage } from "./helpers/browserTestGlobals.ts";
+import { MemoryStorage, withWindowStorage, withWindowValue } from "./helpers/browserTestGlobals.ts";
 
 const labels: ToolsViewModelLabels = {
   pomodoroFocus: "Focus",
@@ -285,6 +285,14 @@ await runTest("shared reminder entry appears only from 24 hours before its sched
   const now = 1_000_000;
   const day = 24 * 60 * 60 * 1000;
   const data = { timer: null, reminder: { label: "Tomorrow", scheduledAt: now + day + 1 } };
+  const due = data.reminder.scheduledAt;
+  assert.equal(nextStatusClockDelay(false, null, now), null);
+  assert.equal(nextStatusClockDelay(false, due, now), 1);
+  assert.equal(nextStatusClockDelay(false, due, now + 1), 60_000);
+  assert.equal(nextStatusClockDelay(false, due, due), 1);
+  assert.equal(nextStatusClockDelay(false, due, due + 1), 60_000);
+  assert.equal(nextStatusClockDelay(true, due, now + 1), 1000);
+  assert.equal(nextStatusClockDelay(false, due + day * 100, now), 60_000);
   assert.deepEqual(buildToolStatusEntries(data, 0, now, labels), []);
   assert.equal(buildToolStatusEntries(data, 0, now + 1, labels).length, 1);
   assert.equal(buildToolStatusEntries(data, 0, data.reminder.scheduledAt, labels).length, 1);
@@ -293,6 +301,52 @@ await runTest("shared reminder entry appears only from 24 hours before its sched
     firedAt: null, cancelledAt: null, recurrence: null }];
   assert.deepEqual(buildToolsStatusChipViewModels(snapshot({ reminders }), now, labels), []);
   assert.equal(buildToolsStatusChipViewModels(snapshot({ reminders }), now + 1, labels).length, 1);
+});
+
+await runTest("reminder-only clock updates at visibility boundaries and releases pending work", () => {
+  const originalNow = Date.now;
+  const originalDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
+  let now = 10_000;
+  const due = now + 86_400_000 + 180_000;
+  const updates: number[] = [];
+  const timers = new Map<number, { callback: () => void; delay: number }>();
+  let nextId = 0;
+  const events = Object.assign(new EventTarget(), {
+    setTimeout(callback: () => void, delay: number) {
+      timers.set(++nextId, { callback, delay });
+      return nextId;
+    },
+    clearTimeout(id: number) { timers.delete(id); },
+  });
+  try {
+    Date.now = () => now;
+    Object.defineProperty(globalThis, "document", { configurable: true, value: new EventTarget() });
+    withWindowValue(events, () => {
+      const stop = startStatusClock(false, due, value => updates.push(value));
+      assert.deepEqual(updates, [now]);
+      for (let i = 0; i < 3; i++) {
+        const [next] = timers.values();
+        assert.equal(next.delay, 60_000);
+        now += next.delay;
+        next.callback();
+      }
+      assert.deepEqual(updates, [10_000, due - 86_400_000]);
+      now = due + 1;
+      events.dispatchEvent(new Event("focus"));
+      assert.equal(updates.at(-1), due + 1);
+      now = due;
+      document.dispatchEvent(new Event("visibilitychange"));
+      assert.equal(updates.at(-1), due);
+      assert.equal([...timers.values()][0].delay, 1);
+      stop();
+      events.dispatchEvent(new Event("focus"));
+      assert.equal(timers.size, 0);
+    });
+  } finally {
+    Date.now = originalNow;
+    if (originalDocument) Object.defineProperty(globalThis, "document", originalDocument);
+    else Reflect.deleteProperty(globalThis, "document");
+  }
 });
 
 await runTest("tools preferences merge previous activity tabs into usage mode", () => {
