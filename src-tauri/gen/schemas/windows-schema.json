@@ -531,6 +531,12 @@
           "markdownDescription": "Enables the cmd_get_executable_icon_rows command without any pre-configured scope."
         },
         {
+          "description": "Enables the cmd_get_focus_history command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-focus-history",
+          "markdownDescription": "Enables the cmd_get_focus_history command without any pre-configured scope."
+        },
+        {
           "description": "Enables the cmd_get_history_range_rows command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-get-history-range-rows",
@@ -1225,6 +1231,12 @@
           "type": "string",
           "const": "deny-cmd-get-executable-icon-rows",
           "markdownDescription": "Denies the cmd_get_executable_icon_rows command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_get_focus_history command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-focus-history",
+          "markdownDescription": "Denies the cmd_get_focus_history command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_get_history_range_rows command without any pre-configured scope.",

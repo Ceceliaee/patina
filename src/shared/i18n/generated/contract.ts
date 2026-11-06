@@ -954,7 +954,12 @@ export interface UiText {
     "completedToday": (count: number) => string;
     "createReminder": string;
     "defaultReminderLabel": string;
+    "focusDetails": string;
     "focusDuration": string;
+    "focusHistoryEmpty": string;
+    "focusHistoryEnded": string;
+    "focusHistoryError": string;
+    "focusHistoryOpen": string;
     "focusModeFree": string;
     "focusModePomodoro": string;
     "freeFocusEdit": string;
