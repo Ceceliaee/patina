@@ -27,7 +27,8 @@ const NON_DATA_PRIMARY_LAZY_ROUTES_GZIP_BUDGET_KI_B = 86.5;
 // Recurring reminder controls: docs/archive/2026-11-01-recurring-reminders-bundle-decision.md.
 // Software notification delivery: docs/archive/2026-11-04-tools-notification-bundle-decision.md.
 // Icon extraction and theme adaptation: docs/archive/2026-11-05-activity-color-bundle-decision.md.
-const TOTAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 416.5;
+// Per-task focus history: docs/archive/2026-11-06-focus-history-bundle-decision.md.
+const TOTAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 417.7;
 
 const INITIAL_CHUNK_BUDGETS = [
   { label: "index", pattern: /^index-.*\.js$/, gzipKiB: 65 },
