@@ -100,7 +100,7 @@ function Move-MiniProbeCursor([int]$x,[int]$y) {
     throw "Input position unavailable: expected ($x,$y), observed ($($placed.X),$($placed.Y)), SetPhysicalCursorPos=$moved win32=$errorCode; stopping injection"
   }
 }
-function Focus-MiniProbeInput {
+function Focus-MiniProbeInput([switch]$requireActivity) {
   $form.Show()
   $form.TopMost=$true
   try {
@@ -116,7 +116,11 @@ function Focus-MiniProbeInput {
     [System.Windows.Forms.Application]::DoEvents()
     $previousForeground=[MiniProbe]::GetForegroundWindow()
     Move-MiniProbeCursor $point.X $point.Y
-    if ($previousForeground -eq $form.Handle) { return }
+    if ($previousForeground -eq $form.Handle -and -not $requireActivity) { return }
+    $cursor=New-Object MiniProbe+Point
+    if (-not [MiniProbe]::GetPhysicalCursorPos([ref]$cursor) -or $cursor.X -ne $point.X -or $cursor.Y -ne $point.Y) { throw 'Input precondition changed before clicking the owned focus target' }
+    $hit=[MiniProbe]::WindowFromPoint($cursor)
+    if ($hit -ne $form.Handle -and -not [MiniProbe]::IsChild($form.Handle,$hit)) { throw 'Owned focus target is covered; stopping injection' }
     [MiniProbe]::mouse_event(2,0,0,0,[UIntPtr]::Zero)
     [MiniProbe]::mouse_event(4,0,0,0,[UIntPtr]::Zero)
     # Mouse activation is queued; observe its completion without injecting another click.
@@ -176,7 +180,7 @@ try {
     if ($request.op -eq 'up') { [MiniProbe]::mouse_event(4,0,0,0,[UIntPtr]::Zero); $buttonDown=$false }
     if ($request.op -eq 'focus') { Focus-MiniProbeInput; $inputStarted=$true }
     if ($request.op -eq 'allow-main-focus') {
-      Focus-MiniProbeInput; $inputStarted=$true
+      Focus-MiniProbeInput -requireActivity; $inputStarted=$true
       if (-not [MiniProbe]::AllowSetForegroundWindow(${processId})) { throw 'Cannot grant foreground activation to the isolated app' }
     }
     if ($request.op -eq 'hide') { $form.Hide() }
