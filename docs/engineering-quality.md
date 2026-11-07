@@ -153,7 +153,7 @@ JS 离线审计只接受最近 24 小时内成功联网审计生成、且 SHA-25
 
 `perf:desktop-resources` 独立运行 mini 与主窗口资源采样，`perf:desktop-lifecycle` 保留完整 runtime 与资源并集。窗口、输入、订阅或原生资源生命周期变化需提供资源证据；带 coverage 的产物或不完整进程树不能证明性能预算。资源组串行执行，保留既有样本数、静置时长与预算。准备、无主动输入的原生组和系统输入阶段分别计时；原生组仍可能显示窗口或对话框。本机验收应集中安排输入阶段，取消或发现外部鼠标/前台变化时停止注入，不反复抢回焦点。进程清理只关闭本轮 Windows Job；强制终止无法保证应用自行刷新未提交状态，测试成功仍要求正常退出与数据断言。
 
-默认 CI gate 与 release workflow 必须覆盖 `pnpm run check:full` 的全部检查；工作流可拆分为独立 job 执行，具体编排由 `.github/workflows/` 拥有。
+`Verify` 必须覆盖 `pnpm run check:full` 的全部检查及独立 Tauri runtime。发布工作流按[发布验收规则](versioning-and-release-policy.md#10-发布前的最低验证门槛)核验同一提交的 CI 结果，具体编排由 `.github/workflows/` 拥有。
 
 日常 `tauri dev` 使用 Cargo 的 `dev` 配置，保留增量编译和完整调试信息。直接执行 `cargo test` 使用 `test` 配置，关闭增量编译并保留回溯所需的行号。仓库的质量检查、性能工具和原生验收统一使用继承这些设置的 `validation` 配置。Cargo 仍复用未改变的依赖；修改 crate 后会重新编译该 crate。
 

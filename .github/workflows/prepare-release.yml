@@ -7,10 +7,6 @@ on:
         description: "Existing version tag to publish, for example 1.6.1"
         required: true
         type: string
-      validation_ref:
-        description: "Optional full commit SHA with test-only fixes to overlay during frontend validation"
-        required: false
-        type: string
   push:
     tags:
       - "v[0-9]*.[0-9]*.[0-9]*"
@@ -25,11 +21,15 @@ concurrency:
 
 jobs:
   resolve:
-    name: Resolve release tag
+    name: Verify release tag and CI
     runs-on: windows-latest
+    permissions:
+      contents: read
+      actions: read
     outputs:
       version: ${{ steps.release.outputs.version }}
       tag: ${{ steps.release.outputs.tag }}
+      commit: ${{ steps.tag.outputs.commit }}
 
     steps:
       - name: Checkout
@@ -40,13 +40,15 @@ jobs:
       - name: Resolve release version
         id: release
         shell: pwsh
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
         run: |
           $semverPattern = '(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9A-Za-z-][0-9A-Za-z-]*))*))?'
 
-          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-            $version = "${{ inputs.version }}"
+          if ($env:GITHUB_EVENT_NAME -eq "workflow_dispatch") {
+            $version = $env:REQUESTED_VERSION
           } else {
-            $refName = "${{ github.ref_name }}"
+            $refName = $env:GITHUB_REF_NAME
             if ($refName -notmatch "^v(?<version>$semverPattern)$") {
               throw "Tag '$refName' is not a release version tag."
             }
@@ -77,6 +79,7 @@ jobs:
           }
 
       - name: Ensure release does not already exist
+        id: tag
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -112,8 +115,24 @@ jobs:
             throw "Failed to fetch $tag from origin."
           }
 
-          $tagCommit = git rev-list -n 1 $tag
+          $tagCommit = git rev-parse --verify "${tagRef}^{commit}"
+          if ($LASTEXITCODE -ne 0 -or $tagCommit -notmatch '^[0-9a-f]{40}$') { throw "Cannot resolve commit for $tag" }
+          if ($env:GITHUB_REF -cne $tagRef -or $tagCommit -cne (git rev-parse HEAD)) {
+            throw "Start this workflow from $tagRef at $tagCommit."
+          }
+          "commit=$tagCommit" >> $env:GITHUB_OUTPUT
           Write-Host "Publishing $tag from $tagCommit"
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+
+      - name: Require successful main verification for the release commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node --experimental-strip-types scripts/release-verification.ts ${{ steps.tag.outputs.commit }}
 
   version-files:
     name: Check version files
@@ -124,7 +143,7 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ needs.resolve.outputs.tag }}
+          ref: ${{ needs.resolve.outputs.commit }}
           fetch-depth: 0
 
       - name: Set up Node
@@ -144,7 +163,7 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ needs.resolve.outputs.tag }}
+          ref: ${{ needs.resolve.outputs.commit }}
           fetch-depth: 0
 
       - name: Set up Node
@@ -164,7 +183,7 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ needs.resolve.outputs.tag }}
+          ref: ${{ needs.resolve.outputs.commit }}
           fetch-depth: 0
 
       - name: Set up Node
@@ -183,132 +202,6 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  frontend:
-    name: Frontend checks
-    runs-on: windows-latest
-    needs: resolve
-
-    steps:
-      - name: Checkout release tag
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: ${{ needs.resolve.outputs.tag }}
-          fetch-depth: 0
-
-      - name: Apply test-only validation fixes
-        if: github.event_name == 'workflow_dispatch' && inputs.validation_ref != ''
-        shell: pwsh
-        env:
-          RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
-          VALIDATION_REF: ${{ inputs.validation_ref }}
-        run: |
-          if ($env:VALIDATION_REF -notmatch '^[0-9a-fA-F]{40}$') {
-            throw "validation_ref must be a full 40-character commit SHA."
-          }
-
-          git fetch --no-tags origin $env:VALIDATION_REF
-          if ($LASTEXITCODE -ne 0) { throw "Could not fetch validation_ref $env:VALIDATION_REF." }
-
-          $validationCommit = (git rev-parse "$env:VALIDATION_REF^{commit}").Trim()
-          $releaseCommit = (git rev-list -n 1 $env:RELEASE_TAG).Trim()
-          git merge-base --is-ancestor $releaseCommit $validationCommit
-          if ($LASTEXITCODE -ne 0) {
-            throw "validation_ref must descend from the release tag commit."
-          }
-
-          $changedPaths = @(git diff --name-only $releaseCommit $validationCommit | Where-Object { $_ })
-          if ($changedPaths.Count -eq 0) { throw "validation_ref does not change the release tag." }
-          $invalidPaths = @($changedPaths | Where-Object { $_ -notlike 'tests/*' })
-          if ($invalidPaths.Count -gt 0) {
-            throw "validation_ref changes non-test paths: $($invalidPaths -join ', ')"
-          }
-
-          git restore --source=$validationCommit --worktree -- tests
-          $appliedPaths = @(git diff --name-only | Where-Object { $_ })
-          if ($appliedPaths.Count -eq 0 -or @($appliedPaths | Where-Object { $_ -notlike 'tests/*' }).Count -gt 0) {
-            throw "Test-only validation overlay was not applied cleanly."
-          }
-          Write-Host "Applied test-only validation fixes from $validationCommit to $env:RELEASE_TAG."
-
-      - name: Install pinned pnpm
-        shell: pwsh
-        run: |
-          $packageManager = (Get-Content package.json -Raw | ConvertFrom-Json).packageManager
-          npm install --global $packageManager
-          if ($LASTEXITCODE -ne 0) { throw "pnpm installation failed" }
-
-      - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run frontend quality gate
-        run: pnpm run check
-
-  rust-quality:
-    name: Rust checks (${{ matrix.arch }})
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: x64
-            runner: windows-latest
-            target: x86_64-pc-windows-msvc
-          - arch: arm64
-            runner: windows-11-arm
-            target: aarch64-pc-windows-msvc
-    needs: resolve
-
-    steps:
-      - name: Checkout release tag
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: ${{ needs.resolve.outputs.tag }}
-          fetch-depth: 0
-
-      - name: Install pinned pnpm
-        shell: pwsh
-        run: |
-          $packageManager = (Get-Content package.json -Raw | ConvertFrom-Json).packageManager
-          npm install --global $packageManager
-          if ($LASTEXITCODE -ne 0) { throw "pnpm installation failed" }
-
-      - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: Set up Rust from rust-toolchain.toml
-        shell: pwsh
-        run: |
-          rustup set default-host ${{ matrix.target }}
-          if ($LASTEXITCODE -ne 0) { throw "Rust host configuration failed" }
-          rustup toolchain install --no-self-update
-          if ($LASTEXITCODE -ne 0) { throw "Rust installation failed" }
-          $hostInfo = rustc -vV
-          $hostInfo
-          if ($hostInfo -notcontains "host: ${{ matrix.target }}") { throw "Rust host architecture mismatch" }
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run Rust quality gate
-        run: pnpm run check:rust
-
-      - name: Install RustSec audit tool
-        run: cargo install cargo-audit --version 0.22.2 --locked
-
-      - name: Audit dependencies
-        run: pnpm run check:dependencies
-
   windows-build:
     name: Build Windows installer (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
@@ -322,13 +215,13 @@ jobs:
           - arch: arm64
             runner: windows-11-arm
             target: aarch64-pc-windows-msvc
-    needs: [resolve, version-files, changelog, release-notes, frontend, rust-quality]
+    needs: [resolve, version-files, changelog, release-notes]
 
     steps:
       - name: Checkout release tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ needs.resolve.outputs.tag }}
+          ref: ${{ needs.resolve.outputs.commit }}
           fetch-depth: 0
 
       - name: Install pinned pnpm
@@ -405,7 +298,7 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ needs.resolve.outputs.tag }}
+          ref: ${{ needs.resolve.outputs.commit }}
           fetch-depth: 0
 
       - name: Set up Node
@@ -525,7 +418,7 @@ jobs:
         if: steps.r2.outputs.enabled == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ needs.resolve.outputs.tag }}
+          ref: ${{ needs.resolve.outputs.commit }}
           fetch-depth: 0
 
       - name: Set up Node

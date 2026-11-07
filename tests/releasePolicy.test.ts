@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { requireMainVerification } from "../scripts/release-verification.ts";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -340,8 +341,7 @@ function testReleaseWorkflowSplitsQualityGatesBeforePublish() {
   assert.match(workflow, /^  version-files:/m);
   assert.match(workflow, /^  changelog:/m);
   assert.match(workflow, /^  release-notes:/m);
-  assert.match(workflow, /^  frontend:/m);
-  assert.match(workflow, /^  rust-quality:/m);
+  assert.doesNotMatch(workflow, /^  (frontend|rust-quality):/m);
   assert.match(workflow, /^  windows-build:/m);
   assert.match(workflow, /^  publish:/m);
   assert.match(workflow, /^  r2:/m);
@@ -350,12 +350,13 @@ function testReleaseWorkflowSplitsQualityGatesBeforePublish() {
   assert.doesNotMatch(workflow, /^  r2-config:/m);
   assert.doesNotMatch(workflow, /^  r2-upload:/m);
   assert.doesNotMatch(workflow, /^  r2-clean:/m);
-  assert.match(workflow, /needs: \[resolve, version-files, changelog, release-notes, frontend, rust-quality\]/);
+  assert.match(workflow, /needs: \[resolve, version-files, changelog, release-notes\]/);
   assert.match(workflow, /needs: \[resolve, release-notes, windows-build\]/);
   assert.match(workflow, /needs: \[resolve, publish\]/);
   assert.match(workflow, /if: steps\.r2\.outputs\.enabled == 'true'/);
-  assert.match(workflow, /run: pnpm run check$/m);
-  assert.match(workflow, /run: pnpm run check:rust$/m);
+  assert.match(workflow, /run: node --experimental-strip-types scripts\/release-verification\.ts \$\{\{ steps\.tag\.outputs\.commit \}\}/);
+  assert.equal(workflow.match(/ref: \$\{\{ needs\.resolve\.outputs\.commit \}\}/g)?.length, 6);
+  assert.doesNotMatch(workflow, /validation_ref|run: pnpm run check(?:$|:)/m);
   assert.match(workflow, /uses: actions\/upload-artifact@[0-9a-f]{40} # v7/);
   assert.match(workflow, /uses: actions\/download-artifact@[0-9a-f]{40} # v8/);
   assert.match(workflow, /name: Prepare release assets/);
@@ -368,20 +369,42 @@ function testReleaseWorkflowSplitsQualityGatesBeforePublish() {
   assert.doesNotMatch(workflow, /run: pnpm run release:check/);
 }
 
-function testReleaseWorkflowRestrictsValidationOverlayToTests() {
-  const workflow = readFileSync(".github/workflows/prepare-release.yml", "utf8");
-  const frontendStart = workflow.indexOf("\n  frontend:");
-  const rustStart = workflow.indexOf("\n  rust-quality:", frontendStart);
-  const frontend = workflow.slice(frontendStart, rustStart);
-
-  assert.match(workflow, /validation_ref:\n        description: "Optional full commit SHA with test-only fixes/);
-  assert.match(frontend, /if: github\.event_name == 'workflow_dispatch' && inputs\.validation_ref != ''/);
-  assert.match(frontend, /VALIDATION_REF: \$\{\{ inputs\.validation_ref \}\}/);
-  assert.match(frontend, /\^\[0-9a-fA-F\]\{40\}\$/);
-  assert.match(frontend, /git merge-base --is-ancestor \$releaseCommit \$validationCommit/);
-  assert.match(frontend, /\$_ -notlike 'tests\/\*'/);
-  assert.match(frontend, /git restore --source=\$validationCommit --worktree -- tests/);
-  assert.doesNotMatch(workflow.slice(rustStart), /VALIDATION_REF|validation_ref/);
+function testReleaseRequiresGreenMainPush() {
+  const repo = "owner/repo";
+  const sha = "a".repeat(40);
+  const run = {
+    id: 101, run_attempt: 2, path: ".github/workflows/verify.yml", event: "push",
+    repository: { full_name: repo }, head_repository: { full_name: repo },
+    head_branch: "main", head_sha: sha, status: "completed", conclusion: "success",
+  };
+  const verifyWorkflow = readFileSync(".github/workflows/verify.yml", "utf8");
+  const jobNames = ["Resolve and verify immutable candidate", "Frontend checks", "Rust checks (x64)", "Rust checks (arm64)", "Tauri runtime smoke"];
+  for (const name of jobNames) {
+    assert.ok(verifyWorkflow.includes(`name: ${name.replace(/\((x64|arm64)\)/, "(${{ matrix.arch }})")}`));
+  }
+  const jobs = jobNames.map(name => ({ name, run_id: run.id, head_sha: sha, status: "completed", conclusion: "success" }));
+  const check = (runs = [run], list = jobs, total = list.length) => requireMainVerification(repo, sha, endpoint => {
+    if (endpoint === `repos/${repo}/actions/workflows/verify.yml/runs?branch=main&event=push&head_sha=${sha}&per_page=1`) {
+      return { workflow_runs: runs };
+    }
+    assert.equal(endpoint, `repos/${repo}/actions/runs/101/attempts/2/jobs?per_page=100`);
+    return { jobs: list, total_count: total };
+  });
+  assert.equal(check(), "https://github.com/owner/repo/actions/runs/101/attempts/2");
+  assert.throws(() => check([]), /No main push Verify/);
+  for (const change of [
+    { head_sha: "b".repeat(40) }, { head_branch: "other" }, { path: ".github/workflows/other.yml" },
+    { head_repository: { full_name: "fork/repo" } }, { repository: { full_name: "other/repo" } },
+    { event: "pull_request" }, { event: "workflow_dispatch" }, { status: "in_progress" }, { conclusion: "failure" },
+  ]) assert.throws(() => check([{ ...run, ...change }]));
+  for (const job of jobs) {
+    assert.throws(() => check([run], jobs.filter(other => other !== job)), /missing/);
+  }
+  for (const change of [{ conclusion: "skipped" }, { conclusion: "failure" }, { status: "queued" }, { head_sha: "b".repeat(40) }, { run_id: 102 }]) {
+    assert.throws(() => check([run], [{ ...jobs[0], ...change }, ...jobs.slice(1)]), /incomplete or unsuccessful/);
+  }
+  assert.throws(() => check([run], jobs, jobs.length + 1), /incomplete/);
+  assert.throws(() => requireMainVerification(repo, sha, () => { throw new Error("API unavailable"); }), /API unavailable/);
 }
 
 function testReleaseWorkflowAttestsVerifiedFinalInstallerWithMinimumPermissions() {
@@ -739,7 +762,7 @@ testReleaseVisibleChangeCountIgnoresInternal();
 testReleaseVisibleChangeCountLimits();
 testReleaseWorkflowDoesNotPublishBrowserExtensionAssets();
 testReleaseWorkflowSplitsQualityGatesBeforePublish();
-testReleaseWorkflowRestrictsValidationOverlayToTests();
+testReleaseRequiresGreenMainPush();
 testReleaseWorkflowAttestsVerifiedFinalInstallerWithMinimumPermissions();
 testDualArchitectureWorkflowBoundaries();
 testToolchainContractsStayAligned();

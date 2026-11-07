@@ -138,7 +138,7 @@
 - 已发布的稳定版本不得为了补进后到的小修而被原地覆盖，也不得删除 Release 后重发同版本稳定版
 - 如果 `1.0.1` 已发布，后续修复默认进入 `1.0.2`
 - 只有目标版本尚无 tag 和 GitHub Release 时，才可继续沿用同一版本号更改发布内容
-- tag 已存在而 Release 不存在的失败发布，只能按[第 11 节](#11-默认发布流程) 从原 tag 补跑，包括该节限定的 test-only `validation_ref`；产品代码变化必须使用新版本和新 tag。已有 Release 时不得补跑覆盖
+- tag 已存在而 Release 不存在的失败发布，只能按[第 11 节](#11-默认发布流程) 从原 tag 补跑；源码变化必须使用新版本和新 tag。已有 Release 时不得补跑覆盖
 
 ---
 
@@ -407,7 +407,7 @@ GitHub Release 继续作为正式发布源、主下载入口和主更新清单�
 - 本地运行 `pnpm run release:check`
 
 `package.json` 拥有 `release:check` 的检查组成与执行顺序；通用质量门槛由
-[`engineering-quality.md`](./engineering-quality.md#5-默认验证门槛) 拥有。发布工作流还必须从目标 tag 校验版本与 changelog，并覆盖完整质量门槛。
+[`engineering-quality.md`](./engineering-quality.md#5-默认验证门槛) 拥有。正式发布前，目标提交必须在本仓库 `main` 的 push 事件上通过 `Verify`。发布工作流按 tag 的完整提交 SHA 查验最近一次对应运行及其全部作业；记录缺失、运行未结束、作业未全绿或查询失败时停止。通过后，版本、changelog 和安装包均取自该提交。
 
 GitHub Actions 生成正式发布资产后、发布 GitHub Release 前，还必须执行：
 
@@ -434,10 +434,10 @@ GitHub Actions 生成正式发布资产后、发布 GitHub Release 前，还必�
 1. 找到最近已发布版本，审查其后完整 commit 与 diff，再按实际范围选择 SemVer；不能只看最后一轮局部改动。
 2. 在本地同步所有版本文件并整理 changelog。长期政策文档不保存当前版本值。
 3. 运行版本一致性、changelog 和 `pnpm run release:check`；正式资产由 workflow 生成，本地默认不创建 `dist-release`、安装包或 updater 产物。
-4. 只有获得当前任务的远程 push 授权后才推送准备提交；创建和推送 `vX.Y.Z` tag 还需要单独的 tag 或发布授权。
+4. 获得当前任务的远程 push 授权后推送准备提交。等该提交在 `main` 的 `Verify` 全绿，再依单独的 tag 或发布授权为该提交创建并推送 `vX.Y.Z`。
 5. [`prepare-release.yml`](../.github/workflows/prepare-release.yml) 从 tag 对应 commit 校验版本与 changelog，拒绝已有 Release，生成并独立验证安装包、校验和与 updater manifest，完成 attestation 后以禁止覆盖的方式创建 GitHub Release。
 6. GitHub Release 成立后再同步 R2 镜像；镜像失败不能撤销、覆盖或改变 GitHub Release 主事实，updater 继续优先使用 GitHub endpoint。
-7. 发布模式的 `workflow_dispatch` 只补跑“tag 已存在且 Release 不存在”的失败流程，不创建 commit、tag 或版本文件；Release 已存在时必须失败并按不可变规则准备新版本。若失败来自 tag 内测试工具的时序问题，可通过可选 `validation_ref` 指定 tag 后的完整 commit SHA；工作流只接受从该 tag 演进且仅修改 `tests/` 的提交，只在前端验证 job 中叠加这些测试修复，版本校验、changelog、安装包、签名和发布资产仍严格来自原 tag。
+7. 发布模式的 `workflow_dispatch` 只补跑已有 tag 且尚无 Release 的流程。补跑使用原 tag 的工作流和源码，仍需满足该工作流的发布门槛。Release 已存在时必须按不可变规则准备新版本。
 
 补跑时使用目标 tag 对应的 workflow 版本，例如 `gh workflow run prepare-release.yml --ref v<version> -f version=<version>`。迁移前使用 npm 的 tag 沿用其原始 workflow；当前 pnpm workflow 消费包含 pnpm 声明和锁文件的 tag，不增加管理器兼容分支。
 
