@@ -20,7 +20,6 @@ const GITHUB_UPDATER_ENDPOINT =
   "https://github.com/Ceceliaee/patina/releases/latest/download/latest.json";
 const SHA256_SUMS_FILE_NAME = "SHA256SUMS.txt";
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
-const MAX_VISIBLE_RELEASE_CHANGE_COUNT = 7;
 const RELEASE_NOTE_SECTION_TITLES = {
   Added: "新增",
   Changed: "改进",
@@ -462,17 +461,20 @@ function releaseNoteVisibleSections(parsed) {
 }
 
 export function validateReleaseNoteVisibleChangeCount(parsed) {
+  const version = VERSION_PATTERN.exec(parsed.version);
+  const isMinorRelease = version && version[2] !== "0" && version[3] === "0";
+  const limit = isMinorRelease ? 14 : 7;
   const visibleChangeCount = releaseNoteVisibleSections(parsed).reduce(
     (count, section) => count + section.bullets.length,
     0,
   );
 
   if (visibleChangeCount === 0) {
-    return `CHANGELOG.md ${parsed.version} must include 1 to ${MAX_VISIBLE_RELEASE_CHANGE_COUNT} user-visible Added/Changed/Fixed/Removed entries`;
+    return `CHANGELOG.md ${parsed.version} must include 1 to ${limit} user-visible Added/Changed/Fixed/Removed entries`;
   }
 
-  if (visibleChangeCount > MAX_VISIBLE_RELEASE_CHANGE_COUNT) {
-    return `CHANGELOG.md ${parsed.version} has ${visibleChangeCount} user-visible Added/Changed/Fixed/Removed entries; keep the combined count to 1-${MAX_VISIBLE_RELEASE_CHANGE_COUNT}`;
+  if (visibleChangeCount > limit) {
+    return `CHANGELOG.md ${parsed.version} has ${visibleChangeCount} user-visible Added/Changed/Fixed/Removed entries; keep the combined count to 1-${limit}`;
   }
 
   return null;

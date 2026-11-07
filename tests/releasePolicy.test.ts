@@ -303,16 +303,22 @@ function testReleaseVisibleChangeCountIgnoresInternal() {
   );
 }
 
-function testReleaseVisibleChangeCountRejectsTooManyUserFacingItems() {
-  assert.equal(
-    validateReleaseNoteVisibleChangeCount({
-      version: "1.6.0",
-      sections: [
-        { heading: "Changed", bullets: Array.from({ length: 8 }, (_, index) => `- Change ${index + 1}`) },
-      ],
-    }),
-    "CHANGELOG.md 1.6.0 has 8 user-visible Added/Changed/Fixed/Removed entries; keep the combined count to 1-7",
-  );
+function testReleaseVisibleChangeCountLimits() {
+  for (const [version, limit] of [
+    ["1.9.11", 7], ["1.9.12-beta.1", 7], ["1.10.0", 14], ["1.10.0-rc.1", 14], ["2.0.0", 7],
+  ] as const) {
+    const changed = Array.from({ length: limit - 1 }, (_, index) => `- Change ${index + 1}`);
+    const sections = [
+      { heading: "Changed", bullets: changed },
+      { heading: "Added", bullets: ["- New feature"] },
+    ];
+    assert.equal(validateReleaseNoteVisibleChangeCount({ version, sections }), null);
+    sections[1].bullets.push("- Another feature");
+    assert.equal(validateReleaseNoteVisibleChangeCount({ version, sections }),
+      `CHANGELOG.md ${version} has ${limit + 1} user-visible Added/Changed/Fixed/Removed entries; keep the combined count to 1-${limit}`);
+    assert.equal(validateReleaseNoteVisibleChangeCount({ version, sections: [] }),
+      `CHANGELOG.md ${version} must include 1 to ${limit} user-visible Added/Changed/Fixed/Removed entries`);
+  }
 }
 
 function testReleaseWorkflowDoesNotPublishBrowserExtensionAssets() {
@@ -730,7 +736,7 @@ testReleaseNotesIncludeAllVisibleBullets();
 testReleaseNotesKeepVisibleSectionsAndSkipInternal();
 testReleaseNotesOnlyMentionPatinaInstaller();
 testReleaseVisibleChangeCountIgnoresInternal();
-testReleaseVisibleChangeCountRejectsTooManyUserFacingItems();
+testReleaseVisibleChangeCountLimits();
 testReleaseWorkflowDoesNotPublishBrowserExtensionAssets();
 testReleaseWorkflowSplitsQualityGatesBeforePublish();
 testReleaseWorkflowRestrictsValidationOverlayToTests();

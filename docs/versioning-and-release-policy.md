@@ -321,7 +321,7 @@ GitHub Release 正文必须来自 `CHANGELOG.md` 对应版本节，但不是机�
 2. 全量带出对应版本节 `Added / Changed / Fixed / Removed` 中的用户可感知变化
 3. 必要时补充验证、安装包与已知注意事项
 
-对应版本节的 `Added / Changed / Fixed / Removed` 四部分应先在 `CHANGELOG.md` 中保持精炼，合计最好控制在 1 到 7 条用户可感知变化。
+对应版本节的 `Added / Changed / Fixed / Removed` 四部分合计至少 1 条。patch 版本最多 7 条，minor 版本最多 14 条。major 版本沿用 7 条上限，预发布版本按目标正式版本计数。摘要与 `Internal` 不计入条数。
 
 默认不要：
 
