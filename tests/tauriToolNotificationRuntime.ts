@@ -24,7 +24,7 @@ export async function verifyToolNotificationRuntime(session: RuntimeSession) {
   session.ownCleanup(probe.close);
   let notification: CdpConnection | null = null;
   const read = (sql: string) => {
-    const database = new DatabaseSync(path, { readOnly: true });
+    const database = new DatabaseSync(path, { readOnly: true, timeout: 5_000 });
     try { return database.prepare(sql).all(); } finally { database.close(); }
   };
   const connect = async () => {

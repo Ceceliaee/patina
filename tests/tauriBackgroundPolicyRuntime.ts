@@ -11,10 +11,9 @@ async function evaluate(client: CdpConnection, expression: string) {
   return (response.result as { value?: unknown })?.value;
 }
 
-export function readTrackerProgress(databasePath: string) {
-  const database = new DatabaseSync(databasePath, { readOnly: true, allowExtension: false });
+export function readTrackerProgress(databasePath: string, { readOnly = true } = {}) {
+  const database = new DatabaseSync(databasePath, { readOnly, allowExtension: false, timeout: 5_000 });
   try {
-    database.exec("PRAGMA busy_timeout=5000");
     return Number(database.prepare("SELECT value FROM settings WHERE key='__tracker_last_successful_sample_ms'").get()?.value ?? 0);
   } finally { database.close(); }
 }

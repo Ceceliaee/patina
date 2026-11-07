@@ -352,7 +352,8 @@ export async function run(session: RuntimeSession) {
     client = null;
     await waitFor("close-to-exit leaves no runtime process", async () => (await session.job!.count()) === 0, 10_000);
     assert.doesNotMatch(logs.join("").slice(closeToExitLogStart), /recreating-visible-window|reason=unexpected-destroy/);
-    assert.ok(readTrackerProgress(join(root, "data", "patina.db")) >= lastCommitBeforeExit,
+    // The first opener after exit may need to roll back a hot journal before reading committed data.
+    assert.ok(readTrackerProgress(join(root, "data", "patina.db"), { readOnly: false }) >= lastCommitBeforeExit,
       "ordinary exit must retain the last committed tracking checkpoint");
     console.log("PASS close-to-exit wins over pending background destruction");
 
