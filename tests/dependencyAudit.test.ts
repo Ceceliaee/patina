@@ -84,11 +84,10 @@ writeFileSync(lockfilePath, "lock baseline");
 const executable = path.resolve("pnpm.exe");
 try {
 
-async function scenario(results: Array<typeof success>, expectedStatus: number, expectedCalls: number, offline = false) {
+async function scenario(results: Array<typeof success>, expectedStatus: number, expectedCalls: number, pnpmExecutable = executable) {
   let calls = 0;
   let pauses = 0;
-  const status = await runPnpmAudit(executable, {
-    offline,
+  const status = await runPnpmAudit(pnpmExecutable, {
     snapshotPath,
     lockfilePath,
     execute: (args) => {
@@ -104,7 +103,9 @@ async function scenario(results: Array<typeof success>, expectedStatus: number, 
   assert.equal(pauses, expectedCalls - 1);
 }
 
-await scenario([success], 0, 1);
+for (const name of ["pnpm", "pnpm.exe", "pnpm-native", "pnpm-native.exe", "package manager.exe"]) {
+  await scenario([success], 0, 1, path.join(fixture, name));
+}
 await scenario([timeout, success], 0, 2);
 await scenario([timeout], 1, 3);
 await scenario([registryFailure(503), success], 0, 2);
@@ -177,7 +178,19 @@ await assert.rejects(runPnpmAudit(executable, { offline: true, snapshotPath, loc
 writeFileSync(lockfilePath, "changed lock");
 await assert.rejects(runPnpmAudit(executable, { offline: true, snapshotPath, lockfilePath }), /last 24 hours/);
 await assert.rejects(runPnpmAudit(executable, { offline: true, snapshotPath: path.join(fixture, "missing.json"), lockfilePath }), /ENOENT/);
-await assert.rejects(runPnpmAudit(path.resolve("pnpm.cmd")), /native pnpm/);
+for (const invalidPath of [path.resolve("pnpm.cmd"), path.resolve("package manager.BAT"), "pnpm-native"]) {
+  await assert.rejects(runPnpmAudit(invalidPath, { snapshotPath, lockfilePath }), /npm_execpath/);
+}
+const originalUserAgent = process.env.npm_config_user_agent;
+try {
+  for (const userAgent of ["", "npm/1.0.0", "pnpm/0.0.0"]) {
+    process.env.npm_config_user_agent = userAgent;
+    await assert.rejects(runPnpmAudit(executable, { snapshotPath, lockfilePath }), /Run through pnpm/);
+  }
+} finally {
+  if (originalUserAgent === undefined) delete process.env.npm_config_user_agent;
+  else process.env.npm_config_user_agent = originalUserAgent;
+}
 const manifest = { engines: { node: "24.18.0", pnpm: "12.3.4" }, packageManager: "pnpm@12.3.4" };
 assert.deepEqual(toolchainErrors("24.18.0", manifest, "24.18.0", "pnpm/12.3.4 npm/? node/v24.18.0"), []);
 assert.ok(toolchainErrors("24.18.0", manifest, "22.0.0", "pnpm/12.3.4").length);

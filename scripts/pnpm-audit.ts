@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { stripVTControlCharacters } from "node:util";
+import { pnpmToolchainErrors } from "./check-toolchain.ts";
 
 type AuditResult = { status: number | null; stdout: string; stderr: string; error?: Error };
 
@@ -51,8 +52,11 @@ export async function runPnpmAudit(pnpmExecutable: string, options: {
     }
     return cleanReport(snapshot.report) ? 0 : 1;
   }
-  if (!path.isAbsolute(pnpmExecutable) || !/^pnpm(?:\.exe)?$/i.test(path.basename(pnpmExecutable))) {
-    throw new Error("Run this gate through the pinned native pnpm executable");
+  const manifest = JSON.parse(readFileSync("package.json", "utf8"));
+  const errors = pnpmToolchainErrors(manifest, process.env.npm_config_user_agent ?? "");
+  if (errors.length) throw new Error(errors.join("\n"));
+  if (!path.isAbsolute(pnpmExecutable) || /\.(?:cmd|bat)$/i.test(pnpmExecutable)) {
+    throw new Error("npm_execpath must be an absolute executable path that can run without a shell");
   }
   const auditedLockHash = lockHash();
   rmSync(snapshotPath, { force: true });

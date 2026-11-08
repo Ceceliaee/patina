@@ -2,16 +2,23 @@ import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export function toolchainErrors(nodeVersion: string, manifest: { engines?: { node?: string; pnpm?: string }; packageManager?: string }, actualNode: string, userAgent: string): string[] {
+type ToolchainManifest = { engines?: { node?: string; pnpm?: string }; packageManager?: string };
+
+export function pnpmToolchainErrors(manifest: ToolchainManifest, userAgent: string): string[] {
   const errors: string[] = [];
-  if (manifest.engines?.node !== nodeVersion) errors.push("engines.node must match .node-version");
-  if (actualNode !== nodeVersion) errors.push(`Node ${nodeVersion} required; received ${actualNode}`);
   const pnpmVersion = manifest.engines?.pnpm;
   if (!pnpmVersion || !/^\d+\.\d+\.\d+$/.test(pnpmVersion) || manifest.packageManager !== `pnpm@${pnpmVersion}`) {
     errors.push("packageManager must pin the same exact pnpm version as engines.pnpm");
   }
   if (userAgent.split(" ")[0] !== `pnpm/${pnpmVersion}`) errors.push(`Run through pnpm ${pnpmVersion}`);
   return errors;
+}
+
+export function toolchainErrors(nodeVersion: string, manifest: ToolchainManifest, actualNode: string, userAgent: string): string[] {
+  const errors: string[] = [];
+  if (manifest.engines?.node !== nodeVersion) errors.push("engines.node must match .node-version");
+  if (actualNode !== nodeVersion) errors.push(`Node ${nodeVersion} required; received ${actualNode}`);
+  return errors.concat(pnpmToolchainErrors(manifest, userAgent));
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
