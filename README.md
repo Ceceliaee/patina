@@ -2,7 +2,7 @@
 
 # Patina
 
-Local-first time tracking for Windows desktop work.
+Quiet, reliable time tracking that keeps your data local.
 
 English · [简体中文](README.zh-CN.md)
 
@@ -14,27 +14,16 @@ English · [简体中文](README.zh-CN.md)
 
 </div>
 
-
 <p align="center">
-Patina records foreground app usage as local, quiet, and trustworthy personal desktop time records.
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/readme/hero-dark.png">
+    <img src=".github/assets/readme/hero-light.png" alt="Patina Today overview">
+  </picture>
 </p>
-
-<p align="center">
-  <img src=".github/assets/readme/hero.png" alt="Patina dashboard">
-</p>
-
-## Why Patina
-
-- Records foreground apps automatically, without manually starting or stopping timers.
-- Handles idle, lock, sleep, and abnormal-exit boundaries to keep records more trustworthy.
-- Keeps data local by default, with no account, cloud sync, or server dependency.
-- Lets you manage app names, categories, colors, anonymous activity statistics, and window title capture.
-- Provides lightweight local tools such as reminders, timers, and Pomodoro.
-- Keeps the interface restrained, clear, and low-interruption for long-term daily use.
 
 ## Download
 
-Download and install the latest Patina:
+Patina runs on Windows 10 and Windows 11.
 
 <p align="center">
   <a href="https://github.com/Ceceliaee/patina/releases/latest">
@@ -45,7 +34,7 @@ Download and install the latest Patina:
   </a>
 </p>
 
-[Patina Web Sync](https://github.com/Ceceliaee/patina-web-sync) adds specific webpage details to browser activity. Install it as needed:
+To see browsing time by website, install [Patina Web Sync](https://github.com/Ceceliaee/patina-web-sync) and connect it to the desktop app.
 
 <p align="center">
   <a href="https://chromewebstore.google.com/detail/patina-web-sync/gimdckblhckibmeklhemgccabmbnoemd"><img src=".github/assets/store-badges/chrome-web-store.png" height="36" alt="Install Patina Web Sync from the Chrome Web Store"></a>
@@ -53,33 +42,37 @@ Download and install the latest Patina:
   <a href="https://microsoftedge.microsoft.com/addons/detail/gogmlpjhbfjghilmpcciedplifdiibai"><img src=".github/assets/store-badges/edge-add-ons.png" height="36" alt="Install Patina Web Sync from Microsoft Edge Add-ons"></a>
 </p>
 
+## Why Patina
+
+- Automatically track how much time you spend in each foreground app.
+- Review your day, see where your time goes, and follow changes over time.
+- Keep activity records on your device by default. No account is required.
+
 ## Core Features
 
 ### Automatic Tracking
 
-- Automatically records the current foreground app and turns activity into time records.
-- Detects idle, lock, and sleep states to reduce invalid time in statistics.
-- Handles record boundaries after long-away periods and abnormal exits, reducing accidentally merged time.
-- Reduces missed effective activity in low-interaction scenarios such as videos, meetings, courses, and livestreams.
+- Record each period of activity in the foreground app.
+- Keep tracking during videos and meetings using signals such as audio playback.
 
-### Review And Analysis
+### Review and Analysis
 
-- Review effective activity, app rankings, and category distribution in today's overview.
-- Use the timeline to review activity by date and inspect app switches and window title details.
-- Understand long-term time distribution through trends, heatmaps, and app curves.
+- See daily activity totals, your most-used apps, and the share of time spent in each category.
+- Browse by date to review app switches and saved window titles.
+- Compare app usage trends and see how your time is distributed across different periods.
 
-### Management And Control
+### Management and Control
 
-- Rename apps and adjust categories, colors, and statistics rules.
-- Enable [anonymous statistics](docs/product-principles-and-scope.md#73-可管理的应用语义层) for selected apps, recording time without identity or titles.
-- Control window title capture separately for each app; disabling titles does not stop time tracking.
-- Export local backups, restore backups, and clean up historical records.
+- Customize display names, categories, and colors for apps and websites.
+- Combine usage time for related programs. Websites are grouped by their main domain.
+- Back up data locally or to WebDAV, schedule backups, and restore from a backup.
+- Import or export activity records.
 
 ### Lightweight Tools
 
-- Create one-off reminders and app usage limit reminders.
-- Use stopwatch, countdown, and Pomodoro for active focus tasks.
-- Tool state stays local and does not replace automatic tracking records.
+- Schedule one-time or recurring reminders.
+- Set daily limits for apps, categories, or websites and get a reminder when you reach a limit.
+- Use Pomodoro or free focus and review focus sessions and breaks by task.
 
 ## Interface Preview
 
@@ -89,52 +82,68 @@ Download and install the latest Patina:
     <td width="50%" align="center"><strong>Data</strong></td>
   </tr>
   <tr>
-    <td width="50%"><img src=".github/assets/readme/history.png" alt="History page"></td>
-    <td width="50%"><img src=".github/assets/readme/data.png" alt="Data page"></td>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset=".github/assets/readme/history-dark.png">
+        <img src=".github/assets/readme/history-light.png" alt="History page">
+      </picture>
+    </td>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset=".github/assets/readme/data-dark.png">
+        <img src=".github/assets/readme/data-light.png" alt="Data page">
+      </picture>
+    </td>
   </tr>
   <tr>
     <td width="50%" align="center"><strong>Classification</strong></td>
     <td width="50%" align="center"><strong>Tools</strong></td>
   </tr>
   <tr>
-    <td width="50%"><img src=".github/assets/readme/classification.png" alt="Classification page"></td>
-    <td width="50%"><img src=".github/assets/readme/tools.png" alt="Tools page"></td>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset=".github/assets/readme/classification-dark.png">
+        <img src=".github/assets/readme/classification-light.png" alt="Classification page">
+      </picture>
+    </td>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset=".github/assets/readme/tools-dark.png">
+        <img src=".github/assets/readme/tools-light.png" alt="Tools page">
+      </picture>
+    </td>
   </tr>
   <tr>
     <td width="50%" align="center"><strong>Settings</strong></td>
     <td width="50%" align="center"><strong>About</strong></td>
   </tr>
   <tr>
-    <td width="50%"><img src=".github/assets/readme/settings.png" alt="Settings page"></td>
-    <td width="50%"><img src=".github/assets/readme/about.png" alt="About page"></td>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset=".github/assets/readme/settings-dark.png">
+        <img src=".github/assets/readme/settings-light.png" alt="Settings page">
+      </picture>
+    </td>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset=".github/assets/readme/about-dark.png">
+        <img src=".github/assets/readme/about-light.png" alt="About page">
+      </picture>
+    </td>
   </tr>
 </table>
 
-## Reliability And Privacy
+## Reliability and Privacy
 
-Time tracking has long-term value only when the records are trustworthy. Patina focuses on these boundaries:
-
-- **Foreground app recognition**: records the window and app that are actually in the foreground, reducing temporary-window and system noise.
-- **Idle handling**: idle time does not continue counting as effective activity.
-- **State boundaries**: handles record boundaries after lock, sleep, resume, long-away periods, and abnormal exits.
-- **Effective-duration stats**: rankings, distributions, and totals use effective activity time, not just open spans.
-- **Title capture control**: window title capture can be disabled per app to reduce unnecessary sensitive information retention.
-- **[Local data control](docs/architecture.md#存储位置与启动控制状态)**: core data stays local, and backups, restores, and history cleanup are initiated by the user.
-
-## Current Scope
-
-Patina currently focuses on personal local time records:
-
-- Windows 10/11 desktop use
-- Personal local data storage and control
-- Automatic tracking, review, classification, and backup or restore
-- Lightweight local tools
-
-It is not currently aimed at team collaboration, account systems, cloud sync, multi-platform sync, or heavy AI insights.
+- **Idle detection.** Patina distinguishes active time from periods of inactivity, screen lock, and sleep.
+- **Active time.** App rankings, category shares, and totals use time spent active.
+- **Title recording and anonymous statistics.** Choose whether to save titles for each app or website, or enable [anonymous statistics](docs/product-principles-and-scope.md#73-可管理的应用语义层).
+- **Browsing privacy.** Web records store full URLs locally by default. Anonymous statistics retain only browsing time.
+- **History retention.** Clear activity records older than the retention period you choose.
 
 ## Feedback
 
-Use GitHub Issues for bugs and feedback that needs follow-up, or scan the QR code to join the QQ channel for everyday conversation:
+Report problems or suggest improvements through GitHub Issues or the Patina QQ channel.
 
 <div align="center">
   <a href="https://github.com/Ceceliaee/patina/issues/new/choose">
@@ -150,31 +159,34 @@ Use GitHub Issues for bugs and feedback that needs follow-up, or scan the QR cod
   </picture>
 </div>
 
-## Build From Source
+## Development and Contributing
+
+### Run from Source
 
 <a id="requirements"></a>
 <a id="install-dependencies"></a>
 <a id="run-in-development"></a>
 <a id="build-installer"></a>
 
-Follow [dependency setup and first run](CONTRIBUTING.md#34-install-dependencies) for the development environment, installation, startup, and troubleshooting. Development uses a separate identity and data directory. Formal installers follow the [release policy](docs/versioning-and-release-policy.md#10-发布前的最低验证门槛).
+Follow the [first-run guide](CONTRIBUTING.md#34-install-dependencies) to set up the development environment and install dependencies, then run `pnpm run tauri dev`. The development build can run alongside the release build. Each uses its own data directory. To build a release installer, see the [release policy](docs/versioning-and-release-policy.md#10-发布前的最低验证门槛).
 
-## Tech Stack
+### Tech Stack
 
-- Desktop shell: Tauri v2
-- Backend: Rust
-- Frontend: React + Vite + TypeScript
-- Styling: Tailwind CSS
-- Database: SQLite via `@tauri-apps/plugin-sql`
-- Windows integration: `windows` crate
+- **Desktop framework** — Tauri v2
+- **Backend** — Rust
+- **System integration** — Windows API
+- **Frontend** — React and TypeScript
+- **Styling** — Tailwind CSS
+- **Frontend build tool** — Vite
+- **Local storage** — SQLite
 
-## Contributing
+### Contributing
 
-If you want to contribute, understand the product direction, or review architecture boundaries, start with [`CONTRIBUTING.md`](CONTRIBUTING.md#english).
+The [contributing guide](CONTRIBUTING.md#english) explains how to discuss the scope of a change, validate it, and submit a pull request.
 
-## Support
+## Support the Project
 
-Patina is a personal, local-first open-source project. If it has been useful in your daily life or work, you can support ongoing maintenance in whichever way is convenient:
+If Patina has been useful to you, you can support its maintenance through Ko-fi or WeChat.
 
 <div align="center">
   <a href="https://ko-fi.com/ceceliaee"><img src="https://storage.ko-fi.com/cdn/kofi2.png?v=3" height="36" alt="Buy me a coffee"></a>
@@ -184,8 +196,6 @@ Patina is a personal, local-first open-source project. If it has been useful in 
     <img src=".github/assets/support/wechat-reward-light.png" width="200" alt="WeChat reward code">
   </picture>
 </div>
-
-Sponsorship helps sustain maintenance, but it does not affect feature priority, issue handling, the roadmap, or the product direction.
 
 ## Star History
 
