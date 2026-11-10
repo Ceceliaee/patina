@@ -1,3 +1,11 @@
+macro_rules! run_select_sql {
+    ($filter:literal) => { concat!("SELECT run_key, target_generation, target_kind, logical_date, logical_time_minutes, target_path,
+            staging_path, phase, remote_etag, status, file_state, attempt_count, retry_at_ms,
+            started_at_ms, completed_at_ms, archive_sha256, size_bytes, error_code, error_message,
+            cleanup_warning, updated_at_ms
+     FROM scheduled_backup_runs", " ", $filter) };
+}
+
 use crate::domain::backup_schedule::{
     ScheduledBackupCadence, ScheduledBackupConfig, ScheduledBackupRun, ScheduledBackupTarget,
     SCHEDULED_BACKUP_KEEP_COUNT,
@@ -88,7 +96,7 @@ pub async fn load_run(
     pool: &Pool<Sqlite>,
     run_key: &str,
 ) -> Result<Option<ScheduledBackupRun>, String> {
-    let row = sqlx::query(&format!("{} WHERE run_key = ? LIMIT 1", run_select_sql()))
+    let row = sqlx::query(run_select_sql!("WHERE run_key = ? LIMIT 1"))
         .bind(run_key)
         .fetch_optional(pool)
         .await
@@ -433,10 +441,9 @@ pub async fn list_retention_candidates(
     pool: &Pool<Sqlite>,
     generation: &str,
 ) -> Result<Vec<ScheduledBackupRun>, String> {
-    let rows = sqlx::query(&format!(
-        "{} WHERE target_generation = ? AND status = 'succeeded' AND file_state = 'present'
-         ORDER BY logical_date DESC, logical_time_minutes DESC, completed_at_ms DESC, run_key DESC",
-        run_select_sql()
+    let rows = sqlx::query(run_select_sql!(
+        "WHERE target_generation = ? AND status = 'succeeded' AND file_state = 'present'
+         ORDER BY logical_date DESC, logical_time_minutes DESC, completed_at_ms DESC, run_key DESC"
     ))
     .bind(generation)
     .fetch_all(pool)
@@ -515,9 +522,8 @@ pub async fn load_recent_by_status(
     generation: &str,
     status: &str,
 ) -> Result<Option<ScheduledBackupRun>, String> {
-    let row = sqlx::query(&format!(
-        "{} WHERE target_generation = ? AND status = ? ORDER BY updated_at_ms DESC LIMIT 1",
-        run_select_sql()
+    let row = sqlx::query(run_select_sql!(
+        "WHERE target_generation = ? AND status = ? ORDER BY updated_at_ms DESC LIMIT 1"
     ))
     .bind(generation)
     .bind(status)
@@ -528,9 +534,8 @@ pub async fn load_recent_by_status(
 }
 
 pub async fn load_active(pool: &Pool<Sqlite>) -> Result<Option<ScheduledBackupRun>, String> {
-    let row = sqlx::query(&format!(
-        "{} WHERE status IN ('running', 'retry_wait') ORDER BY updated_at_ms DESC LIMIT 1",
-        run_select_sql()
+    let row = sqlx::query(run_select_sql!(
+        "WHERE status IN ('running', 'retry_wait') ORDER BY updated_at_ms DESC LIMIT 1"
     ))
     .fetch_optional(pool)
     .await
@@ -583,14 +588,6 @@ pub async fn reset_after_replace_restore(
             format!("failed to clear scheduled backup runtime after restore: {error}")
         })?;
     Ok(())
-}
-
-fn run_select_sql() -> &'static str {
-    "SELECT run_key, target_generation, target_kind, logical_date, logical_time_minutes, target_path,
-            staging_path, phase, remote_etag, status, file_state, attempt_count, retry_at_ms,
-            started_at_ms, completed_at_ms, archive_sha256, size_bytes, error_code, error_message,
-            cleanup_warning, updated_at_ms
-     FROM scheduled_backup_runs"
 }
 
 fn config_from_row(row: sqlx::sqlite::SqliteRow) -> Result<ScheduledBackupConfig, String> {

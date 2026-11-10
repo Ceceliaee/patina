@@ -352,7 +352,7 @@ pub(super) async fn load_sessions(
          FROM sessions {} ORDER BY id ASC",
         clause
     );
-    let mut query = sqlx::query(&sql);
+    let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
     for param in params {
         query = query.bind(param);
     }
@@ -388,7 +388,7 @@ pub(super) async fn load_web_activity(
          FROM web_activity_segments {} ORDER BY id ASC",
         clause
     );
-    let mut query = sqlx::query(&sql);
+    let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
     for param in params {
         query = query.bind(param);
     }

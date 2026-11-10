@@ -1,3 +1,18 @@
+macro_rules! run_select_sql {
+    ($filter:literal) => {
+        concat!(
+            "SELECT run_key, plan_generation, cadence, logical_start_date, logical_end_date,
+            period_start_ms, period_end_ms, format, selected_fields_json, target_path,
+            staging_path, phase, status, file_state, attempt_count, retry_at_ms, row_count,
+            size_bytes, sha256, error_code, error_message, started_at_ms, completed_at_ms,
+            updated_at_ms
+     FROM scheduled_export_runs",
+            " ",
+            $filter
+        )
+    };
+}
+
 use crate::domain::export_schedule::{
     ScheduledExportCadence, ScheduledExportConfig, ScheduledExportFormat, ScheduledExportRun,
 };
@@ -122,7 +137,7 @@ pub async fn load_run(
     pool: &Pool<Sqlite>,
     run_key: &str,
 ) -> Result<Option<ScheduledExportRun>, String> {
-    let row = sqlx::query(&format!("{} WHERE run_key = ? LIMIT 1", run_select_sql()))
+    let row = sqlx::query(run_select_sql!("WHERE run_key = ? LIMIT 1"))
         .bind(run_key)
         .fetch_optional(pool)
         .await
@@ -136,9 +151,8 @@ pub async fn load_period(
     period_start_ms: i64,
     period_end_ms: i64,
 ) -> Result<Option<ScheduledExportRun>, String> {
-    let row = sqlx::query(&format!(
-        "{} WHERE plan_generation = ? AND period_start_ms = ? AND period_end_ms = ? LIMIT 1",
-        run_select_sql()
+    let row = sqlx::query(run_select_sql!(
+        "WHERE plan_generation = ? AND period_start_ms = ? AND period_end_ms = ? LIMIT 1"
     ))
     .bind(generation)
     .bind(period_start_ms)
@@ -150,9 +164,8 @@ pub async fn load_period(
 }
 
 pub async fn load_active(pool: &Pool<Sqlite>) -> Result<Option<ScheduledExportRun>, String> {
-    let row = sqlx::query(&format!(
-        "{} WHERE status IN ('running', 'retry_wait') ORDER BY updated_at_ms DESC LIMIT 1",
-        run_select_sql()
+    let row = sqlx::query(run_select_sql!(
+        "WHERE status IN ('running', 'retry_wait') ORDER BY updated_at_ms DESC LIMIT 1"
     ))
     .fetch_optional(pool)
     .await
@@ -165,9 +178,8 @@ pub async fn load_recent_by_status(
     generation: &str,
     status: &str,
 ) -> Result<Option<ScheduledExportRun>, String> {
-    let row = sqlx::query(&format!(
-        "{} WHERE plan_generation = ? AND status = ? ORDER BY updated_at_ms DESC LIMIT 1",
-        run_select_sql()
+    let row = sqlx::query(run_select_sql!(
+        "WHERE plan_generation = ? AND status = ? ORDER BY updated_at_ms DESC LIMIT 1"
     ))
     .bind(generation)
     .bind(status)
@@ -444,15 +456,6 @@ fn transition(affected: u64, action: &str) -> Result<(), String> {
             "failed to {action}: scheduled export state changed unexpectedly"
         ))
     }
-}
-
-fn run_select_sql() -> &'static str {
-    "SELECT run_key, plan_generation, cadence, logical_start_date, logical_end_date,
-            period_start_ms, period_end_ms, format, selected_fields_json, target_path,
-            staging_path, phase, status, file_state, attempt_count, retry_at_ms, row_count,
-            size_bytes, sha256, error_code, error_message, started_at_ms, completed_at_ms,
-            updated_at_ms
-     FROM scheduled_export_runs"
 }
 
 fn decode_fields(value: String) -> Result<Vec<String>, String> {

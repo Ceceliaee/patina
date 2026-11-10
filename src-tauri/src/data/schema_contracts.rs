@@ -113,7 +113,7 @@ pub async fn has_retired_widget_preferences(pool: &Pool<Sqlite>) -> Result<bool,
     // Reuse the migration predicate so history repair and execution share the same data contract.
     let query =
         crate::data::schema::WIDGET_RETIREMENT_SQL.replace("DELETE FROM", "SELECT COUNT(*) FROM");
-    let count: i64 = sqlx::query_scalar(&query)
+    let count: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(query))
         .fetch_one(pool)
         .await
         .map_err(|error| format!("failed to inspect retired window preferences: {error}"))?;
@@ -180,7 +180,8 @@ pub async fn has_web_activity_revision_schema(pool: &Pool<Sqlite>) -> Result<boo
 }
 
 async fn table_columns(pool: &Pool<Sqlite>, table: &str) -> Result<BTreeSet<String>, String> {
-    let rows = sqlx::query(&format!("PRAGMA table_info({table})"))
+    let rows = sqlx::query("SELECT name FROM pragma_table_info(?)")
+        .bind(table)
         .fetch_all(pool)
         .await
         .map_err(|error| format!("failed to inspect {table} schema columns: {error}"))?;
@@ -191,7 +192,8 @@ async fn table_columns(pool: &Pool<Sqlite>, table: &str) -> Result<BTreeSet<Stri
 }
 
 async fn table_indexes(pool: &Pool<Sqlite>, table: &str) -> Result<BTreeSet<String>, String> {
-    let rows = sqlx::query(&format!("PRAGMA index_list({table})"))
+    let rows = sqlx::query("SELECT name FROM pragma_index_list(?)")
+        .bind(table)
         .fetch_all(pool)
         .await
         .map_err(|error| format!("failed to inspect {table} schema indexes: {error}"))?;

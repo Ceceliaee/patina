@@ -13,10 +13,11 @@ const TOTALS_SQL: &str = "WITH ordered AS (
 pub(super) async fn read_uncached(
     tx: &mut Transaction<'_, Sqlite>,
 ) -> Result<BTreeMap<String, i64>, String> {
-    let rows: Vec<(String, i64)> = sqlx::query_as(&TOTALS_SQL.replace("{filter}", ""))
-        .fetch_all(&mut **tx)
-        .await
-        .map_err(|e| e.to_string())?;
+    let rows: Vec<(String, i64)> =
+        sqlx::query_as(sqlx::AssertSqlSafe(TOTALS_SQL.replace("{filter}", "")))
+            .fetch_all(&mut **tx)
+            .await
+            .map_err(|e| e.to_string())?;
     Ok(rows.into_iter().collect())
 }
 
@@ -77,7 +78,9 @@ async fn read_cached_sql(
             "INSERT OR REPLACE INTO temp.web_lifetime_totals(domain,total) {}",
             TOTALS_SQL.replace("{filter}", filter)
         );
-        sqlx::query(&insert).execute(&mut **tx).await?;
+        sqlx::query(sqlx::AssertSqlSafe(insert))
+            .execute(&mut **tx)
+            .await?;
         // A dirty domain without any remaining facts produces no aggregate row.
         sqlx::query("DELETE FROM temp.web_lifetime_totals WHERE total IS NULL")
             .execute(&mut **tx)

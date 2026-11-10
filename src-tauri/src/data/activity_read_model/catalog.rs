@@ -138,7 +138,7 @@ async fn rebuild(pool: &Pool<Sqlite>) -> Result<(), String> {
                 grouped.last_seen_ms, grouped.has_native, grouped.has_exact, grouped.has_bucket, ?, ?
          FROM grouped"
     );
-    sqlx::query(&rebuild_sql)
+    sqlx::query(sqlx::AssertSqlSafe(rebuild_sql))
         .bind(source_revision)
         .bind(timestamp_ms)
         .execute(&mut *tx)
@@ -253,7 +253,7 @@ async fn load_trackable_catalog_facts(
     tx: &mut Transaction<'_, Sqlite>,
     app_key: &str,
 ) -> Result<Vec<CatalogFact>, String> {
-    let rows = sqlx::query(&catalog_facts_sql())
+    let rows = sqlx::query(sqlx::AssertSqlSafe(catalog_facts_sql()))
         .bind(app_key)
         .fetch_all(&mut **tx)
         .await
@@ -265,7 +265,7 @@ async fn load_trackable_catalog_facts_from_pool(
     pool: &Pool<Sqlite>,
     app_key: &str,
 ) -> Result<Vec<CatalogFact>, String> {
-    let rows = sqlx::query(&catalog_facts_sql())
+    let rows = sqlx::query(sqlx::AssertSqlSafe(catalog_facts_sql()))
         .bind(app_key)
         .fetch_all(pool)
         .await
@@ -492,7 +492,7 @@ async fn fetch_catalog_page_rows(
     cursor: Option<&RecordedAppCatalogCursorDto>,
     safe_limit: usize,
 ) -> Result<Vec<SqliteRow>, sqlx::Error> {
-    sqlx::query(sql)
+    sqlx::query(sqlx::AssertSqlSafe(sql))
         .bind(i64::from(!normalized_search.is_empty()))
         .bind(search_pattern)
         .bind(search_pattern)

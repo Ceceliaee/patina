@@ -5,7 +5,7 @@ use super::common::{
     ExportTimeFilter,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions, SqliteRow};
-use sqlx::{Pool, Row, Sqlite};
+use sqlx::{Pool, Row, SqlSafeStr, Sqlite};
 use std::path::Path;
 
 const SESSION_SOURCE_COLUMNS: &[&str] = &[
@@ -133,19 +133,20 @@ async fn copy_anonymous(
         .collect::<Vec<_>>()
         .join(", ");
     let mut tx = dst.begin().await.map_err(|error| error.to_string())?;
-    sqlx::query(&format!(
+    sqlx::query(sqlx::AssertSqlSafe(format!(
         "CREATE TABLE anonymous_activity (id INTEGER PRIMARY KEY AUTOINCREMENT, {columns})"
-    ))
+    )))
     .execute(&mut *tx)
     .await
     .map_err(|error| error.to_string())?;
     let placeholders = vec!["?"; fields.len()].join(", ");
-    let insert = format!(
+    let insert = sqlx::AssertSqlSafe(format!(
         "INSERT INTO anonymous_activity ({}) VALUES ({placeholders})",
         fields.join(", ")
-    );
+    ))
+    .into_sql_str();
     for row in &rows {
-        let mut query = sqlx::query(&insert);
+        let mut query = sqlx::query(insert.clone());
         for field in &fields {
             query = query.bind(super::common::anonymous_field_value(
                 field,
@@ -397,11 +398,11 @@ async fn copy_sessions(
     }
 
     let (query, params) = build_select_query("sessions", SESSION_SOURCE_COLUMNS, filter);
-    let rows = fetch_rows(src, &query, params).await?;
+    let rows = fetch_rows(src, sqlx::AssertSqlSafe(query), params).await?;
     let insert_sql = build_insert_query("sessions", &resolved.session_cols);
 
     for row in &rows {
-        let mut query = sqlx::query(&insert_sql);
+        let mut query = sqlx::query(insert_sql.clone());
         for column in &resolved.session_cols {
             query = match column.output_name {
                 "record_type" => query.bind("session"),
@@ -513,11 +514,11 @@ async fn copy_web(
     }
 
     let (query, params) = build_select_query("web_activity_segments", WEB_SOURCE_COLUMNS, filter);
-    let rows = fetch_rows(src, &query, params).await?;
+    let rows = fetch_rows(src, sqlx::AssertSqlSafe(query), params).await?;
     let insert_sql = build_insert_query("web_activity_segments", &resolved.web_cols);
 
     for row in &rows {
-        let mut query = sqlx::query(&insert_sql);
+        let mut query = sqlx::query(insert_sql.clone());
         for column in &resolved.web_cols {
             query = match column.output_name {
                 "record_type" => query.bind("web"),
@@ -640,7 +641,7 @@ async fn create_table(
         )
     };
 
-    sqlx::query(&create_sql)
+    sqlx::query(sqlx::AssertSqlSafe(create_sql))
         .execute(&mut **tx)
         .await
         .map_err(|e| format!("create {table}: {e}"))?;
@@ -662,19 +663,20 @@ fn build_select_query(
     )
 }
 
-fn build_insert_query(table: &str, columns: &[ExportColumn]) -> String {
+fn build_insert_query(table: &'static str, columns: &[ExportColumn]) -> sqlx::SqlStr {
     let insert_cols: Vec<&str> = columns.iter().map(|column| column.output_name).collect();
     let placeholders: Vec<&str> = columns.iter().map(|_| "?").collect();
-    format!(
+    sqlx::AssertSqlSafe(format!(
         "INSERT INTO {table} ({}) VALUES ({})",
         insert_cols.join(", "),
         placeholders.join(", ")
-    )
+    ))
+    .into_sql_str()
 }
 
 async fn fetch_rows(
     pool: &Pool<Sqlite>,
-    query: &str,
+    query: impl sqlx::SqlSafeStr,
     params: Vec<i64>,
 ) -> Result<Vec<SqliteRow>, String> {
     let mut query = sqlx::query(query);

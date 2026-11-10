@@ -159,7 +159,7 @@ async fn decode_exact_sessions(
         q(start),
         MAX_IMPORT_RECORDS + 1,
     );
-    let rows = sqlx::query(&sql)
+    let rows = sqlx::query(sqlx::AssertSqlSafe(sql))
         .fetch_all(pool)
         .await
         .map_err(|error| format!("failed to read Taix sessions: {error}"))?;
@@ -272,7 +272,7 @@ async fn decode_hour_buckets(
         q(start),
         MAX_IMPORT_RECORDS.saturating_sub(records.len()) + 1,
     );
-    let rows = sqlx::query(&sql)
+    let rows = sqlx::query(sqlx::AssertSqlSafe(sql))
         .fetch_all(pool)
         .await
         .map_err(|error| format!("failed to read Tai/Taix hour records: {error}"))?;

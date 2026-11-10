@@ -17,11 +17,11 @@ pub async fn fetch_all_reminders_for_backup(
     } else {
         "NULL AS restore_key"
     };
-    let rows = sqlx::query(&format!(
+    let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
         "SELECT {identity_column}, id, label, scheduled_at, created_at, status, fired_at, cancelled_at, {recurrence_columns}
          FROM tool_reminders
          ORDER BY id ASC"
-    ))
+    )))
     .fetch_all(pool)
     .await
     .map_err(|error| format!("failed to read tool reminders for backup: {error}"))?;
@@ -61,13 +61,13 @@ pub async fn fetch_all_pomodoro_runs_for_backup(
     } else {
         "NULL AS task_label, NULL AS task_deleted_at"
     };
-    let rows = sqlx::query(&format!(
+    let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
         "SELECT {completed_groups} AS completed_groups, {task_columns}, id, phase, status, cycle_index, focus_ms, short_break_ms, long_break_ms,
                 long_break_every, phase_started_at, phase_paused_at, phase_remaining_ms,
                 completed_focus_count, created_at, updated_at
          FROM tool_pomodoro_runs
          ORDER BY id ASC"
-    ))
+    )))
     .fetch_all(pool)
     .await
     .map_err(|error| format!("failed to read tool pomodoro runs for backup: {error}"))?;

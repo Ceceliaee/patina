@@ -347,7 +347,7 @@ async fn load_sessions(
 ) -> Result<Vec<SessionRow>, String> {
     let (clause, params) = build_overlap_where_clause(filter);
     let sql = format!("SELECT id, app_name, exe_name, window_title, start_time, end_time, duration, COALESCE(continuity_group_start_time, start_time) AS continuity_group_start_time FROM sessions {clause} ORDER BY start_time ASC, id ASC");
-    let mut query = sqlx::query(&sql);
+    let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
     for param in params {
         query = query.bind(param);
     }
@@ -377,7 +377,7 @@ async fn load_web_activity(
 ) -> Result<Vec<WebRow>, String> {
     let (clause, params) = build_overlap_where_clause(filter);
     let sql = format!("SELECT id, browser_client_id, browser_kind, browser_exe_name, domain, normalized_domain, url, title, favicon_url, start_time, end_time, duration, source, created_at, updated_at FROM web_activity_segments {clause} ORDER BY start_time ASC, id ASC");
-    let mut query = sqlx::query(&sql);
+    let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
     for param in params {
         query = query.bind(param);
     }

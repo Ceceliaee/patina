@@ -734,7 +734,8 @@ async fn validate_sqlite_table_columns(
     table: &str,
     expected_fields: &[String],
 ) -> Result<(), String> {
-    let rows = sqlx::query(&format!("PRAGMA table_info({table})"))
+    let rows = sqlx::query("SELECT * FROM pragma_table_info(?)")
+        .bind(table)
         .fetch_all(&mut *connection)
         .await
         .map_err(|_| "format_validation_failed".to_string())?;

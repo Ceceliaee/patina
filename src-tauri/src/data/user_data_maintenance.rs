@@ -285,7 +285,7 @@ async fn delete_sessions_by_exe_names_in_pool(
         "DELETE FROM session_title_samples
          WHERE session_id IN (SELECT id FROM sessions WHERE exe_name IN ({placeholders}))"
     );
-    let mut title_query = sqlx::query(&title_query);
+    let mut title_query = sqlx::query(sqlx::AssertSqlSafe(title_query));
     for exe_name in exe_names {
         title_query = title_query.bind(exe_name);
     }
@@ -305,7 +305,7 @@ async fn delete_sessions_by_exe_names_in_pool(
         ),
     ] {
         let query = format!("DELETE FROM {table} WHERE exe_name IN ({placeholders})");
-        let mut query = sqlx::query(&query);
+        let mut query = sqlx::query(sqlx::AssertSqlSafe(query));
         for exe_name in exe_names {
             query = query.bind(exe_name);
         }
@@ -348,7 +348,7 @@ async fn delete_sessions_by_exe_names_between_in_pool(
            WHERE exe_name IN ({placeholders}) AND start_time >= ? AND start_time < ?
          )"
     );
-    let mut title_query = sqlx::query(&title_query);
+    let mut title_query = sqlx::query(sqlx::AssertSqlSafe(title_query));
     for exe_name in exe_names {
         title_query = title_query.bind(exe_name);
     }
@@ -378,7 +378,7 @@ async fn delete_sessions_by_exe_names_between_in_pool(
             "DELETE FROM {table}
              WHERE exe_name IN ({placeholders}) AND {time_column} >= ? AND {time_column} < ?"
         );
-        let mut query = sqlx::query(&query);
+        let mut query = sqlx::query(sqlx::AssertSqlSafe(query));
         for exe_name in exe_names {
             query = query.bind(exe_name);
         }

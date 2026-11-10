@@ -14,7 +14,7 @@ pub async fn extend_activity_reminder(
 ) -> Result<(), String> {
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
     let query = format!("SELECT {ACTIVITY_RULE_COLUMNS} FROM tool_activity_reminder_rules WHERE id = ? AND disabled_at IS NULL AND NOT EXISTS (SELECT 1 FROM tool_activity_reminder_states WHERE rule_id = tool_activity_reminder_rules.id AND enabled = 0)");
-    let row = sqlx::query(&query)
+    let row = sqlx::query(sqlx::AssertSqlSafe(query))
         .bind(rule_id)
         .fetch_optional(&mut *tx)
         .await

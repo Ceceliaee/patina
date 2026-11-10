@@ -8,9 +8,9 @@ pub(crate) async fn optimize_query_statistics(pool: &Pool<Sqlite>) -> Result<(),
     let _timing = super::diagnostics::start(super::diagnostics::Phase::Maintenance);
     // Check queried tables and indexes without statistics. Retain STAT4 by omitting
     // the analysis-limit flag, and avoid blind analysis of untouched singleton tables.
-    sqlx::query(&format!(
+    sqlx::query(sqlx::AssertSqlSafe(format!(
         "PRAGMA optimize({QUERY_STATISTICS_OPTIMIZE_MASK})"
-    ))
+    )))
     .execute(pool)
     .await
     .map(|_| ())

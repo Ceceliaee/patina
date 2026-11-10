@@ -587,7 +587,7 @@ async fn table_count_if_exists(pool: &Pool<Sqlite>, table: &str) -> Result<i64, 
     }
 
     let query = format!("SELECT COUNT(*) FROM {table}");
-    sqlx::query_scalar::<_, i64>(&query)
+    sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(query))
         .fetch_one(pool)
         .await
         .map_err(|error| format!("failed to count `{table}`: {error}"))

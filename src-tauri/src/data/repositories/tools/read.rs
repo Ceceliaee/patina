@@ -49,11 +49,11 @@ pub(super) async fn fetch_reminder_by_id(
     pool: &Pool<Sqlite>,
     id: i64,
 ) -> Result<ToolReminder, String> {
-    sqlx::query(&format!(
+    sqlx::query(sqlx::AssertSqlSafe(format!(
         "SELECT id, label, scheduled_at, created_at, status, fired_at, cancelled_at, {REMINDER_RECURRENCE_COLUMNS}
          FROM tool_reminders
          WHERE id = ?"
-    ))
+    )))
     .bind(id)
     .fetch_one(pool)
     .await
@@ -92,7 +92,7 @@ pub(super) async fn fetch_activity_reminder_rule_by_id(
     let query =
         format!("SELECT {ACTIVITY_RULE_COLUMNS} FROM tool_activity_reminder_rules WHERE id = ?");
     let mut rule = map_activity_reminder_rule_row(
-        sqlx::query(&query)
+        sqlx::query(sqlx::AssertSqlSafe(query))
             .bind(id)
             .fetch_one(pool)
             .await
@@ -144,7 +144,7 @@ async fn fetch_active_activity_reminder_rules(
         "SELECT {ACTIVITY_RULE_COLUMNS} FROM tool_activity_reminder_rules
          WHERE disabled_at IS NULL ORDER BY created_at ASC, id ASC"
     );
-    let rows = sqlx::query(&query)
+    let rows = sqlx::query(sqlx::AssertSqlSafe(query))
         .fetch_all(pool)
         .await
         .map_err(|error| format!("failed to load active activity reminder rules: {error}"))?;
@@ -168,7 +168,7 @@ pub(crate) async fn fetch_all_activity_reminder_rules(
 ) -> Result<Vec<ToolActivityReminderRule>, String> {
     let query =
         format!("SELECT {ACTIVITY_RULE_COLUMNS} FROM tool_activity_reminder_rules ORDER BY id ASC");
-    sqlx::query(&query)
+    sqlx::query(sqlx::AssertSqlSafe(query))
         .fetch_all(pool)
         .await
         .map_err(|error| {
@@ -310,7 +310,7 @@ pub(super) async fn fetch_web_usage_facts_tx(
 }
 
 async fn fetch_visible_reminders(pool: &Pool<Sqlite>) -> Result<Vec<ToolReminder>, String> {
-    let rows = sqlx::query(&format!(
+    let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
         "SELECT id, label, scheduled_at, created_at, status, fired_at, cancelled_at, {REMINDER_RECURRENCE_COLUMNS}
          FROM tool_reminders
          WHERE status != 'cancelled'
@@ -318,7 +318,7 @@ async fn fetch_visible_reminders(pool: &Pool<Sqlite>) -> Result<Vec<ToolReminder
             CASE WHEN status IN (?, 'paused') THEN 0 ELSE 1 END ASC,
             CASE WHEN status IN (?, 'paused') THEN scheduled_at ELSE -COALESCE(fired_at, cancelled_at, created_at) END ASC,
             id ASC"
-    ))
+    )))
     .bind(ReminderStatus::Scheduled.as_str())
     .bind(ReminderStatus::Scheduled.as_str())
     .fetch_all(pool)

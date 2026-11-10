@@ -52,7 +52,7 @@ impl MigrationSource<'static> for InlineMigrationList {
                     migration.version,
                     migration.description.into(),
                     MigrationType::ReversibleUp,
-                    migration.sql.into(),
+                    sqlx::SqlStr::from_static(migration.sql),
                     false,
                 ));
             }
@@ -69,7 +69,7 @@ pub(crate) fn expected_migration_metadata() -> Vec<(i64, &'static str, Vec<u8>)>
                 migration.version,
                 migration.description.into(),
                 MigrationType::ReversibleUp,
-                migration.sql.into(),
+                sqlx::SqlStr::from_static(migration.sql),
                 false,
             );
             (

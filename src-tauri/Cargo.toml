@@ -58,7 +58,10 @@ tokio = { version = "1.53.3", features = ["rt-multi-thread", "time", "net", "syn
 tokio-util = { version = "0.7", features = ["io"] }
 tokio-tungstenite = { version = "0.28", features = ["rustls-tls-native-roots"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
-sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"] }
+# Keep the bundled SQLite above the WAL page-cache fix in RUSTSEC-2026-0459.
+libsqlite3-sys = { version = "0.39.1", default-features = false }
+# First upstream SQLx revision accepting these bindings.
+sqlx = { git = "https://github.com/transact-rs/sqlx", rev = "10462fa4414c6c7f1ed1d39bb31678e3b726878c", default-features = false, features = ["sqlite", "runtime-tokio", "derive", "migrate"] }
 url = "2"
 psl = "=2.1.230"
 quick-xml = "0.41.0"

@@ -211,10 +211,10 @@ pub async fn resolve_reminder_alert(
 }
 
 pub async fn pending_reminder_alerts(pool: &Pool<Sqlite>) -> Result<Vec<ToolReminder>, String> {
-    sqlx::query(&format!(
+    sqlx::query(sqlx::AssertSqlSafe(format!(
         "SELECT id, label, scheduled_at, created_at, status, fired_at, cancelled_at, {REMINDER_RECURRENCE_COLUMNS}
          FROM tool_reminders WHERE status = 'pending_confirmation' ORDER BY fired_at, id"
-    ))
+    )))
     .fetch_all(pool)
     .await
     .map_err(|error| format!("failed to recover pending reminders: {error}"))
@@ -225,12 +225,12 @@ pub async fn fire_due_reminders(
     tx: &mut Transaction<'_, Sqlite>,
     now_ms: i64,
 ) -> Result<Vec<ToolReminder>, String> {
-    let rows = sqlx::query(&format!(
+    let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
         "SELECT id, label, scheduled_at, created_at, status, fired_at, cancelled_at, {REMINDER_RECURRENCE_COLUMNS}
          FROM tool_reminders
          WHERE status = ? AND scheduled_at <= ?
          ORDER BY scheduled_at ASC, id ASC"
-    ))
+    )))
     .bind(ReminderStatus::Scheduled.as_str())
     .bind(now_ms)
     .fetch_all(&mut **tx)

@@ -15,11 +15,6 @@ const LOCK_ONLY_ADVISORIES = [
     reason: "GTK dependency is not reachable on either Windows release target",
   },
   {
-    id: "RUSTSEC-2023-0071",
-    crate: "rsa@0.9.10",
-    reason: "optional SQLx dependency is not enabled by Patina's SQLite-only feature set",
-  },
-  {
     id: "RUSTSEC-2026-0194",
     crate: "quick-xml@0.39.4",
     reason: "only reachable through the Linux Wayland scanner, not the Windows product target",

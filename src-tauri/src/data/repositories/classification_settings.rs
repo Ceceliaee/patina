@@ -145,7 +145,7 @@ pub async fn load_classification_snapshot(
 pub async fn load_classification_snapshot_in_tx(
     tx: &mut Transaction<'_, Sqlite>,
 ) -> Result<ClassificationSnapshot, String> {
-    let rows = sqlx::query(&classification_settings_query())
+    let rows = sqlx::query(sqlx::AssertSqlSafe(classification_settings_query()))
         .bind(format!("{APP_OVERRIDE_KEY_PREFIX}%"))
         .bind(format!("{WEB_DOMAIN_OVERRIDE_KEY_PREFIX}%"))
         .bind(format!("{CATEGORY_LABEL_OVERRIDE_KEY_PREFIX}%"))
@@ -163,7 +163,7 @@ pub async fn load_classification_snapshot_in_tx(
 async fn load_classification_setting_rows(
     pool: &Pool<Sqlite>,
 ) -> Result<Vec<(String, String)>, String> {
-    let rows = sqlx::query(&classification_settings_query())
+    let rows = sqlx::query(sqlx::AssertSqlSafe(classification_settings_query()))
         .bind(format!("{APP_OVERRIDE_KEY_PREFIX}%"))
         .bind(format!("{WEB_DOMAIN_OVERRIDE_KEY_PREFIX}%"))
         .bind(format!("{CATEGORY_LABEL_OVERRIDE_KEY_PREFIX}%"))
