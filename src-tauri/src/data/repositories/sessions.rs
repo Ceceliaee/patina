@@ -585,14 +585,15 @@ mod exclusion_tests {
         )
         .await
         .unwrap();
-        let plan: Vec<String> =
-            sqlx::query(&format!("EXPLAIN QUERY PLAN {LOAD_ACTIVE_SESSION_SQL}"))
-                .fetch_all(&pool)
-                .await
-                .unwrap()
-                .iter()
-                .map(|row| row.get("detail"))
-                .collect();
+        let plan: Vec<String> = sqlx::query(sqlx::AssertSqlSafe(format!(
+            "EXPLAIN QUERY PLAN {LOAD_ACTIVE_SESSION_SQL}"
+        )))
+        .fetch_all(&pool)
+        .await
+        .unwrap()
+        .iter()
+        .map(|row| row.get("detail"))
+        .collect();
         assert!(
             plan.iter().any(|line| {
                 line.contains("SEARCH closed USING INDEX idx_sessions_exe_usage_time")

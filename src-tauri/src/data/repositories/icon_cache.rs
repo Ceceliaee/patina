@@ -378,11 +378,13 @@ mod tests {
     fn freshness_query_uses_primary_key_lookup_without_scanning_icon_payload_rows() {
         tauri::async_runtime::block_on(async {
             let pool = setup_test_db().await;
-            let plan = sqlx::query(&format!("EXPLAIN QUERY PLAN {ICON_CACHE_STATE_QUERY}"))
-                .bind("app.exe")
-                .fetch_all(&pool)
-                .await
-                .unwrap();
+            let plan = sqlx::query(sqlx::AssertSqlSafe(format!(
+                "EXPLAIN QUERY PLAN {ICON_CACHE_STATE_QUERY}"
+            )))
+            .bind("app.exe")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
             let details: Vec<String> = plan.iter().map(|row| row.get("detail")).collect();
             assert!(
                 details

@@ -87,9 +87,9 @@ async fn selected_activity_rules_skip_unrelated_rules_and_usage_sources() {
         } else {
             "web_activity_segments"
         };
-        sqlx::query(&format!(
+        sqlx::query(sqlx::AssertSqlSafe(format!(
             "ALTER TABLE {unused_source} RENAME TO unused_usage"
-        ))
+        )))
         .execute(&mut *tx)
         .await
         .unwrap();

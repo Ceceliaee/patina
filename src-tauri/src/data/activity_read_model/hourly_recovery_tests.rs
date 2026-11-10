@@ -65,13 +65,10 @@ async fn derived_signal_write_failures_roll_back_native_and_import_fact_mutation
         "BEFORE INSERT ON activity_summary_dirty_ranges",
         "BEFORE INSERT ON app_catalog_dirty_keys",
     ] {
-        pool.execute(
-            format!(
-                "CREATE TRIGGER reject_derived_signal {failure_point}
+        pool.execute(sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            "CREATE TRIGGER reject_derived_signal {failure_point}
              BEGIN SELECT RAISE(ABORT, 'injected signal write failure'); END;"
-            )
-            .as_str(),
-        )
+        ))))
         .await
         .unwrap();
         for mutation in [

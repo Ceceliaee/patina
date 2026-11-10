@@ -455,7 +455,7 @@ mod tests {
                 "PRAGMA optimize({})",
                 crate::data::sqlite_pool::QUERY_STATISTICS_OPTIMIZE_MASK | 1
             );
-            let pending: Vec<String> = sqlx::query_scalar(&debug_sql)
+            let pending: Vec<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(debug_sql))
                 .fetch_all(&pool)
                 .await
                 .unwrap();

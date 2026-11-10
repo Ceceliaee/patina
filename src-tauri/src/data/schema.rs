@@ -1507,7 +1507,7 @@ mod query_plan_diagnostics {
 
     async fn explain_query(pool: &SqlitePool, sql: &str, binds: &[i64]) -> Vec<String> {
         let explain_sql = format!("EXPLAIN QUERY PLAN {sql}");
-        let mut query = sqlx::query(&explain_sql);
+        let mut query = sqlx::query(sqlx::AssertSqlSafe(explain_sql));
         for bind in binds {
             query = query.bind(*bind);
         }
@@ -1618,7 +1618,7 @@ mod query_plan_diagnostics {
         let mut binds = (1..=64).collect::<Vec<_>>();
         binds.extend([RANGE_END_MS, NOW_MS, RANGE_START_MS]);
         let plan = explain_query(pool, &sql, &binds).await;
-        let mut query = sqlx::query(&sql);
+        let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
         for bind in &binds {
             query = query.bind(*bind);
         }
@@ -1694,7 +1694,7 @@ mod query_plan_diagnostics {
                      AND start_time < ?
                      AND COALESCE(end_time, ?) > ?";
         let explain_sql = format!("EXPLAIN QUERY PLAN {sql}");
-        let plan = sqlx::query(&explain_sql)
+        let plan = sqlx::query(sqlx::AssertSqlSafe(explain_sql))
             .bind(NOW_MS)
             .bind("example-1.test")
             .bind(RANGE_END_MS)

@@ -8,6 +8,20 @@ use super::sqlite_pool::{
 use sqlx::{Executor, Row, SqlitePool};
 use std::path::Path;
 
+#[tokio::test]
+async fn bundled_sqlite_has_the_wal_page_cache_fix() {
+    let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+    let actual: String = sqlx::query_scalar("SELECT sqlite_version()")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let parts: Vec<u32> = actual
+        .split('.')
+        .map(|part| part.parse().unwrap())
+        .collect();
+    assert!(parts.as_slice() >= &[3, 54, 0], "SQLite {actual}");
+}
+
 const LEGACY_ACTIVITY_TARGET_INDEX: &str =
     "CREATE UNIQUE INDEX idx_tool_activity_reminder_rules_unique_target
     ON tool_activity_reminder_rules(target_kind, CASE target_kind
@@ -26,19 +40,25 @@ async fn legacy_activity_target_database() -> SqlitePool {
         .await
         .unwrap();
     let mut connection = pool.acquire().await.unwrap();
-    connection.ensure_migrations_table().await.unwrap();
+    connection
+        .ensure_migrations_table("_sqlx_migrations")
+        .await
+        .unwrap();
     for migration in schema::tracker_migrations()
         .into_iter()
         .filter(|migration| migration.version <= schema::REMINDER_RECURRENCE_MIGRATION_VERSION)
     {
         connection
-            .apply(&Migration::new(
-                migration.version,
-                migration.description.into(),
-                MigrationType::ReversibleUp,
-                migration.sql.into(),
-                false,
-            ))
+            .apply(
+                "_sqlx_migrations",
+                &Migration::new(
+                    migration.version,
+                    migration.description.into(),
+                    MigrationType::ReversibleUp,
+                    sqlx::SqlStr::from_static(migration.sql),
+                    false,
+                ),
+            )
             .await
             .unwrap();
     }
@@ -177,19 +197,25 @@ async fn timer_retirement_preserves_reminders_pomodoro_and_migration_history() {
         .await
         .unwrap();
     let mut connection = pool.acquire().await.unwrap();
-    connection.ensure_migrations_table().await.unwrap();
+    connection
+        .ensure_migrations_table("_sqlx_migrations")
+        .await
+        .unwrap();
     for migration in schema::tracker_migrations()
         .into_iter()
         .filter(|migration| migration.version < schema::TIMER_RETIREMENT_MIGRATION_VERSION)
     {
         connection
-            .apply(&Migration::new(
-                migration.version,
-                migration.description.into(),
-                MigrationType::ReversibleUp,
-                migration.sql.into(),
-                false,
-            ))
+            .apply(
+                "_sqlx_migrations",
+                &Migration::new(
+                    migration.version,
+                    migration.description.into(),
+                    MigrationType::ReversibleUp,
+                    sqlx::SqlStr::from_static(migration.sql),
+                    false,
+                ),
+            )
             .await
             .unwrap();
     }

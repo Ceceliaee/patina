@@ -426,13 +426,14 @@ mod tests {
     fn anonymous_range_uses_its_effective_end_index() {
         tauri::async_runtime::block_on(async {
             let pool = setup().await;
-            let plan: Vec<(i64, i64, i64, String)> =
-                sqlx::query_as(&format!("EXPLAIN QUERY PLAN {RANGE_SQL}"))
-                    .bind(20_000)
-                    .bind(10_000)
-                    .fetch_all(&pool)
-                    .await
-                    .unwrap();
+            let plan: Vec<(i64, i64, i64, String)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+                "EXPLAIN QUERY PLAN {RANGE_SQL}"
+            )))
+            .bind(20_000)
+            .bind(10_000)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
             assert!(
                 plan.iter().any(|row| row.3.contains(
                     "SEARCH anonymous_activity USING INDEX idx_anonymous_activity_range"

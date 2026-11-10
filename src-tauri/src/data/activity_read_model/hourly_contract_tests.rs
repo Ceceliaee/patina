@@ -130,7 +130,7 @@ async fn native_range_candidates_preserve_boundaries_and_choose_selective_indexe
         for closed_only in [false, true] {
             let current = now_ms();
             let explain_sql = format!("EXPLAIN QUERY PLAN {FACT_CANDIDATES_SQL}");
-            let mut query = sqlx::query(&explain_sql);
+            let mut query = sqlx::query(sqlx::AssertSqlSafe(explain_sql));
             for value in [
                 current,
                 end,
@@ -448,16 +448,18 @@ async fn real_new_york_dst_dates_match_facts_and_projection_per_local_day() {
 #[tokio::test]
 async fn projection_query_plan_bounds_both_ends_of_the_requested_hours() {
     let pool = setup_pool().await;
-    let plan = sqlx::query(&format!("EXPLAIN QUERY PLAN {PROJECTION_RANGE_SQL}"))
-        .bind(365 * 24 * HOUR_MS)
-        .bind(366 * 24 * HOUR_MS)
-        .bind(365 * 24 * HOUR_MS)
-        .fetch_all(&pool)
-        .await
-        .unwrap()
-        .iter()
-        .map(|row| row.get::<String, _>("detail"))
-        .collect::<Vec<_>>();
+    let plan = sqlx::query(sqlx::AssertSqlSafe(format!(
+        "EXPLAIN QUERY PLAN {PROJECTION_RANGE_SQL}"
+    )))
+    .bind(365 * 24 * HOUR_MS)
+    .bind(366 * 24 * HOUR_MS)
+    .bind(365 * 24 * HOUR_MS)
+    .fetch_all(&pool)
+    .await
+    .unwrap()
+    .iter()
+    .map(|row| row.get::<String, _>("detail"))
+    .collect::<Vec<_>>();
     assert!(
         plan.iter().any(|line| {
             line.contains("SEARCH activity_hourly_effective")
@@ -503,13 +505,15 @@ async fn active_probe_uses_the_schema_enforced_single_active_index() {
         duplicate.to_string().contains("idx_sessions_single_active"),
         "{duplicate}"
     );
-    let plan = sqlx::query(&format!("EXPLAIN QUERY PLAN {ACTIVE_SESSION_START_SQL}"))
-        .fetch_all(&pool)
-        .await
-        .unwrap()
-        .iter()
-        .map(|row| row.get::<String, _>("detail"))
-        .collect::<Vec<_>>();
+    let plan = sqlx::query(sqlx::AssertSqlSafe(format!(
+        "EXPLAIN QUERY PLAN {ACTIVE_SESSION_START_SQL}"
+    )))
+    .fetch_all(&pool)
+    .await
+    .unwrap()
+    .iter()
+    .map(|row| row.get::<String, _>("detail"))
+    .collect::<Vec<_>>();
     assert!(
         plan.iter()
             .any(|line| line.contains("idx_sessions_single_active")),

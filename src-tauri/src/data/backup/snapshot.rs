@@ -946,7 +946,7 @@ mod tests {
                 }
                 pool.execute("INSERT INTO scheduled_backup_config VALUES(1,1,'daily',NULL,0,'local','C:\\backup',NULL,1,'candidate-backup',0,0);
                     INSERT INTO scheduled_export_config VALUES(1,1,'daily',NULL,0,'C:\\export','csv','[]','candidate-export',0,0);").await.unwrap();
-                pool.execute(format!("CREATE TRIGGER reject_reset BEFORE UPDATE ON {table} BEGIN SELECT RAISE(ABORT, 'restore reset denied'); END").as_str()).await.unwrap();
+                pool.execute(sqlx::raw_sql(sqlx::AssertSqlSafe(format!("CREATE TRIGGER reject_reset BEFORE UPDATE ON {table} BEGIN SELECT RAISE(ABORT, 'restore reset denied'); END")))).await.unwrap();
                 restore::prepare_snapshot_restore(&pool, 10000, crate::data::backup::RestoreStrategy::Merge).await.unwrap();
                 let result = restore::prepare_snapshot_restore(&pool, 10000, crate::data::backup::RestoreStrategy::Replace).await;
                 assert!(result.is_err(), "{table}: candidate accepted without disabling restored schedules");
@@ -1103,7 +1103,7 @@ mod tests {
             let old_head = schema::WEB_ACTIVITY_SESSION_MIGRATION_VERSION - 1;
             let mut connection = pool.acquire().await.expect("acquire source connection");
             connection
-                .ensure_migrations_table()
+                .ensure_migrations_table("_sqlx_migrations")
                 .await
                 .expect("create migration history");
             for migration in schema::tracker_migrations()
@@ -1111,13 +1111,16 @@ mod tests {
                 .filter(|migration| migration.version <= old_head)
             {
                 connection
-                    .apply(&Migration::new(
-                        migration.version,
-                        migration.description.into(),
-                        MigrationType::ReversibleUp,
-                        migration.sql.into(),
-                        false,
-                    ))
+                    .apply(
+                        "_sqlx_migrations",
+                        &Migration::new(
+                            migration.version,
+                            migration.description.into(),
+                            MigrationType::ReversibleUp,
+                            sqlx::SqlStr::from_static(migration.sql),
+                            false,
+                        ),
+                    )
                     .await
                     .expect("apply supported old migration");
             }

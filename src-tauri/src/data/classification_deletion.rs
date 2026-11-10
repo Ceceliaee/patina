@@ -387,10 +387,12 @@ mod tests {
             "tool_activity_reminder_rules",
         ] {
             assert_eq!(
-                sqlx::query_scalar::<_, i64>(&format!("SELECT count(*) FROM {table}"))
-                    .fetch_one(&pool)
-                    .await
-                    .unwrap(),
+                sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(format!(
+                    "SELECT count(*) FROM {table}"
+                )))
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
                 0
             );
         }

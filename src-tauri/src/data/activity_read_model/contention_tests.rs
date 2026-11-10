@@ -191,9 +191,11 @@ async fn file_database_mixed_workload_capacity() {
     let mut reports = Vec::new();
     for (days, requested_journal) in [(10, "DELETE"), (365, "DELETE"), (10, "WAL"), (365, "WAL")] {
         let (root, pool) = fixture().await;
-        pool.execute(format!("PRAGMA journal_mode={requested_journal}").as_str())
-            .await
-            .unwrap();
+        pool.execute(sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            "PRAGMA journal_mode={requested_journal}"
+        ))))
+        .await
+        .unwrap();
         sqlx::query("WITH RECURSIVE days(d) AS (VALUES(0) UNION ALL SELECT d+1 FROM days WHERE d+1<?), fragments(n) AS (VALUES(0) UNION ALL SELECT n+1 FROM fragments WHERE n+1<1000) INSERT INTO sessions(app_name,exe_name,window_title,start_time,end_time,duration,continuity_group_start_time) SELECT 'Fixture','app-'||(n%12)||'.exe','',d*86400000+n*28800,d*86400000+n*28800+14400,14400,d*86400000+n*28800 FROM days CROSS JOIN fragments")
             .bind(days).execute(&pool).await.unwrap();
         let mut turns = 0;

@@ -141,23 +141,27 @@ async fn measure_capacity(
         encoding_samples_ms.push(encoding_started.elapsed().as_secs_f64() * 1000.0);
         samples_ms.push(started.elapsed().as_secs_f64() * 1000.0);
     }
-    let plan = sqlx::query(&format!("EXPLAIN QUERY PLAN {PROJECTION_RANGE_SQL}"))
-        .bind(start_ms)
-        .bind(end_ms)
-        .bind(start_ms)
-        .fetch_all(pool)
-        .await
-        .unwrap()
-        .iter()
-        .map(|row| row.get::<String, _>("detail"))
-        .collect::<Vec<_>>();
-    let active_probe_plan = sqlx::query(&format!("EXPLAIN QUERY PLAN {ACTIVE_SESSION_START_SQL}"))
-        .fetch_all(pool)
-        .await
-        .unwrap()
-        .iter()
-        .map(|row| row.get::<String, _>("detail"))
-        .collect::<Vec<_>>();
+    let plan = sqlx::query(sqlx::AssertSqlSafe(format!(
+        "EXPLAIN QUERY PLAN {PROJECTION_RANGE_SQL}"
+    )))
+    .bind(start_ms)
+    .bind(end_ms)
+    .bind(start_ms)
+    .fetch_all(pool)
+    .await
+    .unwrap()
+    .iter()
+    .map(|row| row.get::<String, _>("detail"))
+    .collect::<Vec<_>>();
+    let active_probe_plan = sqlx::query(sqlx::AssertSqlSafe(format!(
+        "EXPLAIN QUERY PLAN {ACTIVE_SESSION_START_SQL}"
+    )))
+    .fetch_all(pool)
+    .await
+    .unwrap()
+    .iter()
+    .map(|row| row.get::<String, _>("detail"))
+    .collect::<Vec<_>>();
     assert!(
         active_probe_plan
             .iter()
