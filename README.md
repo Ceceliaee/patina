@@ -1,3 +1,6 @@
+> [!NOTE]
+> Patina is migrating its Windows desktop UI to GPUI and plans to use GPUI for future releases. The `main` branch and the [latest stable release](https://github.com/Ceceliaee/patina/releases/latest) still use Tauri. You can keep using your current installation.
+
 <div align="center">
 
 # Patina
