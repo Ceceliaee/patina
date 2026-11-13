@@ -93,8 +93,9 @@ pub fn setup(
     crate::app::tools::register_alert_handler(app);
     power::start(app.handle().clone());
     let pause = app.state::<crate::engine::tracking::pause_state::TrackingPauseRuntimeState>();
-    audio::start_signal_source(pause.subscribe());
-    media::start_signal_source(pause.subscribe());
+    let runtime = tauri::async_runtime::handle();
+    audio::start_signal_source(runtime.inner(), pause.subscribe());
+    media::start_signal_source(runtime.inner(), pause.subscribe());
     crate::app::web_activity_bridge::start(app.handle().clone());
     crate::app::remote_status_bridge::start(app.handle().clone());
     crate::data::activity_read_model::spawn_background_worker(app.handle().clone());

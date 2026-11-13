@@ -53,7 +53,7 @@ pub(crate) async fn start_session_with_name_scheduler(
         let hwnd = window.hwnd.clone();
         let root_owner_hwnd = window.root_owner_hwnd.clone();
 
-        tauri::async_runtime::spawn(async move {
+        tokio::spawn(async move {
             if let Err(error) = metadata::ensure_icon_cache(
                 data.as_ref(),
                 metadata::IconMetadataSource {

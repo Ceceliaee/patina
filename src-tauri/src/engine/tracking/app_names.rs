@@ -76,7 +76,7 @@ impl NameResolver {
         &self,
         confirm: SessionNameWrite,
         probe: impl FnOnce() -> Option<String> + Send + 'static,
-    ) -> Option<tauri::async_runtime::JoinHandle<()>> {
+    ) -> Option<tokio::task::JoinHandle<()>> {
         let pending = match self.pending.clone().try_acquire_owned() {
             Ok(permit) => permit,
             Err(_) => {
@@ -97,13 +97,13 @@ impl NameResolver {
         };
         let stats = self.stats.clone();
         let native = self.native.clone();
-        Some(tauri::async_runtime::spawn(async move {
+        Some(tokio::spawn(async move {
             let _pending = pending;
             let _pending_guard = pending_guard;
             let Ok(permit) = native.acquire_owned().await else {
                 return;
             };
-            let result = tauri::async_runtime::spawn_blocking(move || {
+            let result = tokio::task::spawn_blocking(move || {
                 let _permit = permit;
                 probe()
             })

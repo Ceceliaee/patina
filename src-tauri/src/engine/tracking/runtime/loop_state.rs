@@ -8,6 +8,7 @@ use crate::domain::tracking::{
     is_trackable_window, resolve_app_override_executable, TrackingStatusSnapshot,
     WindowTrackingCandidate,
 };
+use crate::engine::tracking::host::TrackingHost;
 use crate::engine::tracking::pause_state::TrackingPauseRuntimeState;
 use crate::engine::tracking::ports::{
     TrackingDataStore, TRACKER_LAST_HEARTBEAT_KEY, TRACKER_LAST_SUCCESSFUL_SAMPLE_KEY,
@@ -19,8 +20,8 @@ use std::collections::HashMap;
 const TRACKER_TIMESTAMP_PERSIST_INTERVAL_MS: i64 = 3_000;
 
 /// A stale or reversed clock cannot extend the last committed activity interval.
-pub(super) async fn seal_stale_sample<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
+pub(super) async fn seal_stale_sample<H: TrackingHost>(
+    app: &H,
     data: &dyn TrackingDataStore,
     health: &super::super::watchdog::RuntimeHealthState,
     now_ms: i64,

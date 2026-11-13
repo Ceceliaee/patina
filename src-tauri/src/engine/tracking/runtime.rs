@@ -1,12 +1,9 @@
-use super::pause_state::TrackingPauseRuntimeState;
 use super::ports::{SharedTrackingDataStore, TrackingDataStore};
-use super::runtime_snapshot::TrackingRuntimeSnapshotState;
 #[cfg(test)]
 use super::session_timeout::seal_active_sessions_for_tracking_pause;
 #[cfg(test)]
 use super::startup;
 use super::sustained_participation::SustainedParticipationRuntimeState;
-use super::title_state::TitleRecordingRuntimeState;
 use super::{active_session, continuity, transition, watchdog};
 #[cfg(test)]
 use crate::data::repositories::{sessions, tracker_settings};
@@ -15,9 +12,9 @@ use crate::domain::tracking::TrackingDataChangedPayload;
 use crate::domain::tracking::TrackingStatusSnapshot;
 #[cfg(test)]
 use crate::domain::tracking::TRACKING_REASON_TRACKING_PAUSED_SEALED;
+use crate::engine::tracking::host::TrackingHost;
 use crate::platform::windows::foreground as tracker;
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::time::{sleep, Duration};
 
 #[path = "runtime/anonymous_activity.rs"]
@@ -51,15 +48,15 @@ use window_polling::poll_active_window_with_timeout;
 // Owner ledger: run() owns runtime loop orchestration only. Polling,
 // loop-state loading, power lifecycle handling, and event support stay in the
 // sibling runtime/* modules so commands.rs and lib.rs remain thin IPC entrypoints.
-pub async fn run<R: Runtime>(
-    app: AppHandle<R>,
+pub async fn run<H: TrackingHost>(
+    app: H,
     health_state: Arc<watchdog::RuntimeHealthState>,
     data: SharedTrackingDataStore,
 ) -> Result<(), String> {
     let progress = &health_state.progress;
-    let pause_state = app.state::<TrackingPauseRuntimeState>();
-    let title_state = app.state::<TitleRecordingRuntimeState>();
-    let snapshot_state = app.state::<TrackingRuntimeSnapshotState>();
+    let pause_state = app.pause();
+    let title_state = app.titles();
+    let snapshot_state = app.projection();
 
     let mut last_window: Option<tracker::WindowInfo> = None;
     let mut last_tracking_status: Option<TrackingStatusSnapshot> = None;
@@ -81,7 +78,7 @@ pub async fn run<R: Runtime>(
         if let Err(error) = power_lifecycle::flush_pending_power_stop_and_publish(
             &app,
             data.as_ref(),
-            &snapshot_state,
+            snapshot_state,
         )
         .await
         {
@@ -141,8 +138,8 @@ pub async fn run<R: Runtime>(
         health_state.progress.enter(watchdog::TrackingStage::Policy);
         let (tracking_state, next_sustained_participation_state) = load_tracking_loop_state(
             data.as_ref(),
-            &pause_state,
-            &title_state,
+            pause_state,
+            title_state,
             &window_info,
             now_ms,
             &sustained_participation_state,
@@ -318,7 +315,7 @@ pub async fn run<R: Runtime>(
             .await;
         if did_change_active_window {
             if let Some(snapshot) = snapshot_state.snapshot() {
-                let _ = app.emit("active-window-changed", &snapshot.window);
+                app.active_window_changed(&snapshot.window);
             }
             last_emitted_window = Some(window_info.clone());
         }
@@ -335,13 +332,13 @@ pub async fn run<R: Runtime>(
     }
 }
 
-pub async fn handle_power_lifecycle_event<R: Runtime>(
-    app: AppHandle<R>,
+pub async fn handle_power_lifecycle_event<H: TrackingHost>(
+    app: H,
     data: &dyn TrackingDataStore,
 ) -> Result<(), String> {
-    let snapshot_state = app.state::<TrackingRuntimeSnapshotState>();
+    let snapshot_state = app.projection();
     let _guard = snapshot_state.transition.lock().await;
-    power_lifecycle::flush_pending_power_stop_and_publish(&app, data, &snapshot_state).await?;
+    power_lifecycle::flush_pending_power_stop_and_publish(&app, data, snapshot_state).await?;
     Ok(())
 }
 

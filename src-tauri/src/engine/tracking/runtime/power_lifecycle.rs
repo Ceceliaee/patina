@@ -1,6 +1,6 @@
+use crate::engine::tracking::host::TrackingHost;
 use crate::engine::tracking::ports::{TrackingDataError, TrackingDataStore};
 use crate::engine::tracking::runtime_snapshot::TrackingRuntimeSnapshotState;
-use tauri::{AppHandle, Runtime};
 
 // Caller owns the tracking transition gate. A late handler drains pending facts,
 // rather than replaying its original event against whichever session is now active.
@@ -130,8 +130,8 @@ mod tests {
     }
 }
 
-pub(super) async fn flush_pending_power_stop_and_publish<R: Runtime>(
-    app: &AppHandle<R>,
+pub(super) async fn flush_pending_power_stop_and_publish<H: TrackingHost>(
+    app: &H,
     data: &dyn TrackingDataStore,
     state: &TrackingRuntimeSnapshotState,
 ) -> Result<(), String> {

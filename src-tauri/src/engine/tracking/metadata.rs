@@ -73,7 +73,7 @@ pub(crate) async fn run_icon_extraction(
     permit: OwnedSemaphorePermit,
     extract: impl FnOnce() -> Option<String> + Send + 'static,
 ) -> Option<String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    tokio::task::spawn_blocking(move || {
         // Cancelling the async waiter cannot stop native work or free its slot.
         let _permit = permit;
         extract()

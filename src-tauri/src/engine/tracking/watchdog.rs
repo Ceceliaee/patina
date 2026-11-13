@@ -1,10 +1,10 @@
 use crate::domain::tracking::TRACKING_REASON_WATCHDOG_SEALED;
+use crate::engine::tracking::host::TrackingHost;
 use crate::engine::tracking::ports::{SharedTrackingDataStore, TrackingDataStore};
 use std::sync::{
     atomic::{AtomicI64, Ordering},
     Arc,
 };
-use tauri::{AppHandle, Manager, Runtime};
 use tokio::time::{sleep, Duration};
 
 use super::runtime;
@@ -83,8 +83,8 @@ impl RuntimeHealthState {
     }
 }
 
-pub async fn watch<R: Runtime>(
-    app: AppHandle<R>,
+pub async fn watch<H: TrackingHost>(
+    app: H,
     health_state: Arc<RuntimeHealthState>,
     data: SharedTrackingDataStore,
 ) -> Result<(), String> {
@@ -111,14 +111,14 @@ pub async fn watch<R: Runtime>(
     }
 }
 
-async fn seal_stale_session<R: Runtime>(
-    app: &AppHandle<R>,
+async fn seal_stale_session<H: TrackingHost>(
+    app: &H,
     data: &dyn TrackingDataStore,
     health_state: &RuntimeHealthState,
     sample_time_ms: i64,
 ) {
-    let state = app.state::<super::runtime_snapshot::TrackingRuntimeSnapshotState>();
-    match reconcile_stale_session(data, health_state, &state, sample_time_ms).await {
+    let state = app.projection();
+    match reconcile_stale_session(data, health_state, state, sample_time_ms).await {
         Ok(Some(true)) => {
             log_watchdog_error(format!(
                 "watchdog sealed stale active session at {sample_time_ms} after tracker stall"

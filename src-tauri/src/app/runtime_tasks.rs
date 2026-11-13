@@ -31,7 +31,7 @@ pub(crate) fn spawn_tracking_runtime_restart_loop<R: Runtime + 'static>(
         let mut retry_delay = RestartBackoff::new();
         let mut background_tasks_started = false;
         loop {
-            let data = match crate::data::tracking_runtime::shared_from_app(&app).await {
+            let data = match crate::data::tracking_runtime_tauri::shared_from_app(&app).await {
                 Ok(data) => data,
                 Err(error) => {
                     eprintln!("[tracker] tracking data store unavailable: {error}");
@@ -101,7 +101,7 @@ pub(crate) fn spawn_tracking_watchdog_restart_loop<R: Runtime + 'static>(
     tauri::async_runtime::spawn(async move {
         let mut retry_delay = RestartBackoff::new();
         loop {
-            let data = match crate::data::tracking_runtime::shared_from_app(&app).await {
+            let data = match crate::data::tracking_runtime_tauri::shared_from_app(&app).await {
                 Ok(data) => data,
                 Err(error) => {
                     eprintln!("[tracker] watchdog data store unavailable: {error}");

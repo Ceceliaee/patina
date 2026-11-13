@@ -1,17 +1,17 @@
 use super::ports::{TrackingDataError, TrackingDataStore};
 use crate::domain::tracking::resolve_interrupted_session_end;
-use crate::domain::tracking::{TrackingDataChangedPayload, TRACKING_REASON_STARTUP_SEALED};
+use crate::domain::tracking::TRACKING_REASON_STARTUP_SEALED;
+use crate::engine::tracking::host::TrackingHost;
 use crate::platform::windows::foreground as tracker;
-use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 const DEFAULT_AFK_THRESHOLD_SECS: u64 = 180;
 
-pub async fn initialize_tracker<R: Runtime>(
-    app: &AppHandle<R>,
+pub async fn initialize_tracker<H: TrackingHost>(
+    app: &H,
     data: &dyn TrackingDataStore,
 ) -> Result<(), TrackingDataError> {
-    let title_state = app.state::<super::title_state::TitleRecordingRuntimeState>();
-    let snapshot_state = app.state::<super::runtime_snapshot::TrackingRuntimeSnapshotState>();
+    let title_state = app.titles();
+    let snapshot_state = app.projection();
     let _title_guard = title_state.lock_update().await;
     let _transition_guard = snapshot_state.transition.lock().await;
     let afk_threshold_secs = data
@@ -28,11 +28,7 @@ pub async fn initialize_tracker<R: Runtime>(
     }
     persist_startup_self_heal_if_needed(data, &repair_notes).await?;
 
-    if let Err(error) = app
-        .state::<super::pause_state::TrackingPauseRuntimeState>()
-        .initialize(data, now_ms())
-        .await
-    {
+    if let Err(error) = app.pause().initialize(data, now_ms()).await {
         log_startup_error(format!(
             "failed to initialize tracking pause state: {error}"
         ));
@@ -58,8 +54,8 @@ async fn record_normalized_closed_duration(
     Ok(())
 }
 
-async fn seal_startup_active_session_if_needed<R: Runtime>(
-    app: &AppHandle<R>,
+async fn seal_startup_active_session_if_needed<H: TrackingHost>(
+    app: &H,
     data: &dyn TrackingDataStore,
     repair_notes: &mut Vec<String>,
 ) -> Result<(), TrackingDataError> {
@@ -106,15 +102,12 @@ async fn persist_startup_self_heal_if_needed(
     Ok(())
 }
 
-fn emit_tracking_data_changed<R: Runtime>(
-    app: &AppHandle<R>,
+fn emit_tracking_data_changed<H: TrackingHost>(
+    app: &H,
     reason: &str,
     changed_at_ms: u64,
-) -> tauri::Result<()> {
-    app.emit(
-        "tracking-data-changed",
-        TrackingDataChangedPayload::new(reason, changed_at_ms),
-    )
+) -> Result<(), String> {
+    app.data_changed(reason, changed_at_ms)
 }
 
 fn now_ms() -> i64 {

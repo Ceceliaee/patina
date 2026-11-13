@@ -27,7 +27,7 @@ mod cases {
         exe: &str,
         time: i64,
         probe: impl FnOnce() -> Option<String> + Send + 'static,
-    ) -> Option<tauri::async_runtime::JoinHandle<()>> {
+    ) -> Option<tokio::task::JoinHandle<()>> {
         let window = WindowInfo {
             hwnd: "1".into(),
             root_owner_hwnd: "1".into(),

@@ -1,12 +1,9 @@
-use super::super::{
-    ports::TrackingDataStore, runtime_snapshot::TrackingRuntimeSnapshotState,
-    watchdog::RuntimeHealthState,
-};
+use super::super::{ports::TrackingDataStore, watchdog::RuntimeHealthState};
 use super::loop_state::{record_committed_sample, TrackerTimestampPersistState};
-use tauri::{AppHandle, Emitter, Manager, Runtime};
+use crate::engine::tracking::host::TrackingHost;
 
-pub(super) async fn record_sample<R: Runtime>(
-    app: &AppHandle<R>,
+pub(super) async fn record_sample<H: TrackingHost>(
+    app: &H,
     data: &dyn TrackingDataStore,
     health: &RuntimeHealthState,
     timestamps: &mut TrackerTimestampPersistState,
@@ -18,11 +15,10 @@ pub(super) async fn record_sample<R: Runtime>(
         .await
         .map_err(|error| error.to_string())?;
     record_committed_sample(data, health, now_ms, true, timestamps).await;
-    app.state::<TrackingRuntimeSnapshotState>()
-        .replace_active_session(None);
+    app.projection().replace_active_session(None);
     if changed {
-        if let Some(snapshot) = app.state::<TrackingRuntimeSnapshotState>().snapshot() {
-            let _ = app.emit("active-window-changed", &snapshot.window);
+        if let Some(snapshot) = app.projection().snapshot() {
+            app.active_window_changed(&snapshot.window);
         }
         let _ = super::emit_tracking_data_changed(app, "anonymous-activity-updated", now_ms as u64);
     }
