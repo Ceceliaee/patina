@@ -1,5 +1,4 @@
 use crate::data::repositories::{icon_cache, sessions, tracker_settings};
-use crate::data::sqlite_pool::wait_for_sqlite_pool;
 use crate::domain::tracking::ActiveSessionSnapshot;
 use crate::engine::tracking::ports::{
     IconCacheRead, SessionNameWrite, SharedTrackingDataStore, TrackingDataError,
@@ -9,11 +8,10 @@ use futures_util::future::BoxFuture;
 use sqlx::{Pool, Sqlite};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Runtime};
 
 pub type TrackingRuntimeDataError = sqlx::Error;
 
-type TrackingPoolSource = Arc<
+pub(crate) type TrackingPoolSource = Arc<
     dyn Fn() -> BoxFuture<'static, Result<Pool<Sqlite>, TrackingRuntimeDataError>> + Send + Sync,
 >;
 
@@ -24,10 +22,6 @@ mod pool_lifecycle_tests;
 #[cfg(test)]
 #[path = "tracking_runtime/icon_refresh_tests.rs"]
 mod icon_refresh_tests;
-
-#[cfg(debug_assertions)]
-#[path = "tracking_runtime/native_icon_acceptance.rs"]
-pub(crate) mod native_icon_acceptance;
 
 #[cfg(test)]
 #[path = "tracking_runtime/app_name_tests.rs"]
@@ -191,26 +185,15 @@ impl TrackingRuntimeDataStore {
     }
 }
 
-pub async fn shared_from_app<R: Runtime>(
-    app: &AppHandle<R>,
-) -> Result<SharedTrackingDataStore, String> {
-    let pool_app = app.clone();
-    let event_app = app.clone();
-    let source: TrackingPoolSource = Arc::new(move || {
-        let app = pool_app.clone();
-        Box::pin(async move {
-            wait_for_sqlite_pool(&app)
-                .await
-                .map_err(sqlx::Error::Protocol)
-        })
-    });
-    source().await.map_err(|error| error.to_string())?;
+pub(crate) async fn shared_from_provider(
+    source: TrackingPoolSource,
+    icon_changed: Arc<dyn Fn(&str) + Send + Sync>,
+) -> Result<SharedTrackingDataStore, TrackingRuntimeDataError> {
+    source().await?;
     Ok(Arc::new(TrackingRuntimeDataStore {
         session_name_changed: Arc::new(AtomicBool::new(false)),
         source,
-        icon_changed: Arc::new(move |exe| {
-            let _ = event_app.emit("app-icon-changed", exe);
-        }),
+        icon_changed,
     }))
 }
 
@@ -218,12 +201,7 @@ pub async fn shared_from_app<R: Runtime>(
 async fn shared_from_pool_source(
     source: TrackingPoolSource,
 ) -> Result<SharedTrackingDataStore, TrackingRuntimeDataError> {
-    source().await?;
-    Ok(Arc::new(TrackingRuntimeDataStore {
-        session_name_changed: Arc::new(AtomicBool::new(false)),
-        source,
-        icon_changed: Arc::new(|_| {}),
-    }))
+    shared_from_provider(source, Arc::new(|_| {})).await
 }
 
 fn tracking_data_error(error: impl std::fmt::Display) -> TrackingDataError {

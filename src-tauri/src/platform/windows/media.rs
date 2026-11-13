@@ -45,7 +45,10 @@ struct MediaProbeInFlightGuard {
     probe_in_flight: Arc<AtomicBool>,
 }
 
-pub fn start_signal_source(paused: tokio::sync::watch::Receiver<bool>) {
+pub fn start_signal_source(
+    runtime: &tokio::runtime::Handle,
+    paused: tokio::sync::watch::Receiver<bool>,
+) {
     if MEDIA_SIGNAL_SOURCE
         .set((
             MediaSignalSourceState::new(),
@@ -56,7 +59,7 @@ pub fn start_signal_source(paused: tokio::sync::watch::Receiver<bool>) {
         let (state, sampling) = MEDIA_SIGNAL_SOURCE
             .get()
             .expect("signal source initialized");
-        tauri::async_runtime::spawn(
+        runtime.spawn(
             sampling.run(Duration::from_secs(MEDIA_RECONCILE_INTERVAL_SECS), || {
                 state.reconcile_once()
             }),

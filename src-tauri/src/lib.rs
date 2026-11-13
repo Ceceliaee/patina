@@ -1,3 +1,7 @@
+#[cfg(debug_assertions)]
+#[path = "data/tracking_runtime/native_icon_acceptance.rs"]
+mod native_icon_acceptance;
+
 mod app;
 mod commands;
 mod data;
@@ -11,7 +15,7 @@ use std::sync::Arc;
 #[doc(hidden)]
 pub fn verify_native_probe_lifecycle(executable: &std::path::Path) -> Result<(), String> {
     platform::windows::native_probe::acceptance::verify(executable)?;
-    data::tracking_runtime::native_icon_acceptance::verify(executable);
+    native_icon_acceptance::verify(executable);
     Ok(())
 }
 

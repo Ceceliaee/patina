@@ -25,6 +25,7 @@ pub mod storage_restart;
 pub mod tools_store;
 pub mod tracking_pause_service;
 pub mod tracking_runtime;
+pub(crate) mod tracking_runtime_tauri;
 pub mod update_store;
 pub mod user_data_maintenance;
 pub mod web_activity_analysis;

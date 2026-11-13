@@ -6,6 +6,7 @@ pub mod fullscreen;
 pub mod handles;
 pub mod icon;
 pub mod input;
+pub mod job;
 pub mod media;
 pub(crate) mod native_probe;
 pub mod packaged_app;

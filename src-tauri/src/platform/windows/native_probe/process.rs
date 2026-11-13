@@ -1,6 +1,6 @@
 use super::protocol::{self, ProbeKind, Request, Response};
 use std::os::windows::{
-    io::{AsRawHandle, FromRawHandle, OwnedHandle},
+    io::{AsRawHandle, OwnedHandle},
     process::CommandExt,
 };
 use std::path::Path;
@@ -14,11 +14,7 @@ use std::time::{Duration, Instant};
 use windows::Win32::{
     Foundation::HANDLE,
     System::{
-        JobObjects::{
-            AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
-            SetInformationJobObject, TerminateJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
-        },
+        JobObjects::{AssignProcessToJobObject, TerminateJobObject},
         Threading::{TerminateProcess, CREATE_NO_WINDOW},
     },
 };
@@ -52,7 +48,8 @@ impl ProbeProcess {
     }
 
     fn spawn_owned(executable: &Path, kind: ProbeKind) -> Result<Self, String> {
-        let job = create_job()?;
+        let job =
+            crate::platform::windows::job::kill_on_close().map_err(|e| format!("probe {e}"))?;
         let fault = super::fault::FaultSlot::create()?;
         let child = Command::new(executable)
             .args([super::worker::ARGUMENT, kind.argument()])
@@ -279,22 +276,4 @@ impl Drop for ProbeProcess {
         // Job ownership closes even if the OS could not confirm termination.
         // The lane retains an unconfirmed process instead of spawning another.
     }
-}
-
-fn create_job() -> Result<OwnedHandle, String> {
-    let handle =
-        unsafe { CreateJobObjectW(None, None) }.map_err(|_| "probe Job creation failed")?;
-    let job = unsafe { OwnedHandle::from_raw_handle(handle.0) };
-    let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
-    limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-    unsafe {
-        SetInformationJobObject(
-            handle,
-            JobObjectExtendedLimitInformation,
-            (&limits as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
-            std::mem::size_of_val(&limits) as u32,
-        )
-    }
-    .map_err(|_| "probe Job configuration failed")?;
-    Ok(job)
 }

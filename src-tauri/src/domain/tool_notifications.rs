@@ -26,7 +26,7 @@ pub struct Preferences {
     pub sound: Sound,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PreferencesPatch {
     pub delivery: Option<Delivery>,

@@ -89,16 +89,21 @@ pub(crate) fn play(sound: Sound) {
     if sound == Sound::None {
         return;
     }
-    tauri::async_runtime::spawn_blocking(move || {
-        let Ok(_guard) = PLAYBACK.try_lock() else {
-            return;
-        };
-        let data = wave(sound);
-        // SND_MEMORY | SND_NODEFAULT; synchronous playback keeps the buffer alive.
-        if unsafe { PlaySoundW(data.as_ptr(), std::ptr::null_mut(), 0x0004 | 0x0002) } == 0 {
-            eprintln!("[tool-notification] local sound playback failed");
-        }
-    });
+    if let Err(error) = std::thread::Builder::new()
+        .name("tool-notification-sound".into())
+        .spawn(move || {
+            let Ok(_guard) = PLAYBACK.try_lock() else {
+                return;
+            };
+            let data = wave(sound);
+            // SND_MEMORY | SND_NODEFAULT; synchronous playback keeps the buffer alive.
+            if unsafe { PlaySoundW(data.as_ptr(), std::ptr::null_mut(), 0x0004 | 0x0002) } == 0 {
+                eprintln!("[tool-notification] local sound playback failed");
+            }
+        })
+    {
+        eprintln!("[tool-notification] could not start sound playback: {error}");
+    }
 }
 
 #[cfg(test)]

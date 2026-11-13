@@ -41,7 +41,10 @@ struct AudioProbeInFlightGuard {
     probe_in_flight: Arc<AtomicBool>,
 }
 
-pub fn start_signal_source(paused: tokio::sync::watch::Receiver<bool>) {
+pub fn start_signal_source(
+    runtime: &tokio::runtime::Handle,
+    paused: tokio::sync::watch::Receiver<bool>,
+) {
     if AUDIO_SIGNAL_SOURCE
         .set((
             AudioSignalSourceState::new(),
@@ -52,7 +55,7 @@ pub fn start_signal_source(paused: tokio::sync::watch::Receiver<bool>) {
         let (state, sampling) = AUDIO_SIGNAL_SOURCE
             .get()
             .expect("signal source initialized");
-        tauri::async_runtime::spawn(
+        runtime.spawn(
             sampling.run(Duration::from_secs(AUDIO_RECONCILE_INTERVAL_SECS), || {
                 state.reconcile_once()
             }),
