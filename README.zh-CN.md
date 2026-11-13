@@ -1,5 +1,5 @@
 > [!NOTE]
-> Patina 正在将 Windows 桌面界面迁移到 GPUI，计划在后续版本中采用 GPUI 作为桌面 UI 框架。目前 `main` 分支和[最新稳定版](https://github.com/Ceceliaee/patina/releases/latest)仍使用 Tauri，已安装的用户可以照常使用。
+> GPUI 桌面版在 `main` 分支开发。`tauri-maintenance` 分支维护[当前稳定版](https://github.com/Ceceliaee/patina/releases/latest)使用的 Tauri 代码。已安装的用户可以照常使用。
 
 <div align="center">
 
