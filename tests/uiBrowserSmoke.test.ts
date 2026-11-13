@@ -22,7 +22,8 @@ import { runFreeFocusScenarios } from "./uiBrowserSmoke/freeFocusScenarios.ts";
 import { runNavigationScenarios } from "./uiBrowserSmoke/navigationScenarios.ts";
 import { runRemoteBackupRecoveryScenarios, runSettingsScenarios } from "./uiBrowserSmoke/settingsScenarios.ts";
 import { runClassificationScenarios } from "./uiBrowserSmoke/classificationScenarios.ts";
-import { runDashboardReadFailureScenarios, runDashboardScenarios } from "./uiBrowserSmoke/dashboardScenarios.ts";
+import { runRequestedIconScenarios } from "./uiBrowserSmoke/requestedIconScenarios.ts";
+import { runAnonymousActivityScenarios } from "./uiBrowserSmoke/anonymousActivityScenarios.ts";
 import { runHistoryReadFailureScenarios, runHistoryScenarios } from "./uiBrowserSmoke/historyScenarios.ts";
 import { runDataReadFailureScenarios, runDataScenarios } from "./uiBrowserSmoke/dataScenarios.ts";
 import { runDataLoadingLayoutScenario } from "./uiBrowserSmoke/dataLoadingLayoutScenario.ts";
@@ -165,21 +166,19 @@ try {
   if (group === "startup") {
     // Startup scenarios above include the real hook subscription lifecycle.
   } else if (group === "anonymous") {
-    await runDashboardScenarios({ ...smokeContext, runTest: async (name, fn) => {
-      if (name.startsWith("anonymous activity ranks once")) await runTest(name, fn);
-    } });
+    await runAnonymousActivityScenarios(smokeContext);
   } else if (group === "typography") {
     await runTypographyScenarios(smokeContext);
   } else if (group === "locale") {
     await runLocaleScenarios(smokeContext);
   } else if (group === "content") {
     await runClassificationScenarios(smokeContext);
-    await runDashboardScenarios(smokeContext);
+    await runAnonymousActivityScenarios(smokeContext);
     await runHistoryScenarios(smokeContext);
     await runDataScenarios(smokeContext);
   } else if (group === "read-failure") {
     await runRemoteBackupRecoveryScenarios(smokeContext);
-    await runDashboardReadFailureScenarios(smokeContext);
+    await runRequestedIconScenarios(smokeContext);
     await runDataReadFailureScenarios(smokeContext);
     await runHistoryReadFailureScenarios(smokeContext);
   } else if (group === "settings") {
@@ -220,8 +219,6 @@ try {
     await runFreeFocusScenarios(smokeContext);
   } else if (group === "navigation") {
     await runNavigationScenarios(smokeContext);
-  } else if (group === "dashboard") {
-    await runDashboardScenarios(smokeContext);
   } else if (group === "history") {
     await runHistoryScenarios(smokeContext);
   } else if (group === "data-full") {
@@ -241,13 +238,13 @@ try {
 
     await runClassificationScenarios(smokeContext);
 
-    await runDashboardScenarios(smokeContext);
+    await runAnonymousActivityScenarios(smokeContext);
 
     await runHistoryScenarios(smokeContext);
 
     await runDataScenarios(smokeContext);
 
-    await runDashboardReadFailureScenarios(smokeContext);
+    await runRequestedIconScenarios(smokeContext);
     await runDataReadFailureScenarios(smokeContext);
     await runHistoryReadFailureScenarios(smokeContext);
 
