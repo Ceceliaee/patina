@@ -1,0 +1,18 @@
+[package]
+name = "patina-dev"
+version = "0.1.0"
+edition = "2024"
+publish = false
+autobins = false
+
+[[bin]]
+name = "patina-dev"
+path = "scripts/gpui-dev/main.rs"
+
+[workspace]
+exclude = ["src-tauri", "desktop"]
+
+[dependencies]
+serde_json = "1"
+tempfile = "3"
+windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem", "Win32_System_Console", "Win32_System_Threading"] }
