@@ -1,0 +1,39 @@
+[package]
+name = "patina-recorder"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+path = "../../src-tauri/src/recording.rs"
+# The shared modules' unit tests run in the existing Patina Rust test target.
+test = false
+doctest = false
+
+[dependencies]
+sha2="0.10"
+base64 = "0.22.1"
+chrono = "0.4.44"
+icu_locale = "2.0"
+icu_plurals = { version = "2.0", features = ["compiled_data"] }
+psl = "=2.1.230"
+futures-util = "0.3"
+image = "0.24"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+libsqlite3-sys = { version = "0.39.1", default-features = false }
+sqlx.workspace = true
+tokio = { version = "1", features = ["rt-multi-thread", "time", "sync", "macros"] }
+url = "2"
+uuid = { version = "1", features = ["v4"] }
+windows-core = "0.62.2"
+windows = { version = "0.62.2", features = [
+  "Media", "Media_Control", "Win32_Foundation", "Win32_Graphics_Gdi",
+  "Win32_Media_Audio", "Win32_Security", "Win32_Storage_FileSystem",
+  "Win32_Storage_Packaging_Appx", "Win32_System_Com", "Win32_System_Com_StructuredStorage",
+  "Win32_System_Diagnostics_Debug", "Win32_System_Diagnostics_ToolHelp", "Win32_System_JobObjects",
+  "Win32_System_Kernel", "Win32_System_LibraryLoader", "Win32_System_Memory",
+  "Win32_System_ProcessStatus", "Win32_System_SystemInformation", "Win32_System_Threading",
+  "Win32_System_Variant", "Win32_System_WinRT", "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_Shell", "Win32_UI_Shell_PropertiesSystem", "Win32_UI_WindowsAndMessaging",
+] }

@@ -66,6 +66,8 @@ const SYSTEM_CATEGORY_COLOR: &str = "#475569";
 struct ClassificationOverride {
     category: Option<String>,
     enabled: bool,
+    display_name: Option<String>,
+    color: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -275,6 +277,77 @@ impl ClassificationSnapshot {
     }
 }
 
+#[allow(
+    dead_code,
+    reason = "native Today presentation also consumes this classification snapshot"
+)]
+impl ClassificationSnapshot {
+    pub fn app_owner(&self, exe: &str) -> String {
+        let canonical = crate::domain::tracking::resolve_app_override_executable(exe)
+            .unwrap_or_else(|| canonical_exe(exe));
+        self.app_links
+            .get(&canonical)
+            .or_else(|| self.app_links.get(canonical.trim_end_matches(".exe")))
+            .cloned()
+            .unwrap_or(canonical)
+    }
+
+    pub fn app_appearance(&self, owner: &str) -> (Option<&str>, Option<&str>) {
+        let value = self.app_overrides.get(owner);
+        (
+            value.and_then(|v| v.display_name.as_deref()),
+            value.and_then(|v| v.color.as_deref()),
+        )
+    }
+
+    pub fn available_categories(&self) -> Vec<ResolvedCategory> {
+        let mut categories: Vec<_> = SEEDED_CATEGORIES
+            .iter()
+            .copied()
+            .chain(self.custom_categories.iter().map(String::as_str))
+            .filter_map(|id| self.resolve_category_by_id(id))
+            .collect();
+        categories.sort_by(|a, b| a.label.cmp(&b.label).then(a.id.cmp(&b.id)));
+        categories
+    }
+
+    pub fn display_category(
+        &self,
+        exe: &str,
+        defaults: &std::collections::BTreeMap<String, String>,
+    ) -> ResolvedCategory {
+        let mut c = self.resolve_session_category(exe);
+        if SEEDED_CATEGORIES.contains(&c.id.as_str())
+            && c.id != "ai"
+            && !self.label_overrides.contains_key(&c.id)
+        {
+            c.label = localization::text(self.locale, &format!("categories.short.{}", c.id));
+        }
+        if !self.color_overrides.contains_key(&c.id) && c.id != "other" && c.id != "system" {
+            c.color = defaults
+                .get(&format!("__category_default_color_assignment::{}", c.id))
+                .cloned()
+                .unwrap_or_else(|| {
+                    match c.id.as_str() {
+                        "ai" => "#3293C8",
+                        "development" => "#4790CF",
+                        "office" => "#6F7AE6",
+                        "browser" => "#36AC7E",
+                        "communication" => "#C56A73",
+                        "video" => "#66955C",
+                        "music" => "#3D9C6B",
+                        "game" => "#B07E55",
+                        "design" => "#8C6FA1",
+                        "utility" => "#35A69E",
+                        _ => DEFAULT_ACCENT_COLOR,
+                    }
+                    .into()
+                });
+        }
+        c
+    }
+}
+
 pub fn canonical_exe(value: &str) -> String {
     value.trim().trim_matches('"').to_ascii_lowercase()
 }
@@ -296,7 +369,20 @@ fn parse_override(raw_value: &str, read_track: bool) -> Option<ClassificationOve
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned);
-    Some(ClassificationOverride { category, enabled })
+    Some(ClassificationOverride {
+        category,
+        enabled,
+        display_name: parsed
+            .get("displayName")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned),
+        color: parsed
+            .get("color")
+            .and_then(Value::as_str)
+            .and_then(normalize_hex_color),
+    })
 }
 
 fn normalize_label(value: &str) -> String {

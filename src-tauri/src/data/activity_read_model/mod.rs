@@ -50,29 +50,7 @@ pub struct RecordedAppCatalogPageDto {
     pub source_revision: i64,
 }
 
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ActivityAggregateRecordDto {
-    pub anonymous: bool,
-    pub app_name: String,
-    pub exe_name: String,
-    pub start_time: i64,
-    pub end_time: i64,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ActivityAggregateRangeDto {
-    #[serde(skip)]
-    pub(crate) maintenance_pending: bool,
-    pub records: Vec<ActivityAggregateRecordDto>,
-    pub read_path: &'static str,
-    pub fallback_reason: Option<&'static str>,
-    pub source_revision: i64,
-    pub projection_row_count: usize,
-    pub fact_row_count: usize,
-    pub has_active_session: bool,
-}
+pub use hourly::{ActivityAggregateRangeDto, ActivityAggregateRecordDto};
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

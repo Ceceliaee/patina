@@ -115,6 +115,19 @@ pub async fn commit_app_setting_mutations(
         SqliteOperationError::from_sqlx("start app settings transaction", error)
     })?;
 
+    commit_app_setting_mutations_in_tx(&mut tx, mutations, anonymous_available).await?;
+    tx.commit().await.map_err(|error| {
+        SqliteOperationError::from_sqlx("commit app settings transaction", error)
+    })?;
+
+    Ok(())
+}
+
+pub(crate) async fn commit_app_setting_mutations_in_tx(
+    tx: &mut sqlx::Transaction<'_, Sqlite>,
+    mutations: &[AppSettingMutation],
+    anonymous_available: bool,
+) -> Result<(), SqliteOperationError> {
     for mutation in mutations {
         validate_app_setting_mutation(mutation)?;
         sqlx::query(
@@ -123,21 +136,21 @@ pub async fn commit_app_setting_mutations(
         )
         .bind(&mutation.key)
         .bind(&mutation.value)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await
         .map_err(|error| SqliteOperationError::from_sqlx("save app setting", error))?;
         if mutation.key == "tracking_paused"
             && crate::domain::settings::parse_boolean_setting(&mutation.value, false)
         {
             super::sessions::end_active_sessions_tx(
-                &mut tx,
+                tx,
                 crate::platform::clock::unix_timestamp_millis_i64(),
             )
             .await
             .map_err(|error| SqliteOperationError::from_sqlx("seal paused tracking", error))?;
             if anonymous_available {
                 super::anonymous_activity::seal_tx(
-                    &mut tx,
+                    tx,
                     crate::platform::clock::unix_timestamp_millis_i64(),
                 )
                 .await
@@ -151,7 +164,7 @@ pub async fn commit_app_setting_mutations(
             || (mutation.key == WEB_ACTIVITY_TOKEN_KEY && mutation.value.trim().is_empty())
         {
             super::web_activity::end_active_segment_tx(
-                &mut tx,
+                tx,
                 crate::platform::clock::unix_timestamp_millis_i64(),
             )
             .await
@@ -160,7 +173,7 @@ pub async fn commit_app_setting_mutations(
             })?;
             if anonymous_available {
                 super::anonymous_activity::seal_web_tx(
-                    &mut tx,
+                    tx,
                     crate::platform::clock::unix_timestamp_millis_i64(),
                 )
                 .await
@@ -170,10 +183,6 @@ pub async fn commit_app_setting_mutations(
             }
         }
     }
-
-    tx.commit().await.map_err(|error| {
-        SqliteOperationError::from_sqlx("commit app settings transaction", error)
-    })?;
 
     Ok(())
 }

@@ -9,6 +9,7 @@ pub use super::window_geometry::{PhysicalPoint as Point, PhysicalRect as Rect};
 
 pub const PANEL_WIDTH: f64 = 320.0;
 pub const PANEL_HEIGHT: f64 = 240.0;
+pub const LEAVE_DELAY: std::time::Duration = std::time::Duration::from_millis(450);
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -243,6 +244,15 @@ impl Interaction {
         self.leave_since = None;
     }
     pub fn tick(&mut self, near: bool, automatic: bool, now: std::time::Instant) -> bool {
+        self.tick_with_leave_delay(near, automatic, now, LEAVE_DELAY)
+    }
+    pub fn tick_with_leave_delay(
+        &mut self,
+        near: bool,
+        automatic: bool,
+        now: std::time::Instant,
+        leave_delay: std::time::Duration,
+    ) -> bool {
         let before = self.expanded;
         if !near {
             self.require_leave = false;
@@ -256,7 +266,7 @@ impl Interaction {
             }
         } else if self.expanded {
             let since = self.leave_since.get_or_insert(now);
-            if now.saturating_duration_since(*since) >= std::time::Duration::from_millis(450) {
+            if now.saturating_duration_since(*since) >= leave_delay {
                 self.expanded = false;
                 self.leave_since = None;
             }

@@ -1,10 +1,35 @@
-use super::{now_ms, ActivityAggregateRangeDto, ActivityAggregateRecordDto};
 use crate::domain::activity_read_model::{
     ceil_to_hour, floor_to_hour, normalize_app_key, resolve_activity_precedence,
     should_track_activity_fact, ActivityOrigin, OwnedActivityRange, HOUR_MS,
 };
+use crate::platform::clock::unix_timestamp_millis_i64 as now_ms;
+use serde::Serialize;
 use sqlx::{Pool, Row, Sqlite, Transaction};
 use std::collections::BTreeMap;
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActivityAggregateRecordDto {
+    pub anonymous: bool,
+    pub app_name: String,
+    pub exe_name: String,
+    pub start_time: i64,
+    pub end_time: i64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActivityAggregateRangeDto {
+    #[serde(skip)]
+    pub(crate) maintenance_pending: bool,
+    pub records: Vec<ActivityAggregateRecordDto>,
+    pub read_path: &'static str,
+    pub fallback_reason: Option<&'static str>,
+    pub source_revision: i64,
+    pub projection_row_count: usize,
+    pub fact_row_count: usize,
+    pub has_active_session: bool,
+}
 
 const HOURLY_SCHEMA_VERSION: i64 = 1;
 const HOURLY_ALGORITHM_VERSION: i64 = 3;

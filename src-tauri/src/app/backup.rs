@@ -26,7 +26,7 @@ pub(crate) async fn restore_backup_and_refresh(
     tracking.note_tracking_policy_change();
     // Merge keeps destination rows, so end the live destination interval before
     // either restore strategy can replace settings or reuse session identities.
-    crate::data::tracking_runtime::shared_from_app(&app)
+    crate::data::tracking_runtime_tauri::shared_from_app(&app)
         .await?
         .end_active_sessions(now_ms() as i64)
         .await
@@ -36,7 +36,7 @@ pub(crate) async fn restore_backup_and_refresh(
     // Restored privacy settings must take effect before tracking resumes.
     title_state.set_enabled(false);
     title_state.invalidate_app_overrides();
-    match crate::data::tracking_runtime::shared_from_app(&app).await {
+    match crate::data::tracking_runtime_tauri::shared_from_app(&app).await {
         Ok(data) => {
             if let Err(error) = title_state.initialize(data.as_ref()).await {
                 eprintln!("[backup] restore committed but title policy refresh failed: {error}");

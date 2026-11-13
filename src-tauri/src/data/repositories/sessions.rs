@@ -192,11 +192,21 @@ pub async fn end_active_session_for_exe(
     target_exe_name: &str,
     raw_end_time: i64,
 ) -> Result<bool, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    let changed = end_active_session_for_exe_tx(&mut tx, target_exe_name, raw_end_time).await?;
+    tx.commit().await?;
+    Ok(changed)
+}
+
+pub(crate) async fn end_active_session_for_exe_tx(
+    tx: &mut sqlx::Transaction<'_, Sqlite>,
+    target_exe_name: &str,
+    raw_end_time: i64,
+) -> Result<bool, sqlx::Error> {
     let Some(target) = resolve_app_override_executable(target_exe_name) else {
         return Ok(false);
     };
 
-    let mut tx = pool.begin().await?;
     let active = sqlx::query(
         "SELECT id, start_time, exe_name
          FROM sessions
@@ -204,16 +214,14 @@ pub async fn end_active_session_for_exe(
          ORDER BY start_time DESC, id DESC
          LIMIT 1",
     )
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut **tx)
     .await?;
     let Some(active) = active else {
-        tx.rollback().await?;
         return Ok(false);
     };
 
     let exe_name: String = active.get("exe_name");
     if resolve_app_override_executable(&exe_name).as_deref() != Some(target.as_str()) {
-        tx.rollback().await?;
         return Ok(false);
     }
 
@@ -224,10 +232,9 @@ pub async fn end_active_session_for_exe(
         .bind(end_time)
         .bind(end_time - start_time)
         .bind(id)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
-    session_title_samples::finish_active_title_sample_tx(&mut tx, id, end_time).await?;
-    tx.commit().await?;
+    session_title_samples::finish_active_title_sample_tx(tx, id, end_time).await?;
     Ok(true)
 }
 
@@ -237,31 +244,38 @@ pub async fn disable_active_title_for_exe(
     timestamp_ms: i64,
 ) -> Result<bool, sqlx::Error> {
     let mut tx = pool.begin().await?;
+    let changed = disable_active_title_for_exe_tx(&mut tx, target_exe_name, timestamp_ms).await?;
+    tx.commit().await?;
+    Ok(changed)
+}
+
+pub(crate) async fn disable_active_title_for_exe_tx(
+    tx: &mut sqlx::Transaction<'_, Sqlite>,
+    target_exe_name: &str,
+    timestamp_ms: i64,
+) -> Result<bool, sqlx::Error> {
     let active: Option<(i64, String, String)> = sqlx::query_as(
         "SELECT id, exe_name, COALESCE(window_title, '') FROM sessions WHERE end_time IS NULL ORDER BY start_time DESC, id DESC LIMIT 1",
     )
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut **tx)
     .await?;
     let Some((session_id, exe_name, window_title)) = active else {
-        tx.rollback().await?;
         return Ok(false);
     };
     let target = resolve_app_override_executable(target_exe_name);
     if target.is_none() || resolve_app_override_executable(&exe_name) != target {
-        tx.rollback().await?;
         return Ok(false);
     }
     sqlx::query("UPDATE sessions SET window_title = '' WHERE id = ?")
         .bind(session_id)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
     let changed = crate::data::repositories::session_title_samples::finish_active_title_sample_tx(
-        &mut tx,
+        tx,
         session_id,
         timestamp_ms,
     )
     .await?;
-    tx.commit().await?;
     Ok(changed || !window_title.is_empty())
 }
 
@@ -270,26 +284,33 @@ pub async fn disable_active_title(
     timestamp_ms: i64,
 ) -> Result<bool, sqlx::Error> {
     let mut tx = pool.begin().await?;
+    let changed = disable_active_title_tx(&mut tx, timestamp_ms).await?;
+    tx.commit().await?;
+    Ok(changed)
+}
+
+pub(crate) async fn disable_active_title_tx(
+    tx: &mut sqlx::Transaction<'_, Sqlite>,
+    timestamp_ms: i64,
+) -> Result<bool, sqlx::Error> {
     let active = sqlx::query_as::<_, (i64, String)>(
         "SELECT id, COALESCE(window_title, '') FROM sessions WHERE end_time IS NULL ORDER BY start_time DESC, id DESC LIMIT 1",
     )
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut **tx)
     .await?;
     let Some((session_id, window_title)) = active else {
-        tx.rollback().await?;
         return Ok(false);
     };
     sqlx::query("UPDATE sessions SET window_title = '' WHERE id = ?")
         .bind(session_id)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
     let changed = crate::data::repositories::session_title_samples::finish_active_title_sample_tx(
-        &mut tx,
+        tx,
         session_id,
         timestamp_ms,
     )
     .await?;
-    tx.commit().await?;
     Ok(changed || !window_title.is_empty())
 }
 
