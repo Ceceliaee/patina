@@ -1,0 +1,13 @@
+[package]
+name = "patina-focus"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+patina-plugin-sdk.workspace = true
+extism-pdk.workspace = true
+serde_json.workspace = true
