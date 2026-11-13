@@ -1,0 +1,12 @@
+[package]
+name = "quietpro"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+gpui-kit = { workspace = true, features = ["assets"] }
+
+[dev-dependencies]
+serde_json = "1"
+windows = { version = "0.62.2", features = ["Win32_System_Com", "Win32_UI_Accessibility", "Win32_UI_WindowsAndMessaging"] }
