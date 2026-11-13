@@ -259,6 +259,11 @@ runTest("update relaunch view storage persists current keys", () => {
 
     clearPendingUpdateRelaunchViewRestore();
     assert.equal(window.localStorage.getItem("patina:pending-update-relaunch-view"), null);
+
+    window.localStorage.setItem("patina:last-active-view", "dashboard");
+    markPendingUpdateRelaunchViewRestore();
+    assert.equal(consumePendingUpdateRelaunchView(), null);
+    assert.equal(readLastActiveView(), null);
   });
 });
 

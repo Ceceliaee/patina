@@ -36,13 +36,7 @@ export interface DashboardSnapshot {
   fetchedAtMs: number;
   icons: Record<string, string>;
   activityRecords: AggregateSessionRecord[];
-  yesterdayActivityRecords: AggregateSessionRecord[];
   hasActiveSession: boolean;
-}
-
-interface IconSnapshot {
-  fetchedAtMs: number;
-  icons: Record<string, string>;
 }
 
 export interface DashboardReadModel {
@@ -73,36 +67,18 @@ const DASHBOARD_SNAPSHOT_DEPENDENCIES: DashboardSnapshotDependencies = {
 };
 
 function collectDashboardIconExecutables(
-  ...sessionGroups: Array<Array<Pick<HistorySession, "exeName">>>
+  sessions: Array<Pick<HistorySession, "exeName">>,
 ): string[] {
-  const seen = new Set<string>();
-  const result: string[] = [];
-
-  for (const sessions of sessionGroups) {
-    for (const session of sessions) {
-      const exeName = session.exeName.trim();
-      if (!exeName || seen.has(exeName)) continue;
-
-      seen.add(exeName);
-      result.push(exeName);
-    }
-  }
-
-  return [...new Set(result.flatMap((key) => [key, AppClassification.resolveStatisticalApp(key)]))];
+  const names = new Set(sessions.map(session => session.exeName.trim()).filter(Boolean));
+  return [...new Set([...names].flatMap((key) => [key, AppClassification.resolveStatisticalApp(key)]))];
 }
 
 export async function loadDashboardSnapshotWithDeps(
   date: Date,
   deps: DashboardSnapshotDependencies,
 ): Promise<DashboardSnapshot> {
-  const yesterday = new Date(date);
-  yesterday.setDate(yesterday.getDate() - 1);
   const dayRange = getDayRange(date);
-  const yesterdayRange = getDayRange(yesterday);
-  const [dayResponse, yesterdayResponse] = await Promise.all([
-    deps.getActivityAggregateRange(dayRange.startMs, dayRange.endMs),
-    deps.getActivityAggregateRange(yesterdayRange.startMs, yesterdayRange.endMs),
-  ]);
+  const dayResponse = await deps.getActivityAggregateRange(dayRange.startMs, dayRange.endMs);
   const icons = await deps.loadIcons(
     collectDashboardIconExecutables(dayResponse.records),
   ).catch((error: unknown) => {
@@ -114,31 +90,12 @@ export async function loadDashboardSnapshotWithDeps(
     fetchedAtMs: deps.now(),
     icons,
     activityRecords: dayResponse.records,
-    yesterdayActivityRecords: yesterdayResponse.records,
     hasActiveSession: dayResponse.hasActiveSession,
   };
 }
 
 export async function loadDashboardSnapshot(date: Date = new Date()): Promise<DashboardSnapshot> {
   return loadDashboardSnapshotWithDeps(date, DASHBOARD_SNAPSHOT_DEPENDENCIES);
-}
-
-export async function loadIconSnapshotWithDeps(
-  exeNames: string[],
-  deps: Pick<DashboardSnapshotDependencies, "now" | "loadIcons" | "getCachedIcons">,
-): Promise<IconSnapshot> {
-  const icons = exeNames.length > 0
-    ? await deps.loadIcons(exeNames)
-    : deps.getCachedIcons();
-
-  return {
-    fetchedAtMs: deps.now(),
-    icons,
-  };
-}
-
-export async function loadIconSnapshot(exeNames: string[] = []): Promise<IconSnapshot> {
-  return loadIconSnapshotWithDeps(exeNames, DASHBOARD_SNAPSHOT_DEPENDENCIES);
 }
 
 export function buildDashboardReadModel(

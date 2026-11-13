@@ -5,7 +5,6 @@ import AppSidebar from "./components/AppSidebar";
 import AppTitleBar from "./components/AppTitleBar";
 import AppViewOutlet from "./components/AppViewOutlet.tsx";
 import type { View } from "./types/view";
-import Dashboard from "../features/dashboard/components/Dashboard.tsx";
 import type AboutView from "../features/about/components/About.tsx";
 import type AppMappingView from "../features/classification/components/AppMapping.tsx";
 import type DataView from "../features/data/components/Data.tsx";
@@ -20,14 +19,13 @@ import type {
   ThemeMode,
 } from "../shared/settings/appSettings.ts";
 import type { ColorSchemePreview } from "../features/settings/types.ts";
-import { useDashboardStats } from "../features/dashboard/hooks/useDashboardStats";
+import { getAppIconRuntimeCacheSnapshot } from "../platform/persistence/appIconRuntimeCache.ts";
 import { useWindowTracking } from "./hooks/useWindowTracking";
 import {
   INITIAL_READ_MODEL_REFRESH_STATE,
   resolveReadModelRefreshSignal,
 } from "./services/readModelRefreshState.ts";
 import {
-  loadDashboardRuntimeSnapshot,
   getHistoryRuntimeSeedSnapshot,
   loadDataTrendRuntimeSnapshot,
   loadHistoryRuntimeSnapshot,
@@ -137,22 +135,12 @@ export default function AppShellContent({
   });
   const refreshSignal = resolveReadModelRefreshSignal(syncTick, readModelRefreshState);
   const { mappingVersion } = readModelRefreshState;
-  const isDashboardRefreshEnabled = currentView === "dashboard" && isForegroundReady;
   const isHistoryRefreshEnabled = currentView === "history" && isForegroundReady;
   const isDataRefreshEnabled = currentView === "data" && isForegroundReady;
-  const { dashboard, icons, readState: dashboardReadState } = useDashboardStats(
-    appSettings.refreshIntervalSecs,
-    refreshSignal,
-    trackerHealth,
-    loadDashboardRuntimeSnapshot,
-    mappingVersion,
-    classificationReady,
-    isDashboardRefreshEnabled,
-  );
+  const icons = getAppIconRuntimeCacheSnapshot();
   useAppShellRuntimeLifecycle({
     classificationReady,
     isDataRefreshEnabled,
-    isDashboardRefreshEnabled,
     isForegroundReady,
     isHistoryRefreshEnabled,
     isWindowForegroundLike,
@@ -227,7 +215,7 @@ export default function AppShellContent({
     preloadNavigationView(nextView, "preview");
   }, []);
   const { navigationMode, sidebarProps } = useAppSidebarState({
-    currentView: viewPresentation.presentedView,
+    currentView: presentedView ?? currentView,
     onPrepareNavigate: prepareNavigate,
     onNavigate: handleSidebarNavigate,
     onPreviewNavigate: handleSidebarPreviewNavigate,
@@ -262,22 +250,6 @@ export default function AppShellContent({
           {...viewPresentation.outletProps}
           uiText={uiText}
           views={{
-            dashboard: (
-              <Dashboard
-                dashboard={dashboard}
-                icons={icons}
-                readState={dashboardReadState}
-                hourlyActivityChartMode={appSettings.hourlyActivityChartMode}
-                onHourlyActivityChartModeChange={handleHourlyActivityChartModeChange}
-                runtime={{
-                  refreshKey: refreshSignal,
-                  mappingVersion,
-                  mergeThresholdSecs: appSettings.timelineMergeGapSecs,
-                  trackerHealth,
-                }}
-                {...quickClassificationCallbacks}
-              />
-            ),
             history: (
               <History
                 onInitialContentReady={viewPresentation.onHistoryContentReady}

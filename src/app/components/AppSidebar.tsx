@@ -1,7 +1,7 @@
 import { useLocaleText } from "../../shared/i18n/index.ts";
 import QuietIconAction from "../../shared/components/QuietIconAction";
 import { useEffect, useRef, type CSSProperties } from "react";
-import { Monitor, Clock, Settings2, Sparkles, BarChart3, Info, Menu, ToolCase } from "lucide-react";
+import { Clock, Settings2, Sparkles, BarChart3, Info, Menu, ToolCase } from "lucide-react";
 import appIconUrl from "../../../src-tauri/icons/128x128@2x.png";
 
 import type { SidebarNavigationMode } from "../services/sidebarNavigationPreferenceStorage.ts";
@@ -31,7 +31,6 @@ export default function AppSidebar({
   const UI_TEXT = useLocaleText();
   const isLabeled = navigationMode === "labeled";
   const navItems = [
-    { id: "dashboard" as View, icon: Monitor, label: UI_TEXT.dashboard.title },
     { id: "history" as View, icon: Clock, label: UI_TEXT.history.title },
     { id: "data" as View, icon: BarChart3, label: UI_TEXT.data.title },
     { id: "mapping" as View, icon: Sparkles, label: UI_TEXT.mapping.title },

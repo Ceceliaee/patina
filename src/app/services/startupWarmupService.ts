@@ -119,7 +119,6 @@ interface StartupWarmupTaskPolicy {
 }
 
 interface StartupWarmupRefreshOptions {
-  includeDashboard?: boolean;
   includeData?: boolean;
   includeHistory?: boolean;
 }
@@ -500,7 +499,6 @@ export function scheduleStartupWarmupRefresh(
   options: StartupWarmupRefreshOptions = {},
   deps: Pick<
     StartupWarmupDeps,
-    | "loadDashboardRuntimeSnapshot"
     | "loadDataTrendRuntimeSnapshot"
     | "loadHistoryRuntimeSnapshot"
     | "scheduler"
@@ -518,10 +516,6 @@ export function scheduleStartupWarmupRefresh(
     }
 
     const tasks: Array<Promise<unknown>> = [];
-
-    if (options.includeDashboard ?? true) {
-      tasks.push(deps.loadDashboardRuntimeSnapshot(new Date()));
-    }
 
     if (options.includeHistory ?? true) {
       tasks.push(deps.loadHistoryRuntimeSnapshot(new Date(), 7));

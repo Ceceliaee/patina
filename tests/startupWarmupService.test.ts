@@ -152,7 +152,6 @@ function makeDashboardSnapshot(fetchedAtMs: number) {
     fetchedAtMs,
     icons: {},
     activityRecords: [],
-    yesterdayActivityRecords: [],
     hasActiveSession: false
   };
 }
@@ -438,7 +437,6 @@ await runTest("startup warmup refresh debounces repeated tracking changes", asyn
   await flushPromises();
 
   assert.deepEqual(events, [
-    "dashboard-snapshot",
     "history-snapshot",
   ]);
   assert.deepEqual(warnings, []);
@@ -460,7 +458,6 @@ await runTest("startup warmup refresh includes data only when requested", async 
   await flushPromises();
 
   assert.deepEqual(events, [
-    "dashboard-snapshot",
     "history-snapshot",
     "data-trend-refresh",
   ]);
@@ -478,7 +475,6 @@ await runTest("startup warmup refresh can skip invisible page refreshes", async 
   };
 
   scheduleStartupWarmupRefresh(30, {
-    includeDashboard: false,
     includeHistory: false,
     includeData: false,
   }, deps);
@@ -490,7 +486,6 @@ await runTest("startup warmup refresh can skip invisible page refreshes", async 
 
 await runTest("default refresh scheduling can be cancelled without executing runtime work", async () => {
   const cancel = scheduleStartupWarmupRefresh(60_000, {
-    includeDashboard: false,
     includeHistory: false,
     includeData: false,
   });

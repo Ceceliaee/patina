@@ -9,8 +9,7 @@ const LAST_ACTIVE_VIEW_KEY = "patina:last-active-view";
 const PENDING_UPDATE_RELAUNCH_VIEW_KEY = "patina:pending-update-relaunch-view";
 
 function isView(value: string | null): value is View {
-  return value === "dashboard"
-    || value === "history"
+  return value === "history"
     || value === "data"
     || value === "mapping"
     || value === "tools"

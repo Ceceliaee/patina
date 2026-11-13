@@ -39,7 +39,7 @@ export function useAppShellNavigation({ confirm }: UseAppShellNavigationParams) 
   const settingsSaveHandlerRef = useRef<SaveHandler>(null);
   const mappingSaveHandlerRef = useRef<SaveHandler>(null);
   const [currentView, setCurrentView] = useState<View>(
-    () => consumePendingUpdateRelaunchView() ?? readLastActiveView() ?? "dashboard",
+    () => consumePendingUpdateRelaunchView() ?? readLastActiveView() ?? "history",
   );
   const [viewDirtyState, setViewDirtyState] = useState<ViewDirtyState>(INITIAL_DIRTY_STATE);
 

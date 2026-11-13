@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getPreloadableViewChunkStatus,
   preloadLazyViewChunk,
-  type PreloadableView,
 } from "../services/viewChunkPreloadService.ts";
 import type { View } from "../types/view.ts";
 import {
@@ -29,39 +28,21 @@ function prepareViewData(view: View): Promise<unknown> {
   return Promise.resolve();
 }
 
-function getPreloadableNavigationView(view: View): PreloadableView | null {
-  switch (view) {
-    case "about":
-    case "data":
-    case "history":
-    case "mapping":
-    case "settings":
-    case "tools":
-      return view;
-    case "dashboard":
-      return null;
-  }
-}
-
 export function preloadNavigationView(view: View, reason: "intent" | "preview"): void {
-  const preloadableView = getPreloadableNavigationView(view);
-  if (!preloadableView) return;
   if (view === "data" && reason === "intent") {
     beginDataNavigationMeasurement();
   }
 
   void Promise.all([
-    preloadLazyViewChunk(preloadableView),
+    preloadLazyViewChunk(view),
     prepareViewData(view),
   ]).catch((error) => {
-    console.warn(`Failed to preload ${preloadableView} view on navigation ${reason}`, error);
+    console.warn(`Failed to preload ${view} view on navigation ${reason}`, error);
   });
 }
 
 function isNavigationViewReady(view: View) {
-  const preloadableView = getPreloadableNavigationView(view);
-  if (!preloadableView) return true;
-  if (getPreloadableViewChunkStatus(preloadableView) !== "resolved") return false;
+  if (getPreloadableViewChunkStatus(view) !== "resolved") return false;
   if (view === "settings") {
     return getSettingsPageBootstrapCache() !== null;
   }
@@ -75,11 +56,8 @@ function isNavigationViewReady(view: View) {
 }
 
 async function prepareNavigationView(view: View) {
-  const preloadableView = getPreloadableNavigationView(view);
-  if (!preloadableView) return;
-
   const [chunkResult, dataResult] = await Promise.allSettled([
-    preloadLazyViewChunk(preloadableView),
+    preloadLazyViewChunk(view),
     prepareViewData(view),
   ]);
   if (chunkResult.status === "rejected") {
@@ -91,8 +69,8 @@ async function prepareNavigationView(view: View) {
 }
 
 export function useAppShellRenderedView(currentView: View, foregroundReady: boolean) {
-  const [renderedView, setRenderedView] = useState<View>("dashboard");
-  const [presentedView, setPresentedView] = useState<View>(renderedView);
+  const [renderedView, setRenderedView] = useState<View | null>(null);
+  const [presentedView, setPresentedView] = useState<View | null>(null);
   const [content, setContent] = useState({ view: renderedView, ready: false });
   if (content.view !== renderedView) setContent({ view: renderedView, ready: false });
   const markContentReady = useCallback((view: View) => {
@@ -140,13 +118,13 @@ export function useAppShellRenderedView(currentView: View, foregroundReady: bool
     outletProps: {
       foregroundReady,
       onPresentedViewChange: setPresentedView,
-      renderedView,
+      renderedView: renderedView ?? currentView,
+      prepared: renderedView !== null,
       contentReady: (renderedView !== "history" && renderedView !== "data")
         || (content.view === renderedView && content.ready),
     },
     onHistoryContentReady,
     onDataContentReady,
     presentedView,
-    renderedView,
   };
 }

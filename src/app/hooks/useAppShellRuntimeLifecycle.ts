@@ -17,7 +17,6 @@ const BACKGROUND_CACHE_RELEASE_DELAY_MS = LONG_BACKGROUND_DELAY_MS;
 interface AppShellRuntimeLifecycleOptions {
   classificationReady: boolean;
   isDataRefreshEnabled: boolean;
-  isDashboardRefreshEnabled: boolean;
   isForegroundReady: boolean;
   isHistoryRefreshEnabled: boolean;
   isWindowForegroundLike: boolean;
@@ -30,7 +29,6 @@ interface AppShellRuntimeLifecycleOptions {
 export function useAppShellRuntimeLifecycle({
   classificationReady,
   isDataRefreshEnabled,
-  isDashboardRefreshEnabled,
   isForegroundReady,
   isHistoryRefreshEnabled,
   isWindowForegroundLike,
@@ -97,13 +95,11 @@ export function useAppShellRuntimeLifecycle({
     if (!classificationReady || syncTick <= 0) return undefined;
 
     return scheduleStartupWarmupRefresh(undefined, {
-      includeDashboard: isDashboardRefreshEnabled,
       includeHistory: isHistoryRefreshEnabled,
       includeData: isDataRefreshEnabled,
     });
   }, [
     classificationReady,
-    isDashboardRefreshEnabled,
     isDataRefreshEnabled,
     isHistoryRefreshEnabled,
     syncTick,

@@ -31,7 +31,7 @@ const NON_DATA_PRIMARY_LAZY_ROUTES_GZIP_BUDGET_KI_B = 86.5;
 const TOTAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 417.7;
 
 const INITIAL_CHUNK_BUDGETS = [
-  { label: "index", pattern: /^index-.*\.js$/, gzipKiB: 65 },
+  { label: "index", pattern: /^index-.*\.js$/, gzipKiB: 49 },
   { label: "browser storage", pattern: /^browserStorage-.*\.js$/, gzipKiB: 0.197 },
   { label: "react-vendor", pattern: /^react-vendor-.*\.js$/, gzipKiB: 66.8 },
   { label: "icons", pattern: /^icons-.*\.js$/, gzipKiB: 8 },
@@ -65,7 +65,7 @@ const LAZY_PAGE_CHUNK_BUDGETS = [
   { label: "Settings", pattern: /^Settings-.*\.js$/, gzipKiB: 24 },
   // Scoped cost review: docs/archive/classification-link-layout-bundle-decision.md.
   { label: "AppMapping", pattern: /^AppMapping-.*\.js$/, gzipKiB: 19.7 },
-  { label: "History", pattern: /^History-.*\.js$/, gzipKiB: 16.4 },
+  { label: "History", pattern: /^History-.*\.js$/, gzipKiB: 17.7 },
   { label: "Tools", pattern: /^Tools-.*\.js$/, gzipKiB: 18 },
   // The destination analysis panel and its range control are both part of
   // Data's first render; the private detail chunk owns day analysis only. The
@@ -95,19 +95,19 @@ const LAZY_SECONDARY_CHUNK_BUDGETS = [
   { label: "Data trend snapshot", pattern: /^dataTrendSnapshot-.*\.js$/, gzipKiB: 2 },
   { label: "Data bootstrap snapshot", pattern: /^dataBootstrapSnapshot-.*\.js$/, gzipKiB: 1.8 },
   // The shared destination-detail entry preloads one cross-feature dialog while
-  // retaining a separate chunk so ordinary Dashboard, History, and Data views
+  // retaining a separate chunk so ordinary History and Data views
   // do not pay for single-object analysis in their first-render graphs.
   // Single-date controller returns to its sole consumer:
   // docs/archive/2026-11-01-reminder-direct-picker-bundle-decision.md.
-  { label: "Destination detail", pattern: /^DestinationDetailDialog-.*\.js$/, gzipKiB: 9.25 },
-  // Dashboard preloads this classification-owned editor on icon hover/focus and
-  // keeps it out of the initial graph until the user opens the context menu.
+  { label: "Destination detail", pattern: /^DestinationDetailDialog-.*\.js$/, gzipKiB: 9.3 },
+  // History and Data preload the editor on icon hover or focus.
   { label: "Quick classification", pattern: /^QuickClassificationSurface-.*\.js$/, gzipKiB: 3.4 },
 ] as const;
 
 // Stable cross-feature owners stay lazy and receive their own narrow budget
 // instead of consuming the allowance for unowned support chunks.
 const LAZY_SHARED_UI_CHUNK_BUDGETS = [
+  { label: "quick classification launcher", pattern: /^useQuickClassificationLauncher-.*\.js$/, gzipKiB: 2.72 },
   { label: "activity timeline models", pattern: /^webActivityViewModel-.*\.js$/, gzipKiB: 4.4 },
   // Nested reminder controls: docs/archive/2026-11-01-reminder-standard-controls-bundle-decision.md.
   { label: "QuietAnchoredPopover", pattern: /^QuietAnchoredPopover-.*\.js$/, gzipKiB: 1.53 },
@@ -127,13 +127,12 @@ const LAZY_SHARED_UI_CHUNK_BUDGETS = [
 
 // Unowned fragments remain tightly bounded after route, secondary-runtime, and
 // stable shared owners are attributed above.
-// The scheduled-export entry adds two direct icon modules. Keep them in the
-// unowned support aggregate while preserving the global and per-owner limits.
-const LAZY_SUPPORT_CHUNKS_GZIP_BUDGET_KI_B = 4.36;
+// Page headers, chart tooltips and their small presentation helpers load with the remaining routes.
+const LAZY_SUPPORT_CHUNKS_GZIP_BUDGET_KI_B = 6.3;
 const SETTINGS_COPY_GZIP_BUDGET_KI_B = 12;
 // Import preview, destructuring, and batch deletion require matching locale resources.
 // Destination detail contributes shared bilingual resources used by
-// Dashboard, History, and Data. Keep explicit headroom for that stable owner.
+// History and Data. Keep explicit headroom for that stable owner.
 const COPY_DOMAINS_GZIP_BUDGET_KI_B = 33;
 const NON_SETTINGS_COPY_GZIP_REVIEW_KI_B = 4;
 

@@ -11,6 +11,7 @@ import type { View } from "../types/view.ts";
 interface AppViewOutletProps {
   onPresentedViewChange?: (view: View) => void;
   renderedView: View;
+  prepared: boolean;
   contentReady?: boolean;
   foregroundReady: boolean;
   uiText: UiText;
@@ -20,6 +21,7 @@ interface AppViewOutletProps {
 export default function AppViewOutlet({
   onPresentedViewChange,
   renderedView,
+  prepared,
   contentReady = true,
   foregroundReady,
   uiText,
@@ -30,16 +32,17 @@ export default function AppViewOutlet({
   const transitionRequestRef = useRef(0);
 
   useLayoutEffect(() => {
-    if (renderedView === displayedView) return;
+    if (!prepared || renderedView === displayedView) return;
 
     transitionRequestRef.current += 1;
     setOutgoingView((current) => (
       current === renderedView ? null : current ?? displayedView
     ));
     setDisplayedView(renderedView);
-  }, [displayedView, renderedView]);
+  }, [displayedView, prepared, renderedView]);
 
   useLayoutEffect(() => {
+    if (!prepared) return undefined;
     if (outgoingView === null) {
       onPresentedViewChange?.(displayedView);
       return undefined;
@@ -73,7 +76,7 @@ export default function AppViewOutlet({
       window.cancelAnimationFrame(animationFrameId);
       window.clearTimeout(fallbackTimerId);
     };
-  }, [contentReady, displayedView, foregroundReady, onPresentedViewChange, outgoingView, renderedView]);
+  }, [contentReady, displayedView, foregroundReady, onPresentedViewChange, outgoingView, prepared, renderedView]);
 
   const transitionActive = outgoingView !== null;
 
@@ -96,7 +99,7 @@ export default function AppViewOutlet({
           aria-hidden={transitionActive || undefined}
           className="qp-view-container flex-1 min-h-0 flex flex-col h-full overflow-hidden"
         >
-          {views[displayedView]}
+          {prepared && views[displayedView]}
         </div>
         {outgoingView !== null ? (
           <div

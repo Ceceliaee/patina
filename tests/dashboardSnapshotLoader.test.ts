@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import {
   loadDashboardSnapshotWithDeps,
-  loadIconSnapshotWithDeps,
 } from "../src/features/dashboard/services/dashboardReadModel.ts";
 import {
   clearDashboardSnapshotCache,
@@ -12,15 +11,11 @@ import { getHistoryRuntimeSeedSnapshot } from "../src/app/services/readModelRunt
 const selectedDate = new Date(2026, 6, 1, 12);
 const dayStart = new Date(2026, 6, 1).getTime();
 const nextDayStart = new Date(2026, 6, 2).getTime();
-const yesterdayStart = new Date(2026, 5, 30).getTime();
 const todayRecords = [
   { appName: "Alpha", exeName: "alpha.exe", startTime: dayStart, endTime: dayStart + 10 },
   { appName: "Alpha", exeName: "alpha.exe", startTime: dayStart + 20, endTime: dayStart + 30 },
   { appName: "Imported", exeName: "imported.exe", startTime: dayStart + 40, endTime: dayStart + 50 },
   { appName: "Unknown", exeName: "", startTime: dayStart + 60, endTime: dayStart + 70 },
-];
-const yesterdayRecords = [
-  { appName: "Beta", exeName: "beta.exe", startTime: yesterdayStart, endTime: yesterdayStart + 10 },
 ];
 const response = (records = todayRecords, hasActiveSession = true) => ({
   records,
@@ -37,7 +32,7 @@ const snapshot = await loadDashboardSnapshotWithDeps(selectedDate, {
   now: () => 1234,
   getActivityAggregateRange: async (startMs, endMs) => {
     requestedRanges.push([startMs, endMs]);
-    return startMs === dayStart ? response() : response(yesterdayRecords, false);
+    return response();
   },
   loadIcons: async (exeNames) => {
     iconRequests.push(exeNames);
@@ -45,41 +40,22 @@ const snapshot = await loadDashboardSnapshotWithDeps(selectedDate, {
   },
   getCachedIcons: () => ({}),
 });
-assert.deepEqual(requestedRanges, [[dayStart, nextDayStart], [yesterdayStart, dayStart]]);
+assert.deepEqual(requestedRanges, [[dayStart, nextDayStart]]);
 assert.deepEqual(iconRequests, [["alpha.exe", "imported.exe"]]);
 assert.deepEqual(snapshot, {
     fetchedAtMs: 1234,
     icons: { "alpha.exe": "icon" },
     hasActiveSession: true,
     activityRecords: todayRecords,
-    yesterdayActivityRecords: yesterdayRecords
   });
 
-const loadedIcons = await loadIconSnapshotWithDeps(["alpha.exe"], {
-  now: () => 2000,
-  loadIcons: async (exeNames) => ({ [exeNames[0]]: "loaded" }),
-  getCachedIcons: () => ({ cached: "unused" }),
-});
-assert.deepEqual(loadedIcons, { fetchedAtMs: 2000, icons: { "alpha.exe": "loaded" } });
-const cachedIcons = await loadIconSnapshotWithDeps([], {
-  now: () => 3000,
-  loadIcons: async () => ({ loaded: "unused" }),
-  getCachedIcons: () => ({ cached: "hit" }),
-});
-assert.deepEqual(cachedIcons, { fetchedAtMs: 3000, icons: { cached: "hit" } });
-
-for (const rejectedStart of [dayStart, yesterdayStart]) {
-  const failure = new Error(`aggregate unavailable: ${rejectedStart}`);
-  await assert.rejects(loadDashboardSnapshotWithDeps(selectedDate, {
-    now: () => 4000,
-    getActivityAggregateRange: async (startMs) => {
-      if (startMs === rejectedStart) throw failure;
-      return response();
-    },
-    loadIcons: async () => assert.fail("Icons must not start before both statistics reads succeed"),
-    getCachedIcons: () => ({}),
-  }), (error) => error === failure);
-}
+const failure = new Error("aggregate unavailable");
+await assert.rejects(loadDashboardSnapshotWithDeps(selectedDate, {
+  now: () => 4000,
+  getActivityAggregateRange: async () => { throw failure; },
+  loadIcons: async () => assert.fail("Icons must wait for the aggregate read"),
+  getCachedIcons: () => ({}),
+}), (error) => error === failure);
 
 const iconFailure = new Error("icon transport unavailable");
 const warnings: unknown[][] = [];
@@ -107,7 +83,6 @@ const emptySnapshot = await loadDashboardSnapshotWithDeps(selectedDate, {
   getCachedIcons: () => ({}),
 });
 assert.deepEqual(emptySnapshot.activityRecords, []);
-assert.deepEqual(emptySnapshot.yesterdayActivityRecords, []);
 assert.equal(emptySnapshot.hasActiveSession, false);
 
 setDashboardSnapshotCache(snapshot, selectedDate);
