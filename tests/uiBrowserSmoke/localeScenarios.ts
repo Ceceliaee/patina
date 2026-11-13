@@ -91,7 +91,7 @@ export async function runLocaleScenarios(context: BrowserSmokeContext) {
     };
     assert.deepEqual(
       englishState.labels,
-      ["Today", "History", "Data", "Classification", "Tools", "Settings", "About"],
+      ["History", "Data", "Classification", "Tools", "Settings", "About"],
     );
     assert.equal(englishState.fit, true);
     assert.equal(englishState.singleLine, true);
@@ -181,7 +181,7 @@ export async function runLocaleScenarios(context: BrowserSmokeContext) {
       `(() => {
         const labels = Array.from(document.querySelectorAll("[data-sidebar-nav-label]"));
         const menu = document.querySelector('[aria-label="Navigation labels"]');
-        return labels.length === 7
+        return labels.length === 6
           && labels.every((node) => node.scrollWidth <= node.clientWidth + 1)
           && menu?.getAttribute("aria-pressed") === "true"
           && document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1;
@@ -318,8 +318,8 @@ export async function runLocaleScenarios(context: BrowserSmokeContext) {
   });
 
   for (const localeCase of [
-    { locale: "es", labels: ["Hoy", "Historial", "Datos", "Clasificación", "Herramientas", "Configuración", "Acerca de"], exportTitle: "Exportación e importación", exportAction: "Exportar", month: "Este mes" },
-    { locale: "ru-RU", labels: ["Сегодня", "История", "Данные", "Категории", "Инструменты", "Настройки", "О программе"], exportTitle: "Экспорт и импорт", exportAction: "Экспорт", month: "Этот месяц" },
+    { locale: "es", labels: ["Historial", "Datos", "Clasificación", "Herramientas", "Configuración", "Acerca de"], exportTitle: "Exportación e importación", exportAction: "Exportar", month: "Este mes" },
+    { locale: "ru-RU", labels: ["История", "Данные", "Категории", "Инструменты", "Настройки", "О программе"], exportTitle: "Экспорт и импорт", exportAction: "Экспорт", month: "Этот месяц" },
   ]) await runTest(`${localeCase.locale} pages and export remain usable in the minimum window`, async () => {
     const { locale, labels } = localeCase;
     const script = await client.command("Page.addScriptToEvaluateOnNewDocument", {
@@ -328,14 +328,14 @@ export async function runLocaleScenarios(context: BrowserSmokeContext) {
     try {
       await client.command("Page.navigate", { url: appUrl }, sessionId);
       await waitForExpression(client, sessionId, `document.documentElement.lang === ${jsonString(locale)} && Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(labels[1]))} + ']'))`, 45000);
-      for (const [index, view] of ["dashboard", "history", "data", "mapping", "tools", "settings", "about"].entries()) {
+      for (const [index, view] of ["history", "data", "mapping", "tools", "settings", "about"].entries()) {
         const label = labels[index];
         await evaluate(client, sessionId, `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(label))} + ']')?.click()`);
         await waitForExpression(client, sessionId, `document.querySelector('main.qp-canvas')?.dataset.presentedView === ${jsonString(view)} && document.querySelector('main.qp-canvas')?.dataset.viewTransitionState === 'settled'`);
         assert.equal(await evaluate(client, sessionId, "document.documentElement.lang"), locale);
         assert.ok(await evaluate(client, sessionId, "document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1"), `${label} must not overflow horizontally`);
       }
-      await evaluate(client, sessionId, `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(labels[5]))} + ']')?.click()`);
+      await evaluate(client, sessionId, `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(labels[4]))} + ']')?.click()`);
       await waitForExpression(client, sessionId, `document.body.innerText.includes(${jsonString(localeCase.exportTitle)})`);
       await evaluate(client, sessionId, `Array.from(document.querySelectorAll('button')).find(n => n.textContent?.trim() === ${jsonString(localeCase.exportAction)})?.click()`);
       await waitForExpression(client, sessionId, "Boolean(document.querySelector('.settings-data-export-format-grid'))");

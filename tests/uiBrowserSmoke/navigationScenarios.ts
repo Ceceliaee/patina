@@ -90,8 +90,8 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
   await runTest("chart navigation retains the previous page until content or an error is ready", async () => {
     for (const [view, label] of [['history', '历史'], ['data', '数据']]) {
       for (const outcome of ['ready', 'error', 'leave']) {
-        await evaluate(client, sessionId, `document.querySelector('.qp-nav-item[aria-label="今天"]').click()`);
-        await waitForExpression(client, sessionId, `document.querySelector('main')?.dataset.presentedView==='dashboard'`);
+        await evaluate(client, sessionId, `document.querySelector('.qp-nav-item[aria-label="关于"]').click()`);
+        await waitForExpression(client, sessionId, `document.querySelector('main')?.dataset.presentedView==='about'`);
         await evaluate(client, sessionId, `(async()=>{
           const history=await import('/src/features/history/services/historyCacheLifecycle.ts');
           const data=await import('/src/features/data/services/dataCacheLifecycle.ts');
@@ -105,7 +105,7 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
         try {
           await waitForExpression(client, sessionId, `globalThis.__PATINA_CHART_PENDING.length>0 && !!document.querySelector('${view === 'history' ? '[data-history-content-state]' : '[data-data-content-state]'}')`);
           await waitForAnimationFrames(client, sessionId, 3);
-          assert.equal(await evaluate(client, sessionId, `document.querySelector('main').dataset.presentedView`), 'dashboard', `${view} exposed an empty chart before its read settled`);
+          assert.equal(await evaluate(client, sessionId, `document.querySelector('main').dataset.presentedView`), 'about', `${view} exposed an empty chart before its read settled`);
           if (outcome === 'leave') {
             await evaluate(client, sessionId, `document.querySelector('.qp-nav-item[aria-label="关于"]').click()`);
             await waitForExpression(client, sessionId, `document.querySelector('main')?.dataset.presentedView==='about'`);
@@ -137,8 +137,8 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
       await waitForExpression(client, sessionId, view === 'history'
         ? `document.querySelector('[data-history-content-state]')?.dataset.historyContentState==='ready'`
         : `document.querySelector('[data-data-content-state]')?.dataset.dataContentState==='complete'`);
-      await evaluate(client, sessionId, `document.querySelector('.qp-nav-item[aria-label="今天"]').click()`);
-      await waitForExpression(client, sessionId, `document.querySelector('main')?.dataset.presentedView==='dashboard'`);
+      await evaluate(client, sessionId, `document.querySelector('.qp-nav-item[aria-label="关于"]').click()`);
+      await waitForExpression(client, sessionId, `document.querySelector('main')?.dataset.presentedView==='about'`);
       await evaluate(client, sessionId, `(async()=>{
         const history=await import('/src/features/history/services/historySnapshotCache.ts');
         const data=await import('/src/features/data/services/dataCacheLifecycle.ts');
@@ -175,7 +175,7 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
   await runTest("sidebar navigation labels toggle without geometry or navigation drift", async () => {
     await evaluate(client!, sessionId, `
       localStorage.removeItem("patina:sidebar-navigation-mode");
-      localStorage.setItem("patina:last-active-view", "dashboard");
+      localStorage.setItem("patina:last-active-view", "history");
     `);
     await client!.command("Emulation.setDeviceMetricsOverride", {
       width: 1100,
@@ -246,20 +246,20 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
     };
     assert.equal(iconsState.mode, "icons");
     assert.deepEqual(iconsState.labels, []);
-    assert.deepEqual(iconsState.iconSizes, Array(7).fill("18"));
+    assert.deepEqual(iconsState.iconSizes, Array(EXPECTED_NAV_LABELS.length).fill("18"));
     assert.equal(iconsState.pressed, "false");
     assert.equal(iconsState.visuallyPressed, false);
-    assert.equal(iconsState.current, "今天");
+    assert.equal(iconsState.current, "历史");
     assert.equal(iconsState.footerLast, true);
     assert.ok(iconsState.overflowX <= 1);
 
-    await evaluate(client!, sessionId, `document.querySelector('[data-sidebar-nav-item="dashboard"]')?.focus()`);
+    await evaluate(client!, sessionId, `document.querySelector('[data-sidebar-nav-item="history"]')?.focus()`);
     const tabOrder: string[] = [];
-    for (let index = 0; index < 7; index += 1) {
+    for (let index = 0; index < EXPECTED_NAV_LABELS.length; index += 1) {
       await dispatchTabKey(context);
       tabOrder.push(String(await evaluate(client!, sessionId, `document.activeElement?.getAttribute("aria-label") ?? ""`)));
     }
-    assert.deepEqual(tabOrder, ["历史", "数据", "分类", "工具", "设置", "关于", "导航名称"]);
+    assert.deepEqual(tabOrder, [ "数据", "分类", "工具", "设置", "关于", "导航名称"]);
 
     assert.equal(
       await evaluate(client!, sessionId, `
@@ -334,11 +334,11 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
     assert.deepEqual(labeledState.labels, [...EXPECTED_NAV_LABELS]);
     assert.equal(labeledState.labelsFit, true);
     assert.equal(labeledState.verticalContent, true);
-    assert.deepEqual(labeledState.iconSizes, Array(7).fill("15"));
+    assert.deepEqual(labeledState.iconSizes, Array(EXPECTED_NAV_LABELS.length).fill("15"));
     assert.equal(labeledState.pressed, "true");
     assert.equal(labeledState.visuallyPressed, false);
     assert.equal(labeledState.focused, true);
-    assert.equal(labeledState.current, "今天");
+    assert.equal(labeledState.current, "历史");
     assert.equal(labeledState.sameActiveNode, true);
     assert.equal(labeledState.labelsHiddenFromName, true);
     assert.equal(labeledState.iconsHiddenFromName, true);
@@ -473,7 +473,7 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
 
     await evaluate(client!, sessionId, `
       localStorage.setItem("patina:sidebar-navigation-mode", "expanded");
-      localStorage.setItem("patina:last-active-view", "dashboard");
+      localStorage.setItem("patina:last-active-view", "history");
     `);
     await client!.command("Page.navigate", { url: context.appUrl }, sessionId);
     await waitForExpression(
@@ -646,7 +646,8 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
       assert.ok(Math.abs(buttonRect.width - shellEntryState.windowButtonSize.width) <= 0.5);
       assert.ok(Math.abs(buttonRect.height - shellEntryState.windowButtonSize.height) <= 0.5);
     });
-    assert.ok(Math.abs(shellEntryState.navHeight - 340) <= 0.5);
+    const expectedNavHeight = EXPECTED_NAV_LABELS.length * 40 + (EXPECTED_NAV_LABELS.length - 1) * 10;
+    assert.ok(Math.abs(shellEntryState.navHeight - expectedNavHeight) <= 0.5);
     assert.ok(shellEntryState.overflowX <= 1);
 
     const firstToolStatusCenter = await evaluate(client!, sessionId, `
@@ -741,7 +742,7 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
     // have completed before navigation. Other synchronization uses conditions.
     await delay(4_000);
 
-    for (const label of EXPECTED_NAV_LABELS.slice(1)) {
+    for (const label of EXPECTED_NAV_LABELS) {
       const clicked = await evaluate(client!, sessionId, `
         (() => {
           const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(label))} + ']');
@@ -771,7 +772,7 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
       structureMs: number;
       blankFrames: number;
     }> = [];
-    const labels = ["今天", "历史", "数据", "分类"];
+    const labels = ["关于", "历史", "数据", "分类"];
     for (let cycle = 0; cycle < 5; cycle += 1) {
       for (const label of labels) {
         const sample = await evaluate(client!, sessionId, `
@@ -1014,7 +1015,7 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("今天"))} + ']');
+          const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("关于"))} + ']');
           if (!node) return false;
           node.click();
           localStorage.setItem("__time_tracker_history_query_delay_ms", "900");
@@ -1026,14 +1027,14 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("今天"))} + ']')?.className.includes("qp-nav-item-active")`,
+      `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("关于"))} + ']')?.className.includes("qp-nav-item-active")`,
     );
 
     await client!.command("Page.navigate", { url: context.appUrl }, sessionId);
     await waitForExpression(
       client!,
       sessionId,
-      `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("今天"))} + ']')?.className.includes("qp-nav-item-active")`,
+      `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("关于"))} + ']')?.className.includes("qp-nav-item-active")`,
     );
     assert.equal(
       await evaluate(client!, sessionId, `
@@ -1091,11 +1092,11 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
     await evaluate(client!, sessionId, `localStorage.removeItem("__time_tracker_history_query_delay_ms")`);
   });
 
-  await runTest("History cold bootstrap reuses today's ready Dashboard sessions", async () => {
+  await runTest("History cold bootstrap reuses the warmed daily aggregate", async () => {
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("今天"))} + ']');
+          const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("关于"))} + ']');
           if (!node) return false;
           node.click();
           const settings = JSON.parse(localStorage.getItem("__time_tracker_smoke_settings") ?? "{}");
@@ -1110,25 +1111,32 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `localStorage.getItem("patina:last-active-view") === "dashboard"`,
+      `localStorage.getItem("patina:last-active-view") === "about"`,
       undefined,
-      "Dashboard navigation should persist before the simulated WebView reload",
+      "About navigation should persist before the simulated WebView reload",
     );
     await client!.command("Page.navigate", { url: context.appUrl }, sessionId);
     await waitForExpression(
       client!,
       sessionId,
-      `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("今天"))} + ']')?.className.includes("qp-nav-item-active")`,
+      `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("关于"))} + ']')?.className.includes("qp-nav-item-active")`,
     );
     await waitForExpression(
       client!,
       sessionId,
-      `document.querySelectorAll(".dashboard-top-app-progress").length >= 1`,
+      `(async () => {
+        const { getDashboardSnapshotCache } = await import('/src/features/dashboard/services/dashboardSnapshotCache.ts');
+        return Boolean(getDashboardSnapshotCache());
+      })()`,
     );
     await evaluate(
       client!,
       sessionId,
-      `localStorage.setItem("__time_tracker_history_query_delay_ms", "900")`,
+      `(async () => {
+        const { clearHistorySnapshotCache } = await import('/src/features/history/services/historySnapshotCache.ts');
+        clearHistorySnapshotCache();
+        localStorage.setItem("__time_tracker_history_query_delay_ms", "900");
+      })()`,
     );
     assert.equal(
       await evaluate(client!, sessionId, `
@@ -1147,7 +1155,7 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
       `document.querySelector("[data-history-content-state]")?.getAttribute("data-history-content-state") === "bootstrap"
         && !["—", "0m"].includes(document.querySelector(".history-day-summary-value")?.textContent?.trim() ?? "")`,
       undefined,
-      "History should mount the Dashboard aggregate seed before the delayed detail query settles",
+      "History should mount the daily aggregate seed before the delayed detail query settles",
     );
 
     const coldState = JSON.parse(String(await evaluate(client!, sessionId, `
@@ -1173,8 +1181,8 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
     assert.equal(coldState.segmentCount, 0, JSON.stringify(coldState));
     assert.equal(
       await evaluate(client!, sessionId, `document.querySelector("main")?.dataset.presentedView`),
-      "dashboard",
-      "Dashboard should remain visible while History only has an aggregate seed",
+      "about",
+      "About should remain visible while History only has an aggregate seed",
     );
 
     await waitForExpression(
@@ -1322,7 +1330,7 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
         const settings = JSON.parse(localStorage.getItem(key) ?? "{}");
         settings.theme_mode = "light";
         localStorage.setItem(key, JSON.stringify(settings));
-        localStorage.setItem("patina:last-active-view", "dashboard");
+        localStorage.setItem("patina:last-active-view", "about");
       })()
     `);
     await client!.command("Page.navigate", { url: context.appUrl }, sessionId);
@@ -1330,7 +1338,7 @@ export async function runNavigationScenarios(context: BrowserSmokeContext) {
       client!,
       sessionId,
       `globalThis.__PATINA_MAIN_WINDOW_READY_EVIDENCE?.theme === "light"
-        && globalThis.__PATINA_MAIN_WINDOW_READY_EVIDENCE?.presentedView === "dashboard"`,
+        && globalThis.__PATINA_MAIN_WINDOW_READY_EVIDENCE?.presentedView === "about"`,
       15_000,
       "restore browser smoke appearance and destination",
     );

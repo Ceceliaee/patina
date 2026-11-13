@@ -74,7 +74,7 @@ try {
     await measure('cold-open', nav('分类'), cards(count), profile);
     if (profile > 0) continue;
     for (let run = -2; run < 20; run++) {
-      await evaluate(client, sessionId, `${nav('今天')};true`);
+      await evaluate(client, sessionId, `${nav('关于')};true`);
       await waitForExpression(client, sessionId, `!document.querySelector('[data-classification-content-state]')`);
       await measure('warm-open', nav('分类'), cards(count), run);
       await measure('search-many', input('Catalog'), cards(count), run);

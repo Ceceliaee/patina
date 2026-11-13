@@ -311,7 +311,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          localStorage.setItem("patina:last-active-view", "dashboard");
+          localStorage.setItem("patina:last-active-view", "about");
           localStorage.removeItem("__time_tracker_settings_query_delay_ms");
           document.documentElement.dataset.patinaSmokeReload = "settings-cold";
           location.reload();
@@ -325,7 +325,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       sessionId,
       `document.documentElement.dataset.patinaSmokeReload !== "settings-cold"
         && Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("设置"))} + ']'))
-        && document.querySelector('[data-dashboard-read-state]')?.getAttribute('data-dashboard-read-state') === 'ready'`,
+        && Boolean(document.querySelector('.about-center-panel'))`,
     );
     await evaluate(client!, sessionId, `(async () => {
       const bootstrap = await import('/src/features/settings/services/settingsBootstrapService.ts');
@@ -349,7 +349,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       presentedView: document.querySelector("main.qp-canvas")?.getAttribute("data-presented-view") ?? null,
       settingsMounted: Boolean(document.querySelector(".settings-button-preview")),
     })`))) as { presentedView: string | null; settingsMounted: boolean };
-    assert.equal(pendingState.presentedView, "dashboard");
+    assert.equal(pendingState.presentedView, "about");
     assert.equal(pendingState.settingsMounted, false);
 
     await evaluate(client!, sessionId, `localStorage.removeItem('__patina_navigation_held_commands');
@@ -410,27 +410,19 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
   });
 
   await runTest("settings cold failure is explicit and retryable", async () => {
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        (async () => {
-          const dashboard = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("今天"))} + ']');
-          dashboard?.click();
-          if (!dashboard) return false;
-          const cache = await import("/src/features/settings/services/settingsBootstrapCache.ts");
-          cache.setSettingsBootstrapCache(null);
-          globalThis.__TIME_TRACKER_REJECT_SETTINGS_QUERY_COUNT = 1;
-          return true;
-        })()
-      `),
-      true,
-    );
+    await evaluate(client!, sessionId, `document.querySelector('[data-sidebar-nav-item="about"]').click()`);
     await waitForExpression(
       client!,
       sessionId,
-      `document.querySelector("main.qp-canvas")?.dataset.presentedView === "dashboard"`,
+      `document.querySelector("main.qp-canvas")?.dataset.presentedView === "about" && !document.querySelector(".settings-button-preview")`,
     );
     await evaluate(client!, sessionId, `
-      document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("设置"))} + ']')?.click()
+      (async () => {
+        const cache = await import("/src/features/settings/services/settingsBootstrapCache.ts");
+        cache.setSettingsBootstrapCache(null);
+        globalThis.__PATINA_REJECT_SETTINGS_QUERY = true;
+        document.querySelector('[data-sidebar-nav-item="settings"]').click();
+      })()
     `);
     await waitForExpression(
       client!,
@@ -444,7 +436,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          globalThis.__TIME_TRACKER_REJECT_SETTINGS_QUERY_COUNT = 0;
+          delete globalThis.__PATINA_REJECT_SETTINGS_QUERY;
           const retry = Array.from(document.querySelectorAll("button"))
             .find((node) => node.textContent?.trim() === ${jsonString("重试")});
           retry?.click();
@@ -1027,7 +1019,6 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       "saved English locale should survive a reload",
     );
     for (const destination of [
-      { label: "Today", view: "dashboard" },
       { label: "History", view: "history" },
       { label: "Data", view: "data" },
       { label: "Classification", view: "mapping" },

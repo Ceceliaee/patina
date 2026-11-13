@@ -60,15 +60,15 @@ export async function verifyLinkedApplicationRanking(evaluate: Evaluate, linked:
       && await window.__TAURI_INTERNALS__.invoke("plugin:window|is_visible", { label: "main" })
   )()`), 10000);
   console.log("PATINA_LINKED_RANKING_VISIBILITY", JSON.stringify({ visibleBefore, revealed: true }));
-  await waitFor("linked ranking dashboard navigation", async () => evaluate(`(() => {
-    const nav = document.querySelector('[data-sidebar-nav-item="dashboard"]');
+  await waitFor("linked ranking history navigation", async () => evaluate(`(() => {
+    const nav = document.querySelector('[data-sidebar-nav-item="history"]');
     if (!nav) return false; nav.click(); return true;
   })()`).catch(() => false), 10000);
   let lastRows: unknown;
   await waitFor(`linked ranking ${linked ? "merged" : "unlinked"} after restart`, async () => {
-    lastRows = await evaluate(`Array.from(document.querySelectorAll('.dashboard-top-app-name-row')).map(name => ({
+    lastRows = await evaluate(`Array.from(document.querySelectorAll('.history-day-distribution-name-row')).map(name => ({
       name: name.querySelector('span')?.textContent,
-      duration: name.parentElement.parentElement.parentElement.querySelector('.dashboard-top-app-duration span')?.textContent
+      duration: name.closest('.justify-between')?.querySelector('.tabular-nums span')?.textContent
     })).filter(row => row.name?.startsWith('Runtime Linked'))`);
     try {
       assert.deepEqual(lastRows, linked
@@ -81,7 +81,7 @@ export async function verifyLinkedApplicationRanking(evaluate: Evaluate, linked:
       now: Date.now(), date: new Date().toString(),
       visibility: document.visibilityState,
       scripts: Array.from(document.scripts).map(script => script.src),
-      rows: Array.from(document.querySelectorAll('.dashboard-top-app-name-row')).map(node => node.textContent),
+      rows: Array.from(document.querySelectorAll('.history-day-distribution-name-row')).map(node => node.textContent),
       visibleText: document.body.innerText.slice(0, 2000)
     })`).catch(String);
     throw new Error(`${String(error)}; ranking=${JSON.stringify(lastRows)}; context=${JSON.stringify(context)}`);
@@ -91,8 +91,8 @@ export async function verifyLinkedApplicationRanking(evaluate: Evaluate, linked:
 
 export async function verifyLinkedApplicationDetailAndTrend(evaluate: Evaluate) {
   await evaluate(`(() => {
-    const row = Array.from(document.querySelectorAll('.dashboard-top-app-name-row')).find(node => node.textContent.includes('Runtime Linked Parent'));
-    row.parentElement.parentElement.querySelector('.dashboard-top-app-detail-trigger').dispatchEvent(new MouseEvent('dblclick', {bubbles: true}));
+    const row = Array.from(document.querySelectorAll('.history-day-distribution-name-row')).find(node => node.textContent.includes('Runtime Linked Parent'));
+    row.closest('.justify-between').querySelector('.history-day-distribution-detail-trigger').dispatchEvent(new MouseEvent('dblclick', {bubbles: true}));
   })()`);
   await waitFor("linked detail includes both original activities", async () => evaluate(`(() => {
     const durations = Array.from(document.querySelectorAll('.destination-detail-record-duration')).map(node => node.textContent);

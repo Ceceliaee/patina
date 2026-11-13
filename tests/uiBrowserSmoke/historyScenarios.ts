@@ -120,7 +120,7 @@ export async function runHistoryReadFailureScenarios(context: BrowserSmokeContex
   const meaningful = `document.querySelector('[data-history-content-state]')?.getAttribute('data-history-content-meaningful')`;
   const startWarmNavigation = async () => {
     await waitForExpression(client, sessionId, `${state} === 'ready'`);
-    await evaluate(client, sessionId, `globalThis.__PATINA_HISTORY_MODE = 'pending'; document.querySelector('[data-sidebar-nav-item="dashboard"]').click()`);
+    await evaluate(client, sessionId, `globalThis.__PATINA_HISTORY_MODE = 'pending'; document.querySelector('[data-sidebar-nav-item="about"]').click()`);
     await waitForExpression(client, sessionId, `!document.querySelector('[data-history-content-state]')`);
     await evaluate(client, sessionId, `document.querySelector('[data-sidebar-nav-item="history"]').click()`);
     await waitForExpression(client, sessionId, `${state} === 'refreshing' && ${meaningful} === 'true' && globalThis.__PATINA_HISTORY_PENDING.length >= 2`);
@@ -873,7 +873,6 @@ async function runHistoryScenarioSet(context: BrowserSmokeContext) {
       `),
       true,
     );
-    // Establish the category state here; Dashboard may not have run before us.
     await evaluate(client!, sessionId, `(() => {
       const toggle = document.querySelector('.history-pulse-mode-toggle');
       if (toggle?.getAttribute('aria-pressed') === 'false') toggle.click();
@@ -2295,12 +2294,12 @@ async function runHistoryScenarioSet(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("今天"))} + ']'))`,
+      `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("历史"))} + ']'))`,
     );
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("今天"))} + ']');
+          const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("历史"))} + ']');
           if (!node) return false;
           node.click();
           return true;
@@ -2311,7 +2310,7 @@ async function runHistoryScenarioSet(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `document.querySelector(".dashboard-pulse-mode-toggle")?.getAttribute("aria-pressed") === "true"`,
+      `document.querySelector(".history-pulse-mode-toggle")?.getAttribute("aria-pressed") === "true"`,
     );
   });
 
@@ -2987,7 +2986,7 @@ async function runHistoryScenarioSet(context: BrowserSmokeContext) {
       deviceScaleFactor: 1,
       mobile: false,
     }, sessionId);
-    await navigateTo("今天");
+    await navigateTo("关于");
     await evaluate(client!, sessionId, `
       (() => {
         globalThis.__TIME_TRACKER_ENABLE_WEB_FIXTURE = true;
@@ -3482,7 +3481,7 @@ async function runHistoryScenarioSet(context: BrowserSmokeContext) {
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("今天"))} + ']');
+          const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("关于"))} + ']');
           node?.click();
           return Boolean(node);
         })()
@@ -3492,7 +3491,7 @@ async function runHistoryScenarioSet(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("今天"))} + ']')?.className.includes("qp-nav-item-active")`,
+      `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("关于"))} + ']')?.className.includes("qp-nav-item-active")`,
     );
     await evaluate(client!, sessionId, `
       (() => {

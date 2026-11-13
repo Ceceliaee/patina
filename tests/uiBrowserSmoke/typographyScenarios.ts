@@ -3,7 +3,7 @@ import type { BrowserSmokeContext } from "./scenarioTypes.ts";
 import { evaluate, jsonString, waitForAnimationFrames, waitForExpression } from "./browserHarness.ts";
 
 export async function runTypographyScenarios({ client, sessionId, appUrl, runTest }: BrowserSmokeContext) {
-  await runTest("seven pages preserve typography roles across locales themes and desktop scales", async () => {
+  await runTest("main pages preserve typography roles across locales themes and desktop scales", async () => {
     const stored = await evaluate(client, sessionId, "localStorage.getItem('__time_tracker_smoke_settings')") as string | null;
     try {
       for (const [locale, width, theme, scale] of [
@@ -17,7 +17,7 @@ export async function runTypographyScenarios({ client, sessionId, appUrl, runTes
         const previousOrigin = await evaluate(client, sessionId, "performance.timeOrigin");
         await client.command("Page.navigate", { url: appUrl }, sessionId);
         await waitForExpression(client, sessionId, `performance.timeOrigin !== ${previousOrigin}`);
-        await waitForExpression(client, sessionId, "document.querySelectorAll('[data-sidebar-nav-item]').length === 7 && Boolean(document.querySelector('.qp-page-header-title'))");
+        await waitForExpression(client, sessionId, "document.querySelectorAll('[data-sidebar-nav-item]').length === 6 && Boolean(document.querySelector('.qp-page-header-title'))");
         await waitForExpression(client, sessionId, `document.documentElement.lang === ${jsonString(locale)} && document.documentElement.dataset.theme === ${jsonString(theme)}`);
         const pages = await evaluate(client, sessionId, "[...document.querySelectorAll('[data-sidebar-nav-item]')].map(n=>({id:n.dataset.sidebarNavItem,title:n.getAttribute('aria-label')}))") as Array<{ id: string; title: string }>;
         for (const page of pages) {
@@ -27,10 +27,10 @@ export async function runTypographyScenarios({ client, sessionId, appUrl, runTes
           const state = await evaluate(client, sessionId, `(() => {
             const main = document.querySelector('main');
             const header = main.querySelector('.qp-page-header-title');
-            const sections = [...main.querySelectorAll('.dashboard-card-header h3,.data-trend-header h3,.tools-panel-title h2')];
+            const sections = [...main.querySelectorAll('.data-trend-header h3,.tools-panel-title h2')];
             const rows = [...main.querySelectorAll('.settings-preference-title,.qp-app-mapping-name')];
             const badges = [...main.querySelectorAll('.qp-badge')];
-            const compact = [...main.querySelectorAll('.dashboard-top-app-count,.history-horizontal-timeline-legend-item,.qp-segmented-filter-compact:not(.qp-segmented-filter-control) .qp-segmented-filter-item')];
+            const compact = [...main.querySelectorAll('.history-horizontal-timeline-legend-item,.qp-segmented-filter-compact:not(.qp-segmented-filter-control) .qp-segmented-filter-item')];
             const controls = [...main.querySelectorAll('.qp-segmented-filter-control .qp-segmented-filter-item')];
             const rect = main.getBoundingClientRect();
             return {

@@ -1350,8 +1350,7 @@ function tauriStubFor(path: string) {
         if (override !== undefined) return override;
         if (command === "cmd_get_setting_rows") {
           if (payload.key == null && payload.keyPrefix == null
-            && Number(globalThis.__TIME_TRACKER_REJECT_SETTINGS_QUERY_COUNT ?? 0) > 0) {
-            globalThis.__TIME_TRACKER_REJECT_SETTINGS_QUERY_COUNT -= 1;
+            && globalThis.__PATINA_REJECT_SETTINGS_QUERY) {
             throw new Error("settings query rejected by browser smoke fixture");
           }
           const delay = Number(globalThis.__TIME_TRACKER_SETTINGS_QUERY_DELAY_MS

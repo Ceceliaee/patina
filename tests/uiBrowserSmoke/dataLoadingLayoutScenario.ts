@@ -75,8 +75,8 @@ export async function runDataLoadingLayoutScenario({ appUrl, client, sessionId, 
         assert.equal(await evaluate(client, sessionId,
           `document.querySelector('.data-trend-panel')?.getAttribute('aria-busy')`), "false");
 
-        await evaluate(client, sessionId, `document.querySelector('[aria-label="今天"]').click()`);
-        await waitForExpression(client, sessionId, `document.querySelector('main')?.dataset.presentedView === 'dashboard'
+        await evaluate(client, sessionId, `document.querySelector('[aria-label="关于"]').click()`);
+        await waitForExpression(client, sessionId, `document.querySelector('main')?.dataset.presentedView === 'about'
           && document.querySelector('main')?.dataset.viewTransitionState === 'settled'`);
         await startCapture();
         await waitForExpression(client, sessionId, `Boolean(document.querySelector('[data-data-content-state="complete"]'))`);

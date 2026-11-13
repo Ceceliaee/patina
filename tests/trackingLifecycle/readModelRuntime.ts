@@ -61,14 +61,12 @@ export function runReadModelRuntimeTests() {
     fetchedAtMs: 1,
     icons: {},
     activityRecords: [],
-    yesterdayActivityRecords: [],
     hasActiveSession: false
   };
     const newer: DashboardSnapshot = {
     fetchedAtMs: 2,
     icons: {},
     activityRecords: [],
-    yesterdayActivityRecords: [],
     hasActiveSession: false
   };
     let resolveOlder!: (snapshot: DashboardSnapshot) => void;
@@ -128,7 +126,6 @@ export function runReadModelRuntimeTests() {
     fetchedAtMs: 123,
     icons: { "QQ.exe": "icon" },
     activityRecords: [],
-    yesterdayActivityRecords: [],
     hasActiveSession: false
   };
 

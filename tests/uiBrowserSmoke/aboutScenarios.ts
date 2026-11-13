@@ -9,7 +9,7 @@ export async function runAboutScenarios(context: BrowserSmokeContext) {
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          localStorage.setItem("patina:last-active-view", "dashboard");
+          localStorage.setItem("patina:last-active-view", "history");
           localStorage.setItem("__time_tracker_settings_query_delay_ms", "900");
           location.reload();
           return true;
@@ -20,7 +20,7 @@ export async function runAboutScenarios(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("关于"))} + ']'))`,
+      `Boolean(document.querySelector("[data-history-content-state]") && document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("关于"))} + ']'))`,
     );
     assert.equal(
       await evaluate(client!, sessionId, `
@@ -35,20 +35,20 @@ export async function runAboutScenarios(context: BrowserSmokeContext) {
     const pendingState = JSON.parse(String(await evaluate(client!, sessionId, `JSON.stringify({
       presentedView: document.querySelector("main.qp-canvas")?.getAttribute("data-presented-view") ?? null,
       aboutMounted: Boolean(document.querySelector(".about-center-panel")),
-      dashboardMounted: Boolean(document.querySelector(".dashboard-workspace")),
+      historyMounted: Boolean(document.querySelector("[data-history-content-state]")),
     })`))) as {
       presentedView: string | null;
       aboutMounted: boolean;
-      dashboardMounted: boolean;
+      historyMounted: boolean;
     };
     assert.ok(
-      pendingState.presentedView === "dashboard" || pendingState.presentedView === "about",
-      `cold About handoff must retain Dashboard or present About, got ${pendingState.presentedView}`,
+      pendingState.presentedView === "history" || pendingState.presentedView === "about",
+      `cold About handoff must retain History or present About, got ${pendingState.presentedView}`,
     );
     assert.equal(
       pendingState.presentedView === "about"
         ? pendingState.aboutMounted
-        : pendingState.dashboardMounted,
+        : pendingState.historyMounted,
       true,
     );
 
@@ -63,7 +63,7 @@ export async function runAboutScenarios(context: BrowserSmokeContext) {
     assert.equal(
       await evaluate(client!, sessionId, `document.querySelector("main.qp-canvas")?.innerText.includes("加载中...")`),
       false,
-      "the presented About page must not wait on Dashboard's independent data read",
+      "the presented About page must not wait on History's independent data read",
     );
     await evaluate(client!, sessionId, `localStorage.removeItem("__time_tracker_settings_query_delay_ms")`);
   });

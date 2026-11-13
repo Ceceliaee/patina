@@ -41,7 +41,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
       const startSelector = `[aria-label=${JSON.stringify(COPY["zh-CN"].accessibility.tools.startPomodoro)}]`;
       const pauseSelector = `[aria-label=${JSON.stringify(COPY["zh-CN"].accessibility.tools.pausePomodoro)}]`;
       await waitForExpression(client!, sessionId, `
-        document.documentElement.dataset.patinaSmokeReload !== "tools-action-recovery"
+        document.documentElement?.dataset.patinaSmokeReload !== "tools-action-recovery"
           && Boolean(document.querySelector(${jsonString(startSelector)}))
       `);
       await evaluate(client!, sessionId, `
@@ -120,7 +120,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
         location.reload();
       `);
       await waitForExpression(client!, sessionId, `
-        document.documentElement.dataset.patinaSmokeReload !== "tools-action-restored"
+        document.documentElement?.dataset.patinaSmokeReload !== "tools-action-restored"
           && Boolean(document.querySelector('main.qp-canvas'))
       `);
     }
@@ -130,7 +130,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          localStorage.setItem("patina:last-active-view", "dashboard");
+          localStorage.setItem("patina:last-active-view", "about");
           localStorage.setItem("__patina_navigation_held_commands", JSON.stringify(["cmd_get_tools_snapshot"]));
           document.documentElement.dataset.patinaSmokeReload = "tools-cold";
           location.reload();
@@ -142,9 +142,9 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `document.documentElement.dataset.patinaSmokeReload !== "tools-cold"
+      `document.documentElement?.dataset.patinaSmokeReload !== "tools-cold"
         && Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("工具"))} + ']'))
-        && document.querySelector('[data-dashboard-read-state]')?.getAttribute('data-dashboard-read-state') === 'ready'`,
+        && Boolean(document.querySelector('.about-center-panel'))`,
     );
     assert.equal(
       await evaluate(client!, sessionId, `
@@ -161,7 +161,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
       presentedView: document.querySelector("main.qp-canvas")?.getAttribute("data-presented-view") ?? null,
       toolsMounted: Boolean(document.querySelector(".tools-page")),
       showsLoadingCopy: document.body.innerText.includes("加载中..."),
-      dashboardActive: document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("今天"))} + ']')
+      aboutActive: document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("关于"))} + ']')
         ?.className.includes("qp-nav-item-active") ?? false,
       toolsActive: document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("工具"))} + ']')
         ?.className.includes("qp-nav-item-active") ?? false,
@@ -169,13 +169,13 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
       presentedView: string | null;
       toolsMounted: boolean;
       showsLoadingCopy: boolean;
-      dashboardActive: boolean;
+      aboutActive: boolean;
       toolsActive: boolean;
     };
-    assert.equal(pendingState.presentedView, "dashboard");
+    assert.equal(pendingState.presentedView, "about");
     assert.equal(pendingState.toolsMounted, false);
     assert.equal(pendingState.showsLoadingCopy, false);
-    assert.equal(pendingState.dashboardActive, true);
+    assert.equal(pendingState.aboutActive, true);
     assert.equal(pendingState.toolsActive, false);
 
     await evaluate(client!, sessionId, `localStorage.removeItem('__patina_navigation_held_commands');
@@ -195,7 +195,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
   await runTest("a stale Tools ensure cannot override a newer navigation request", async () => {
     await evaluate(client!, sessionId, `
       (() => {
-        localStorage.setItem("patina:last-active-view", "dashboard");
+        localStorage.setItem("patina:last-active-view", "about");
         localStorage.setItem("__time_tracker_tools_snapshot_delay_ms", "900");
         document.documentElement.dataset.patinaSmokeReload = "tools-stale-ensure";
         location.reload();
@@ -204,18 +204,18 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `document.documentElement.dataset.patinaSmokeReload !== "tools-stale-ensure"
+      `document.documentElement?.dataset.patinaSmokeReload !== "tools-stale-ensure"
         && Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("工具"))} + ']'))`,
     );
     assert.equal(
       await evaluate(client!, sessionId, `
         (async () => {
           const tools = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("工具"))} + ']');
-          const dashboard = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("今天"))} + ']');
-          if (!tools || !dashboard) return false;
+          const about = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("关于"))} + ']');
+          if (!tools || !about) return false;
           tools.click();
           await new Promise((resolve) => setTimeout(resolve, 50));
-          dashboard.click();
+          about.click();
           return true;
         })()
       `),
@@ -226,7 +226,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
       presentedView: document.querySelector("main.qp-canvas")?.getAttribute("data-presented-view") ?? null,
       toolsMounted: Boolean(document.querySelector(".tools-page")),
     })`))) as { presentedView: string | null; toolsMounted: boolean };
-    assert.equal(finalState.presentedView, "dashboard");
+    assert.equal(finalState.presentedView, "about");
     assert.equal(finalState.toolsMounted, false);
     await evaluate(client!, sessionId, `localStorage.removeItem("__time_tracker_tools_snapshot_delay_ms")`);
   });
@@ -234,7 +234,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
   await runTest("Tools cold snapshot failure is explicit and retryable", async () => {
     await evaluate(client!, sessionId, `
       (() => {
-        localStorage.setItem("patina:last-active-view", "dashboard");
+        localStorage.setItem("patina:last-active-view", "about");
         localStorage.setItem("__time_tracker_reject_tools_snapshot", "1");
         document.documentElement.dataset.patinaSmokeReload = "tools-cold-failure";
         location.reload();
@@ -243,7 +243,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `document.documentElement.dataset.patinaSmokeReload !== "tools-cold-failure"
+      `document.documentElement?.dataset.patinaSmokeReload !== "tools-cold-failure"
         && Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("工具"))} + ']'))`,
     );
     await evaluate(client!, sessionId, `
@@ -883,9 +883,9 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const dashboard = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("今天"))} + ']');
-          if (!dashboard) return false;
-          dashboard.click();
+          const about = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("关于"))} + ']');
+          if (!about) return false;
+          about.click();
           return true;
         })()
       `),
@@ -894,7 +894,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("今天"))} + ']')?.className.includes("qp-nav-item-active")`,
+      `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("关于"))} + ']')?.className.includes("qp-nav-item-active")`,
     );
     assert.equal(
       await evaluate(client!, sessionId, `
@@ -1073,7 +1073,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
         })()
       `);
       await waitForExpression(client, sessionId, `
-        document.documentElement.dataset.patinaSmokeReload !== "reminder-overflow"
+        document.documentElement?.dataset.patinaSmokeReload !== "reminder-overflow"
           && document.querySelectorAll('.tools-reminder-row').length === 8
       `);
       await waitForExpression(client, sessionId, `(() => {
@@ -1213,7 +1213,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
         location.reload();
       `);
       await waitForExpression(client, sessionId, `
-        document.documentElement.dataset.patinaSmokeReload !== "reminder-overflow-restored"
+        document.documentElement?.dataset.patinaSmokeReload !== "reminder-overflow-restored"
           && Boolean(document.querySelector('main.qp-canvas'))
       `);
     }

@@ -58,7 +58,7 @@ export async function runClassificationCategoryFilterScenarios({ client, session
         if (stored === null) localStorage.removeItem('__time_tracker_smoke_settings');
         else localStorage.setItem('__time_tracker_smoke_settings', stored);
         localStorage.removeItem('__time_tracker_enable_classification_catalog_fixture');
-        localStorage.setItem('patina:last-active-view', 'dashboard');
+        localStorage.setItem('patina:last-active-view', 'about');
         location.reload();
       })()`);
       await waitForExpression(client!, sessionId, `Boolean(document.querySelector('main'))`);
@@ -204,7 +204,7 @@ export async function runClassificationCategoryFilterScenarios({ client, session
       await evaluate(client!, sessionId, `(() => {
         const settings=${JSON.stringify(settingsBefore)};
         if(settings===null) localStorage.removeItem('__time_tracker_smoke_settings'); else localStorage.setItem('__time_tracker_smoke_settings',settings);
-        localStorage.setItem('patina:last-active-view','dashboard');
+        localStorage.setItem('patina:last-active-view','about');
         location.reload();
       })()`);
       await waitForExpression(client!, sessionId, `Boolean(document.querySelector('main'))`);

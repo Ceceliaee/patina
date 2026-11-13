@@ -31,7 +31,7 @@ export function mountBackgroundCacheProbe() {
   const date = new Date(2030, 0, 2);
   function Probe({ foreground }: { foreground: boolean }) {
     useAppShellRuntimeLifecycle({ classificationReady: false, isDataRefreshEnabled: false,
-      isDashboardRefreshEnabled: false, isForegroundReady: foreground, isHistoryRefreshEnabled: false,
+      isForegroundReady: foreground, isHistoryRefreshEnabled: false,
       isWindowForegroundLike: foreground, mappingVersion: 0, quietMotionMode: "baseline", syncTick: 0,
       uiTextLanguage: "zh-CN" });
     return null;

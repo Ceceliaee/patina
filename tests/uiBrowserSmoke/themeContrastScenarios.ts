@@ -124,60 +124,30 @@ export async function runThemeContrastScenarios({ client, sessionId, runTest }: 
           ...${stored}, theme_mode: 'system', language: '${sample.locale}',
           color_scheme_light: '${sample.scheme}', color_scheme_dark: '${sample.scheme}',
           theme_contrast_light: '0', theme_contrast_dark: '100'
-        })); localStorage.setItem('patina:last-active-view', 'dashboard');`);
+        })); localStorage.setItem('patina:last-active-view', 'settings');`);
         await client.command("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: sample.variant }] }, sessionId);
         await client.command("Emulation.setDeviceMetricsOverride", { width: sample.width, height: 760, deviceScaleFactor: sample.scale, mobile: false }, sessionId);
-        await reloadAndWait(`document.documentElement.dataset.themeContrast === '${sample.contrast}' && Boolean(document.querySelector('.dashboard-top-app-progress'))`);
-        assert.equal(await read(`(() => {
-          const labels = [...document.querySelectorAll('.dashboard-focus-ranking-name')];
-          const card = document.querySelector('.dashboard-focus-card').getBoundingClientRect();
-          return labels.length > 0 && labels.every(label => {
-            const bounds = label.getBoundingClientRect();
-            const text = document.createRange();
-            text.selectNodeContents(label);
-            return bounds.width > 0 && label.scrollWidth <= label.clientWidth + 1
-              && label.scrollHeight <= label.clientHeight + 1
-              && [...text.getClientRects()].every(rect => rect.left >= bounds.left - 1
-                && rect.right <= bounds.right + 1 && rect.top >= card.top && rect.bottom <= card.bottom);
-          });
-        })()`), true, `${sample.locale} focus categories must remain fully readable at ${sample.width}px`);
-        if (sample.contrast >= 40) {
-          const separation = await read(`(() => {
-            const row = document.querySelector('.dashboard-top-app-progress').parentElement.parentElement.parentElement;
-            const channels = node => getComputedStyle(node).backgroundColor.match(/\\d+/g).slice(0, 3).map(Number);
-            const rowColor = channels(row), panelColor = channels(row.closest('.qp-panel'));
-            return rowColor.reduce((sum, value, index) => sum + panelColor[index] - value, 0) / 3;
-          })()`);
-          assert.ok(Number(separation) >= 2, "softened application rows must retain a surface difference from the panel");
-        }
-        assert.equal(await read(`(() => {
-          const track = document.querySelector('.dashboard-top-app-progress').parentElement;
-          const probe = document.createElement('div');
-          probe.style.backgroundColor = 'var(--qp-chart-track)';
-          document.body.append(probe);
-          try { return getComputedStyle(track).backgroundColor === getComputedStyle(probe).backgroundColor; }
-          finally { probe.remove(); }
-        })()`), true, "statistics use the soft track independently of settings sliders");
+        await reloadAndWait(`document.documentElement.dataset.themeContrast === '${sample.contrast}' && Boolean(document.querySelector('.settings-theme-entry'))`);
         const hoverTarget = await read(`(() => {
           const button = document.querySelector('[data-sidebar-nav-item]:not(.qp-nav-item-active)');
           const r = button.getBoundingClientRect();
           return { x: r.x + r.width / 2, y: r.y + r.height / 2, width: r.width, height: r.height };
         })()`) as { x: number; y: number; width: number; height: number };
         await client.command("Input.dispatchMouseEvent", { type: "mouseMoved", x: hoverTarget.x, y: hoverTarget.y }, sessionId);
-        await wait(`getComputedStyle(document.querySelector('[data-sidebar-nav-item]:not(.qp-nav-item-active)')).backgroundColor === getComputedStyle(document.querySelector('.dashboard-top-app-progress').parentElement.parentElement.parentElement).backgroundColor`);
+        await wait(`(() => {
+          const button = document.querySelector('[data-sidebar-nav-item]:not(.qp-nav-item-active)');
+          const probe = document.createElement('span');
+          probe.style.backgroundColor = 'var(--qp-bg-elevated)';
+          button.append(probe);
+          try { return getComputedStyle(button).backgroundColor === getComputedStyle(probe).backgroundColor; }
+          finally { probe.remove(); }
+        })()`);
         assert.equal(await read(`(() => {
           const button = document.querySelector('[data-sidebar-nav-item]:not(.qp-nav-item-active)');
-          const style = getComputedStyle(button);
-          const row = document.querySelector('.dashboard-top-app-progress').parentElement.parentElement.parentElement;
           return button.getBoundingClientRect().width === ${hoverTarget.width}
-            && button.getBoundingClientRect().height === ${hoverTarget.height}
-            && style.backgroundColor === getComputedStyle(row).backgroundColor;
+            && button.getBoundingClientRect().height === ${hoverTarget.height};
         })()`), true, "hover uses the nested surface without changing navigation geometry");
         await client.command("Input.dispatchMouseEvent", { type: "mouseMoved", x: 0, y: 0 }, sessionId);
-        const dashboardScreenshot = await client.command("Page.captureScreenshot", { format: "png" }, sessionId) as { data: string };
-        writeFileSync(join(evidence, `${sample.variant}-${sample.scheme}-${sample.locale}-dashboard.png`), Buffer.from(dashboardScreenshot.data, "base64"));
-        await read(`localStorage.setItem('patina:last-active-view', 'settings')`);
-        await reloadAndWait(`document.documentElement.dataset.themeContrast === '${sample.contrast}' && document.documentElement.dataset.theme === '${sample.variant}' && Boolean(document.querySelector('.settings-theme-entry'))`);
         const expectedControls = controls.find(row => row.variant === sample.variant && row.scheme === sample.scheme)!.expected;
         assert.equal(await read(`(() => {
           const input = document.querySelector('input[type="range"]');

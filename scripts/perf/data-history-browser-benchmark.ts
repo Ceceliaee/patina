@@ -22,7 +22,7 @@ import {
 import { DATA_NAVIGATION_PERFORMANCE_MARKS } from "../../src/features/data/services/dataNavigationPerformance.ts";
 
 const DATA_LABEL = "数据";
-const DASHBOARD_LABEL = "今天";
+const ABOUT_LABEL = "关于";
 const HISTORY_LABEL = "历史";
 const HISTORY_MEANINGFUL_CONTENT_EXPRESSION = `
   (() => {
@@ -241,12 +241,12 @@ async function measurePreparedBrowserDuration(
   return createBenchmarkMeasurement(name, durations, budgetAverageMs);
 }
 
-async function openDashboard(client: CdpConnection, sessionId: string) {
+async function openAbout(client: CdpConnection, sessionId: string) {
   await clickNav(
     client,
     sessionId,
-    DASHBOARD_LABEL,
-    `document.body.innerText.includes("专注分布") || document.body.innerText.includes("应用排行")`,
+    ABOUT_LABEL,
+    `Boolean(document.querySelector(".about-center-panel"))`,
   );
 }
 
@@ -378,8 +378,11 @@ try {
     deviceScaleFactor: 1,
     mobile: false,
   }, sessionId);
+  await client.command("Page.addScriptToEvaluateOnNewDocument", {
+    source: 'localStorage.setItem("patina:last-active-view", "about");',
+  }, sessionId);
   await client.command("Page.navigate", { url: appUrl }, sessionId);
-  await waitForExpression(client, sessionId, navActiveExpression(DASHBOARD_LABEL), 45_000);
+  await waitForExpression(client, sessionId, navActiveExpression(ABOUT_LABEL), 45_000);
   await waitForPaint(client, sessionId);
 
   if (process.argv.includes("--range-controls-self-test")) {
@@ -405,45 +408,45 @@ try {
     "Boolean(document.querySelector('.history-horizontal-timeline-segment')?.checkVisibility())",
     45_000,
   );
-  await openDashboard(client, sessionId);
+  await openAbout(client, sessionId);
 
   const dataNavigationStages: DataNavigationStageDurations[] = [];
   for (let index = 0; index < 8; index += 1) {
-    await openDashboard(client, sessionId);
+    await openAbout(client, sessionId);
     dataNavigationStages.push(await clickDataNavigationStageDurations(client, sessionId));
   }
 
   const measurements = [
     createBenchmarkMeasurement(
-      "browser-dashboard-to-history-meaningful-content-cold",
+      "browser-about-to-history-meaningful-content-cold",
       [coldHistoryMeaningfulContentDurationMs],
       350,
     ),
     createBenchmarkMeasurement(
-      "browser-dashboard-to-data-chunk-ready",
+      "browser-about-to-data-chunk-ready",
       dataNavigationStages.map((sample) => sample.chunkReadyMs),
       80,
     ),
     createBenchmarkMeasurement(
-      "browser-dashboard-to-data-root-mounted",
+      "browser-about-to-data-root-mounted",
       dataNavigationStages.map((sample) => sample.rootMountedMs),
       160,
     ),
     enforceP95Budget(
       createBenchmarkMeasurement(
-        "browser-dashboard-to-data-active",
+        "browser-about-to-data-active",
         dataNavigationStages.map((sample) => sample.structureActiveMs),
         160,
       ),
       160,
     ),
     createBenchmarkMeasurement(
-      "browser-dashboard-to-data-read-model-ready",
+      "browser-about-to-data-read-model-ready",
       dataNavigationStages.map((sample) => sample.readModelReadyMs),
       500,
     ),
     createBenchmarkMeasurement(
-      "browser-dashboard-to-data-complete",
+      "browser-about-to-data-complete",
       dataNavigationStages.map((sample) => sample.completeMs),
       500,
     ),
@@ -464,22 +467,22 @@ try {
       await setOverviewRange(client!, sessionId, "近一年");
       await setOverviewRange(client!, sessionId, "近 7 天");
     }),
-    await measureAsyncBenchmark("browser-dashboard-to-history", 8, 350, async () => {
-      await openDashboard(client!, sessionId);
+    await measureAsyncBenchmark("browser-about-to-history", 8, 350, async () => {
+      await openAbout(client!, sessionId);
       await openHistory(client!, sessionId);
     }),
     enforceP95Budget(
-      await measurePreparedBrowserDuration("browser-dashboard-to-history-active", 8, 160, async () => {
-        await openDashboard(client!, sessionId);
+      await measurePreparedBrowserDuration("browser-about-to-history-active", 8, 160, async () => {
+        await openAbout(client!, sessionId);
       }, () => clickNavActiveDurationMs(client!, sessionId, HISTORY_LABEL)),
       160,
     ),
     await measurePreparedBrowserDuration(
-      "browser-dashboard-to-history-meaningful-content-hot",
+      "browser-about-to-history-meaningful-content-hot",
       8,
       160,
       async () => {
-        await openDashboard(client!, sessionId);
+        await openAbout(client!, sessionId);
       },
       () => clickNavConditionDurationMs(
         client!,

@@ -176,8 +176,8 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
     try {
       await client.command("Page.navigate", { url: appUrl }, sessionId);
       await wait(`document.querySelector('main.qp-canvas')?.dataset.viewTransitionState === 'settled'`);
-      await read(`document.querySelector('[data-sidebar-nav-item="dashboard"]').click()`);
-      await wait(`document.querySelector('main.qp-canvas')?.dataset.presentedView === 'dashboard'
+      await read(`document.querySelector('[data-sidebar-nav-item="about"]').click()`);
+      await wait(`document.querySelector('main.qp-canvas')?.dataset.presentedView === 'about'
         && document.querySelector('main.qp-canvas')?.dataset.viewTransitionState === 'settled'`);
       for (const sample of samples) {
         await applyTheme(sample);

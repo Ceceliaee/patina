@@ -98,7 +98,7 @@ async function runClassificationCases(context: BrowserSmokeContext) {
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          localStorage.setItem("patina:last-active-view", "dashboard");
+          localStorage.setItem("patina:last-active-view", "about");
           localStorage.setItem("__patina_navigation_held_commands", JSON.stringify(["cmd_get_recorded_app_catalog_page"]));
           location.reload();
           return true;
@@ -113,10 +113,10 @@ async function runClassificationCases(context: BrowserSmokeContext) {
     );
 
     // This scenario measures navigation from an already usable page. The shell
-    // button can appear before the initial Dashboard snapshot has arrived.
+    // button can appear before the About content has mounted.
     await waitForExpression(client!, sessionId,
-      `document.querySelector('[data-dashboard-read-state]')?.getAttribute('data-dashboard-read-state') === 'ready'`,
-      15_000, "Dashboard must be ready before sampling classification navigation");
+      `Boolean(document.querySelector('.about-center-panel'))`,
+      15_000, "About must be ready before sampling classification navigation");
 
     assert.equal(
       await evaluate(client!, sessionId, `
@@ -161,7 +161,7 @@ async function runClassificationCases(context: BrowserSmokeContext) {
       classificationState: string | null;
       showsLoadingCopy: boolean;
     };
-    assert.equal(pendingState.presentedView, "dashboard");
+    assert.equal(pendingState.presentedView, "about");
     assert.equal(pendingState.classificationState, null);
     assert.equal(pendingState.showsLoadingCopy, false);
 
@@ -232,7 +232,7 @@ async function runClassificationCases(context: BrowserSmokeContext) {
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const today = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("今天"))} + ']');
+          const today = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("关于"))} + ']');
           today?.click();
           return Boolean(today);
         })()
@@ -368,7 +368,7 @@ async function runClassificationCases(context: BrowserSmokeContext) {
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const navigation = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("今天"))} + ']');
+          const navigation = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("分类"))} + ']');
           navigation?.click();
           return Boolean(navigation);
         })()
@@ -377,15 +377,15 @@ async function runClassificationCases(context: BrowserSmokeContext) {
     );
     await waitForExpression(client!, sessionId, `
       (() => {
-        const shadows = Array.from(document.querySelectorAll('[style*="box-shadow"]'))
-          .map((node) => node.style.boxShadow);
+        const shadows = Array.from(document.querySelectorAll('.qp-color-trigger-swatch')).map(node => getComputedStyle(node).backgroundColor);
         return shadows.some((value) => value.includes('227, 74, 58'))
           && shadows.some((value) => value.includes('37, 127, 98'));
       })()
-    `, undefined, "Dashboard icon theme colors should be warmed");
+    `, undefined, "Classification icon theme colors should be warmed");
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
+          localStorage.setItem("patina:last-active-view", "about");
           location.reload();
           return true;
         })()
@@ -396,10 +396,10 @@ async function runClassificationCases(context: BrowserSmokeContext) {
       client!,
       sessionId,
       `document.readyState === "complete"
-        && document.querySelector("main.qp-canvas")?.dataset.presentedView === "dashboard"
+        && document.querySelector("main.qp-canvas")?.dataset.presentedView === "about"
         && Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("分类"))} + ']'))`,
       15_000,
-      "Rebuilt main WebView should settle on Dashboard before classification sampling",
+      "Rebuilt main WebView should settle on About before classification sampling",
     );
 
     assert.equal(
@@ -459,7 +459,7 @@ async function runClassificationCases(context: BrowserSmokeContext) {
   await runTest("classification presentation stays atomic across cold load and every remount", async () => {
     assert.equal(await evaluate(client!, sessionId, `
       (() => {
-        localStorage.setItem("patina:last-active-view", "dashboard");
+        localStorage.setItem("patina:last-active-view", "about");
         localStorage.setItem("__time_tracker_enable_classification_icon_fixture", "1");
         localStorage.setItem("__time_tracker_app_icon_query_delay_ms", "700");
         location.reload();
@@ -469,7 +469,7 @@ async function runClassificationCases(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("分类"))} + ']'))`,
+      `Boolean(document.querySelector('.about-center-panel') && document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("分类"))} + ']'))`,
       15_000,
       "Rebuilt main WebView should become interactive",
     );
@@ -482,7 +482,7 @@ async function runClassificationCases(context: BrowserSmokeContext) {
         sessionId,
         `document.querySelector("main.qp-canvas")?.getAttribute("data-presented-view")`,
       ),
-      "dashboard",
+      "about",
       "classification must not mount before its complete presentation assets are ready",
     );
     await waitForExpression(client!, sessionId, `
@@ -513,7 +513,7 @@ async function runClassificationCases(context: BrowserSmokeContext) {
       `localStorage.removeItem("__time_tracker_app_icon_query_delay_ms")`,
     );
     const origins = [
-      { label: "今天", view: "dashboard" },
+      { label: "关于", view: "about" },
       { label: "历史", view: "history" },
       { label: "数据", view: "data" },
       { label: "设置", view: "settings" },
@@ -550,7 +550,7 @@ async function runClassificationCases(context: BrowserSmokeContext) {
     await evaluate(client!, sessionId, `
       (() => {
         localStorage.removeItem("__time_tracker_enable_classification_icon_fixture");
-        localStorage.setItem("patina:last-active-view", "dashboard");
+        localStorage.setItem("patina:last-active-view", "about");
         location.reload();
         return true;
       })()
@@ -897,7 +897,7 @@ async function runClassificationCases(context: BrowserSmokeContext) {
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("今天"))} + ']');
+          const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("关于"))} + ']');
           if (!node) return false;
           node.click();
           return true;
@@ -1246,7 +1246,7 @@ async function runClassificationCases(context: BrowserSmokeContext) {
       assert.equal(
         await evaluate(client!, sessionId, `
           (() => {
-            const today = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("今天"))} + ']');
+            const today = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("关于"))} + ']');
             today?.click();
             return Boolean(today);
           })()
