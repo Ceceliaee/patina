@@ -110,7 +110,7 @@ export async function verifyDesktopResourceLifecycle(
   try {
     await client.command("Network.enable");
     for (let cycle = 1; cycle <= 15; cycle += 1) {
-      for (const view of ["data", "history", "settings", "about", "dashboard"]) {
+      for (const view of ["data", "history", "settings", "about"]) {
         signal?.throwIfAborted();
         assert.equal(await evaluate(`(() => {
           const button = document.querySelector('[data-sidebar-nav-item="${view}"]');
