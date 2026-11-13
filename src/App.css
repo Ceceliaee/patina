@@ -12,7 +12,6 @@
 @import "./styles/app-shell.css";
 @import "./styles/mini-window.css";
 @import "./styles/features/settings.css";
-@import "./styles/features/dashboard.css";
 @import "./styles/features/classification.css";
 @import "./styles/features/history.css";
 @import "./styles/features/data.css";
