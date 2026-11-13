@@ -1,0 +1,14 @@
+[workspace]
+
+[package]
+name = "patina-counter"
+edition = "2024"
+version = "0.1.0"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+extism-pdk = "1"
+patina-plugin-sdk = { path = "../../plugin-sdk" }

@@ -1,0 +1,19 @@
+[package]
+name = "patina-tool-host"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+base64 = "0.22"
+ring = "0.17"
+extism = { version = "=1.41.0", default-features = false }
+patina-plugin-sdk = { path = "../plugin-sdk" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tempfile = "3"
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+wat = "1"
