@@ -1,5 +1,13 @@
 // zh-CN tools locale resource. Pure data only.
 export const MESSAGES = {
+  "tools.timerAccess": "允许在关闭面板后计时并显示到期通知。",
+  "tools.reinstall": "重新安装",
+  "tools.manager": "管理工具",
+  "tools.install": "从文件安装",
+  "tools.uninstall": "卸载工具",
+  "tools.empty": "尚未安装工具",
+  "tools.panelAccess": "允许在工具页显示交互面板，并保存此工具自己的数据。",
+  "tools.retain": "卸载后保留此工具的数据。",
   "tools.focusDetails": "任务详情",
   "tools.focusHistoryEmpty": "暂无专注记录",
   "tools.focusHistoryError": "专注记录读取失败",

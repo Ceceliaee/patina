@@ -1016,7 +1016,15 @@ export const LOCALE_SOURCE_REVIEWS = {
     "tools.focusHistoryEmpty": "c637e27239c198db",
     "tools.focusHistoryError": "ee8509e191f98aae",
     "tools.focusHistoryOpen": "e4f73c35da043ee9",
-    "tools.focusHistoryEnded": "5f5887c7e4471247"
+    "tools.focusHistoryEnded": "5f5887c7e4471247",
+    "tools.manager": "2fdf18b0a2fdbab8",
+    "tools.install": "3d61f57e0aaf5274",
+    "tools.uninstall": "3c7aed1ceae42283",
+    "tools.empty": "2fb6279f7a3fb0b3",
+    "tools.panelAccess": "a8581e2c564d96e4",
+    "tools.retain": "0a29dbe2b5b89af6",
+    "tools.timerAccess": "8ef128cf2d85cf67",
+    "tools.reinstall": "16b8531523b59991"
   },
   "es": {
     "about.description": "9e6291ff14b79ed3",
@@ -2034,7 +2042,15 @@ export const LOCALE_SOURCE_REVIEWS = {
     "tools.focusHistoryEmpty": "c637e27239c198db",
     "tools.focusHistoryError": "ee8509e191f98aae",
     "tools.focusHistoryOpen": "e4f73c35da043ee9",
-    "tools.focusHistoryEnded": "5f5887c7e4471247"
+    "tools.focusHistoryEnded": "5f5887c7e4471247",
+    "tools.manager": "2fdf18b0a2fdbab8",
+    "tools.install": "3d61f57e0aaf5274",
+    "tools.uninstall": "3c7aed1ceae42283",
+    "tools.empty": "2fb6279f7a3fb0b3",
+    "tools.panelAccess": "a8581e2c564d96e4",
+    "tools.retain": "0a29dbe2b5b89af6",
+    "tools.timerAccess": "8ef128cf2d85cf67",
+    "tools.reinstall": "16b8531523b59991"
   },
   "ru-RU": {
     "about.description": "9e6291ff14b79ed3",
@@ -3052,6 +3068,14 @@ export const LOCALE_SOURCE_REVIEWS = {
     "tools.focusHistoryEmpty": "c637e27239c198db",
     "tools.focusHistoryError": "ee8509e191f98aae",
     "tools.focusHistoryOpen": "e4f73c35da043ee9",
-    "tools.focusHistoryEnded": "5f5887c7e4471247"
+    "tools.focusHistoryEnded": "5f5887c7e4471247",
+    "tools.manager": "2fdf18b0a2fdbab8",
+    "tools.install": "3d61f57e0aaf5274",
+    "tools.uninstall": "3c7aed1ceae42283",
+    "tools.empty": "2fb6279f7a3fb0b3",
+    "tools.panelAccess": "a8581e2c564d96e4",
+    "tools.retain": "0a29dbe2b5b89af6",
+    "tools.timerAccess": "8ef128cf2d85cf67",
+    "tools.reinstall": "16b8531523b59991"
   }
 } as const;

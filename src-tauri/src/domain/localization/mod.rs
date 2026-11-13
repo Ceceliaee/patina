@@ -11,6 +11,12 @@ pub(super) enum NativeExpr {
     Literal(&'static str),
     Arg(&'static str),
     Concat(&'static [NativeExpr]),
+    IfEqual(
+        &'static str,
+        &'static str,
+        &'static NativeExpr,
+        &'static NativeExpr,
+    ),
     Plural {
         arg: &'static str,
         cases: &'static [(&'static str, NativeExpr)],
@@ -97,6 +103,16 @@ fn evaluate(
                 output.push_str(&evaluate(*part, locale_tag, values)?);
             }
             Ok(output)
+        }
+        NativeExpr::IfEqual(arg, expected, yes, no) => {
+            let value = values
+                .get(arg)
+                .ok_or_else(|| format!("missing argument {arg:?}"))?;
+            evaluate(
+                if value == expected { *yes } else { *no },
+                locale_tag,
+                values,
+            )
         }
         NativeExpr::Plural { arg, cases } => {
             let raw = values

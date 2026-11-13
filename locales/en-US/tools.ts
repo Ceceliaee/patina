@@ -1,5 +1,13 @@
 // en-US tools locale resource. Pure data only.
 export const MESSAGES = {
+  "tools.timerAccess": "Allow background timers and expiry notifications.",
+  "tools.reinstall": "Reinstall",
+  "tools.manager": "Manage tools",
+  "tools.install": "Install from file",
+  "tools.uninstall": "Uninstall tool",
+  "tools.empty": "No tools installed",
+  "tools.panelAccess": "Allow a panel on the Tools page and storage for this tool’s own data.",
+  "tools.retain": "This tool’s data will be kept after uninstalling.",
   "tools.focusDetails": "Task details",
   "tools.focusHistoryEmpty": "No focus history yet",
   "tools.focusHistoryError": "Could not load focus history",

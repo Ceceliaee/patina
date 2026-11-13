@@ -352,5 +352,7 @@ export async function loadAndValidateProductionLocales(): Promise<Record<Product
 }
 
 export function schemaEntriesBySurface(surface: "frontend" | "native"): Array<[string, SchemaEntry]> {
-  return Object.entries(MESSAGE_SCHEMA).filter(([, entry]) => entry.surface === surface) as Array<[string, SchemaEntry]>;
+  return Object.entries(MESSAGE_SCHEMA).filter(([, entry]) =>
+    entry.surface === surface || (surface === "native" && "alsoNative" in entry && entry.alsoNative)
+  ) as Array<[string, SchemaEntry]>;
 }

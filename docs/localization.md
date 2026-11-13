@@ -26,6 +26,8 @@ Patina 使用仓库级、语言无关的消息契约，而不是让某个前端�
 
 schema 条目可增加语言无关的 `description` 和 `translatorNote`。翻译包始终提供由表面与 key 形成的稳定位置上下文；当短文案、品牌名、无障碍含义或业务语义可能歧义时，维护者必须补充这两个字段之一，导出器会把它们直接交给翻译者。
 
+同一句前端消息也供原生窗口使用时，在现有 schema 条目标记 `alsoNative: true`。两个宿主消费同一个 key 和译文。
+
 这不是 Fluent，也没有引入新的前端语言或运行时框架。前端使用浏览器内建的 `Intl`，Rust 仅为 CLDR 基数复数使用 ICU4X。
 
 <a id="2-不变量"></a>
@@ -216,7 +218,7 @@ schema 声明参数名和类型，资源使用 `arg` 与 `concat`：
 
 ## Rust 原生表面
 
-托盘、Tools 到期提醒、Markdown 导出标题/摘要/字段标签和内置分类名通过 `domain/localization` 获取文案。调用方传 key 和命名参数，不得重新维护 `match language` 中英文表。生成的 Rust 消息 AST 原生支持 `literal`、`arg`、`concat` 与 `plural`；每个 `plural` 都调用 ICU4X，因此俄语的记录、小时、分钟等词形无需修改 Rust 业务调用方。
+托盘、GPUI 页面、Tools 到期提醒、Markdown 导出和内置分类名通过 `domain/localization` 获取文案。调用方传 key 和命名参数。生成的 Rust 消息支持文本、参数、拼接和 ICU4X 基数复数，也支持以 `if` 判断命名参数是否等于指定字符串。例如 Today 的昨日对比使用 `direction` 参数选择增长、减少或持平的译文。
 
 未知持久化 locale 会记录诊断并回退到注册表中的标准语言。缺失 key 会先回退标准语言，仍缺失时记录诊断并返回 key，避免静默空白。
 

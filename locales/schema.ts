@@ -1,16 +1,24 @@
 // Canonical language-neutral message contract. Do not derive this file from a locale at build time.
 export const MESSAGE_SCHEMA = {
+  "tools.timerAccess": {"kind": "string", "params": [], "surface": "native"},
+  "tools.reinstall": {"kind": "string", "params": [], "surface": "native"},
+  "tools.manager": {"kind": "string", "params": [], "surface": "native"},
+  "tools.install": {"kind": "string", "params": [], "surface": "native"},
+  "tools.uninstall": {"kind": "string", "params": [], "surface": "native"},
+  "tools.empty": {"kind": "string", "params": [], "surface": "native"},
+  "tools.panelAccess": {"kind": "string", "params": [], "surface": "native"},
+  "tools.retain": {"kind": "string", "params": [], "surface": "native"},
   "tools.freeRestMode": {"kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
   "tools.freeRestFixed": {"kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
   "tools.freeRestRatio": {"kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
   "tools.freeRestDuration": {"kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
-  "tools.freeRestProportion": {"kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
+  "tools.freeRestProportion": {"alsoNative": true, "kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
   "tools.freeFocusEmpty": {"kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
   "tools.freeFocusEdit": {"kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
-  "tools.freeFocusFinish": {"kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
+  "tools.freeFocusFinish": {"alsoNative": true, "kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
   "tools.freeFocusRestart": {"kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
-  "tools.freeFocusRest": {"kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
-  "tools.freeFocusStart": {"kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
+  "tools.freeFocusRest": {"alsoNative": true, "kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
+  "tools.freeFocusStart": {"alsoNative": true, "kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
   "tools.freeFocusPause": {"kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
   "tools.freeFocusResume": {"kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
   "tools.freeFocusReset": {"kind": "string", "params": [], "surface": "frontend", "description": "Free focus task controls and per-task break settings."},
@@ -19,7 +27,7 @@ export const MESSAGE_SCHEMA = {
   "tools.pomodoroStartLater": {"kind": "string", "params": [], "surface": "frontend", "description": "Focus notification: manual next-phase start and completed set summary."},
   "tools.pomodoroStartBreak": {"kind": "string", "params": [], "surface": "frontend", "description": "Focus notification: manual next-phase start and completed set summary."},
   "tools.pomodoroStartFocus": {"kind": "string", "params": [], "surface": "frontend", "description": "Focus notification: manual next-phase start and completed set summary."},
-  "tools.pomodoroStartNextGroup": {"kind": "string", "params": [], "surface": "frontend", "description": "Focus notification: manual next-phase start and completed set summary."},
+  "tools.pomodoroStartNextGroup": {"alsoNative": true, "kind": "string", "params": [], "surface": "frontend", "description": "Focus notification: manual next-phase start and completed set summary."},
   "tools.pomodoroNextPhase": {"kind": "message", "params": [{"name": "phase", "type": "string", "optional": false}, {"name": "duration", "type": "string", "optional": false}], "surface": "frontend", "description": "Focus notification: manual next-phase start and completed set summary."},
   "tools.pomodoroGroupSummary": {"kind": "message", "params": [{"name": "rounds", "type": "integer", "optional": false}, {"name": "groups", "type": "integer", "optional": false}], "surface": "frontend", "description": "Focus notification: manual next-phase start and completed set summary."},
   "tools.pomodoroCompletedGroups": {"kind": "message", "params": [{"name": "count", "type": "integer", "optional": false}], "surface": "frontend", "description": "Lifetime fully completed groups for this task; each includes all focus periods and the final long break."},
@@ -29,35 +37,35 @@ export const MESSAGE_SCHEMA = {
   "tools.pomodoroTimingSettings": {"kind": "string", "params": [], "surface": "frontend", "description": "Popover for per-task focus and break durations."},
   "tools.pomodoroTimingSummary": {"kind": "message", "params": [{"name": "minutes", "type": "number", "optional": false}, {"name": "rounds", "type": "integer", "optional": false}], "surface": "frontend", "description": "Compact focus duration and number of rounds before a long break."},
 
-  "tools.focusDetails": {"kind": "string", "params": [], "surface": "frontend", "description": "Focus history dialog and accessible action."},
-  "tools.focusHistoryEmpty": {"kind": "string", "params": [], "surface": "frontend", "description": "Focus task has no recorded intervals."},
+  "tools.focusDetails": {"alsoNative": true, "kind": "string", "params": [], "surface": "frontend", "description": "Focus history dialog and accessible action."},
+  "tools.focusHistoryEmpty": {"alsoNative": true, "kind": "string", "params": [], "surface": "frontend", "description": "Focus task has no recorded intervals."},
   "tools.focusHistoryError": {"kind": "string", "params": [], "surface": "frontend", "description": "Failed to read a task's focus history."},
-  "tools.focusHistoryOpen": {"kind": "string", "params": [], "surface": "frontend", "description": "An ongoing session or interval."},
-  "tools.focusHistoryEnded": {"kind": "string", "params": [], "surface": "frontend", "description": "Session ended before completion."},
-  "tools.pomodoroTaskCreate": {"kind": "string", "params": [], "surface": "frontend", "description": "Pomodoro task list: pomodoroTaskCreate."},
+  "tools.focusHistoryOpen": {"alsoNative": true, "kind": "string", "params": [], "surface": "frontend", "description": "An ongoing session or interval."},
+  "tools.focusHistoryEnded": {"alsoNative": true, "kind": "string", "params": [], "surface": "frontend", "description": "Session ended before completion."},
+  "tools.pomodoroTaskCreate": {"alsoNative": true, "kind": "string", "params": [], "surface": "frontend", "description": "Pomodoro task list: pomodoroTaskCreate."},
   "tools.pomodoroTaskEdit": {"kind": "string", "params": [], "surface": "frontend", "description": "Pomodoro task list: pomodoroTaskEdit."},
-  "tools.pomodoroTaskName": {"kind": "string", "params": [], "surface": "frontend", "description": "Pomodoro task list: pomodoroTaskName."},
+  "tools.pomodoroTaskName": {"alsoNative": true, "kind": "string", "params": [], "surface": "frontend", "description": "Pomodoro task list: pomodoroTaskName."},
   "tools.pomodoroTaskPlaceholder": {"kind": "string", "params": [], "surface": "frontend", "description": "Pomodoro task list: pomodoroTaskPlaceholder."},
   "tools.pomodoroTaskEmpty": {"kind": "string", "params": [], "surface": "frontend", "description": "Pomodoro task list: pomodoroTaskEmpty."},
   "tools.pomodoroTaskDefault": {"kind": "string", "params": [], "surface": "frontend", "description": "Pomodoro task list: pomodoroTaskDefault."},
   "tools.pomodoroRoundUnit": {"kind": "string", "params": [], "surface": "frontend", "description": "Pomodoro task list: pomodoroRoundUnit."},
-  "tools.reminderTimeLabel": {"kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderTimeLabel."},
-  "tools.reminderRepeatLabel": {"kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderRepeatLabel."},
-  "tools.reminderRepeatNone": {"kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderRepeatNone."},
-  "tools.reminderRepeatInterval": {"kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderRepeatInterval."},
-  "tools.reminderRepeatDaily": {"kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderRepeatDaily."},
-  "tools.reminderRepeatMonthly": {"kind": "string", "params": [], "surface": "frontend", "description": "Repeat on the same day of each month; skip months without that day."},
-  "tools.reminderRepeatYearly": {"kind": "string", "params": [], "surface": "frontend", "description": "Repeat on the same month and day each year; skip years without that date."},
-  "tools.reminderRepeatWeekly": {"kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderRepeatWeekly."},
-  "tools.reminderMinutesUnit": {"kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderMinutesUnit."},
+  "tools.reminderTimeLabel": {"alsoNative": true, "kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderTimeLabel."},
+  "tools.reminderRepeatLabel": {"alsoNative": true, "kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderRepeatLabel."},
+  "tools.reminderRepeatNone": {"alsoNative": true, "kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderRepeatNone."},
+  "tools.reminderRepeatInterval": {"alsoNative": true, "kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderRepeatInterval."},
+  "tools.reminderRepeatDaily": {"alsoNative": true, "kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderRepeatDaily."},
+  "tools.reminderRepeatMonthly": {"alsoNative": true, "kind": "string", "params": [], "surface": "frontend", "description": "Repeat on the same day of each month; skip months without that day."},
+  "tools.reminderRepeatYearly": {"alsoNative": true, "kind": "string", "params": [], "surface": "frontend", "description": "Repeat on the same month and day each year; skip years without that date."},
+  "tools.reminderRepeatWeekly": {"alsoNative": true, "kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderRepeatWeekly."},
+  "tools.reminderMinutesUnit": {"alsoNative": true, "kind": "string", "params": [], "surface": "frontend", "description": "Timed reminder schedule control: reminderMinutesUnit."},
 
-  "tools.reminderSnooze": {"kind": "string", "params": [], "surface": "frontend", "description": "Defer a timed reminder and choose when to be reminded again."},
-  "tools.reminderConfirmComplete": {"kind": "string", "params": [], "surface": "frontend", "description": "Acknowledge a timed reminder as completed while keeping its list entry."},
+  "tools.reminderSnooze": {"alsoNative": true, "kind": "string", "params": [], "surface": "frontend", "description": "Defer a timed reminder and choose when to be reminded again."},
+  "tools.reminderConfirmComplete": {"alsoNative": true, "kind": "string", "params": [], "surface": "frontend", "description": "Acknowledge a timed reminder as completed while keeping its list entry."},
   "tools.reminderCompleted": {"kind": "string", "params": [], "surface": "frontend", "description": "Completed state of a retained timed reminder."},
   "tools.reminderPendingConfirmation": {"kind": "string", "params": [], "surface": "frontend", "description": "A timed reminder has fired and is awaiting the user's response."},
   "tools.reminderSnoozeDelay": {"kind": "message", "params": [{"name": "value", "type": "string", "optional": false}], "surface": "frontend", "description": "Remind again after the localized duration, such as 5 minutes."},
   "tools.reminderOccurredAt": {"kind": "message", "params": [{"name": "value", "type": "string", "optional": false}], "surface": "frontend", "description": "The localized time when a timed reminder was triggered."},
-  "tools.reminderEditTitle": {"kind": "string", "params": [], "surface": "frontend", "description": "Title of the dialog for editing a scheduled reminder."},
+  "tools.reminderEditTitle": {"alsoNative": true, "kind": "string", "params": [], "surface": "frontend", "description": "Title of the dialog for editing a scheduled reminder."},
   "tools.usageLimitReached": {"kind": "string", "params": [], "surface": "frontend", "description": "Usage limit alert dialog: usageLimitReached"},
   "tools.usageExtend": {"kind": "string", "params": [], "surface": "frontend", "description": "Usage limit alert dialog: usageExtend"},
   "tools.usageReturnDesktop": {"kind": "string", "params": [], "surface": "frontend", "description": "Explicitly minimize desktop windows. This action does not stop or block applications."},
@@ -79,14 +87,18 @@ export const MESSAGE_SCHEMA = {
   "mapping.objectDeleted": { "kind": "string", "params": [], "surface": "frontend" },
 
   "native.storage.startupFailure": { "kind": "message", "params": [{"name":"details","type":"string","optional":false}], "surface": "native", "description": "Storage preparation failure before the database and locale preferences can be loaded; uses the source locale." },
-  "settings.timeRulesTitle": {"kind": "string", "params": [], "surface": "frontend", "description": "Settings group heading: Time rules"},
-  "settings.recordingOptionsTitle": {"kind": "string", "params": [], "surface": "frontend", "description": "Settings group heading: Recording options"},
-  "settings.themeGroupTitle": {"kind": "string", "params": [], "surface": "frontend", "description": "Settings group heading: Theme"},
-  "settings.interfaceGroupTitle": {"kind": "string", "params": [], "surface": "frontend", "description": "Settings group heading: Interface"},
+  "settings.timeRulesTitle": {
+    "alsoNative": true,"kind": "string", "params": [], "surface": "frontend", "description": "Settings group heading: Time rules"},
+  "settings.recordingOptionsTitle": {
+    "alsoNative": true,"kind": "string", "params": [], "surface": "frontend", "description": "Settings group heading: Recording options"},
+  "settings.themeGroupTitle": {
+    "alsoNative": true,"kind": "string", "params": [], "surface": "frontend", "description": "Settings group heading: Theme"},
+  "settings.interfaceGroupTitle": {
+    "alsoNative": true,"kind": "string", "params": [], "surface": "frontend", "description": "Settings group heading: Interface"},
   "settings.windowBehaviorTitle": {"kind": "string", "params": [], "surface": "frontend", "description": "Settings group heading: Window behavior"},
   "settings.runtimeBehaviorTitle": {"kind": "string", "params": [], "surface": "frontend", "description": "Settings group heading: Runtime behavior"},
   "native.export.anonymousActivity": { "kind": "string", "params": [], "surface": "native", "description": "Anonymous activity label in exported data; identity fields remain empty." },
-  "common.anonymousActivity": { "kind": "string", "params": [], "surface": "frontend", "description": "Single anonymous activity identity; duration is retained without application or website identity." },
+  "common.anonymousActivity": { "kind": "string", "params": [], "surface": "frontend", "alsoNative": true, "description": "Single anonymous activity identity; duration is retained without application or website identity." },
   "mapping.webLinks": { "kind": "string", "params": [], "surface": "frontend", "description": "Website grouping and exact-domain controls" },
   "mapping.addLinkedWebDomain": { "kind": "string", "params": [], "surface": "frontend", "description": "Add an observed website to this parent" },
   "mapping.backToLinkedWebDomains": { "kind": "string", "params": [], "surface": "frontend", "description": "Return from the website picker" },
@@ -101,11 +113,13 @@ export const MESSAGE_SCHEMA = {
 
 
   "about.description": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "about.feedbackDialog.githubAction": {
+    "alsoNative": true,
     "description": "Action label that opens GitHub Issues in the default browser.",
     "kind": "string",
     "params": [],
@@ -130,11 +144,13 @@ export const MESSAGE_SCHEMA = {
     "translatorNote": "Describe the QR code's purpose for screen-reader users; do not describe its visual pattern."
   },
   "about.feedbackDialog.qqTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "about.feedbackDialog.title": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -150,6 +166,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "about.supportDialog.openKofi": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -160,11 +177,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "about.supportDialog.wechatTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "about.title": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -356,11 +375,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "accessibility.history.decreaseMinDuration": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "accessibility.history.increaseMinDuration": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -377,6 +398,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "accessibility.history.nextMonth": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -393,6 +415,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "accessibility.history.previousMonth": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -414,6 +437,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "accessibility.sidebar.navigationLabels": {
+    "alsoNative": true,
     "description": "Stable accessible name for the sidebar button that switches between icon-only navigation and navigation with visible page names.",
     "kind": "string",
     "params": [],
@@ -500,36 +524,36 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "miniWindow.title": { "kind": "string", "params": [], "surface": "frontend", "description": "Independent desktop mini window: title." },
+  "miniWindow.title": { "kind": "string", "params": [], "surface": "frontend", "alsoNative": true, "description": "Independent desktop mini window: title." },
   "miniWindow.today": { "kind": "string", "params": [], "surface": "frontend" },
-  "miniWindow.activity": { "kind": "string", "params": [], "surface": "frontend" },
+  "miniWindow.activity": { "kind": "string", "params": [], "surface": "frontend", "alsoNative": true },
   "miniWindow.tools": { "kind": "string", "params": [], "surface": "frontend" },
-  "miniWindow.previousPage": { "kind": "string", "params": [], "surface": "frontend" },
-  "miniWindow.nextPage": { "kind": "string", "params": [], "surface": "frontend" },
-  "miniWindow.recentHour": { "kind": "string", "params": [], "surface": "frontend" },
+  "miniWindow.previousPage": { "kind": "string", "params": [], "surface": "frontend", "alsoNative": true },
+  "miniWindow.nextPage": { "kind": "string", "params": [], "surface": "frontend", "alsoNative": true },
+  "miniWindow.recentHour": { "kind": "string", "params": [], "surface": "frontend", "alsoNative": true },
   "miniWindow.emptyTools": { "kind": "string", "params": [], "surface": "frontend" },
-  "miniWindow.open": { "kind": "string", "params": [], "surface": "frontend", "description": "Independent desktop mini window: open." },
-  "miniWindow.failed": { "kind": "string", "params": [], "surface": "frontend", "description": "Independent desktop mini window: failed." },
-  "miniWindow.hold": { "kind": "string", "params": [], "surface": "frontend", "description": "Independent desktop mini window: hold." },
+  "miniWindow.open": { "kind": "string", "params": [], "surface": "frontend", "alsoNative": true, "description": "Independent desktop mini window: open." },
+  "miniWindow.failed": { "kind": "string", "params": [], "surface": "frontend", "alsoNative": true, "description": "Independent desktop mini window: failed." },
+  "miniWindow.hold": { "kind": "string", "params": [], "surface": "frontend", "alsoNative": true, "description": "Independent desktop mini window: hold." },
   "accessibility.titleBar.close": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "accessibility.titleBar.maximize": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "accessibility.titleBar.minimize": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "accessibility.titleBar.restore": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "accessibility.tools.createReminder": {
     "kind": "string",
@@ -596,6 +620,7 @@ export const MESSAGE_SCHEMA = {
   "accessibility.miniWindow.openMainWindow": {
     "kind": "string",
     "params": [],
+    "alsoNative": true,
     "surface": "frontend"
   },
   "app.historyDeleted": {
@@ -614,6 +639,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "app.unsavedConfirmBody": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -624,6 +650,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "app.unsavedConfirmTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -777,62 +804,62 @@ export const MESSAGE_SCHEMA = {
   "categories.other": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "categories.short.browser": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "categories.short.communication": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "categories.short.design": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "categories.short.development": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "categories.short.game": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "categories.short.music": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "categories.short.office": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "categories.short.other": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "categories.short.system": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "categories.short.utility": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "categories.short.video": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "categories.system": {
     "kind": "string",
@@ -850,6 +877,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "common.cancel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -857,9 +885,10 @@ export const MESSAGE_SCHEMA = {
   "common.close": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "common.confirm": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -877,24 +906,24 @@ export const MESSAGE_SCHEMA = {
   "common.loading": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "common.readFailed": {
     "kind": "string",
     "params": [],
-    "surface": "frontend",
+    "surface": "frontend", "alsoNative": true,
     "description": "Panel data could not be read; no valid snapshot exists. Invite the user to retry."
   },
   "common.refreshFailed": {
     "kind": "string",
     "params": [],
-    "surface": "frontend",
+    "surface": "frontend", "alsoNative": true,
     "description": "The panel keeps its last successful snapshot after a refresh failure."
   },
   "common.retry": {
     "kind": "string",
     "params": [],
-    "surface": "frontend",
+    "surface": "frontend", "alsoNative": true,
     "description": "Retry the failed read for the current panel and query."
   },
   "common.processing": {
@@ -903,16 +932,19 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "common.save": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "common.saved": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "common.saving": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -946,22 +978,22 @@ export const MESSAGE_SCHEMA = {
         "optional": false
       }
     ],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "dashboard.emptyState": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "dashboard.focusShare": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "dashboard.hourlyActivity": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "dashboard.idle": {
     "kind": "string",
@@ -981,22 +1013,22 @@ export const MESSAGE_SCHEMA = {
   "dashboard.showHourlyActivityByCategory": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "dashboard.showTotalHourlyActivity": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "dashboard.title": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "dashboard.topApps": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "dashboard.topAppsBadge": {
     "kind": "message",
@@ -1007,12 +1039,12 @@ export const MESSAGE_SCHEMA = {
         "optional": false
       }
     ],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "dashboard.total": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "dashboard.tracking": {
     "kind": "message",
@@ -1031,6 +1063,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.activityHeatmap": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1041,11 +1074,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.activityTrend": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "data.allTime": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1056,16 +1091,19 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.applyRange": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "data.appSearchPlaceholder": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "data.appTrend": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1081,6 +1119,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.appTrendAverage": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1101,6 +1140,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.appTrendTotal": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1132,11 +1172,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.categorySearchPlaceholder": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "data.categoryTrend": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1173,11 +1215,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.destinationApp": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "data.destinationCategory": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1188,6 +1232,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.destinationWeb": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1198,6 +1243,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.heatmapDaily": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1208,6 +1254,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.heatmapWeekly": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1228,11 +1275,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.pastSevenDays": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "data.pastThirtyDays": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1243,6 +1292,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.pickEndDate": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1253,21 +1303,25 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.pickerModes.month": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "data.pickerModes.week": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "data.pickerModes.year": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "data.pickStartDate": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1284,6 +1338,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.rangePickerTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1300,6 +1355,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.recentYear": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1331,6 +1387,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.title": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1356,6 +1413,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.webTrend": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1459,6 +1517,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "date.today": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1536,6 +1595,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "destinationDetail.dayError": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1573,11 +1633,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "destinationDetail.minimumDuration": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "destinationDetail.nextDay": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1622,9 +1684,10 @@ export const MESSAGE_SCHEMA = {
         "optional": false
       }
     ],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "destinationDetail.previousDay": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2352,11 +2415,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "history.activeDuration": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "history.activeSpan": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2373,21 +2438,25 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "history.appDistribution": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "history.dailyHourlyActivity": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "history.dayDistribution": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "history.daySummary": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2413,6 +2482,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "history.emptyTimelineWindow": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2460,11 +2530,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "history.openTimeline": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "history.openTimelineZoom": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2475,6 +2547,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "history.peakHour": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2491,6 +2564,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "history.showHourlyActivityByCategory": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2511,11 +2585,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "history.showTotalHourlyActivity": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "history.timeline": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2526,6 +2602,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "history.timelineAxis": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2536,6 +2613,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "history.timelineDecreaseHours": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2552,6 +2630,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "history.timelineIncreaseHours": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2562,6 +2641,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "history.timelineModeSwitch": {
+    "alsoNative": true,
     "kind": "message",
     "params": [
       {
@@ -2614,16 +2694,19 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "history.timelineZoom": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "history.title": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "history.titleDetails": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2652,14 +2735,15 @@ export const MESSAGE_SCHEMA = {
   "hourlyActivityChart.activeMinutes": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "hourlyActivityChart.remainingCategories": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "mapping.appSearchPlaceholder": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2670,6 +2754,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "mapping.categoryFilter": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend",
@@ -2681,6 +2766,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "mapping.categoryDialogTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2697,11 +2783,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "mapping.color": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "mapping.createCategoryAction": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2780,6 +2868,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "mapping.editAppName": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2810,21 +2899,25 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "mapping.excludeStats": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "mapping.filters.all": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "mapping.filters.classified": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "mapping.filters.other": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2867,7 +2960,7 @@ export const MESSAGE_SCHEMA = {
   "mapping.quickCategoryMenuLabel": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "mapping.quickChangeCategory": {
     "kind": "string",
@@ -2883,32 +2976,32 @@ export const MESSAGE_SCHEMA = {
         "optional": false
       }
     ],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "mapping.quickRename": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "mapping.quickRenamePlaceholder": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "mapping.quickRenameTitle": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "mapping.quickSave": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "mapping.quickSaveFailed": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "mapping.quickSaving": {
     "kind": "string",
@@ -2923,7 +3016,7 @@ export const MESSAGE_SCHEMA = {
   "mapping.quickUnclassified": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "mapping.renameCategory": {
     "kind": "message",
@@ -2953,6 +3046,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "mapping.renameCategoryPlaceholder": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2998,6 +3092,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "mapping.title": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3008,11 +3103,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "mapping.titleRecorded": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "mapping.unsaved": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3442,6 +3539,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "native"
   },
   "settings.appearanceTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3833,6 +3931,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.globalTitleLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3848,6 +3947,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.idleTimeoutLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3880,6 +3980,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.languageLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4247,21 +4348,25 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.themeModeLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.themeModeOptions.dark": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.themeModeOptions.light": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.themeModeOptions.system": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4272,11 +4377,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.timelineMergeGapLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.title": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4287,16 +4394,19 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.trackingPanelTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.trackingPausedLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.unsaved": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4618,16 +4728,19 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "tools.activityReminderDisable": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "tools.activityReminderEdit": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "tools.activityReminderDelete": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4658,6 +4771,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "tools.activityReminderTargetLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4705,6 +4819,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "tools.focusDuration": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4715,11 +4830,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "tools.longBreakDuration": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "tools.longBreakEvery": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4736,11 +4853,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "tools.newReminder": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "tools.pause": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4797,29 +4916,34 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "tools.focusModePomodoro": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend",
     "description": "Focus mode with timed work sessions and breaks."
   },
   "tools.focusModeFree": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend",
     "description": "Open-ended focus mode that counts elapsed time without a preset duration."
   },
   "tools.pomodoroTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend",
     "description": "Title of the Focus module containing Pomodoro and free focus modes."
   },
   "tools.reminderEmpty": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "tools.reminderLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4836,27 +4960,32 @@ export const MESSAGE_SCHEMA = {
     "description": "Reminder tab for a relative delay or a specific date and time."
   },
   "tools.reminderModeUsage": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend",
     "description": "Unified usage limits tab for app, category, and website daily usage rules."
   },
   "tools.reminderModeApp": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "tools.reminderModeCategory": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "tools.reminderModeWeb": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "tools.remindersTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4867,6 +4996,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "tools.reset": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4893,11 +5023,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "tools.settingsTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "tools.shortBreakDuration": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4908,11 +5040,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "tools.activityReminderDurationLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "tools.start": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4938,11 +5072,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "tools.title": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "update.appUpdate": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4958,6 +5094,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "update.checkFailed": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4968,6 +5105,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "update.checking": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4978,6 +5116,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "update.checkUpdates": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5096,6 +5235,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "update.feedback": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5157,11 +5297,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "update.manualDownload": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "update.notChecked": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5198,6 +5340,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "update.releaseNotes": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5213,6 +5356,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "update.support": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5266,12 +5410,12 @@ export const MESSAGE_SCHEMA = {
   "miniWindow.idle": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "miniWindow.paused": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "miniWindow.sustainedTracking": {
     "kind": "string",
@@ -5281,7 +5425,7 @@ export const MESSAGE_SCHEMA = {
   "miniWindow.tracking": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "mapping.saveFailed": { "kind": "string", "params": [], "surface": "frontend" },
   "mapping.deleteFailed": { "kind": "string", "params": [], "surface": "frontend" },

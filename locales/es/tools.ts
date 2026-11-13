@@ -1,5 +1,13 @@
 // es locale resource. Pure data only.
 export const MESSAGES = {
+  "tools.timerAccess": "Permitir temporizadores en segundo plano y avisos al vencer.",
+  "tools.reinstall": "Reinstalar",
+  "tools.manager": "Gestionar herramientas",
+  "tools.install": "Instalar desde archivo",
+  "tools.uninstall": "Desinstalar herramienta",
+  "tools.empty": "No hay herramientas instaladas",
+  "tools.panelAccess": "Permitir un panel en la página de herramientas y guardar los datos propios de la herramienta.",
+  "tools.retain": "Los datos de esta herramienta se conservarán tras desinstalarla.",
   "tools.focusDetails": "Detalles de la tarea",
   "tools.focusHistoryEmpty": "Aún no hay historial de concentración",
   "tools.focusHistoryError": "No se pudo cargar el historial",

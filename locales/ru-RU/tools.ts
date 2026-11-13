@@ -1,5 +1,13 @@
 // ru-RU locale resource. Pure data only.
 export const MESSAGES = {
+  "tools.timerAccess": "Разрешить фоновые таймеры и уведомления об их завершении.",
+  "tools.reinstall": "Установить снова",
+  "tools.manager": "Управление инструментами",
+  "tools.install": "Установить из файла",
+  "tools.uninstall": "Удалить инструмент",
+  "tools.empty": "Нет установленных инструментов",
+  "tools.panelAccess": "Разрешить панель на странице инструментов и сохранение собственных данных инструмента.",
+  "tools.retain": "После удаления данные инструмента сохранятся.",
   "tools.focusDetails": "Подробности задачи",
   "tools.focusHistoryEmpty": "Записей пока нет",
   "tools.focusHistoryError": "Не удалось загрузить историю",
