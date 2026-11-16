@@ -1,5 +1,19 @@
 // es locale resource. Pure data only.
 export const MESSAGES = {
+  "settings.storageFrequency": "Frecuencia",
+  "settings.storageCleanupBefore": {"$type": "message", "body": {"$op": "concat", "parts": ["Hace ", {"$op": "arg", "name": "days"}, " días"]}},
+
+  "settings.storageTime": "Hora (HH:mm)",
+  "settings.storageWeekday": "Día (1 lunes – 7 domingo)",
+  "settings.storageMovePending": "Mover la base al volver a iniciar",
+  "settings.storageScheduledBackup": "Copia programada",
+  "settings.storageWeekly": "Repetir cada semana",
+  "settings.webDavDirectory": "Carpeta remota",
+  "settings.dataImport.batchesEmpty": "No hay lotes importados",
+  "settings.servicePortInvalid": "Introduce un puerto entre 1024 y 65535.",
+  "settings.serviceTokenRequired": "Introduce o genera un token.",
+  "settings.serviceEndpointInvalid": "Introduce una URL de WebSocket que empiece por ws:// o wss://.",
+  "settings.webSyncSetup": "Guarda los ajustes e instala Patina Web Sync. Introduce este puerto y token en los ajustes de la extensión y abre una página web normal.",
   "settings.timeRulesTitle": "Reglas de tiempo",
   "settings.recordingOptionsTitle": "Opciones de registro",
   "settings.themeGroupTitle": "Tema",

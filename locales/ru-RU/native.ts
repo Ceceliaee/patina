@@ -1,5 +1,6 @@
 // ru-RU locale resource. Pure data only.
 export const MESSAGES = {
+  "native.category.learning": "Обучение",
   "native.tools.freeFocusTitle": "Свободная концентрация",
 
   "native.tools.pomodoroGroupCompleted": "Цикл помодоро завершён",
@@ -11,15 +12,15 @@ export const MESSAGES = {
   "native.category.ai": "ИИ",
   "native.category.browser": "Браузер",
   "native.category.communication": "Общение",
-  "native.category.design": "Дизайн",
+  "native.category.design": "Творчество",
   "native.category.development": "Разработка",
   "native.category.game": "Игры",
   "native.category.music": "Музыка",
   "native.category.office": "Офис",
-  "native.category.other": "Прочее",
+  "native.category.other": "Без категории",
   "native.category.system": "Система",
   "native.category.utility": "Утилиты",
-  "native.category.video": "Видео",
+  "native.category.video": "Мультимедиа",
   "native.export.duration": {
     "$type": "message",
     "body": {

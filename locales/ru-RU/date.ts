@@ -1,5 +1,8 @@
 // ru-RU locale resource. Pure data only.
 export const MESSAGES = {
+  "date.compactPattern": "d MMM",
+  "date.calendarMonth": {"$type": "message", "body": {"$op": "concat", "parts": [{"$op": "arg", "name": "month"}, " / ", {"$op": "arg", "name": "year"}]}},
+  "date.calendarWeekday": {"$type": "message", "body": {"$op": "if", "when": {"$op": "eq", "left": {"$op": "arg", "name": "day"}, "right": "0"}, "then": "пн", "else": {"$op": "if", "when": {"$op": "eq", "left": {"$op": "arg", "name": "day"}, "right": "1"}, "then": "вт", "else": {"$op": "if", "when": {"$op": "eq", "left": {"$op": "arg", "name": "day"}, "right": "2"}, "then": "ср", "else": {"$op": "if", "when": {"$op": "eq", "left": {"$op": "arg", "name": "day"}, "right": "3"}, "then": "чт", "else": {"$op": "if", "when": {"$op": "eq", "left": {"$op": "arg", "name": "day"}, "right": "4"}, "then": "пт", "else": {"$op": "if", "when": {"$op": "eq", "left": {"$op": "arg", "name": "day"}, "right": "5"}, "then": "сб", "else": "вс"}}}}}}},
   "date.heatmapWeekdays": [
     "пн",
     "",

@@ -30,9 +30,10 @@ export const MESSAGES = {
   "mapping.trackingOffHint": "Resume tracking",
 
   "mapping.appSearchPlaceholder": "Search apps",
+  "mapping.clearSearch": "Clear search",
   "mapping.cancel": "Cancel",
   "mapping.categoryFilter": "Filter by category",
-  "mapping.categoryControl": "Manage categories",
+  "mapping.categoryControl": "Manage",
   "mapping.categoryDialogTitle": "Manage categories",
   "mapping.categorySelectLabel": {
     "$type": "message",
@@ -68,20 +69,7 @@ export const MESSAGES = {
       ]
     }
   },
-  "mapping.deleteCategoryDetail": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "This will delete the ",
-        {
-          "$op": "arg",
-          "name": "label"
-        },
-        " category."
-      ]
-    }
-  },
+  "mapping.deleteCategoryDetail": {"$type":"message","body":{"$op":"concat","parts":["Delete the “",{"$op":"arg","name":"label"},"” category. Apps and websites will become unclassified; their history will be kept."]}},
   "mapping.deleteCategoryTitle": "Delete category",
   "mapping.deleteWebRecords": "Delete website",
   "mapping.disableTitleCapture": "Stop recording titles",

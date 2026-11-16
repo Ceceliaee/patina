@@ -1,5 +1,6 @@
 // es locale resource. Pure data only.
 export const MESSAGES = {
+  "native.category.learning": "Aprendizaje",
   "native.tools.freeFocusTitle": "Concentración libre",
 
   "native.tools.pomodoroGroupCompleted": "Ciclo de pomodoro completado",
@@ -10,16 +11,16 @@ export const MESSAGES = {
   "native.export.anonymousActivity": "Anónimo",
   "native.category.ai": "IA",
   "native.category.browser": "Navegador",
-  "native.category.communication": "Comunicación",
-  "native.category.design": "Diseño",
+  "native.category.communication": "Social",
+  "native.category.design": "Creación",
   "native.category.development": "Desarrollo",
   "native.category.game": "Juegos",
   "native.category.music": "Música",
   "native.category.office": "Oficina",
-  "native.category.other": "Otros",
+  "native.category.other": "Sin clasificar",
   "native.category.system": "Sistema",
   "native.category.utility": "Utilidades",
-  "native.category.video": "Vídeo",
+  "native.category.video": "Multimedia",
   "native.export.duration": {
     "$type": "message",
     "body": {

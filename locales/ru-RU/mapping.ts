@@ -27,9 +27,10 @@ export const MESSAGES = {
   "mapping.trackingOnHint": "Анонимный учёт",
   "mapping.trackingOffHint": "Возобновить учёт",
   "mapping.appSearchPlaceholder": "Поиск прил.",
+  "mapping.clearSearch": "Очистить поиск",
   "mapping.cancel": "Отмена",
   "mapping.categoryFilter": "Фильтр по категории",
-  "mapping.categoryControl": "Управление категориями",
+  "mapping.categoryControl": "Управление",
   "mapping.categoryDialogTitle": "Управление категориями",
   "mapping.categorySelectLabel": {
     "$type": "message",
@@ -65,20 +66,7 @@ export const MESSAGES = {
       ]
     }
   },
-  "mapping.deleteCategoryDetail": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "Будет удалена категория «",
-        {
-          "$op": "arg",
-          "name": "label"
-        },
-        "»."
-      ]
-    }
-  },
+  "mapping.deleteCategoryDetail": {"$type":"message","body":{"$op":"concat","parts":["Удалить категорию «",{"$op":"arg","name":"label"},"». Приложения и сайты станут неклассифицированными; их история сохранится."]}},
   "mapping.deleteCategoryTitle": "Удалить категорию",
   "mapping.deleteWebRecords": "Удалить сайт",
   "mapping.disableTitleCapture": "Прекратить запись заголовков",

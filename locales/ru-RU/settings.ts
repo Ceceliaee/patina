@@ -1,5 +1,19 @@
 // ru-RU locale resource. Pure data only.
 export const MESSAGES = {
+  "settings.storageFrequency": "Периодичность",
+  "settings.storageCleanupBefore": {"$type": "message", "body": {"$op": "concat", "parts": ["", {"$op": "arg", "name": "days"}, " дней назад"]}},
+
+  "settings.storageTime": "Время (ЧЧ:мм)",
+  "settings.storageWeekday": "День недели (1 — пн, 7 — вс)",
+  "settings.storageMovePending": "Перенос базы при следующем запуске",
+  "settings.storageScheduledBackup": "Резервное копирование по расписанию",
+  "settings.storageWeekly": "Повторять еженедельно",
+  "settings.webDavDirectory": "Удалённая папка",
+  "settings.dataImport.batchesEmpty": "Нет импортированных пакетов",
+  "settings.servicePortInvalid": "Введите порт от 1024 до 65535.",
+  "settings.serviceTokenRequired": "Введите или сгенерируйте токен.",
+  "settings.serviceEndpointInvalid": "Введите адрес WebSocket, начинающийся с ws:// или wss://.",
+  "settings.webSyncSetup": "Сохраните настройки и установите Patina Web Sync. Укажите этот порт и токен в настройках расширения, затем откройте обычную веб-страницу.",
   "settings.timeRulesTitle": "Правила времени",
   "settings.recordingOptionsTitle": "Параметры записи",
   "settings.themeGroupTitle": "Тема",

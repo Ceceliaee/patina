@@ -1,5 +1,19 @@
 // en-US settings locale resource. Pure data only.
 export const MESSAGES = {
+  "settings.storageFrequency": "Frequency",
+  "settings.storageCleanupBefore": {"$type": "message", "body": {"$op": "concat", "parts": ["", {"$op": "arg", "name": "days"}, " days ago"]}},
+
+  "settings.storageTime": "Time (HH:mm)",
+  "settings.storageWeekday": "Weekday (1 Monday – 7 Sunday)",
+  "settings.storageMovePending": "Move database on next launch",
+  "settings.storageScheduledBackup": "Scheduled backup",
+  "settings.storageWeekly": "Repeat weekly",
+  "settings.webDavDirectory": "Remote folder",
+  "settings.dataImport.batchesEmpty": "No imported batches",
+  "settings.servicePortInvalid": "Enter a port between 1024 and 65535.",
+  "settings.serviceTokenRequired": "Enter or generate a token.",
+  "settings.serviceEndpointInvalid": "Enter a WebSocket URL starting with ws:// or wss://.",
+  "settings.webSyncSetup": "Save your settings and install Patina Web Sync. Enter this port and token in the extension settings, then open a regular webpage.",
   "settings.timeRulesTitle": "Time rules",
   "settings.recordingOptionsTitle": "Recording options",
   "settings.themeGroupTitle": "Theme",

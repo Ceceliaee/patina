@@ -1,5 +1,19 @@
 // zh-CN settings locale resource. Pure data only.
 export const MESSAGES = {
+  "settings.storageFrequency": "频率",
+  "settings.storageCleanupBefore": {"$type": "message", "body": {"$op": "concat", "parts": ["", {"$op": "arg", "name": "days"}, " 天前"]}},
+
+  "settings.storageTime": "时间（HH:mm）",
+  "settings.storageWeekday": "星期几（1 为周一，7 为周日）",
+  "settings.storageMovePending": "下次启动时迁移数据库",
+  "settings.storageScheduledBackup": "定时备份",
+  "settings.storageWeekly": "每周重复",
+  "settings.webDavDirectory": "远端目录",
+  "settings.dataImport.batchesEmpty": "暂无导入批次",
+  "settings.servicePortInvalid": "请输入 1024 到 65535 之间的端口。",
+  "settings.serviceTokenRequired": "请输入或生成 Token。",
+  "settings.serviceEndpointInvalid": "请输入以 ws:// 或 wss:// 开头的 WebSocket 地址。",
+  "settings.webSyncSetup": "保存设置后安装 Patina Web Sync，在扩展设置中填入这里的端口和 Token，然后打开普通网页。",
   "settings.timeRulesTitle": "时间规则",
   "settings.recordingOptionsTitle": "记录选项",
   "settings.themeGroupTitle": "主题",

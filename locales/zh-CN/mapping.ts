@@ -30,9 +30,10 @@ export const MESSAGES = {
   "mapping.trackingOffHint": "恢复追踪",
 
   "mapping.appSearchPlaceholder": "搜索应用",
+  "mapping.clearSearch": "清空搜索",
   "mapping.cancel": "取消",
   "mapping.categoryFilter": "筛选分类",
-  "mapping.categoryControl": "管理分类",
+  "mapping.categoryControl": "管理",
   "mapping.categoryDialogTitle": "管理分类",
   "mapping.categorySelectLabel": {
     "$type": "message",
@@ -68,20 +69,7 @@ export const MESSAGES = {
       ]
     }
   },
-  "mapping.deleteCategoryDetail": {
-    "$type": "message",
-    "body": {
-      "$op": "concat",
-      "parts": [
-        "将删除 ",
-        {
-          "$op": "arg",
-          "name": "label"
-        },
-        " 分类。"
-      ]
-    }
-  },
+  "mapping.deleteCategoryDetail": {"$type":"message","body":{"$op":"concat","parts":["删除“",{"$op":"arg","name":"label"},"”分类。应用和网页将归为未分类，历史记录会保留。"]}},
   "mapping.deleteCategoryTitle": "删除分类",
   "mapping.deleteWebRecords": "删除网站",
   "mapping.disableTitleCapture": "停止记录标题",

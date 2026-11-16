@@ -1,5 +1,8 @@
 // en-US date locale resource. Pure data only.
 export const MESSAGES = {
+  "date.compactPattern": "MMM d",
+  "date.calendarMonth": {"$type": "message", "body": {"$op": "concat", "parts": [{"$op": "arg", "name": "month"}, " / ", {"$op": "arg", "name": "year"}]}},
+  "date.calendarWeekday": {"$type": "message", "body": {"$op": "if", "when": {"$op": "eq", "left": {"$op": "arg", "name": "day"}, "right": "0"}, "then": "Mon", "else": {"$op": "if", "when": {"$op": "eq", "left": {"$op": "arg", "name": "day"}, "right": "1"}, "then": "Tue", "else": {"$op": "if", "when": {"$op": "eq", "left": {"$op": "arg", "name": "day"}, "right": "2"}, "then": "Wed", "else": {"$op": "if", "when": {"$op": "eq", "left": {"$op": "arg", "name": "day"}, "right": "3"}, "then": "Thu", "else": {"$op": "if", "when": {"$op": "eq", "left": {"$op": "arg", "name": "day"}, "right": "4"}, "then": "Fri", "else": {"$op": "if", "when": {"$op": "eq", "left": {"$op": "arg", "name": "day"}, "right": "5"}, "then": "Sat", "else": "Sun"}}}}}}},
   "date.heatmapWeekdays": [
     "Mon",
     "",
