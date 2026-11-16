@@ -24,15 +24,14 @@ export interface ImportedClassificationResult {
 }
 
 const SEEDED_CATEGORY_ALIASES: Partial<Record<UserAssignableAppCategory, readonly string[]>> = {
-  ai: ["AI"],
   development: ["开发", "开发编码", "Dev", "Development"],
-  office: ["办公", "办公协作", "Office"],
+  office: ["办公", "办公协作", "Office", "AI"],
   browser: ["浏览", "浏览器", "Browser"],
-  communication: ["通讯", "沟通", "即时通讯", "Chat", "Communication"],
-  video: ["视频", "视频内容", "Video"],
-  music: ["音乐", "音乐音频", "Music"],
+  communication: ["社交", "通讯", "沟通", "即时通讯", "Chat", "Communication", "Social"],
+  video: ["影音", "视频", "视频内容", "Video", "音乐", "音乐音频", "Music", "Media"],
   game: ["游戏", "Game", "Games"],
-  design: ["设计", "设计创作", "Design"],
+  design: ["创作", "设计", "设计创作", "Design", "Creation"],
+  learning: ["学习", "Learning"],
   utility: ["工具", "工具效率", "Tool", "Tools", "Utility", "Utilities"],
   other: ["未分类", "其他", "Other", "Unknown", "未知"],
 };

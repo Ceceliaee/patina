@@ -1,5 +1,6 @@
 import {
   isExtendedCategory,
+  normalizeCategoryId,
   type AppCategory,
   type ExtendedAppCategory,
   type UserAssignableAppCategory,
@@ -128,7 +129,7 @@ export function deleteCategoryFromDraftState(
 ): ClassificationDraftState {
   const nextOverrides: Record<string, AppOverride> = {};
   for (const [exeName, override] of Object.entries(current.overrides)) {
-    if (override.category !== category) {
+    if (normalizeCategoryId(override.category) !== category) {
       nextOverrides[exeName] = override;
       continue;
     }
@@ -145,7 +146,7 @@ export function deleteCategoryFromDraftState(
 
   const nextWebDomainOverrides: Record<string, WebDomainOverride> = {};
   for (const [normalizedDomain, override] of Object.entries(current.webDomainOverrides)) {
-    if (override.category !== category) {
+    if (normalizeCategoryId(override.category) !== category) {
       nextWebDomainOverrides[normalizedDomain] = override;
       continue;
     }
@@ -230,14 +231,14 @@ export function mergeCategoryIntoDraftState(
 
   const nextOverrides: Record<string, AppOverride> = {};
   for (const [exeName, override] of Object.entries(current.overrides)) {
-    nextOverrides[exeName] = override.category === fromCategory
+    nextOverrides[exeName] = normalizeCategoryId(override.category) === fromCategory
       ? { ...override, category: toCategory }
       : override;
   }
 
   const nextWebDomainOverrides: Record<string, WebDomainOverride> = {};
   for (const [normalizedDomain, override] of Object.entries(current.webDomainOverrides)) {
-    nextWebDomainOverrides[normalizedDomain] = override.category === fromCategory
+    nextWebDomainOverrides[normalizedDomain] = normalizeCategoryId(override.category) === fromCategory
       ? { ...override, category: toCategory }
       : override;
   }

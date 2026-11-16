@@ -3,6 +3,7 @@ import {
   isAppCategory,
   isExtendedCategory,
   normalizeExtendedCategory,
+  normalizeCategoryId,
   USER_ASSIGNABLE_CATEGORIES,
   type AppCategory,
   type UserAssignableAppCategory,
@@ -72,7 +73,7 @@ function normalizeCategoryLabelOverrides(
 }
 
 function normalizeUserAssignableCategory(category: string | undefined): UserAssignableAppCategory | null {
-  const normalized = (category ?? "").trim();
+  const normalized = normalizeCategoryId((category ?? "").trim());
   if (!normalized) {
     return null;
   }

@@ -16,4 +16,5 @@ export const RELEASE_DEFAULT_CATEGORY_COLOR_ASSIGNMENTS: Record<
   game: "#B07E55",
   design: "#8C6FA1",
   utility: "#35A69E",
+  learning: "#AA8752",
 };

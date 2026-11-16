@@ -19,16 +19,6 @@ export interface TopApplicationItem {
   categoryInitial: string;
 }
 
-export function formatDashboardDuration(ms: number) {
-  const safeMs = Math.max(0, ms);
-  const totalMinutes = Math.floor(safeMs / 60000);
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
-}
-
 export function getTotalTrackedTime(stats: AppStat[]) {
   return stats.reduce((total, item) => total + Math.max(0, item.totalDuration), 0);
 }

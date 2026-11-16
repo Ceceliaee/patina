@@ -4,9 +4,9 @@ import type { HistorySession } from "../../../shared/types/sessions.ts";
 import type { TrackerHealthSnapshot } from "../../../shared/types/tracking.ts";
 import type { AggregateSessionRecord } from "../../../platform/persistence/sessionReadRepository.ts";
 import {
-  getDashboardIconRuntimeCacheSnapshot,
-  loadDashboardIconsForExecutables,
-} from "./dashboardIconRuntimeCache.ts";
+  getAppIconRuntimeCacheSnapshot,
+  loadAppIconsForExecutables,
+} from "../../../platform/persistence/appIconRuntimeCache.ts";
 import {
   buildCategoryDistribution,
   buildTopApplications,
@@ -55,15 +55,15 @@ export interface DashboardReadModel {
 interface DashboardSnapshotDependencies {
   now: () => number;
   getActivityAggregateRange: typeof loadActivityAggregateRange;
-  loadIcons: typeof loadDashboardIconsForExecutables;
-  getCachedIcons: typeof getDashboardIconRuntimeCacheSnapshot;
+  loadIcons: typeof loadAppIconsForExecutables;
+  getCachedIcons: typeof getAppIconRuntimeCacheSnapshot;
 }
 
 const DASHBOARD_SNAPSHOT_DEPENDENCIES: DashboardSnapshotDependencies = {
   now: Date.now,
   getActivityAggregateRange: loadActivityAggregateRange,
-  loadIcons: loadDashboardIconsForExecutables,
-  getCachedIcons: getDashboardIconRuntimeCacheSnapshot,
+  loadIcons: loadAppIconsForExecutables,
+  getCachedIcons: getAppIconRuntimeCacheSnapshot,
 };
 
 function collectDashboardIconExecutables(

@@ -14,6 +14,7 @@ type SeededAppCategory =
   | "game"
   | "design"
   | "utility"
+  | "learning"
   | "other"
   | "system";
 
@@ -22,15 +23,14 @@ export type AppCategory = SeededAppCategory | ExtendedAppCategory | "anonymous";
 export type UserAssignableAppCategory = Exclude<AppCategory, "system" | "anonymous">;
 
 export const USER_ASSIGNABLE_CATEGORIES: UserAssignableAppCategory[] = [
-  "ai",
-  "development",
   "office",
-  "browser",
   "communication",
+  "browser",
   "video",
-  "music",
   "game",
   "design",
+  "development",
+  "learning",
   "utility",
   "other",
 ];
@@ -93,9 +93,16 @@ const SEEDED_CATEGORY_IDS: SeededAppCategory[] = [
   "game",
   "design",
   "utility",
+  "learning",
   "other",
   "system",
 ];
+
+export function normalizeCategoryId<T extends string | undefined>(category: T): T | "office" | "video" {
+  if (category === "ai") return "office";
+  if (category === "music") return "video";
+  return category;
+}
 
 const SEEDED_CATEGORY_SET = new Set<string>(SEEDED_CATEGORY_IDS);
 const CATEGORY_NAME_LIMITS = {

@@ -413,15 +413,14 @@ await runTest("sanitizeDeletedCategories keeps only seeded user-assignable categ
 
 await runTest("first install assignable categories match the lean default set", () => {
   assert.deepEqual(USER_ASSIGNABLE_CATEGORIES, [
-    "ai",
-    "development",
     "office",
-    "browser",
     "communication",
+    "browser",
     "video",
-    "music",
     "game",
     "design",
+    "development",
+    "learning",
     "utility",
     "other",
   ]);
@@ -439,6 +438,23 @@ await runTest("first install assignable categories match the lean default set", 
     ProcessMapper.fromOverrideStorageValue(JSON.stringify({ category: "finance", enabled: true }))?.category,
     undefined,
   );
+});
+
+await runTest("legacy AI and music assignments use the new defaults without losing app settings", () => {
+  for (const [oldCategory, category] of [["ai", "office"], ["music", "video"]]) {
+    const value = ProcessMapper.fromOverrideStorageValue(JSON.stringify({
+      category: oldCategory, displayName: "Personal name", color: "#123456", captureTitle: false,
+    }));
+    assert.equal(value?.category, category);
+    assert.equal(value?.displayName, "Personal name");
+    assert.equal(value?.color, "#123456");
+    assert.equal(value?.captureTitle, false);
+  }
+  assert.equal(ProcessMapper.fromOverrideStorageValue('{"category":"learning"}')?.category, "learning");
+  assert.equal(ProcessMapper.fromOverrideStorageValue('{"category":"custom:research"}')?.category, "custom:research");
+  const web = buildSaveWebDomainOverrideMutations("example.com", { category: "music", captureTitle: false });
+  assert.equal(JSON.parse(web[0].value!).category, "video");
+  assert.equal(JSON.parse(web[0].value!).captureTitle, false);
 });
 
 await runTest("mapping without override ignores saved user overrides", () => {
@@ -755,6 +771,17 @@ await runTest("mergeCategoryIntoDraftState rewrites category references", () => 
   assert.deepEqual(merged.deletedCategories, []);
   assert.equal(merged.categoryColorOverrides[focus], undefined);
   assert.equal(merged.categoryColorOverrides[deepWork], "#112233");
+});
+
+await runTest("merging a category includes its legacy app and web assignments", () => {
+  const merged = mergeCategoryIntoDraftState(buildDraftState({
+    overrides: { "assistant.exe": { category: "ai", displayName: "Assistant" } },
+    webDomainOverrides: { "example.com": { category: "ai", captureTitle: false } },
+  }), "office", "learning", "#AA8752");
+  assert.equal(merged.overrides["assistant.exe"]?.category, "learning");
+  assert.equal(merged.overrides["assistant.exe"]?.displayName, "Assistant");
+  assert.equal(merged.webDomainOverrides["example.com"]?.category, "learning");
+  assert.equal(merged.webDomainOverrides["example.com"]?.captureTitle, false);
 });
 
 await runTest("updateCategoryLabelInDraftState stores and clears display label overrides", () => {

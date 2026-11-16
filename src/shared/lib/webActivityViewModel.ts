@@ -2,7 +2,7 @@ import { resolveWebOwner, webDisplayDomain, webGroupIcon, webLinkParent } from "
 import { AppClassification } from "../classification/appClassification.ts";
 import { isAnonymousActivity } from "../classification/anonymousActivity.ts";
 import { objectColor } from "../classification/objectColor.ts";
-import type { AppCategory } from "../classification/categoryTokens.ts";
+import { normalizeCategoryId, type AppCategory } from "../classification/categoryTokens.ts";
 import type { UiText } from "../i18n/index.ts";
 import type {
   WebActivitySegment,
@@ -88,7 +88,7 @@ function resolveWebCategory(
   overrides: Record<string, WebDomainOverride>,
 ): AppCategory {
   if (isAnonymousActivity(normalizedDomain)) return "anonymous";
-  return overrides[resolveWebOwner(normalizedDomain, overrides)]?.category ?? "other";
+  return normalizeCategoryId(overrides[resolveWebOwner(normalizedDomain, overrides)]?.category ?? "other");
 }
 
 function resolveWebLabel(segment: WebActivitySegment, overrides: Record<string, WebDomainOverride>): string {

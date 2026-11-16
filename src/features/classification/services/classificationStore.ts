@@ -23,6 +23,7 @@ import {
   isAppCategory,
   isExtendedCategory,
   isModernExtendedCategoryId,
+  normalizeCategoryId,
   USER_ASSIGNABLE_CATEGORIES,
   type AppCategory,
   type ExtendedAppCategory,
@@ -109,8 +110,9 @@ function normalizeWebDomainKey(value: string): string | null {
 function normalizeWebDomainOverride(override: WebDomainOverride | null | undefined): WebDomainOverride | null {
   if (!override) return null;
   const normalized: WebDomainOverride = {};
-  if (override.category && (isExtendedCategory(override.category) || USER_ASSIGNABLE_CATEGORY_SET.has(override.category))) {
-    normalized.category = override.category;
+  const category = normalizeCategoryId(override.category);
+  if (category && (isExtendedCategory(category) || USER_ASSIGNABLE_CATEGORY_SET.has(category))) {
+    normalized.category = category;
   }
   if (override.displayName?.trim()) {
     normalized.displayName = override.displayName.trim();

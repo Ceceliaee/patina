@@ -1,16 +1,14 @@
-import { invalidateAppIcons } from "../src/platform/persistence/appIconRuntimeCache.ts";
 import { publishAppIconChange, subscribeAppIconChanges } from "../src/shared/hooks/appIconChanges.ts";
 import { installAppIconEvents } from "../src/platform/runtime/appIconEventGateway.ts";
 import assert from "node:assert/strict";
 import { getIconsForExecutables } from "../src/platform/persistence/sessionReadRepository.ts";
 import { AppClassification } from "../src/shared/classification/appClassification.ts";
 import {
-  getDashboardIcon,
-  getRetryableMissingDashboardIconExecutables,
-  loadDashboardIconsForExecutables,
-  resetDashboardIconRuntimeCacheForTests,
-} from "../src/features/dashboard/services/dashboardIconRuntimeCache.ts";
-import {
+  getAppIcon,
+  getRetryableMissingAppIconExecutables,
+  loadAppIconsForExecutables,
+  resetAppIconRuntimeCacheForTests,
+  invalidateAppIcons,
   getAppIconRuntimeCacheStats,
   getAppIconRuntimeCacheSnapshot,
 } from "../src/platform/persistence/appIconRuntimeCache.ts";
@@ -55,18 +53,18 @@ await (async () => {
 })();
 
 async function runTest(name: string, fn: () => Promise<void> | void) {
-  resetDashboardIconRuntimeCacheForTests();
+  resetAppIconRuntimeCacheForTests();
   resetClassificationIconPresentationCacheForTests();
   await fn();
-  resetDashboardIconRuntimeCacheForTests();
+  resetAppIconRuntimeCacheForTests();
   resetClassificationIconPresentationCacheForTests();
   passed += 1;
   console.log(`PASS ${name}`);
 }
 
-await runTest("dashboard icon cache queries only requested executables and expands aliases", async () => {
+await runTest("app icon cache queries only requested executables and expands aliases", async () => {
   const calls: string[][] = [];
-  const icons = await loadDashboardIconsForExecutables(["Code.exe"], {
+  const icons = await loadAppIconsForExecutables(["Code.exe"], {
     nowMs: () => 1_000,
     loadIcons: async (exeNames) => {
       calls.push(exeNames);
@@ -76,20 +74,20 @@ await runTest("dashboard icon cache queries only requested executables and expan
 
   assert.deepEqual(calls, [["Code.exe"]]);
   assert.equal(icons["Code.exe"], "icon-code");
-  assert.equal(getDashboardIcon(icons, "Code.exe"), "icon-code");
+  assert.equal(getAppIcon(icons, "Code.exe"), "icon-code");
 
-  const cachedIcons = await loadDashboardIconsForExecutables(["code.exe"], {
+  const cachedIcons = await loadAppIconsForExecutables(["code.exe"], {
     nowMs: () => 1_500,
     loadIcons: async () => {
       throw new Error("cached icon should not query SQLite again");
     },
   });
 
-  assert.equal(getDashboardIcon(cachedIcons, "code.exe"), "icon-code");
+  assert.equal(getAppIcon(cachedIcons, "code.exe"), "icon-code");
   assert.deepEqual(calls, [["Code.exe"]]);
 });
 
-await runTest("dashboard icon cache backs off missing icons instead of retrying every tick", async () => {
+await runTest("app icon cache backs off missing icons instead of retrying every tick", async () => {
   const calls: string[][] = [];
   let nowMs = 10_000;
   const deps = {
@@ -100,43 +98,43 @@ await runTest("dashboard icon cache backs off missing icons instead of retrying 
     },
   };
 
-  await loadDashboardIconsForExecutables(["Missing.exe"], deps);
+  await loadAppIconsForExecutables(["Missing.exe"], deps);
   for (const [index, delay] of [2_000, 5_000, 15_000, 60_000, 60_000].entries()) {
     nowMs += delay - 1;
-    await loadDashboardIconsForExecutables(["Missing.exe"], deps);
+    await loadAppIconsForExecutables(["Missing.exe"], deps);
     assert.equal(calls.length, index + 1, "missing icons wait for the full retry delay");
     nowMs += 1;
-    await loadDashboardIconsForExecutables(["Missing.exe"], deps);
+    await loadAppIconsForExecutables(["Missing.exe"], deps);
     assert.equal(calls.length, index + 2, "retry delay saturates at one minute");
   }
   assert.ok(calls.every((names) => names.length === 1 && names[0] === "Missing.exe"));
 });
 
-await runTest("dashboard icon missing detector respects caller-owned icon maps", () => {
+await runTest("app icon missing detector respects caller-owned icon maps", () => {
   assert.deepEqual(
-    getRetryableMissingDashboardIconExecutables(["Code.exe"], { "code.exe": "icon-code" }, 1_000),
+    getRetryableMissingAppIconExecutables(["Code.exe"], { "code.exe": "icon-code" }, 1_000),
     [],
   );
   assert.deepEqual(
-    getRetryableMissingDashboardIconExecutables(["Missing.exe"], {}, 1_000),
+    getRetryableMissingAppIconExecutables(["Missing.exe"], {}, 1_000),
     ["Missing.exe"],
   );
 });
 
-await runTest("dashboard icon runtime cache keeps bounded icon and retry entries", async () => {
+await runTest("app icon runtime cache keeps bounded icon and retry entries", async () => {
   const deps = {
     loadIcons: async (names: string[]) => Object.fromEntries(names.map((name) => [name, `icon:${name}`])),
   };
-  await loadDashboardIconsForExecutables(Array.from({ length: 256 }, (_, index) => `app${index}.exe`), deps);
-  await loadDashboardIconsForExecutables(["app0.exe"], deps);
-  await loadDashboardIconsForExecutables(["app256.exe"], deps);
+  await loadAppIconsForExecutables(Array.from({ length: 256 }, (_, index) => `app${index}.exe`), deps);
+  await loadAppIconsForExecutables(["app0.exe"], deps);
+  await loadAppIconsForExecutables(["app256.exe"], deps);
   const snapshot = getAppIconRuntimeCacheSnapshot();
   assert.equal(snapshot["app0.exe"], "icon:app0.exe", "recently read icons survive eviction");
   assert.equal(snapshot["app1.exe"], undefined, "the oldest unused icon is evicted");
   assert.equal(snapshot["app256.exe"], "icon:app256.exe");
-  resetDashboardIconRuntimeCacheForTests();
+  resetAppIconRuntimeCacheForTests();
 
-  await loadDashboardIconsForExecutables(
+  await loadAppIconsForExecutables(
     Array.from({ length: 300 }, (_, index) => `Found${index}.exe`),
     {
       nowMs: () => 1_000,
@@ -148,7 +146,7 @@ await runTest("dashboard icon runtime cache keeps bounded icon and retry entries
 
   assert.equal(getAppIconRuntimeCacheStats().entries, 256);
 
-  await loadDashboardIconsForExecutables(
+  await loadAppIconsForExecutables(
     Array.from({ length: 300 }, (_, index) => `Missing${index}.exe`),
     {
       nowMs: () => 2_000,
@@ -197,21 +195,21 @@ await runTest("classification retains original member icons while saved links re
 
 
 await runTest("changed icon invalidates aliases while leaving unrelated icons cached", async () => {
-  await loadDashboardIconsForExecutables(["Code.exe", "other.exe"], { loadIcons: async () => ({ "code.exe": "old", "other.exe": "other" }) });
+  await loadAppIconsForExecutables(["Code.exe", "other.exe"], { loadIcons: async () => ({ "code.exe": "old", "other.exe": "other" }) });
   invalidateAppIcons("CODE.EXE");
   const calls: string[][] = [];
-  const result = await loadDashboardIconsForExecutables(["Code.exe", "other.exe"], { loadIcons: async (names) => {
+  const result = await loadAppIconsForExecutables(["Code.exe", "other.exe"], { loadIcons: async (names) => {
     calls.push(names); return { "code.exe": "new" };
   } });
   assert.deepEqual(calls, [["Code.exe"]]);
-  assert.equal(getDashboardIcon(result, "Code.exe"), "new");
-  assert.equal(getDashboardIcon(result, "other.exe"), "other");
+  assert.equal(getAppIcon(result, "Code.exe"), "new");
+  assert.equal(getAppIcon(result, "other.exe"), "other");
 });
 
 await runTest("invalidation during a pending read rejects obsolete results and reloads", async () => {
   let release!: (value: Record<string, string>) => void;
   let calls = 0;
-  const pending = loadDashboardIconsForExecutables(["race.exe"], { loadIcons: async () => {
+  const pending = loadAppIconsForExecutables(["race.exe"], { loadIcons: async () => {
     calls += 1;
     if (calls === 1) return new Promise<Record<string, string>>((resolve) => { release = resolve; });
     return { "race.exe": "new" };
@@ -288,11 +286,11 @@ await runTest("native icon subscription validates payloads and cleans up late re
 
 await runTest("anonymous activity never queries or retries executable icons", async () => {
   const key = "activity:anonymous";
-  const icons = await loadDashboardIconsForExecutables([key], {
+  const icons = await loadAppIconsForExecutables([key], {
     loadIcons: async () => { throw new Error("anonymous is not an executable"); },
   });
   assert.deepEqual(icons, {});
-  assert.deepEqual(getRetryableMissingDashboardIconExecutables([key], {}), []);
+  assert.deepEqual(getRetryableMissingAppIconExecutables([key], {}), []);
 });
 
-console.log(`Passed ${passed} dashboard icon runtime cache tests`);
+console.log(`Passed ${passed} app icon runtime cache tests`);

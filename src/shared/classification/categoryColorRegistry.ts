@@ -1,6 +1,7 @@
 import {
   isAppCategory,
   isExtendedCategory,
+  normalizeCategoryId,
   OTHER_CATEGORY_FIXED_COLOR,
   QUIET_PRO_CATEGORY_PALETTE_37,
   USER_ASSIGNABLE_CATEGORIES,
@@ -93,6 +94,7 @@ export class CategoryColorRegistry {
   }
 
   resolveActiveCategory(category: AppCategory): AppCategory {
+    category = normalizeCategoryId(category);
     if (!this.deletedCategories.has(category)) {
       return category;
     }

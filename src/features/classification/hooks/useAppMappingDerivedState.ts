@@ -7,6 +7,7 @@ import { objectColor } from "../../../shared/classification/objectColor.ts";
 import {
   isExtendedCategory,
   normalizeCategoryLabelInput,
+  normalizeCategoryId,
   USER_ASSIGNABLE_CATEGORIES,
   type AppCategory,
   type UserAssignableAppCategory,
@@ -58,6 +59,7 @@ export function cloneObservedWebDomainCandidates(
 function resolveUserAssignableCategory(
   category: AppCategory | undefined,
 ): UserAssignableAppCategory {
+  category = normalizeCategoryId(category);
   if (category && (isExtendedCategory(category) || USER_ASSIGNABLE_CATEGORY_SET.has(category))) {
     return category as UserAssignableAppCategory;
   }
