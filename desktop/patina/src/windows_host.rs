@@ -1,3 +1,5 @@
+pub(crate) mod eyedropper;
+
 use crate::{
     app_windows::AppWindows,
     window_process::{FromWindow, Query, Target, ToWindow, read_messages, writer},
@@ -22,6 +24,8 @@ pub(super) struct Client {
     clock: RefCell<Option<gpui_kit::Task<()>>>,
     pub(super) locale: Cell<Locale>,
     pub(super) theme: Cell<patina_recorder::Theme>,
+    pub(super) schemes: RefCell<[String; 2]>,
+    pub(super) scheme_preview: Cell<Option<(gpui_kit::WindowId, bool, &'static str)>>,
     activity: RefCell<Activity>,
     paused: Cell<bool>,
     serial: Cell<u64>,
@@ -132,13 +136,25 @@ impl Client {
             })
             .collect()
     }
-    pub(super) fn palette(&self, win: &gpui_kit::Window) -> quietpro::Palette {
+    pub(super) fn dark(&self, win: &gpui_kit::Window) -> bool {
         use patina_recorder::Theme;
-        quietpro::Palette::from(match self.theme.get() {
-            Theme::Light => gpui_kit::WindowAppearance::Light,
-            Theme::Dark => gpui_kit::WindowAppearance::Dark,
-            Theme::System => win.appearance(),
-        })
+        match self.theme.get() {
+            Theme::Light => false,
+            Theme::Dark => true,
+            Theme::System => matches!(
+                win.appearance(),
+                gpui_kit::WindowAppearance::Dark | gpui_kit::WindowAppearance::VibrantDark
+            ),
+        }
+    }
+    pub(super) fn palette(&self, win: &gpui_kit::Window) -> quietpro::Palette {
+        if let Some((window, dark, id)) = self.scheme_preview.get()
+            && window == win.window_handle().window_id()
+        {
+            return quietpro::Palette::for_scheme(dark, id);
+        }
+        let dark = self.dark(win);
+        quietpro::Palette::for_scheme(dark, &self.schemes.borrow()[usize::from(dark)])
     }
     pub(super) fn activity(&self) -> Activity {
         self.activity.borrow().clone()
@@ -148,6 +164,14 @@ impl Client {
     }
     pub(super) fn open(&self, target: Target) {
         let _ = self.tx.send(FromWindow::Open(target));
+    }
+    pub(super) fn main_opened(&self, window: &gpui_kit::Window) {
+        let hwnd = crate::dock::hwnd(window).ok().map(|h| h.0 as usize);
+        let _ = self.tx.send(FromWindow::MainOpened(hwnd));
+    }
+    pub(super) fn close_main(&self, window: &mut gpui_kit::Window) {
+        let _ = self.tx.send(FromWindow::MainClosed);
+        window.remove_window();
     }
     pub(super) fn request<T: DeserializeOwned>(
         &self,
@@ -187,8 +211,14 @@ impl Client {
         day: i64,
         app: Option<String>,
         titles: bool,
+        web: bool,
     ) -> impl Future<Output = Result<patina_recorder::HistoryDay, String>> + 'static {
-        self.request(Query::History { day, app, titles })
+        self.request(Query::History {
+            day,
+            app,
+            titles,
+            web,
+        })
     }
     pub(super) fn recent(&self) -> impl Future<Output = Result<Recent, String>> + 'static {
         self.request(Query::Recent)
@@ -240,13 +270,21 @@ pub fn run_if_requested() -> Option<Result<(), Box<dyn std::error::Error>>> {
         .next()
         .map(|s| patina_recorder::Theme::read(&s.to_string_lossy()))
         .unwrap_or_default();
+    let schemes = std::array::from_fn(|_| {
+        args.next()
+            .map_or_else(|| "default".into(), |s| s.to_string_lossy().into_owned())
+    });
     if args.next().is_some() {
         return Some(Err("unexpected window process argument".into()));
     }
-    Some(run(Locale::from_tag(tag.to_str()), theme))
+    Some(run(Locale::from_tag(tag.to_str()), theme, schemes))
 }
 
-fn run(locale: Locale, theme: patina_recorder::Theme) -> Result<(), Box<dyn std::error::Error>> {
+fn run(
+    locale: Locale,
+    theme: patina_recorder::Theme,
+    schemes: [String; 2],
+) -> Result<(), Box<dyn std::error::Error>> {
     crate::dock::enable_monitor_dpi()?;
     let tx = writer(io::stdout())?;
     let (inbox, messages) = async_channel::unbounded();
@@ -269,6 +307,8 @@ fn run(locale: Locale, theme: patina_recorder::Theme) -> Result<(), Box<dyn std:
                 clock: Default::default(),
                 locale: Cell::new(locale),
                 theme: Cell::new(theme),
+                schemes: RefCell::new(schemes),
+                scheme_preview: Cell::new(None),
                 activity: RefCell::new(Activity::Waiting),
                 paused: Cell::new(false),
                 serial: Cell::new(0),

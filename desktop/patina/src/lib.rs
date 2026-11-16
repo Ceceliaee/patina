@@ -6,9 +6,11 @@ mod dev_preview;
 mod dock;
 mod format;
 mod history;
+mod login;
 mod main_window;
 mod mini;
 mod page_controls;
+mod source_icon;
 mod today;
 mod tool_events;
 mod tool_notice;
@@ -21,7 +23,11 @@ pub use windows_host::run_if_requested as run_window_process_if_requested;
 
 use gpui_kit::{QuitMode, WindowingRequest};
 use patina_recorder::Recorder;
-use std::{env, fs, io, os::windows::fs::OpenOptionsExt, path::PathBuf};
+use std::{
+    env, fs, io,
+    os::windows::fs::OpenOptionsExt,
+    path::{Path, PathBuf},
+};
 use std::{
     rc::Rc,
     sync::{
@@ -32,12 +38,13 @@ use std::{
 pub use tray::Action;
 
 pub const APP_ID: &str = "Patina.GPUI.Experimental";
+static RESTART_AFTER_STORAGE: AtomicBool = AtomicBool::new(false);
 
-fn lock_profile() -> io::Result<(fs::File, PathBuf)> {
-    let parent = env::var_os("PATINA_GPUI_PROFILE_PARENT")
-        .or_else(|| env::var_os("LOCALAPPDATA"))
+fn profile_root(parent: Option<&Path>) -> io::Result<PathBuf> {
+    let parent = parent
+        .map(Path::to_owned)
+        .or_else(|| env::var_os("LOCALAPPDATA").map(PathBuf::from))
         .ok_or_else(|| io::Error::other("missing GPUI profile parent"))?;
-    let parent = PathBuf::from(parent);
     if !parent.is_absolute() || !parent.is_dir() {
         return Err(io::Error::other(
             "GPUI profile parent must be an existing absolute directory",
@@ -45,26 +52,60 @@ fn lock_profile() -> io::Result<(fs::File, PathBuf)> {
     }
     let root = parent.join(APP_ID);
     fs::create_dir_all(&root)?;
-    let lock = fs::OpenOptions::new()
+    root.canonicalize()
+}
+
+fn lock_profile(root: &Path) -> io::Result<fs::File> {
+    fs::OpenOptions::new()
         .create(true)
         .truncate(false)
         .write(true)
         .share_mode(0)
-        .open(root.join("instance.lock"))?;
-    Ok((lock, root))
+        .open(root.join("instance.lock"))
 }
 
 pub fn run(
     send: async_channel::Sender<Action>,
     actions: async_channel::Receiver<Action>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (_profile_lock, root) = lock_profile()?;
+    launch(send, actions, None, false, false)
+}
+
+pub fn launch(
+    send: async_channel::Sender<Action>,
+    actions: async_channel::Receiver<Action>,
+    parent: Option<PathBuf>,
+    forward: bool,
+    autostart: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use sha2::{Digest, Sha256};
+    use std::os::windows::ffi::OsStrExt;
+    let parent = parent.or_else(|| env::var_os("PATINA_GPUI_PROFILE_PARENT").map(PathBuf::from));
+    let root = profile_root(parent.as_deref())?;
+    // The login entry must retain its identity after a toolchain or binary upgrade.
+    let path_bytes: Vec<_> = root
+        .as_os_str()
+        .to_ascii_lowercase()
+        .encode_wide()
+        .flat_map(u16::to_le_bytes)
+        .collect();
+    let profile_id = format!("{APP_ID}.{:x}", Sha256::digest(path_bytes));
+    let _profile_lock = match lock_profile(&root) {
+        Err(e) if forward && e.raw_os_error() == Some(32) => {
+            if !autostart {
+                tray::reopen(&profile_id, &actions)?;
+            }
+            return Ok(());
+        }
+        result => result?,
+    };
     #[cfg(debug_assertions)]
     dev_preview::exit_with_launcher(&send)?;
     dock::enable_monitor_dpi()?;
     let windows_open = Arc::new(AtomicBool::new(false));
     let usage_active = Arc::new(AtomicBool::new(false));
-    let recorder = Rc::new(Recorder::start(&root.join("patina.db"), {
+    let database = patina_recorder::database_for_profile(&root)?;
+    let recorder = Rc::new(Recorder::start_in_profile(&database, &root, {
         let send = send.clone();
         let windows_open = windows_open.clone();
         let usage_active = usage_active.clone();
@@ -80,7 +121,16 @@ pub fn run(
     let application = gpui_kit::application()
         .with_windowing(WindowingRequest::Headless)
         .with_quit_mode(QuitMode::Explicit);
-    let _tray = tray::Tray::new(send.clone(), recorder.clone())?;
+    let behavior = recorder.initial_desktop;
+    let silent = actions.is_empty() && behavior.start_minimized;
+    if actions.is_empty() && !silent {
+        send.try_send(Action::Today)?;
+    }
+    let tray = tray::Tray::new(send.clone(), recorder.clone(), &profile_id, silent)?;
+    let login = login::LoginEntry::new(&profile_id, parent.as_deref())?;
+    if let Err(e) = login.apply(behavior.launch_at_login) {
+        eprintln!("restore login entry: {e}");
+    }
     let shutdown = recorder.clone();
     let (tools, worker) = tool_service::ToolService::start(
         root.join("tools"),
@@ -89,12 +139,41 @@ pub fn run(
         send,
         usage_active,
     )?;
+    let updater = make_updater(&root).map_err(io::Error::other)?;
+    let update_shutdown = updater.clone();
     application.run(move |cx| {
-        window_process::serve(cx, actions, recorder, windows_open, tools);
+        window_process::serve(
+            cx,
+            actions,
+            recorder,
+            windows_open,
+            window_process::Services {
+                tools,
+                tray,
+                login,
+                updater,
+            },
+        );
     });
     let tools_stopped = worker.stop();
     shutdown.shutdown()?;
     tools_stopped?;
+    update_shutdown
+        .complete_shutdown()
+        .map_err(io::Error::other)?;
+    if RESTART_AFTER_STORAGE.swap(false, Ordering::AcqRel) {
+        drop(_profile_lock);
+        #[cfg(debug_assertions)]
+        if env::var_os("PATINA_GPUI_DEV_SESSION").is_some() {
+            std::process::exit(75);
+        }
+        let mut command = std::process::Command::new(env::current_exe()?);
+        command.arg("--today");
+        if let Some(dir) = parent {
+            command.arg("--profile-parent").arg(dir);
+        }
+        command.spawn()?;
+    }
     Ok(())
 }
 
@@ -103,3 +182,17 @@ mod classification;
 mod settings;
 
 mod about;
+
+fn make_updater(root: &Path) -> Result<patina_updater::Service, String> {
+    #[cfg(debug_assertions)]
+    if let Some(fixture) = env::var_os("PATINA_GPUI_UPDATE_FIXTURE") {
+        if env::var_os("PATINA_GPUI_PROFILE_PARENT").is_none() {
+            return Err("Updater fixtures require an isolated profile".into());
+        }
+        return patina_updater::fixture::service(
+            root.join("updates"),
+            Path::new(&fixture),
+        );
+    }
+    patina_updater::Service::bundled(env!("CARGO_PKG_VERSION"), root.join("updates"))
+}

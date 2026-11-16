@@ -1,6 +1,6 @@
 use async_channel::Sender;
 use patina_recorder::Recorder;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use windows::Win32::System::RemoteDesktop::{
     NOTIFY_FOR_THIS_SESSION, WTSRegisterSessionNotification, WTSUnRegisterSessionNotification,
@@ -32,7 +32,36 @@ const TODAY: usize = 4;
 const OPEN: usize = 1;
 const EXIT: usize = 2;
 const TOGGLE: usize = 3;
-const CLASS: windows::core::PCWSTR = w!("Patina.GPUI.Tray");
+pub(super) fn reopen(profile_id: &str, actions: &async_channel::Receiver<Action>) -> Result<()> {
+    let class = windows::core::HSTRING::from(profile_id);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(4);
+    let hwnd = loop {
+        match unsafe { FindWindowW(&class, w!("Patina GPUI")) } {
+            Ok(hwnd) => break hwnd,
+            Err(_) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(40))
+            }
+            Err(error) => return Err(error),
+        }
+    };
+    unsafe {
+        let mut pid = 0;
+        GetWindowThreadProcessId(hwnd, Some(&mut pid));
+        let _ = AllowSetForegroundWindow(pid);
+        let mut action = actions.try_recv().unwrap_or(Action::Today);
+        loop {
+            let id = if matches!(action, Action::Mini { .. }) {
+                OPEN
+            } else {
+                TODAY
+            };
+            PostMessageW(Some(hwnd), WM_COMMAND, WPARAM(id), LPARAM(0))?;
+            let Ok(next) = actions.try_recv() else { break };
+            action = next;
+        }
+    }
+    Ok(())
+}
 
 // Windows dispatches this class on GPUI's UI thread, including while the
 // native menu is tracking. Never hold a RefCell borrow across menu dispatch.
@@ -46,9 +75,14 @@ struct Dispatch {
     icon: HICON,
     restart: u32,
     recorder: Rc<Recorder>,
+    visible: Rc<Cell<bool>>,
 }
 
 pub struct Tray {
+    class: windows::core::HSTRING,
+    visible: Rc<Cell<bool>>,
+    pub(super) behavior: Cell<patina_recorder::DesktopBehaviorSettings>,
+    silent_start: Cell<bool>,
     hwnd: HWND,
     icon: HICON,
     instance: HINSTANCE,
@@ -75,17 +109,27 @@ fn register_icon(hwnd: HWND, icon: HICON) -> Result<()> {
     unsafe {
         Shell_NotifyIconW(NIM_ADD, &d).ok()?;
         d.Anonymous.uVersion = NOTIFYICON_VERSION_4;
-        Shell_NotifyIconW(NIM_SETVERSION, &d).ok()
+        if let Err(error) = Shell_NotifyIconW(NIM_SETVERSION, &d).ok() {
+            let _ = Shell_NotifyIconW(NIM_DELETE, &d);
+            return Err(error);
+        }
+        Ok(())
     }
 }
 
 impl Tray {
-    pub fn new(sender: Sender<Action>, recorder: Rc<Recorder>) -> Result<Self> {
+    pub fn new(
+        sender: Sender<Action>,
+        recorder: Rc<Recorder>,
+        profile_id: &str,
+        silent: bool,
+    ) -> Result<Self> {
         unsafe {
+            let name = windows::core::HSTRING::from(profile_id);
             let instance: HINSTANCE = GetModuleHandleW(None)?.into();
             let class = WNDCLASSW {
                 hInstance: instance,
-                lpszClassName: CLASS,
+                lpszClassName: windows::core::PCWSTR(name.as_ptr()),
                 lpfnWndProc: Some(dispatch),
                 ..Default::default()
             };
@@ -94,7 +138,7 @@ impl Tray {
             }
             let hwnd = match CreateWindowExW(
                 WS_EX_TOOLWINDOW,
-                CLASS,
+                &name,
                 w!("Patina GPUI"),
                 WS_POPUP,
                 0,
@@ -108,7 +152,7 @@ impl Tray {
             ) {
                 Ok(hwnd) => hwnd,
                 Err(e) => {
-                    let _ = UnregisterClassW(CLASS, Some(instance));
+                    let _ = UnregisterClassW(&name, Some(instance));
                     return Err(e);
                 }
             };
@@ -123,11 +167,15 @@ impl Tray {
                 Ok(icon) => icon,
                 Err(e) => {
                     let _ = DestroyWindow(hwnd);
-                    let _ = UnregisterClassW(CLASS, Some(instance));
+                    let _ = UnregisterClassW(&name, Some(instance));
                     return Err(e);
                 }
             };
             let tray = Self {
+                class: name,
+                visible: Rc::new(Cell::new(false)),
+                behavior: Cell::new(recorder.initial_desktop),
+                silent_start: Cell::new(silent),
                 hwnd,
                 icon,
                 instance,
@@ -136,7 +184,7 @@ impl Tray {
             if restart == 0 {
                 return Err(Error::from_thread());
             }
-            register_icon(hwnd, icon)?;
+            tray.apply_visibility(recorder.initial_desktop)?;
             WTSRegisterSessionNotification(hwnd, NOTIFY_FOR_THIS_SESSION)?;
             STATE.with(|state| {
                 *state.borrow_mut() = Some(Dispatch {
@@ -144,10 +192,33 @@ impl Tray {
                     icon,
                     restart,
                     recorder,
+                    visible: tray.visible.clone(),
                 })
             });
             Ok(tray)
         }
+    }
+
+    pub(super) fn main_opened(&self) -> Result<()> {
+        self.silent_start.set(false);
+        self.apply_visibility(self.behavior.get())
+    }
+
+    pub(super) fn apply_visibility(
+        &self,
+        behavior: patina_recorder::DesktopBehaviorSettings,
+    ) -> Result<()> {
+        let visible = behavior.should_keep_tray_visible()
+            || (self.silent_start.get() && behavior.show_tray_icon);
+        if visible != self.visible.get() {
+            if visible {
+                register_icon(self.hwnd, self.icon)?;
+            } else {
+                unsafe { Shell_NotifyIconW(NIM_DELETE, &data(self.hwnd, self.icon)).ok()? };
+            }
+            self.visible.set(visible);
+        }
+        Ok(())
     }
 }
 
@@ -159,7 +230,7 @@ impl Drop for Tray {
             let _ = Shell_NotifyIconW(NIM_DELETE, &data(self.hwnd, self.icon));
             let _ = DestroyWindow(self.hwnd);
             let _ = DestroyIcon(self.icon);
-            let _ = UnregisterClassW(CLASS, Some(self.instance));
+            let _ = UnregisterClassW(&self.class, Some(self.instance));
         }
     }
 }
@@ -209,6 +280,7 @@ unsafe extern "system" fn dispatch(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -
         icon,
         restart,
         recorder,
+        visible,
     }) = STATE.with(|s| s.borrow().clone())
     {
         let power = match (msg, w.0 as u32) {
@@ -229,7 +301,9 @@ unsafe extern "system" fn dispatch(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -
             let _ = tx.try_send(Action::WakeTools);
         }
         if msg == restart {
-            if let Err(e) = register_icon(hwnd, icon) {
+            if visible.get()
+                && let Err(e) = register_icon(hwnd, icon)
+            {
                 eprintln!("tray restore: {e}");
                 let _ = tx.try_send(Action::Exit);
             }

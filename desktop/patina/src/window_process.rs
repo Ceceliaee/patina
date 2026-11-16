@@ -32,11 +32,18 @@ pub(super) enum Target {
 
 #[derive(Serialize, Deserialize)]
 pub(super) enum Query {
+    Update(patina_updater::Request),
+    InstallUpdate,
+    Storage(patina_recorder::StorageRequest),
     Tools(crate::tool_service::ToolRequest),
     HistoryMinimum(bool, i64),
     Rules,
+    ClassificationMode(bool),
+    DeleteApplication(String, Option<patina_recorder::DeletionImpact>),
+    DeleteWebsite(String, Option<patina_recorder::DeletionImpact>),
     SaveRules(
         Vec<patina_recorder::AppRule>,
+        Vec<patina_recorder::WebRule>,
         Vec<patina_recorder::CategoryEdit>,
     ),
     Preferences,
@@ -49,6 +56,7 @@ pub(super) enum Query {
         day: i64,
         app: Option<String>,
         titles: bool,
+        web: bool,
     },
     Today,
     Recent,
@@ -79,6 +87,8 @@ pub(super) enum ToWindow {
 #[derive(Serialize, Deserialize)]
 pub(super) enum FromWindow {
     Open(Target),
+    MainOpened(Option<usize>),
+    MainClosed,
     Idle(u64),
     Query(u64, Box<Query>),
 }
@@ -129,6 +139,7 @@ pub(super) fn writer<T: Serialize + Send + 'static>(
 }
 
 struct WindowProcess {
+    main_hwnd: Option<usize>,
     child: Child,
     _job: OwnedHandle,
     generation: u64,
@@ -149,6 +160,7 @@ impl WindowProcess {
                 recorder.locale.get().tag(),
                 recorder.theme.get().tag(),
             ])
+            .args(recorder.schemes.borrow().iter())
             .creation_flags(0x08000000)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -187,6 +199,7 @@ impl WindowProcess {
                 _job: job,
                 generation,
                 serial: 0,
+                main_hwnd: None,
                 tx,
             }),
             Err(e) => {
@@ -243,20 +256,43 @@ async fn answer(
     query: Query,
 ) -> Result<Value, String> {
     let encoded = match query {
+        Query::Storage(request) => return recorder.storage(request).await,
         Query::Tools(request) => return tools.request(request, recorder.locale.get().tag()).await,
         Query::HistoryMinimum(d, v) => {
             serde_json::to_value(recorder.set_history_minimum(d, v).await?)
         }
         Query::Rules => serde_json::to_value(recorder.rules().await?),
-        Query::SaveRules(r, c) => serde_json::to_value(recorder.save_rules(r, c).await?),
+        Query::ClassificationMode(web) => {
+            serde_json::to_value(recorder.remember_classification_mode(web).await?)
+        }
+        Query::DeleteApplication(exe, confirmed) => {
+            let apply = confirmed.is_some();
+            let impact = recorder.delete_application(exe, confirmed).await?;
+            if apply {
+                tools.wake();
+            }
+            serde_json::to_value(impact)
+        }
+        Query::SaveRules(r, w, c) => serde_json::to_value(recorder.save_rules(r, w, c).await?),
+        Query::DeleteWebsite(identity, confirmed) => {
+            let apply = confirmed.is_some();
+            let impact = recorder.delete_website(identity, confirmed).await?;
+            if apply {
+                tools.wake();
+            }
+            serde_json::to_value(impact)
+        }
         Query::Preferences => serde_json::to_value(recorder.preferences().await?),
-        Query::SavePreferences(old, p) => {
-            serde_json::to_value(recorder.save_preferences(old, p).await?)
+        Query::SavePreferences(..) | Query::Update(_) | Query::InstallUpdate => {
+            unreachable!("host operations are serialized")
         }
         Query::Trends(r, k) => serde_json::to_value(recorder.trends(r, k).await?),
-        Query::History { day, app, titles } => {
-            serde_json::to_value(recorder.history(day, app, titles).await?)
-        }
+        Query::History {
+            day,
+            app,
+            titles,
+            web,
+        } => serde_json::to_value(recorder.history_source(day, app, titles, web).await?),
         Query::Today => serde_json::to_value(recorder.today().await?),
         Query::Recent => serde_json::to_value(recorder.recent().await?),
         Query::Icons(keys) => serde_json::to_value(
@@ -273,14 +309,72 @@ async fn answer(
     encoded.map_err(|e| e.to_string())
 }
 
+async fn save_preferences(
+    recorder: &Recorder,
+    tray: &crate::tray::Tray,
+    login: &crate::login::LoginEntry,
+    old: patina_recorder::TrackingPreferences,
+    next: patina_recorder::TrackingPreferences,
+) -> Result<Value, String> {
+    let current = tray.behavior.get();
+    if old.desktop != current && old.desktop != next.desktop {
+        return Err("resident settings changed since loading".into());
+    }
+    let desired = if old.desktop == next.desktop {
+        current
+    } else {
+        next.desktop
+    };
+    let login_changed = desired.launch_at_login != current.launch_at_login;
+    if login_changed {
+        login
+            .apply(desired.launch_at_login)
+            .map_err(|e| e.to_string())?;
+    }
+    let result = async {
+        tray.apply_visibility(desired).map_err(|e| e.to_string())?;
+        recorder.save_preferences(old, next).await
+    }
+    .await;
+    if let Err(error) = result {
+        let icon = tray.apply_visibility(current);
+        let registration = if login_changed {
+            login.apply(current.launch_at_login)
+        } else {
+            Ok(())
+        };
+        if icon.is_err() || registration.is_err() {
+            return Err(format!(
+                "{error}; restore tray: {icon:?}, restore login: {registration:?}"
+            ));
+        }
+        return Err(error);
+    }
+    tray.behavior.set(desired);
+    Ok(Value::Null)
+}
+
+pub(super) struct Services {
+    pub tools: crate::tool_service::ToolService,
+    pub tray: crate::tray::Tray,
+    pub login: crate::login::LoginEntry,
+    pub updater: patina_updater::Service,
+}
+
 /// The last-window notification only retires the process if it has handled the latest open request.
 pub(super) fn serve(
     cx: &mut gpui_kit::App,
     actions: async_channel::Receiver<Action>,
     recorder: Rc<Recorder>,
     windows_open: Arc<AtomicBool>,
-    tools: crate::tool_service::ToolService,
+    services: Services,
 ) {
+    let Services {
+        tools,
+        tray,
+        login,
+        updater,
+    } = services;
     let (events, inbox) = async_channel::unbounded();
     let tray_events = events.clone();
     cx.spawn(async move |_| {
@@ -325,9 +419,23 @@ pub(super) fn serve(
                     None
                 }
                 Event::Message(id, msg) if worker.as_ref().is_some_and(|w| w.generation == id) => {
-                    let current = worker.as_ref().unwrap();
+                    let current = worker.as_mut().unwrap();
                     match msg {
                         FromWindow::Open(target) => Some(target),
+                        FromWindow::MainOpened(hwnd) => {
+                            current.main_hwnd = hwnd;
+                            if let Err(e) = tray.main_opened() {
+                                eprintln!("apply tray visibility: {e}");
+                            }
+                            None
+                        }
+                        FromWindow::MainClosed => {
+                            current.main_hwnd = None;
+                            if !tray.behavior.get().should_keep_running_in_background() {
+                                break;
+                            }
+                            None
+                        }
                         FromWindow::Idle(serial) => {
                             if serial == current.serial {
                                 windows_open.store(false, Ordering::Release);
@@ -337,6 +445,86 @@ pub(super) fn serve(
                         }
                         FromWindow::Query(request, query) => {
                             let tx = current.tx.clone();
+                            if let Query::Update(command) = query.as_ref() {
+                                let result = updater.request(*command).and_then(|s| {
+                                    serde_json::to_value(s).map_err(|e| e.to_string())
+                                });
+                                let _ = tx.send(ToWindow::Answer(request, result));
+                                continue;
+                            }
+                            if matches!(query.as_ref(), Query::InstallUpdate) {
+                                let result = if current.main_hwnd.is_none() {
+                                    Err("Open the main window to install an update".into())
+                                } else {
+                                    let updater = updater.clone();
+                                    cx.background_executor()
+                                        .spawn(async move {
+                                            let executable = std::env::current_exe()
+                                                .map_err(|e| e.to_string())?;
+                                            updater.begin_install(&executable)
+                                        })
+                                        .await
+                                };
+                                let installed = result.is_ok();
+                                let _ =
+                                    tx.send(ToWindow::Answer(request, result.map(|_| Value::Null)));
+                                if installed {
+                                    break;
+                                }
+                                continue;
+                            }
+                            if let Query::Storage(patina_recorder::StorageRequest::DavReveal(
+                                hwnd,
+                            )) = query.as_ref()
+                            {
+                                use windows::Win32::{
+                                    Foundation::HWND,
+                                    UI::WindowsAndMessaging::{
+                                        GetForegroundWindow, GetWindowThreadProcessId,
+                                    },
+                                };
+                                let handle = HWND(*hwnd as _);
+                                let mut pid = 0;
+                                let foreground = unsafe {
+                                    GetWindowThreadProcessId(handle, Some(&mut pid));
+                                    GetForegroundWindow()
+                                };
+                                if current.main_hwnd != Some(*hwnd)
+                                    || pid != current.child.id()
+                                    || foreground != handle
+                                {
+                                    let _ = tx.send(ToWindow::Answer(
+                                        request,
+                                        Err(
+                                            "Open the main Settings window to reveal this password"
+                                                .into(),
+                                        ),
+                                    ));
+                                    continue;
+                                }
+                            }
+                            if matches!(
+                                query.as_ref(),
+                                Query::Storage(
+                                    patina_recorder::StorageRequest::Move(_)
+                                        | patina_recorder::StorageRequest::Restore { .. }
+                                )
+                            ) {
+                                let result = answer(&recorder, &tools, *query).await;
+                                let restart = result.is_ok();
+                                let _ = tx.send(ToWindow::Answer(request, result));
+                                if restart {
+                                    crate::RESTART_AFTER_STORAGE.store(true, Ordering::Release);
+                                    break;
+                                }
+                                continue;
+                            }
+                            if let Query::SavePreferences(old, next) = *query {
+                                let result =
+                                    save_preferences(&recorder, &tray, &login, old, next).await;
+                                let _ = tx.send(ToWindow::Answer(request, result));
+                                continue;
+                            }
                             let recorder = recorder.clone();
                             let tools = tools.clone();
                             cx.spawn(async move |_| {

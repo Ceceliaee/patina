@@ -8,7 +8,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::process::exit(code);
     }
     let (send, actions) = async_channel::unbounded();
-    for arg in std::env::args_os().skip(1) {
+    let mut args = std::env::args_os().skip(1);
+    let mut parent = None;
+    let mut autostart = false;
+    while let Some(arg) = args.next() {
+        if arg == "--autostart" {
+            autostart = true;
+            continue;
+        }
+        if arg == "--profile-parent" {
+            parent = Some(args.next().ok_or("missing profile parent")?.into());
+            continue;
+        }
         let action = if arg == "--today" {
             patina_gpui::Action::Today
         } else if arg == "--mini" {
@@ -18,5 +29,5 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
         send.try_send(action)?;
     }
-    patina_gpui::run(send, actions)
+    patina_gpui::launch(send, actions, parent, true, autostart)
 }

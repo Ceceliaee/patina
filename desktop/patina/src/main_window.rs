@@ -1,5 +1,3 @@
-mod sidebar;
-
 use crate::{history::History, today::Today};
 
 use gpui_kit::{prelude::*, *};
@@ -7,17 +5,10 @@ use patina_recorder::text;
 use quietpro::{Icon, IconControl};
 use std::rc::Rc;
 
-const SIDEBAR_WIDTH: f32 = 96.;
-const CONTENT_PADDING: f32 = 24.;
-const FRAME_RADIUS: f32 = 16.;
-
-fn outer_frame(colors: quietpro::Palette) -> Div {
-    crate::page_controls::continuous_frame(px(FRAME_RADIUS), colors.border, colors.canvas)
-        .flex_col()
-}
+use quietpro::{SHELL_PADDING, SIDEBAR_WIDTH, outer_frame};
 
 pub(super) fn page_width(viewport_width: Pixels) -> Pixels {
-    viewport_width - px(2. * CONTENT_PADDING + SIDEBAR_WIDTH + crate::page_controls::CARD_GAP)
+    viewport_width - px(2. * SHELL_PADDING + SIDEBAR_WIDTH + quietpro::CARD_GAP)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -108,7 +99,7 @@ impl MainWindow {
             return;
         }
         let dirty = match &self.page {
-            Page::Classification(v) => v.read(cx).dirty(),
+            Page::Classification(v) => v.read(cx).dirty(cx),
             Page::Settings(v) => v.read(cx).dirty(),
             _ => false,
         };
@@ -190,17 +181,25 @@ impl MainWindow {
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
                 None,
-                size(px(1100.), px(736.)),
+                size(px(1080.), px(720.)),
                 cx,
             ))),
-            window_min_size: Some(size(px(900.), px(636.))),
+            window_min_size: Some(size(px(810.), px(540.))),
             titlebar: None,
             app_id: Some(crate::APP_ID.into()),
             ..Default::default()
         };
         let (handle, view) = gpui_kit::open_window(options, cx, |window, cx| {
             window.set_window_title("Patina");
-            crate::app_windows::handle_close(window, cx);
+            window
+                .observe_window_appearance(|_, cx| cx.refresh_windows())
+                .detach();
+            let close = client.clone();
+            window.on_window_should_close(cx, move |window, _| {
+                close.close_main(window);
+                false
+            });
+            client.main_opened(window);
             let today = cx.new(|cx| Today::new(window, client.clone(), cx));
             let view = cx.new(|_| Self {
                 page: Page::Today(today),
@@ -252,31 +251,37 @@ impl Render for MainWindow {
             )
             .children(self.client.shortcut_buttons(false))
             .child(
-                IconControl::new("mini", label("miniWindow.open"), Icon::AppWindow).action(
-                    colors,
-                    move |_, _, _| {
-                        client.open(crate::window_process::Target::Mini { focus: true });
-                    },
-                ),
-            )
-            .child(
-                IconControl::new(
-                    "minimize",
-                    label("accessibility.titleBar.minimize"),
-                    Icon::Minus,
-                )
-                .action(colors, |_, win, _| win.minimize_window()),
-            )
-            .child(
-                IconControl::new("zoom", label(zoom.0), zoom.1)
-                    .action(colors, |_, win, _| win.zoom_window()),
-            )
-            .child(
-                IconControl::new("close", label("accessibility.titleBar.close"), Icon::X)
-                    .action(colors, |_, win, _| win.remove_window()),
+                quietpro::icon_actions()
+                    .child(
+                        IconControl::new("mini", label("miniWindow.open"), Icon::AppWindow).action(
+                            colors,
+                            move |_, _, _| {
+                                client.open(crate::window_process::Target::Mini { focus: true });
+                            },
+                        ),
+                    )
+                    .child(
+                        IconControl::new(
+                            "minimize",
+                            label("accessibility.titleBar.minimize"),
+                            Icon::Minus,
+                        )
+                        .action(colors, |_, win, _| win.minimize_window()),
+                    )
+                    .child(
+                        IconControl::new("zoom", label(zoom.0), zoom.1)
+                            .action(colors, |_, win, _| win.zoom_window()),
+                    )
+                    .child(
+                        IconControl::new("close", label("accessibility.titleBar.close"), Icon::X)
+                            .action(colors, {
+                                let client = self.client.clone();
+                                move |_, win, _| client.close_main(win)
+                            }),
+                    ),
             );
         let labels = self.labels;
-        let rail = div()
+        let rail = quietpro::navigation_rail()
             .on_key_down(|event, window, cx| {
                 let key = &event.keystroke;
                 if key.key == "tab"
@@ -292,20 +297,13 @@ impl Render for MainWindow {
                     cx.stop_propagation();
                 }
             })
-            .flex_1()
-            .flex()
-            .flex_col()
-            .items_center()
-            .gap(px(8.))
-            .px(px(8.))
-            .py(px(24.))
             .child(
                 div()
-                    .h(px(54.))
+                    .h(px(56.))
                     .flex()
                     .items_start()
                     .justify_center()
-                    .pt(px(6.))
+                    .pt(px(8.))
                     .child(crate::page_controls::logo().size(px(28.))),
             )
             .children(
@@ -319,7 +317,7 @@ impl Render for MainWindow {
                     (Section::About, "about.title", Icon::Info),
                 ]
                 .map(|(section, k, icon)| {
-                    sidebar::navigation_item(
+                    quietpro::navigation_item(
                         k,
                         label(k),
                         icon,
@@ -357,13 +355,7 @@ impl Render for MainWindow {
             .text_size(px(14.))
             .child(titlebar)
             .child(
-                div()
-                    .flex_1()
-                    .min_h_0()
-                    .flex()
-                    .gap(px(crate::page_controls::CARD_GAP))
-                    .p(px(CONTENT_PADDING))
-                    .pt(px(16.))
+                quietpro::shell_content()
                     .child(
                         outer_frame(colors)
                             .w(px(SIDEBAR_WIDTH))
@@ -382,40 +374,35 @@ impl Render for MainWindow {
             );
         if let Some((_, focus)) = &self.pending {
             let weak = cx.weak_entity();
-            use crate::page_controls::{action, heading, panel};
-            let content = panel(colors)
-                .w(px(410.))
-                .gap(px(12.))
+            use quietpro::heading;
+            let actions = quietpro::dialog_actions()
+                .child(
+                    quietpro::text_button("keep-editing", label("common.cancel"), colors, true)
+                        .on_click(cx.listener(|t, _, _, cx| {
+                            t.pending = None;
+                            t.tool_target = None;
+                            cx.notify();
+                        })),
+                )
+                .child(
+                    quietpro::text_button("save-before-switch", label("common.save"), colors, true)
+                        .on_click(cx.listener(|t, _, _, cx| match &t.page {
+                            Page::Settings(v) => v.update(cx, |v, cx| v.save(cx)),
+                            Page::Classification(v) => v.update(cx, |v, cx| v.save(cx)),
+                            _ => (),
+                        })),
+                );
+            let content = quietpro::dialog_surface(colors, window.viewport_size())
+                .max_w((window.viewport_size().width - px(48.)).min(px(480.)))
                 .child(heading(label("app.unsavedConfirmTitle")))
                 .child(label("app.unsavedConfirmBody"))
-                .child(action(
-                    "keep-editing",
-                    label("common.cancel"),
-                    label("common.cancel"),
-                    true,
-                    cx.listener(|t, _, _, cx| {
-                        t.pending = None;
-                        t.tool_target = None;
-                        cx.notify();
-                    }),
-                ))
-                .child(action(
-                    "save-before-switch",
-                    label("common.save"),
-                    label("common.save"),
-                    true,
-                    cx.listener(|t, _, _, cx| match &t.page {
-                        Page::Settings(v) => v.update(cx, |v, cx| v.save(cx)),
-                        Page::Classification(v) => v.update(cx, |v, cx| v.save(cx)),
-                        _ => (),
-                    }),
-                ));
+                .child(actions);
             return shell.child(
                 gpui_kit::base::Dialog::new(cx)
                     .focus_handle(focus.clone())
                     .accessibility_label(label("app.unsavedConfirmTitle"))
                     .on_ok(|_, _, _| false)
-                    .backdrop(div().size_full().bg(rgba(0x00000055)))
+                    .backdrop(quietpro::dialog_backdrop())
                     .popup(gpui_kit::base::DialogPopup::new().child(content))
                     .on_open_change(move |open, _, _, cx| {
                         if !open {

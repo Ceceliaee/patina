@@ -32,7 +32,7 @@ pub fn enable_monitor_dpi() -> windows::core::Result<()> {
     Ok(())
 }
 
-fn hwnd(window: &Window) -> Result<HWND, String> {
+pub(super) fn hwnd(window: &Window) -> Result<HWND, String> {
     let raw = HasWindowHandle::window_handle(window).map_err(|e| e.to_string())?;
     let RawWindowHandle::Win32(raw) = raw.as_raw() else {
         return Err("expected a Windows window".into());

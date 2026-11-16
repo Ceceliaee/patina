@@ -241,17 +241,15 @@ impl Mini {
 
     fn header(&self, colors: Palette, cx: &Context<Self>) -> Div {
         let view = cx.weak_entity();
-        let pin = IconControl::new("pin", self.text("miniWindow.hold"), Icon::Pin).toggle(
-            colors,
-            self.pinned,
-            move |held, _, window, cx| {
+        let pin = IconControl::new("pin", self.text("miniWindow.hold"), Icon::Pin)
+            .selected_icon(quietpro::FILLED_PIN_ICON)
+            .toggle(colors, self.pinned, move |held, _, window, cx| {
                 let _ = view.update(cx, |mini, cx| {
                     mini.pinned = held;
                     mini.sync_pointer(window, cx);
                     cx.notify();
                 });
-            },
-        );
+            });
         let client = self.client.clone();
         let main = IconControl::new(
             "open-main",
@@ -276,10 +274,7 @@ impl Mini {
             .border_color(colors.border)
             .child(quietpro::glyph(Icon::AppWindow, self.tone.color(colors)))
             .child(
-                div()
-                    .flex_none()
-                    .flex()
-                    .gap(px(4.))
+                quietpro::icon_actions()
                     .children(self.client.shortcut_buttons(true))
                     .child(pin)
                     .child(main)
@@ -325,7 +320,7 @@ impl Mini {
             .flex()
             .items_center()
             .justify_center()
-            .focus_visible(move |s| s.border_1().border_color(colors.accent))
+            .focus_visible(move |s| s.border_1().border_color(colors.secondary))
             .child(Self::mark(self.tone.color(colors)))
             .on_click(cx.listener(|this, _, _, cx| this.expand(true, cx)))
     }
