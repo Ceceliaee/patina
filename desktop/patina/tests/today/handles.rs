@@ -197,12 +197,13 @@ fn profile(fixture: &Path, out: &Path, uia: bool) -> Result<(), Error> {
 }
 
 #[test]
-#[ignore = "paired Windows desktop handle diagnostics"]
+#[ignore = "dedicated Windows session: paired handle baseline"]
 fn window_handles() -> Result<(), Error> {
+    patina_test_desktop::dedicated_session()?;
     let out = run_path("handles")?;
     fs::create_dir(&out)?;
     let db = out.join("fixture.db");
-    seed(&db)?;
+    super::seed_profile(&db, true)?;
     println!("{} fixture {}", out.display(), hash(&db)?);
     for (uia, name) in [(false, "native.json"), (true, "uia.json")] {
         profile(&db, &out.join(name), uia)?;
@@ -211,8 +212,11 @@ fn window_handles() -> Result<(), Error> {
 }
 
 #[test]
-#[ignore = "requires an interactive Windows desktop"]
+#[ignore = "isolated Win32 desktop"]
 fn renderer_recovery() -> Result<(), Error> {
+    if !patina_test_desktop::run_case()? {
+        return Ok(());
+    }
     use windows::Win32::UI::Shell::{NIN_SELECT, NINF_KEY};
     let _com = ComApartment::init()?;
     let root = tempfile::tempdir()?;
@@ -285,8 +289,11 @@ fn renderer_recovery() -> Result<(), Error> {
 }
 
 #[test]
-#[ignore = "requires an interactive Windows desktop"]
+#[ignore = "isolated Win32 desktop"]
 fn mini_window_handles() -> Result<(), Error> {
+    if !patina_test_desktop::run_case()? {
+        return Ok(());
+    }
     use windows::Win32::{
         System::ProcessStatus::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS_EX},
         UI::Accessibility::{

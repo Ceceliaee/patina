@@ -7,7 +7,7 @@ mod handles;
 mod support;
 use support::*;
 
-use chrono::{Local, TimeZone, Utc};
+use chrono::Utc;
 use desktop::{ComApartment, Error, TestChild, controls, wait, window};
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
 use std::{fs, path::Path, process::Command};
@@ -18,60 +18,6 @@ use windows::{
     },
     core::w,
 };
-
-#[test]
-fn totals_and_classification() -> Result<(), Error> {
-    let root = tempfile::tempdir()?;
-    let db = root.path().join("patina.db");
-    seed(&db)?;
-    let recorder = patina_recorder::Recorder::start(&db, || {})?;
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?;
-    let noon = Local::now()
-        .date_naive()
-        .and_hms_opt(12, 0, 0)
-        .unwrap()
-        .and_local_timezone(Local)
-        .earliest()
-        .unwrap()
-        .timestamp_millis();
-    let read = || async {
-        let pool = sqlx::SqlitePool::connect_with(SqliteConnectOptions::new().filename(&db))
-            .await
-            .map_err(|e| e.to_string())?;
-        patina_recorder::DaySummary::load(pool, noon, recorder.locale.get()).await
-    };
-    let data = rt.block_on(read())?;
-    let minute = 60_000;
-    assert_eq!(data.total, 70 * minute);
-    assert_eq!(data.yesterday, 30 * minute);
-    assert_eq!(
-        data.apps
-            .iter()
-            .map(|a| a.duration / minute)
-            .collect::<Vec<_>>(),
-        [45, 20, 5]
-    );
-    assert_eq!(data.apps[1].hours[..2], [15 * minute, 5 * minute]);
-    assert!(data.apps[2].anonymous);
-    rt.block_on(recorder.edit_app(
-        "studio.exe".into(),
-        patina_recorder::AppEdit::Category("office".into()),
-    ))?;
-    assert!(
-        rt.block_on(recorder.edit_app(
-            "activity:anonymous".into(),
-            patina_recorder::AppEdit::Category("office".into())
-        ))
-        .is_err()
-    );
-    let data = rt.block_on(read())?;
-    assert_eq!(data.categories[0].duration, 65 * minute);
-    assert_eq!(data.apps[0].name, "Studio");
-    recorder.shutdown()?;
-    Ok(())
-}
 
 fn hourly_keyboard(hwnd: HWND, toggle: &IUIAutomationElement, grouped: bool) -> Result<(), Error> {
     let tooltip = || -> Option<String> {
@@ -160,28 +106,144 @@ fn context_menu(hwnd: HWND, trigger: &IUIAutomationElement) -> Result<(), Error>
     Ok(())
 }
 
-fn app_actions(hwnd: HWND) -> Result<(), Error> {
+fn app_actions(hwnd: HWND, db: &Path) -> Result<(), Error> {
     let trigger = named(hwnd, "View details for Studio").ok_or("app trigger")?;
     unsafe {
         trigger.SetFocus()?;
     }
     key(hwnd, 13)?;
     wait("app detail dialog", || named(hwnd, "Close"))?;
+    wait("detail activity records", || {
+        named(hwnd, "Activity records")
+    })?;
+    wait("full-day detail range", || named(hwnd, "00:00 – 24:00"))?;
     key(hwnd, 27)?;
     wait("app detail dismissed", || {
         named(hwnd, "Close").is_none().then_some(())
     })?;
+    let layout = || -> Result<Vec<(String, [i32; 4])>, Error> {
+        let mut geometry = Vec::new();
+        for element in controls(hwnd)? {
+            let name = unsafe { element.CurrentName()? }.to_string();
+            if name.contains(" · Active ")
+                && unsafe { element.CurrentControlType()? } != UIA_ToolTipControlTypeId
+            {
+                let r = unsafe { element.CurrentBoundingRectangle()? };
+                geometry.push((name, [r.left, r.top, r.right, r.bottom]));
+            }
+        }
+        assert_eq!(geometry.len(), 24, "missing chart columns");
+        Ok(geometry)
+    };
+    let before_menu = layout()?;
     context_menu(hwnd, &trigger)?;
+    let rename = wait("context menu", || named(hwnd, "Change name"))?;
+    assert_eq!(
+        layout()?,
+        before_menu,
+        "opening the menu must not resize the page"
+    );
+    assert_eq!(
+        unsafe { rename.CurrentControlType()? },
+        UIA_MenuItemControlTypeId
+    );
+    assert!(
+        named(hwnd, "Close").is_none(),
+        "right click must not open a dialog"
+    );
+    assert!(
+        named(hwnd, "Available categories").is_none(),
+        "categories start collapsed"
+    );
+    let anchor = unsafe { trigger.CurrentBoundingRectangle()? };
+    let menu = unsafe { rename.CurrentBoundingRectangle()? };
+    assert!(
+        (menu.left - anchor.right).abs() < 80 && (menu.top - anchor.bottom).abs() < 80,
+        "context menu must open beside its trigger"
+    );
+    key(hwnd, 40)?;
+    key(hwnd, 39)?;
+    wait("keyboard opens categories", || {
+        named(hwnd, "Available categories")
+    })?;
+    assert_eq!(
+        layout()?,
+        before_menu,
+        "the submenu must not resize the page"
+    );
+    key(hwnd, 27)?;
+    wait("Escape closes only the submenu", || {
+        (named(hwnd, "Available categories").is_none() && named(hwnd, "Change name").is_some())
+            .then_some(())
+    })?;
+    key(hwnd, 27)?;
+    wait("Escape dismisses the menu", || {
+        named(hwnd, "Change name").is_none().then_some(())
+    })?;
+    assert_eq!(
+        layout()?,
+        before_menu,
+        "closing the menu must preserve page geometry"
+    );
+    key(hwnd, 0x5d)?;
+    let category = wait("keyboard context menu after focus return", || {
+        named(hwnd, "Change category")
+    })?;
+    // A submenu owns expanded state, so UIA exposes ExpandCollapse rather than Invoke.
+    let disclosure: IUIAutomationExpandCollapsePattern =
+        unsafe { category.GetCurrentPatternAs(UIA_ExpandCollapsePatternId) }
+            .map_err(|e| format!("Change category must expose ExpandCollapse: {e}"))?;
+    unsafe {
+        assert_eq!(
+            disclosure.CurrentExpandCollapseState()?,
+            ExpandCollapseState_Collapsed
+        );
+        disclosure.Expand()?;
+    }
+    wait("accessibility expands categories", || {
+        named(hwnd, "Available categories")
+    })?;
+    unsafe {
+        assert_eq!(
+            disclosure.CurrentExpandCollapseState()?,
+            ExpandCollapseState_Expanded
+        );
+        disclosure.Collapse()?;
+    }
+    wait("accessibility collapses categories", || {
+        named(hwnd, "Available categories").is_none().then_some(())
+    })?;
+    assert_eq!(
+        unsafe { disclosure.CurrentExpandCollapseState()? },
+        ExpandCollapseState_Collapsed
+    );
+    let at = client_center(hwnd, &category)?;
+    unsafe {
+        PostMessageW(Some(hwnd), WM_MOUSEMOVE, WPARAM(0), at)?;
+    }
     let office = wait("classification options", || {
         controls(hwnd).ok()?.into_iter().find(|el| unsafe {
             el.CurrentName().is_ok_and(|s| s == "Office")
-                && el.CurrentControlType().ok() == Some(UIA_ButtonControlTypeId)
+                && el.CurrentControlType().ok() == Some(UIA_RadioButtonControlTypeId)
         })
     })?;
-    let invoke: IUIAutomationInvokePattern =
-        unsafe { office.GetCurrentPatternAs(UIA_InvokePatternId)? };
+    let submenu = named(hwnd, "Available categories").ok_or("category submenu")?;
+    let bounds = unsafe { submenu.CurrentBoundingRectangle()? };
+    let mut window_bounds = RECT::default();
     unsafe {
-        invoke.Invoke()?;
+        GetWindowRect(hwnd, &mut window_bounds)?;
+    }
+    assert!(
+        bounds.left >= window_bounds.left
+            && bounds.right <= window_bounds.right
+            && bounds.top >= window_bounds.top
+            && bounds.bottom <= window_bounds.bottom
+    );
+    let at = client_center(hwnd, &office)?;
+    unsafe {
+        PostMessageW(Some(hwnd), WM_MOUSEMOVE, WPARAM(0), at)?;
+        PostMessageW(Some(hwnd), WM_LBUTTONDOWN, WPARAM(1), at)?;
+        PostMessageW(Some(hwnd), WM_LBUTTONUP, WPARAM(0), at)?;
     }
     wait("saved category in hourly chart", || {
         names(hwnd)
@@ -189,22 +251,132 @@ fn app_actions(hwnd: HWND) -> Result<(), Error> {
             .any(|s| s.contains("Office 60m"))
             .then_some(())
     })?;
-    context_menu(hwnd, &trigger)?;
-    let rename = wait("rename action", || named(hwnd, "Change name"))?;
-    let rename: IUIAutomationInvokePattern =
-        unsafe { rename.GetCurrentPatternAs(UIA_InvokePatternId)? };
+    let open_rename = || -> Result<IUIAutomationValuePattern, Error> {
+        context_menu(hwnd, &trigger)?;
+        let rename = wait("rename action", || named(hwnd, "Change name"))?;
+        let rename: IUIAutomationInvokePattern =
+            unsafe { rename.GetCurrentPatternAs(UIA_InvokePatternId)? };
+        unsafe {
+            rename.Invoke()?;
+        }
+        let field = wait("name editor", || {
+            controls(hwnd)
+                .ok()?
+                .into_iter()
+                .find(|el| unsafe { el.CurrentControlType().ok() == Some(UIA_EditControlTypeId) })
+        })?;
+        Ok(unsafe { field.GetCurrentPatternAs(UIA_ValuePatternId)? })
+    };
+    let input = open_rename()?;
+    let dialog_bounds = || -> Result<RECT, Error> {
+        let element = wait("rename surface", || {
+            controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+                el.CurrentAutomationId()
+                    .is_ok_and(|id| id == "quick-rename-dialog")
+            })
+        })?;
+        Ok(unsafe { element.CurrentBoundingRectangle()? })
+    };
+    let original_dialog = dialog_bounds()?;
+    let scale = unsafe { GetDpiForWindow(hwnd) } as f64 / 96.;
+    assert!(
+        ((original_dialog.right - original_dialog.left) as f64 / scale - 280.).abs() <= 1.,
+        "a short name uses the minimum dialog width"
+    );
+    let save = named(hwnd, "Save").ok_or("save button")?;
+    let cancel = named(hwnd, "Cancel").ok_or("cancel button")?;
+    let save_rect = unsafe { save.CurrentBoundingRectangle()? };
+    let cancel_rect = unsafe { cancel.CurrentBoundingRectangle()? };
+    assert_eq!(save_rect.top, cancel_rect.top, "dialog actions share a row");
+    assert_eq!(
+        save_rect.bottom, cancel_rect.bottom,
+        "dialog actions share a height"
+    );
+    assert!(cancel_rect.right < save_rect.left, "save follows cancel");
+    assert!(
+        controls(hwnd)?.iter().any(|el| unsafe {
+            el.CurrentName().is_ok_and(|name| name == "Change name")
+                && el.CurrentControlType().ok() == Some(UIA_TextControlTypeId)
+        }),
+        "rename dialog has a visible task title"
+    );
+    assert!(
+        !unsafe { save.CurrentIsEnabled()? }.as_bool(),
+        "unchanged name cannot be saved"
+    );
     unsafe {
-        rename.Invoke()?;
+        PostMessageW(Some(hwnd), WM_CHAR, WPARAM('D' as usize), LPARAM(1))?;
     }
-    let field = wait("name editor", || {
-        controls(hwnd)
+    wait("name starts focused and selected", || unsafe {
+        (input.CurrentValue().ok()? == "D").then_some(())
+    })?;
+    unsafe {
+        input.SetValue(
+            &"A long application name that scrolls inside the input while editing".into(),
+        )?
+    };
+    wait("long draft is visible to accessibility", || unsafe {
+        input
+            .CurrentValue()
             .ok()?
-            .into_iter()
-            .find(|el| unsafe { el.CurrentControlType().ok() == Some(UIA_EditControlTypeId) })
-    })
-    .map_err(|e| format!("{e}; visible nodes: {:?}", names(hwnd)))?;
-    let input: IUIAutomationValuePattern =
-        unsafe { field.GetCurrentPatternAs(UIA_ValuePatternId)? };
+            .to_string()
+            .starts_with("A long")
+            .then_some(())
+    })?;
+    assert_eq!(
+        dialog_bounds()?,
+        original_dialog,
+        "typing must not resize the dialog"
+    );
+    let cancel: IUIAutomationInvokePattern =
+        unsafe { cancel.GetCurrentPatternAs(UIA_InvokePatternId)? };
+    unsafe {
+        cancel.Invoke()?;
+    }
+    wait("cancel discards the draft", || {
+        named(hwnd, "Cancel").is_none().then_some(())
+    })?;
+    let input = open_rename()?;
+    assert_eq!(unsafe { input.CurrentValue()? }.to_string(), "Studio");
+    unsafe {
+        input.SetValue(&"Discard this outside-click draft".into())?;
+        PostMessageW(
+            Some(hwnd),
+            WM_LBUTTONDOWN,
+            WPARAM(1),
+            LPARAM((60 << 16) | 200),
+        )?;
+        PostMessageW(
+            Some(hwnd),
+            WM_LBUTTONUP,
+            WPARAM(0),
+            LPARAM((60 << 16) | 200),
+        )?;
+    }
+    wait("outside click dismisses rename", || {
+        named(hwnd, "Cancel").is_none().then_some(())
+    })?;
+    let input = open_rename()?;
+    assert_eq!(
+        unsafe { input.CurrentValue()? }.to_string(),
+        "Studio",
+        "outside click must discard the unsaved name"
+    );
+    unsafe {
+        input.SetValue(&"  Studio  ".into())?;
+    }
+    key(hwnd, 13)?;
+    wait("trimmed unchanged name stays disabled", || {
+        named(hwnd, "Save").filter(|s| unsafe { s.CurrentIsEnabled().is_ok_and(|v| !v.as_bool()) })
+    })?;
+
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    let mut connection = rt.block_on(SqliteConnection::connect_with(
+        &SqliteConnectOptions::new().filename(db),
+    ))?;
+    rt.block_on(sqlx::query("CREATE TRIGGER reject_test_rename BEFORE INSERT ON settings WHEN NEW.key = '__app_override::studio.exe' BEGIN SELECT RAISE(ABORT, 'test rename failure'); END").execute(&mut connection))?;
     unsafe {
         input.SetValue(&"Workroom".into())?;
     }
@@ -216,8 +388,50 @@ fn app_actions(hwnd: HWND) -> Result<(), Error> {
     unsafe {
         save.Invoke()?;
     }
+    wait("failed save stays in the dialog", || {
+        named(hwnd, "Could not save. Existing settings were not changed.")
+    })?;
+    let error_dialog = dialog_bounds()?;
+    assert_eq!(
+        error_dialog.right - error_dialog.left,
+        original_dialog.right - original_dialog.left
+    );
+    assert!(
+        error_dialog.bottom - error_dialog.top > original_dialog.bottom - original_dialog.top,
+        "an error expands the natural dialog height"
+    );
+    assert_eq!(unsafe { input.CurrentValue()? }.to_string(), "Workroom");
+    assert!(named(hwnd, "View details for Studio").is_some());
+    rt.block_on(sqlx::query("DROP TRIGGER reject_test_rename").execute(&mut connection))?;
+    key(hwnd, 13)?;
     wait("renamed ranking", || {
         named(hwnd, "View details for Workroom")
+    })?;
+    key(hwnd, 13)?;
+    wait("renaming returns focus to the app", || named(hwnd, "Close"))?;
+    key(hwnd, 27)?;
+    wait("detail closed", || {
+        named(hwnd, "Close").is_none().then_some(())
+    })?;
+    let trigger = named(hwnd, "View details for Workroom").ok_or("renamed app")?;
+    context_menu(hwnd, &trigger)?;
+    wait("menu reopened", || named(hwnd, "Change name"))?;
+    unsafe {
+        PostMessageW(
+            Some(hwnd),
+            WM_LBUTTONDOWN,
+            WPARAM(1),
+            LPARAM((60 << 16) | 200),
+        )?;
+        PostMessageW(
+            Some(hwnd),
+            WM_LBUTTONUP,
+            WPARAM(0),
+            LPARAM((60 << 16) | 200),
+        )?;
+    }
+    wait("outside click dismisses the menu", || {
+        named(hwnd, "Change name").is_none().then_some(())
     })?;
     Ok(())
 }
@@ -246,8 +460,9 @@ fn headings(hwnd: HWND) -> Result<serde_json::Value, Error> {
 }
 
 #[test]
-#[ignore = "requires the prepared Tauri baseline, the native run directory and an interactive desktop"]
+#[ignore = "dedicated Windows session: prepared Tauri baseline"]
 fn tauri_comparison() -> Result<(), Error> {
+    patina_test_desktop::dedicated_session()?;
     use std::{
         env,
         net::{TcpListener, TcpStream},
@@ -405,8 +620,9 @@ fn tauri_comparison() -> Result<(), Error> {
 }
 
 #[test]
-#[ignore = "requires an interactive Windows desktop and the Windows resource sampler"]
+#[ignore = "dedicated Windows session: resource sampler and lifecycle baseline"]
 fn main_window_lifecycle() -> Result<(), Error> {
+    patina_test_desktop::dedicated_session()?;
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -417,7 +633,7 @@ fn main_window_lifecycle() -> Result<(), Error> {
         .join(format!("today-{}", Utc::now().format("%Y%m%dT%H%M%S%.3fZ")));
     fs::create_dir(&out)?;
     let fixture = out.join("fixture.db");
-    seed(&fixture)?;
+    seed_profile(&fixture, true)?;
     let root = tempfile::tempdir()?;
     let profile = root.path().join(patina_gpui::APP_ID);
     fs::create_dir(&profile)?;
@@ -663,8 +879,11 @@ fn main_window_lifecycle() -> Result<(), Error> {
 }
 
 #[test]
-#[ignore = "requires an interactive Windows desktop"]
+#[ignore = "isolated Win32 desktop"]
 fn ranked_app_actions() -> Result<(), Error> {
+    if !patina_test_desktop::run_case()? {
+        return Ok(());
+    }
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
@@ -683,6 +902,33 @@ fn ranked_app_actions() -> Result<(), Error> {
         children::find(child.0.id(), |p| window(p, w!("Patina")))
     })?;
     let toggle = wait("chart toggle", || named(hwnd, "Show by category"))?;
+    let panels = [
+        "today-focus-panel",
+        "today-activity-panel",
+        "today-ranking-panel",
+    ]
+    .map(|id| -> Result<RECT, Error> {
+        let panel = wait(id, || {
+            controls(hwnd).ok()?.into_iter().find(|element| unsafe {
+                element.CurrentAutomationId().is_ok_and(|value| value == id)
+            })
+        })?;
+        Ok(unsafe { panel.CurrentBoundingRectangle()? })
+    });
+    let [focus, activity, ranking] = panels;
+    let (focus, activity, ranking) = (focus?, activity?, ranking?);
+    assert!(
+        ((focus.bottom - focus.top) - (activity.bottom - activity.top)).abs() <= 1,
+        "overview cards must have equal heights"
+    );
+    assert_eq!(focus.left, activity.left);
+    assert_eq!(focus.right, activity.right);
+    assert_eq!(focus.top, ranking.top);
+    assert_eq!(activity.bottom, ranking.bottom);
+    assert!(
+        (9 * (ranking.right - ranking.left) - 11 * (focus.right - focus.left)).abs() <= 20,
+        "overview and ranking columns must use a 45:55 ratio: {focus:?}, {ranking:?}"
+    );
     hourly_keyboard(hwnd, &toggle, false)?;
     let toggle: IUIAutomationTogglePattern =
         unsafe { toggle.GetCurrentPatternAs(UIA_TogglePatternId)? };
@@ -691,7 +937,7 @@ fn ranked_app_actions() -> Result<(), Error> {
     }
     let toggle = wait("category mode", || named(hwnd, "Show total activity"))?;
     hourly_keyboard(hwnd, &toggle, true)?;
-    if let Err(e) = app_actions(hwnd) {
+    if let Err(e) = app_actions(hwnd, &profile.join("patina.db")) {
         return Err(format!(
             "{e}; process {:?}; stderr {}",
             child.0.try_wait()?,
@@ -710,7 +956,7 @@ fn capture_original_pages(hwnd: HWND, dir: &Path) -> Result<(), Error> {
     for (name, ready) in [
         ("History", "Day Timeline"),
         ("Data", "Activity Trend"),
-        ("Classification", "Manage categories"),
+        ("Classification", "Manage"),
         ("Settings", "Time rules"),
         ("About", "GitHub"),
     ] {

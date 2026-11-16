@@ -270,13 +270,15 @@ fn run(smoke: bool) -> Result<(), Error> {
 }
 
 #[test]
-#[ignore = "three interactive desktop states, three ten-minute rounds each"]
+#[ignore = "dedicated Windows session: three ten-minute resource rounds"]
 fn tray_mini_baseline() -> Result<(), Error> {
+    patina_test_desktop::dedicated_session()?;
     run(false)
 }
 
 #[test]
-#[ignore = "short verification of the Windows sampler and all three desktop states"]
+#[ignore = "dedicated Windows session: resource sampler"]
 fn sampler_smoke() -> Result<(), Error> {
+    patina_test_desktop::dedicated_session()?;
     run(true)
 }

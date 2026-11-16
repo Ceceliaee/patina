@@ -138,6 +138,12 @@ fn develop(root: &Path, profile: &Path, args: &[String]) -> io::Result<()> {
         if let Some(child) = &mut preview
             && let Some(status) = child.try_wait()?
         {
+            if status.code() == Some(75) {
+                preview = None;
+                running_build = None;
+                changed = true;
+                continue;
+            }
             if !status.success() {
                 return Err(io::Error::other(format!(
                     "GPUI exited with {status} (profile {})",
@@ -159,6 +165,7 @@ fn develop(root: &Path, profile: &Path, args: &[String]) -> io::Result<()> {
                         .args(args)
                         .env("PATINA_GPUI_PROFILE_PARENT", profile)
                         .env("PATINA_GPUI_DEV_SESSION", session.path())
+                        .env("PATINA_GPUI_DEV_BINARY", &binary)
                         .creation_flags(CREATE_NO_WINDOW)
                         .stdin(Stdio::piped())
                         .spawn()?,

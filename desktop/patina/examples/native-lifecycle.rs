@@ -400,6 +400,7 @@ fn exercise(
 }
 
 fn main() -> Outcome {
+    patina_test_desktop::dedicated_session()?;
     if let Some(result) = patina_gpui::run_window_process_if_requested() {
         return result.map_err(|e| e.to_string().into());
     }

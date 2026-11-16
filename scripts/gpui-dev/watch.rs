@@ -24,6 +24,7 @@ pub(super) const DIRECTORIES: &[(&str, bool)] = &[
     ("src-tauri/src", true),
     ("src-tauri/icons", true),
     ("src/features/about/assets", true),
+    ("src/shared/theme", false),
 ];
 
 impl Sources {
