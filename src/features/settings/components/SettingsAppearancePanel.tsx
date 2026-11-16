@@ -1,114 +1,21 @@
-import { LOCALE_METADATA, SUPPORTED_LOCALES, useLocaleText } from "../../../shared/i18n/index.ts";
-import { ChevronRight, Palette } from "lucide-react";
-import { useRef, useState } from "react";
+import { useLocaleText } from "../../../shared/i18n/index.ts";
+import { Palette } from "lucide-react";
 import QuietActionRow from "../../../shared/components/QuietActionRow";
 import QuietBadge from "../../../shared/components/QuietBadge";
-import QuietDialog from "../../../shared/components/QuietDialog";
-import QuietButton from "../../../shared/components/QuietButton";
-import QuietSelect from "../../../shared/components/QuietSelect";
-import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter";
 import QuietSwitch from "../../../shared/components/QuietSwitch";
 import SettingsPanelHeader from "./SettingsPanelHeader";
 import { SettingsPreferenceGroup, SettingsPreferenceRow } from "./SettingsPreferenceLayout";
-import type { AppLanguage, ColorScheme, ThemeMode } from "../../../shared/settings/appSettings.ts";
-import {
-  COLOR_SCHEME_OPTIONS, type ThemeLibrary, } from "../../../shared/settings/colorSchemeOptions.ts";
-
 
 type SettingsAppearancePanelProps = {
-  themeMode: ThemeMode;
-  onThemeModeChange: (nextThemeMode: ThemeMode) => void;
-  language: AppLanguage;
-  onLanguageChange: (nextLanguage: AppLanguage) => void;
-  languageDisabled?: boolean;
-  colorSchemeLight: ColorScheme;
-  colorSchemeDark: ColorScheme;
-  onColorSchemeLightChange: (scheme: ColorScheme) => void;
-  onColorSchemeDarkChange: (scheme: ColorScheme) => void;
   dynamicEffects: boolean;
   onDynamicEffectsChange: (nextChecked: boolean) => void;
-  onConfirmColorSchemeChange: (library: ThemeLibrary) => Promise<boolean>;
-  colorSchemeConfirming: boolean;
 };
 
 export default function SettingsAppearancePanel({
-  themeMode,
-  onThemeModeChange,
-  language,
-  onLanguageChange,
-  languageDisabled = false,
-  colorSchemeLight,
-  colorSchemeDark,
-  onColorSchemeLightChange,
-  onColorSchemeDarkChange,
   dynamicEffects,
   onDynamicEffectsChange,
-  onConfirmColorSchemeChange,
-  colorSchemeConfirming,
 }: SettingsAppearancePanelProps) {
   const UI_TEXT = useLocaleText();
-  const confirmationPendingRef = useRef(false);
-  const selectedSchemeRef = useRef<HTMLButtonElement>(null);
-  const [activeLibrary, setActiveLibrary] = useState<ThemeLibrary | null>(null);
-  const [dialogSnapshot, setDialogSnapshot] = useState<{
-    library: ThemeLibrary;
-    colorScheme: ColorScheme;
-  } | null>(null);
-  const themeModeOptions: Array<{ value: ThemeMode; label: string }> = [
-    { value: "light", label: UI_TEXT.settings.themeModeOptions.light },
-    { value: "dark", label: UI_TEXT.settings.themeModeOptions.dark },
-    { value: "system", label: UI_TEXT.settings.themeModeOptions.system },
-  ];
-  const languageOptions: Array<{ value: AppLanguage; label: string }> = SUPPORTED_LOCALES.map((value) => ({
-    value,
-    label: LOCALE_METADATA[value].label,
-  }));
-  const themeLibraryOptions: Array<{
-    value: ThemeLibrary;
-    label: string;
-  }> = [
-    { value: "light", label: UI_TEXT.settings.themeLibraryOptions.light },
-    { value: "dark", label: UI_TEXT.settings.themeLibraryOptions.dark },
-  ];
-  const activeLibraryOption = themeLibraryOptions.find((option) => option.value === activeLibrary);
-  const activeColorScheme = activeLibrary === "dark" ? colorSchemeDark : colorSchemeLight;
-  const changeActiveColorScheme = (scheme: ColorScheme) => {
-    if (!activeLibrary || confirmationPendingRef.current || colorSchemeConfirming) return;
-    (activeLibrary === "dark" ? onColorSchemeDarkChange : onColorSchemeLightChange)(scheme);
-  };
-
-  const openColorSchemeDialog = (library: ThemeLibrary) => {
-    setDialogSnapshot({
-      library,
-      colorScheme: library === "dark" ? colorSchemeDark : colorSchemeLight,
-    });
-    setActiveLibrary(library);
-  };
-
-  const closeColorSchemeDialog = () => {
-    if (confirmationPendingRef.current || colorSchemeConfirming) return;
-    if (dialogSnapshot) {
-      (dialogSnapshot.library === "dark" ? onColorSchemeDarkChange : onColorSchemeLightChange)(dialogSnapshot.colorScheme);
-    }
-
-    setDialogSnapshot(null);
-    setActiveLibrary(null);
-  };
-
-  const handleConfirmColorScheme = async () => {
-    if (!activeLibrary || confirmationPendingRef.current || colorSchemeConfirming) return;
-    confirmationPendingRef.current = true;
-    try {
-      const accepted = await onConfirmColorSchemeChange(activeLibrary);
-      if (accepted) {
-        setDialogSnapshot(null);
-        setActiveLibrary(null);
-      }
-    } finally {
-      confirmationPendingRef.current = false;
-    }
-  };
-
   return (
     <section className="qp-panel p-5 md:p-6">
       <SettingsPanelHeader
@@ -117,46 +24,8 @@ export default function SettingsAppearancePanel({
       />
 
       <div className="mt-5 space-y-5">
-        <SettingsPreferenceGroup title={UI_TEXT.settings.themeGroupTitle}>
-          <QuietActionRow className="settings-preference-list">
-            <SettingsPreferenceRow title={UI_TEXT.settings.themeModeLabel} stacked>
-              <QuietSegmentedFilter
-                variant="control"
-                value={themeMode}
-                options={themeModeOptions}
-                onChange={onThemeModeChange}
-              />
-            </SettingsPreferenceRow>
-            <SettingsPreferenceRow title={UI_TEXT.settings.colorSchemeLabel} stacked>
-              <div className="settings-theme-entry-list" role="group" aria-label={UI_TEXT.accessibility.settings.colorScheme}>
-                {themeLibraryOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => openColorSchemeDialog(option.value)}
-                    className="settings-theme-entry"
-                  >
-                    <span className="settings-theme-entry-title">{option.label}</span>
-                    <ChevronRight size={14} aria-hidden="true" />
-                  </button>
-                ))}
-              </div>
-            </SettingsPreferenceRow>
-          </QuietActionRow>
-        </SettingsPreferenceGroup>
         <SettingsPreferenceGroup title={UI_TEXT.settings.interfaceGroupTitle}>
           <QuietActionRow className="settings-preference-list">
-            <SettingsPreferenceRow title={UI_TEXT.settings.languageLabel} stacked>
-              <QuietSelect
-                value={language}
-                options={languageOptions}
-                onChange={onLanguageChange}
-                ariaLabel={UI_TEXT.settings.languageLabel}
-                disabled={languageDisabled}
-                density="compact"
-                className="max-w-full"
-              />
-            </SettingsPreferenceRow>
             <SettingsPreferenceRow title={(
               <>
                 {UI_TEXT.settings.dynamicEffectsLabel}
@@ -173,68 +42,6 @@ export default function SettingsAppearancePanel({
         </SettingsPreferenceGroup>
       </div>
 
-      <QuietDialog
-        open={activeLibrary !== null}
-        title={activeLibraryOption?.label ?? UI_TEXT.settings.colorSchemeDialogFallbackTitle}
-        onClose={closeColorSchemeDialog}
-        initialFocusRef={selectedSchemeRef}
-        surfaceClassName="qp-theme-dialog-surface"
-        actions={(
-          <>
-            <QuietButton
-              size="large"
-              onClick={closeColorSchemeDialog}
-              className="qp-dialog-action"
-              disabled={colorSchemeConfirming}
-            >
-              {UI_TEXT.common.cancel}
-            </QuietButton>
-            <QuietButton
-              tone="primary"
-              size="large"
-              onClick={() => void handleConfirmColorScheme()}
-              busy={colorSchemeConfirming}
-              className="qp-dialog-action"
-            >
-              {colorSchemeConfirming ? UI_TEXT.settings.colorSchemeSaving : UI_TEXT.common.confirm}
-            </QuietButton>
-          </>
-        )}
-      >
-        {activeLibrary ? (
-          <div className="qp-theme-dialog-body qp-scroll-region">
-            <div className="settings-color-scheme-list" role="group" aria-label={activeLibraryOption?.label}>
-              {COLOR_SCHEME_OPTIONS[activeLibrary].map((option) => {
-                const selected = option.value === activeColorScheme;
-                return (
-                  <button
-                    key={option.value}
-                    ref={selected ? selectedSchemeRef : undefined}
-                    type="button"
-                    aria-pressed={selected}
-                    disabled={colorSchemeConfirming}
-                    onClick={() => changeActiveColorScheme(option.value)}
-                    className={`settings-color-scheme-option ${
-                      selected ? "settings-color-scheme-option-selected" : ""
-                    }`.trim()}
-                  >
-                    <span className="settings-color-scheme-swatches" aria-hidden="true">
-                      {option.swatches.map((swatch, index) => (
-                        <span
-                          key={`${option.value}-${index}`}
-                          className="settings-color-scheme-swatch"
-                          style={{ backgroundColor: swatch }}
-                        />
-                      ))}
-                    </span>
-                    <span>{option.label ?? UI_TEXT.common.default}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ) : null}
-      </QuietDialog>
     </section>
   );
 }

@@ -56,22 +56,6 @@ export function isLatestExternalSettingsSync(revision: number, latestRevision: n
   return revision === latestRevision;
 }
 
-function normalizeSettingsForSave(settings: AppSettings): AppSettings {
-  const webActivityToken = settings.webActivityToken.trim();
-  const remoteStatusBridgeToken = settings.remoteStatusBridgeToken.trim();
-  const remoteStatusBridgeUrl = settings.remoteStatusBridgeUrl.trim();
-  const remoteStatusBridgeMachineId = settings.remoteStatusBridgeMachineId.trim();
-  return {
-    ...settings,
-    webActivityEnabled: settings.webActivityEnabled && webActivityToken.length > 0,
-    webActivityToken,
-    remoteStatusBridgeEnabled: settings.remoteStatusBridgeEnabled,
-    remoteStatusBridgeUrl,
-    remoteStatusBridgeToken,
-    remoteStatusBridgeMachineId,
-  };
-}
-
 export async function saveSettingsPageStateWithDeps(
   input: SettingsSaveFlowInput,
   deps: SettingsSaveFlowDeps,
@@ -116,10 +100,9 @@ export async function saveSettingsPageStateWithDeps(
   }
 
   try {
-    const normalizedDraftSettings = normalizeSettingsForSave(input.draftSettings);
-    const patch = deps.buildPatch(input.savedSettings, normalizedDraftSettings);
+    const patch = deps.buildPatch(input.savedSettings, input.draftSettings);
     const commitResult = await deps.commitPatch(patch);
-    const nextSettings = { ...normalizedDraftSettings };
+    const nextSettings = { ...input.draftSettings };
     return {
       accepted: true,
       skippedReason: null,

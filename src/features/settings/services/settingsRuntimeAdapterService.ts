@@ -15,7 +15,6 @@ import {
   type BackupRestoreStrategy,
   type BackupPreview,
 } from "../../../platform/backup/backupRuntimeGateway.ts";
-import { copyTextToClipboard } from "../../../platform/desktop/clipboardGateway.ts";
 import { openExternalUrl } from "../../../platform/desktop/externalUrlGateway.ts";
 import {
   getStorageSnapshot,
@@ -38,10 +37,6 @@ import {
   onAppSettingsChanged,
 } from "../../../platform/runtime/appSettingsEventGateway.ts";
 import { setAfkThreshold } from "../../../platform/runtime/trackingRuntimeGateway.ts";
-import {
-  getWebActivityBridgeSnapshot,
-  type WebActivityBridgeSnapshot,
-} from "../../../platform/runtime/webActivityBridgeGateway.ts";
 import type { Locale, UiText } from "../../../shared/i18n/index.ts";
 import type { CleanupRange } from "../types.ts";
 import {
@@ -54,7 +49,6 @@ export function isUnsupportedBackupFormatError(error: unknown): boolean {
 
 export type { BackupPreview, BackupRestoreStrategy } from "../../../platform/backup/backupRuntimeGateway.ts";
 export type { StorageMigrationPreview, StorageSnapshot } from "../../../platform/storage/storageRuntimeGateway.ts";
-export type { WebActivityBridgeSnapshot } from "../../../platform/runtime/webActivityBridgeGateway.ts";
 
 export interface BackupRestorePreparation {
   path: string;
@@ -87,8 +81,6 @@ type PrepareBackupRestoreDeps = {
 
 const RELEASE_NOTES_URL = "https://github.com/Ceceliaee/patina/releases";
 const REPOSITORY_URL = "https://github.com/Ceceliaee/patina";
-const FEEDBACK_URL = "https://github.com/Ceceliaee/patina/issues/new/choose";
-const KOFI_SUPPORT_URL = "https://ko-fi.com/ceceliaee";
 
 export function buildBackupPreviewSummary(preview: BackupPreview, uiText: UiText, locale: Locale): string {
   const UI_TEXT = uiText;
@@ -228,26 +220,6 @@ export class SettingsRuntimeAdapterService {
     await openExternalUrl(REPOSITORY_URL);
   }
 
-  static async openFeedback(): Promise<void> {
-    await openExternalUrl(FEEDBACK_URL);
-  }
-
-  static async openKofiSupport(): Promise<void> {
-    await openExternalUrl(KOFI_SUPPORT_URL);
-  }
-
-  static async openWebActivityHelpLink(url: string): Promise<void> {
-    if (!url.startsWith("https://")) {
-      throw new Error("Unsupported web activity help link");
-    }
-
-    await openExternalUrl(url);
-  }
-
-  static async copyWebActivityHelpValue(value: string): Promise<void> {
-    await copyTextToClipboard(value);
-  }
-
   static async getStorageSnapshot(): Promise<StorageSnapshot> {
     return getStorageSnapshot();
   }
@@ -294,10 +266,6 @@ export class SettingsRuntimeAdapterService {
 
   static async openStorageDirectory(path: string): Promise<void> {
     await openStorageDirectory(path);
-  }
-
-  static async getWebActivityBridgeSnapshot(): Promise<WebActivityBridgeSnapshot> {
-    return getWebActivityBridgeSnapshot();
   }
 
   static buildSettingsPatch(

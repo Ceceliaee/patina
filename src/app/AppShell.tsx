@@ -13,12 +13,9 @@ import type SettingsView from "../features/settings/components/Settings.tsx";
 import type ToolsView from "../features/tools/components/Tools.tsx";
 import QuietToastStack from "../shared/components/QuietToastStack";
 import type {
-  AppLanguage,
   AppSettings,
   HourlyActivityChartMode,
-  ThemeMode,
 } from "../shared/settings/appSettings.ts";
-import type { ColorSchemePreview } from "../features/settings/types.ts";
 import { getAppIconRuntimeCacheSnapshot } from "../platform/persistence/appIconRuntimeCache.ts";
 import { useWindowTracking } from "./hooks/useWindowTracking";
 import {
@@ -75,11 +72,9 @@ type AppWindowState = ReturnType<typeof useAppWindowState>;
 
 export default function AppShellContent({
   appWindowState,
-  setSettingsLanguagePreview,
   windowTracking,
 }: {
   appWindowState: AppWindowState;
-  setSettingsLanguagePreview: (language: AppLanguage | null) => void;
   windowTracking: WindowTrackingState;
 }) {
   const { confirm, dialogs } = useQuietDialogs();
@@ -102,9 +97,6 @@ export default function AppShellContent({
     onImportedDataChanged: handleImportedDataChanged,
     onMappingOverridesChanged,
   } = useImportClassificationCoordinator(setReadModelRefreshState);
-  const [settingsThemeModePreview, setSettingsThemeModePreview] = useState<ThemeMode | null>(null);
-  const [settingsColorSchemePreview, setSettingsColorSchemePreview] =
-    useState<ColorSchemePreview | null>(null);
   const [historyDateRequest, setHistoryDateRequest] = useState<HistoryDateRequest | null>(null);
   const [toolsInitialTarget, setToolsInitialTarget] = useState<ToolsOpenTarget | null>(null);
   const viewPresentation = useAppShellRenderedView(currentView, appWindowState.isForegroundReady);
@@ -130,8 +122,6 @@ export default function AppShellContent({
   const appFrameRef = useMainWindowReady({
     appSettings,
     contentReady: appearanceResolved && presentedView === currentView,
-    themeModePreview: settingsThemeModePreview,
-    colorSchemePreview: settingsColorSchemePreview,
   });
   const refreshSignal = resolveReadModelRefreshSignal(syncTick, readModelRefreshState);
   const { mappingVersion } = readModelRefreshState;
@@ -309,19 +299,9 @@ export default function AppShellContent({
                     void clearDataBootstrapCache();
                   }
                   setAppSettings(nextSettings);
-                  setSettingsThemeModePreview(null);
-                  setSettingsColorSchemePreview(null);
-                  setSettingsLanguagePreview(null);
-                }}
-                onColorSchemeSaved={(nextSettings: AppSettings) => {
-                  setAppSettings(nextSettings);
-                  setSettingsColorSchemePreview(null);
                 }}
                 onRegisterSaveHandler={registerSettingsSaveHandler}
                 onDirtyChange={setSettingsDirty}
-                onThemeModePreview={setSettingsThemeModePreview}
-                onColorSchemePreview={setSettingsColorSchemePreview}
-                onLanguagePreview={setSettingsLanguagePreview}
                 onToast={pushToast}
                 onPrepareImportCategories={prepareImportCategories}
                 onImportedDataChanged={handleImportedDataChanged}

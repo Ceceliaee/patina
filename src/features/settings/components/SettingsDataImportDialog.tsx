@@ -58,7 +58,7 @@ export default function SettingsDataImportDialog({
         onClose={onClose}
         closeOnBackdrop={!busy}
         surfaceClassName="settings-data-action-dialog"
-        headerAside={(
+        headerAside={view === "actions" ? (
           <div className="settings-dialog-header-actions">
             {view === "actions" && batches.length > 0 ? (
               <QuietIconAction
@@ -79,7 +79,7 @@ export default function SettingsDataImportDialog({
               <X size={16} aria-hidden="true" />
             </button>
           </div>
-        )}
+        ) : null}
         actions={view === "preview" ? (
           <>
             <QuietButton disabled={busy} onClick={onShowActions}>{UI_TEXT.common.cancel}</QuietButton>

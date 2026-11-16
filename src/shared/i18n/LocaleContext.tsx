@@ -3,7 +3,6 @@ import {
   useContext,
   useEffect,
   useLayoutEffect,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -21,21 +20,14 @@ const LocaleContext = createContext<LocaleContextValue | null>(null);
 export function LocaleProvider({
   locale,
   children,
-  onLocaleLoadError,
 }: {
   locale: Locale;
   children: ReactNode;
-  onLocaleLoadError?: (locale: Locale, error: unknown) => void;
 }) {
   const [value, setValue] = useState<LocaleContextValue | null>(() => {
     const text = getLoadedLocaleText(locale);
     return text ? { locale, text } : null;
   });
-  const onLocaleLoadErrorRef = useRef(onLocaleLoadError);
-
-  useEffect(() => {
-    onLocaleLoadErrorRef.current = onLocaleLoadError;
-  }, [onLocaleLoadError]);
 
   useEffect(() => {
     const loaded = getLoadedLocaleText(locale);
@@ -56,7 +48,6 @@ export function LocaleProvider({
       }
       if (result.status === "failed") {
         console.error(`[i18n] failed to load locale ${result.locale}`, result.error);
-        onLocaleLoadErrorRef.current?.(result.locale, result.error);
         setValue((current) => current ?? {
           locale: SOURCE_LOCALE,
           text: getLocaleText(SOURCE_LOCALE),

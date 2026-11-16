@@ -11,16 +11,9 @@ import {
 } from "../../platform/desktop/windowControlGateway.ts";
 import { isDocumentThemeApplied, useAppThemeMode } from "./useAppThemeMode.ts";
 
-interface ColorSchemePreview {
-  light: ColorScheme;
-  dark: ColorScheme;
-}
-
 interface UseMainWindowReadyOptions {
   appSettings: AppSettings;
   contentReady: boolean;
-  themeModePreview: ThemeMode | null;
-  colorSchemePreview: ColorSchemePreview | null;
 }
 
 declare global {
@@ -59,15 +52,13 @@ function hasRenderableMainWindowFrame(
 export function useMainWindowReady({
   appSettings,
   contentReady,
-  themeModePreview,
-  colorSchemePreview,
 }: UseMainWindowReadyOptions) {
   const frameRef = useRef<HTMLDivElement>(null);
   const pendingTokenRef = useRef<string | null>(null);
   const confirmedTokenRef = useRef<string | null>(null);
-  const themeMode = themeModePreview ?? appSettings.themeMode;
-  const colorSchemeLight = colorSchemePreview?.light ?? appSettings.colorSchemeLight;
-  const colorSchemeDark = colorSchemePreview?.dark ?? appSettings.colorSchemeDark;
+  const themeMode = appSettings.themeMode;
+  const colorSchemeLight = appSettings.colorSchemeLight;
+  const colorSchemeDark = appSettings.colorSchemeDark;
   useAppThemeMode(themeMode, colorSchemeLight, colorSchemeDark);
 
   useEffect(() => {

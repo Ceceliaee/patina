@@ -4,6 +4,7 @@ import { CalendarClock, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QuietDateRangePicker, {
   type QuietDateRangePickerSelection, } from "../../../shared/components/QuietDateRangePicker.tsx";
+import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter.tsx";
 import QuietDialog from "../../../shared/components/QuietDialog.tsx";
 import QuietButton from "../../../shared/components/QuietButton.tsx";
 import QuietIconAction from "../../../shared/components/QuietIconAction.tsx";
@@ -394,26 +395,15 @@ export default function SettingsDataExportDialog({ open, onClose, onToast }: Pro
           </section>
 
           <section className="settings-data-export-section settings-data-export-format-section">
-            <div className="settings-data-export-section-header">
-              <div className="min-w-0">
-                <p className="settings-data-export-section-title">{UI_TEXT.export.formatLabel}</p>
-              </div>
-            </div>
-            <div className="settings-data-export-format-grid" role="radiogroup" aria-label={UI_TEXT.export.formatLabel}>
-              {getFormatOptions(UI_TEXT).map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={format === option.value}
-                  disabled={exporting}
-                  className={`settings-data-export-format-option ${format === option.value ? "settings-data-export-format-option-selected" : ""}`}
-                  onClick={() => changeFormat(option.value)}
-                >
-                  <strong>{option.label}</strong>
-                </button>
-              ))}
-            </div>
+            <p className="settings-data-export-section-title">{UI_TEXT.export.formatLabel}</p>
+            <QuietSegmentedFilter
+              variant="control"
+              className="settings-data-export-formats"
+              ariaLabel={UI_TEXT.export.formatLabel}
+              value={format}
+              options={getFormatOptions(UI_TEXT).map((option) => ({ ...option, disabled: exporting }))}
+              onChange={changeFormat}
+            />
           </section>
 
           <section className="settings-data-export-section">

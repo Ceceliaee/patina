@@ -22,7 +22,6 @@ import {
   saveSettingsPageStateWithDeps,
 } from "./settingsPageStateInteractions.ts";
 import type { AppSettings } from "../../../shared/settings/appSettings";
-import type { ThemeLibrary } from "../../../shared/settings/colorSchemeOptions.ts";
 import type { CleanupRange } from "../types";
 import type {
   BackupRestorePreparation,
@@ -41,16 +40,9 @@ const buildCleanupOptions = (uiText: UiText): Array<{ value: CleanupRange; label
   { value: 7, label: uiText.settings.cleanupRangeLabels[7] },
 ];
 
-const IDLE_TIMEOUT_MINUTES_RANGE = { min: 5, max: 30 } as const;
-const TIMELINE_MERGE_GAP_MINUTES_RANGE = { min: 1, max: 5 } as const;
-
 let cachedStorageSnapshot: StorageSnapshot | null = null;
 let hasCheckedInitialStorageSnapshot = false;
 let pendingInitialStorageSnapshot: Promise<StorageSnapshot | null> | null = null;
-
-const clampMinute = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-const secondsToMinute = (seconds: number, min: number, max: number) =>
-  clampMinute(Math.round(seconds / 60), min, max);
 
 const loadInitialStorageSnapshotOnce = () => {
   if (cachedStorageSnapshot) {
@@ -79,7 +71,6 @@ const loadInitialStorageSnapshotOnce = () => {
 
 interface UseSettingsPageStateOptions {
   onSettingsChanged: (settings: AppSettings) => void;
-  onColorSchemeSaved?: (settings: AppSettings) => void;
   onDirtyChange?: (dirty: boolean) => void;
   onToast?: (message: string, tone?: QuietToastTone) => void;
   onRegisterSaveHandler?: (handler: (() => Promise<boolean>) | null) => void;
@@ -87,7 +78,6 @@ interface UseSettingsPageStateOptions {
 
 export function useSettingsPageState({
   onSettingsChanged,
-  onColorSchemeSaved,
   onDirtyChange,
   onToast,
   onRegisterSaveHandler,
@@ -360,47 +350,6 @@ export function useSettingsPageState({
     }
   }, [appVersion, draftSettings, hasUnsavedChanges, notify, onSettingsChanged, saveStatus, savedSettings, UI_TEXT]);
 
-  const handleSaveColorScheme = useCallback(async (library: ThemeLibrary): Promise<boolean> => {
-    if (!savedSettings || !draftSettings) return false;
-    if (saveStatus === "saving") return false;
-
-    const key = library === "dark" ? "colorSchemeDark" : "colorSchemeLight";
-    if (savedSettings[key] === draftSettings[key]) {
-      return true;
-    }
-
-    bootstrapLoadRevisionRef.current += 1;
-    setSaveStatus("saving");
-    try {
-      const nextSavedSettings = {
-        ...savedSettings,
-        [key]: draftSettings[key],
-      };
-      const result = await SettingsRuntimeAdapterService.commitSettingsPatch({
-        [key]: draftSettings[key],
-      });
-      setSavedSettings(nextSavedSettings);
-      setSettingsBootstrapCache({
-        settings: nextSavedSettings,
-        appVersion,
-      });
-      onColorSchemeSaved?.(nextSavedSettings);
-      setSaveStatus("saved");
-      window.setTimeout(() => setSaveStatus((current) => current === "saved" ? "idle" : current), 1800);
-      if (result.runtimeSync === "failed") {
-        notify(UI_TEXT.toast.settingsRuntimeSyncPartial, "warning");
-      } else {
-        notify(UI_TEXT.settings.saved, "success");
-      }
-      return true;
-    } catch (error) {
-      console.error("save color scheme failed", error);
-      setSaveStatus("idle");
-      notify(UI_TEXT.settings.saveFailed, "error");
-      return false;
-    }
-  }, [appVersion, draftSettings, notify, onColorSchemeSaved, saveStatus, savedSettings, UI_TEXT]);
-
   useEffect(() => {
     onRegisterSaveHandler?.(handleSave);
     return () => {
@@ -636,38 +585,6 @@ export function useSettingsPageState({
     }
   }, [notify, UI_TEXT]);
 
-  const handleOpenReleaseNotes = useCallback(async () => {
-    try {
-      await SettingsRuntimeAdapterService.openReleaseNotes();
-    } catch (error) {
-      console.error("open release notes failed", error);
-      notify(UI_TEXT.toast.releaseNotesOpenFailed, "error");
-    }
-  }, [notify, UI_TEXT]);
-
-  const handleOpenFeedback = useCallback(async () => {
-    try {
-      await SettingsRuntimeAdapterService.openFeedback();
-    } catch (error) {
-      console.error("open feedback link failed", error);
-      notify(UI_TEXT.toast.feedbackOpenFailed, "error");
-    }
-  }, [notify, UI_TEXT]);
-
-  const idleTimeoutMinutes = draftSettings
-    ? secondsToMinute(
-      draftSettings.idleTimeoutSecs,
-      IDLE_TIMEOUT_MINUTES_RANGE.min,
-      IDLE_TIMEOUT_MINUTES_RANGE.max,
-    )
-    : IDLE_TIMEOUT_MINUTES_RANGE.min;
-  const timelineMergeGapMinutes = draftSettings
-    ? secondsToMinute(
-      draftSettings.timelineMergeGapSecs,
-      TIMELINE_MERGE_GAP_MINUTES_RANGE.min,
-      TIMELINE_MERGE_GAP_MINUTES_RANGE.max,
-    )
-    : TIMELINE_MERGE_GAP_MINUTES_RANGE.min;
   return {
     dialogs,
     loading,
@@ -680,7 +597,6 @@ export function useSettingsPageState({
     hasUnsavedChanges,
     handleCancel,
     handleSave,
-    handleSaveColorScheme,
     handleChange,
     cleanupRange,
     setCleanupRange,
@@ -704,12 +620,6 @@ export function useSettingsPageState({
     handleRestoreDefaultDataDirectory,
     handleRestoreDefaultCacheDirectory,
     handleOpenStorageDirectory,
-    handleOpenReleaseNotes,
-    handleOpenFeedback,
-    idleTimeoutMinutes,
-    timelineMergeGapMinutes,
     cleanupOptions,
-    idleTimeoutMinutesRange: IDLE_TIMEOUT_MINUTES_RANGE,
-    timelineMergeGapMinutesRange: TIMELINE_MERGE_GAP_MINUTES_RANGE,
   };
 }
