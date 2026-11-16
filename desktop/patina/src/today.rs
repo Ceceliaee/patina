@@ -1,9 +1,10 @@
+use quietpro::{CARD_TITLE_GAP, CONTENT_INSET, content_card, content_card as panel};
 mod apps;
 mod charts;
 use apps::Popup;
 
 use crate::format::duration;
-use crate::page_controls::{CONTENT_INSET, content_card, panel};
+
 use gpui_kit::{base::Button, prelude::*, *};
 use patina_recorder::{AppUsage, DaySummary, format_text, text};
 use quietpro::{Icon, IconControl, Palette, caption, glyph};
@@ -14,6 +15,14 @@ use std::{
     time::{Duration, Instant},
 };
 
+const OVERVIEW_MIN_WIDTH: f32 = 260.;
+const SUMMARY_MIN_HEIGHT: f32 = 250.;
+
+struct AppIcon {
+    image: Arc<Image>,
+    color: Option<u32>,
+}
+
 pub(super) struct Today {
     client: Rc<crate::windows_host::Client>,
     data: Option<DaySummary>,
@@ -23,7 +32,7 @@ pub(super) struct Today {
     popup: Option<Popup>,
     hour_focus: [FocusHandle; 24],
     active_hour: Option<usize>,
-    icons: HashMap<String, Arc<Image>>,
+    icons: HashMap<String, AppIcon>,
 }
 
 fn value(label: String) -> Stateful<Div> {
@@ -118,49 +127,57 @@ impl Today {
                         }
                     }
                 }
-                let delay =
-                    view.update(cx, |this, cx| match result {
-                        Ok(data) => {
-                            let current: HashSet<_> =
-                                data.apps.iter().map(|a| a.key.as_str()).collect();
-                            this.icons.retain(|key, _| current.contains(key.as_str()));
-                            for (key, bytes) in images {
-                                if !this.icons.get(&key).is_some_and(|img| img.bytes == bytes) {
-                                    this.icons.insert(
-                                        key,
-                                        Arc::new(Image::from_bytes(ImageFormat::Png, bytes)),
-                                    );
-                                }
+                let delay = view.update(cx, |this, cx| match result {
+                    Ok(data) => {
+                        let current: HashSet<_> =
+                            data.apps.iter().map(|a| a.key.as_str()).collect();
+                        this.icons.retain(|key, _| current.contains(key.as_str()));
+                        for (key, bytes) in images {
+                            if !this
+                                .icons
+                                .get(&key)
+                                .is_some_and(|icon| icon.image.bytes == bytes)
+                            {
+                                this.icons.insert(
+                                    key,
+                                    AppIcon {
+                                        color: patina_recorder::icon_color(&bytes),
+                                        image: Arc::new(Image::from_bytes(ImageFormat::Png, bytes)),
+                                    },
+                                );
                             }
-                            this.error = None;
-                            let delay = if client.paused() {
-                                ((data.day_end - chrono::Local::now().timestamp_millis()).max(1000)
-                                    as u64)
-                                    .div_ceil(1000)
-                            } else {
-                                data.refresh_seconds
-                            };
-                            this.data = Some(data);
-                            cx.notify();
-                            Some(delay)
                         }
-                        Err(e) => {
-                            eprintln!("read Today: {e}");
-                            if this.data.as_ref().is_some_and(|d| {
-                                d.day_end <= chrono::Local::now().timestamp_millis()
-                            }) {
-                                this.data = None;
-                                this.icons.clear();
-                            }
-                            this.error = Some(if this.data.is_some() {
-                                "common.refreshFailed"
-                            } else {
-                                "common.readFailed"
-                            });
-                            cx.notify();
-                            None
+                        this.error = None;
+                        let delay = if client.paused() {
+                            ((data.day_end - chrono::Local::now().timestamp_millis()).max(1000)
+                                as u64)
+                                .div_ceil(1000)
+                        } else {
+                            data.refresh_seconds
+                        };
+                        this.data = Some(data);
+                        cx.notify();
+                        Some(delay)
+                    }
+                    Err(e) => {
+                        eprintln!("read Today: {e}");
+                        if this
+                            .data
+                            .as_ref()
+                            .is_some_and(|d| d.day_end <= chrono::Local::now().timestamp_millis())
+                        {
+                            this.data = None;
+                            this.icons.clear();
                         }
-                    });
+                        this.error = Some(if this.data.is_some() {
+                            "common.refreshFailed"
+                        } else {
+                            "common.readFailed"
+                        });
+                        cx.notify();
+                        None
+                    }
+                });
                 let Ok(Some(seconds)) = delay else {
                     break;
                 };
@@ -204,30 +221,26 @@ impl Today {
 impl Render for Today {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let colors = self.client.palette(window);
+        let dark = self.client.dark(window);
         let locale = self.client.locale.get();
-        let mut page =
-            crate::page_controls::page(colors).child(crate::page_controls::page_title_row(
-                self.label("dashboard.title"),
-                Icon::Monitor,
-                colors,
-            ));
+        let mut page = quietpro::page(colors).child(quietpro::page_title_row(
+            self.label("dashboard.title"),
+            Icon::Monitor,
+            colors,
+        ));
         if let Some(error) = self.error {
-            page =
-                page.child(
-                    div().flex().gap(px(12.)).child(self.label(error)).child(
-                        Button::new("retry")
-                            .child(self.label("common.retry"))
-                            .on_click(cx.listener(|this, _, win, cx| {
-                                this.refresh(win.is_window_active(), cx)
-                            })),
-                    ),
-                );
+            page = page.child(div().flex().gap(px(12.)).child(self.label(error)).child(
+                quietpro::text_button("retry", self.label("common.retry"), colors, true).on_click(
+                    cx.listener(|this, _, win, cx| this.refresh(win.is_window_active(), cx)),
+                ),
+            ));
         }
         if let Some(data) = &self.data {
             let page_width = crate::main_window::page_width(window.viewport_size().width);
             let horizontal_insets = 2. * (CONTENT_INSET + 1.);
-            let width =
-                (f32::from(page_width) - horizontal_insets) * (5. / 12.) - horizontal_insets;
+            let width = ((f32::from(page_width) - horizontal_insets - quietpro::CARD_GAP) * 0.45)
+                .max(OVERVIEW_MIN_WIDTH)
+                - horizontal_insets;
             let mode = data.category_mode;
             let toggle = IconControl::new(
                 "chart-mode",
@@ -250,8 +263,12 @@ impl Render for Today {
                 }
             });
             let activity = content_card(colors.border, colors.panel)
+                .id("today-activity-panel")
+                .role(Role::Group)
+                .accessibility_id("today-activity-panel")
                 .flex_1()
-                .min_h(px(225.))
+                .min_h(px(SUMMARY_MIN_HEIGHT))
+                .gap(px(CARD_TITLE_GAP))
                 .child(
                     div()
                         .flex()
@@ -260,16 +277,17 @@ impl Render for Today {
                         .child(title(self.label("dashboard.hourlyActivity")))
                         .child(toggle),
                 )
-                .child(self.hourly(data, width >= 400., colors, cx));
+                .child(self.hourly(data, width >= 400., colors, dark, cx));
             let left = div()
                 .id("overview")
-                .w(relative(5. / 12.))
+                .flex_none()
+                .w(px(width + horizontal_insets))
                 .min_h_0()
                 .overflow_y_scroll()
                 .flex()
                 .flex_col()
-                .gap(px(crate::page_controls::CARD_GAP))
-                .child(charts::focus(data, locale, width >= 440., colors))
+                .gap(px(quietpro::CARD_GAP))
+                .child(charts::focus(data, locale, width, colors, dark))
                 .child(activity);
             let count = format_text(
                 locale,
@@ -283,11 +301,11 @@ impl Render for Today {
                 .overflow_y_scroll()
                 .flex()
                 .flex_col()
-                .gap(px(crate::page_controls::APP_CARD_GAP))
+                .gap(px(quietpro::APP_CARD_GAP))
                 .children(
                     data.apps
                         .iter()
-                        .map(|app| self.row(app, data.total, colors, cx)),
+                        .map(|app| self.row(app, data.total, colors, window, cx)),
                 )
                 .when(data.apps.is_empty(), |s| {
                     s.items_center()
@@ -295,9 +313,12 @@ impl Render for Today {
                         .child(caption(self.label("dashboard.emptyState"), colors))
                 });
             let ranking = content_card(colors.border, colors.panel)
+                .id("today-ranking-panel")
+                .role(Role::Group)
+                .accessibility_id("today-ranking-panel")
                 .flex_1()
                 .min_w_0()
-                .gap(px(16.))
+                .gap(px(CARD_TITLE_GAP))
                 .child(
                     div()
                         .flex()
@@ -312,14 +333,14 @@ impl Render for Today {
                     .flex_1()
                     .min_h_0()
                     .flex()
-                    .gap(px(crate::page_controls::CARD_GAP))
+                    .gap(px(quietpro::CARD_GAP))
                     .child(left)
                     .child(ranking),
             );
             if let Some(popup) = &self.popup
                 && let Some(app) = data.apps.iter().find(|a| a.key == popup.key)
             {
-                page = page.child(self.dialog(popup, app, data, colors, cx));
+                page = page.child(self.dialog(popup, app, data, colors, window, cx));
             }
         } else if self.error.is_none() {
             page = page.child(caption(self.label("common.loading"), colors));

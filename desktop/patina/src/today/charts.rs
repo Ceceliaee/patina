@@ -1,69 +1,84 @@
-use super::{Today, content_card, panel, title, value};
+use super::{SUMMARY_MIN_HEIGHT, Today, content_card, panel, title, value};
 use crate::format::duration;
-use gpui_kit::{
-    base::plot::shape::{Arc, ArcData},
-    prelude::*,
-    *,
-};
+use gpui_kit::{prelude::*, *};
 use patina_recorder::{DaySummary, Locale, format_text, text};
-use quietpro::{Palette, caption};
+use quietpro::{
+    CARD_TITLE_GAP, HOURLY_AXIS_FONT_SIZE, HOURLY_AXIS_GAP, HOURLY_BAR_TOP_RADIUS,
+    HOURLY_BAR_WIDTH, HOURLY_PLOT_MIN_HEIGHT,
+};
+use quietpro::{Palette, activity_display_color, caption};
 
-pub(super) fn focus(data: &DaySummary, locale: Locale, wide: bool, colors: Palette) -> Div {
-    let limit = if wide { 6 } else { 4 };
+pub(super) fn focus(
+    data: &DaySummary,
+    locale: Locale,
+    content_width: f32,
+    colors: Palette,
+    dark: bool,
+) -> Stateful<Div> {
+    let limit = if content_width >= 440. { 6 } else { 4 };
+    let compact = content_width < 320.;
+    let donut_size = if compact {
+        quietpro::DONUT_COMPACT_SIZE
+    } else {
+        quietpro::DONUT_SIZE
+    };
     let mut slices: Vec<_> = data
         .categories
         .iter()
         .take(limit)
-        .map(|c| (c.label.clone(), c.duration, rgb(c.color)))
+        .map(|c| {
+            (
+                c.label.clone(),
+                c.duration,
+                activity_display_color(c.color, colors.panel, dark),
+            )
+        })
         .collect();
     let rest: i64 = data.categories.iter().skip(limit).map(|c| c.duration).sum();
     if rest > 0 {
-        slices.push((text(locale, "categories.other"), rest, colors.secondary));
+        slices.push((
+            text(locale, "hourlyActivityChart.remainingCategories"),
+            rest,
+            activity_display_color(u32::from(colors.secondary) >> 8, colors.panel, dark),
+        ));
     }
-    let mut legend = div().min_w_0().flex_1().flex().flex_col().gap(px(5.));
+    let mut legend = div().min_w_0().flex_1().flex().flex_col().gap(px(4.));
     for (label, ms, color) in &slices {
         legend = legend.child(
             div()
                 .flex()
+                .min_h(px(24.))
                 .items_center()
-                .gap(px(6.))
-                .child(div().size(px(6.)).rounded_full().bg(*color))
+                .gap(px(8.))
+                .child(div().flex_none().size(px(8.)).rounded_full().bg(*color))
                 .child(value(label.clone()).min_w_0().flex_1().truncate())
-                .child(duration(*ms)),
+                .child(div().flex_none().whitespace_nowrap().child(duration(*ms))),
         );
     }
     if slices.is_empty() {
         legend = legend.child(caption(text(locale, "dashboard.emptyState"), colors));
     }
     let total = data.total;
-    let donut = canvas(
-        |_, _, _| (),
-        move |bounds, _, window, _| {
-            let radius = f32::from(bounds.size.width.min(bounds.size.height)) * 0.49;
-            let arc = Arc::new().outer_radius(radius).inner_radius(radius * 0.71);
-            let tau = std::f32::consts::TAU;
-            arc.paint(
-                &ArcData::new(&(), 0, 1., 0., tau),
-                colors.track,
-                &bounds,
-                window,
-            );
-            let mut angle = 0.;
-            for (_, value, color) in &slices {
-                let next = angle + tau * *value as f32 / total as f32;
-                arc.paint(
-                    &ArcData::new(&(), 0, 1., angle, (next - tau / 90.).max(angle)),
-                    *color,
-                    &bounds,
-                    window,
-                );
-                angle = next;
-            }
-        },
-    )
-    .absolute()
-    .inset_0()
-    .size_full();
+    let donut = quietpro::DonutChart {
+        id: "today-focus-donut".into(),
+        compact,
+        colors,
+        slices: slices
+            .iter()
+            .map(|(label, ms, color)| {
+                let percent = if total > 0 {
+                    *ms as f64 / total as f64 * 100.
+                } else {
+                    0.
+                };
+                quietpro::DonutSlice {
+                    value: *ms as f64,
+                    color: *color,
+                    description: format!("{label} · {} · {percent:.0}%", duration(*ms)).into(),
+                }
+            })
+            .collect(),
+    };
     let delta = total - data.yesterday;
     let direction = match delta.cmp(&0) {
         std::cmp::Ordering::Greater => "increase",
@@ -79,22 +94,28 @@ pub(super) fn focus(data: &DaySummary, locale: Locale, wide: bool, colors: Palet
         ],
     );
     content_card(colors.border, colors.panel)
-        .min_h(px(250.))
-        .child(title(text(locale, "dashboard.focusShare")))
+        .id("today-focus-panel")
+        .role(Role::Group)
+        .accessibility_id("today-focus-panel")
+        .flex_1()
+        .min_h(px(SUMMARY_MIN_HEIGHT))
+        .child(title(text(locale, "dashboard.focusShare")).mb(px(CARD_TITLE_GAP)))
         .child(
             div()
                 .flex_1()
+                .min_w_0()
                 .flex()
                 .items_center()
-                .gap(px(12.))
+                .gap(px(16.))
                 .text_size(px(12.))
                 .child(
                     div()
                         .relative()
-                        .w(relative(0.48))
-                        .h(px(if wide { 185. } else { 150. }))
+                        .flex_none()
+                        .size(px(donut_size))
                         .flex()
                         .flex_col()
+                        .gap(px(4.))
                         .items_center()
                         .justify_center()
                         .child(donut)
@@ -109,7 +130,9 @@ pub(super) fn focus(data: &DaySummary, locale: Locale, wide: bool, colors: Palet
         )
         .child(
             div()
+                .flex_none()
                 .flex()
+                .pt(px(CARD_TITLE_GAP))
                 .justify_end()
                 .child(value(label).text_color(colors.secondary).text_size(px(12.))),
         )
@@ -131,24 +154,37 @@ impl Today {
         data: &DaySummary,
         wide: bool,
         colors: Palette,
+        dark: bool,
         cx: &mut Context<Self>,
     ) -> Div {
         let grouped = data.category_mode;
         let locale = self.client.locale.get();
+        let category_colors: Vec<_> = data
+            .categories
+            .iter()
+            .map(|category| {
+                (
+                    category,
+                    activity_display_color(category.color, colors.panel, dark),
+                )
+            })
+            .collect();
+        let remaining_color =
+            activity_display_color(u32::from(colors.secondary) >> 8, colors.panel, dark);
+        let total_color = activity_display_color(u32::from(colors.accent) >> 8, colors.panel, dark);
         let mut tooltip = None;
         let mut bars = div()
             .relative()
             .flex_1()
-            .min_h(px(130.))
+            .min_h(px(HOURLY_PLOT_MIN_HEIGHT))
             .flex()
             .items_end()
             .border_b_1()
             .border_color(colors.track);
         for hour in 0..24 {
-            let mut segments: Vec<_> = data
-                .categories
+            let mut segments: Vec<_> = category_colors
                 .iter()
-                .map(|c| (c.hours[hour], c.label.clone(), rgb(c.color)))
+                .map(|(c, color)| (c.hours[hour], c.label.clone(), *color))
                 .filter(|(ms, _, _)| *ms > 0)
                 .collect();
             segments.sort_by_key(|s| s.0);
@@ -177,7 +213,7 @@ impl Today {
                     (
                         rest,
                         text(locale, "hourlyActivityChart.remainingCategories"),
-                        colors.secondary,
+                        remaining_color,
                     ),
                 );
             }
@@ -192,26 +228,30 @@ impl Today {
             }
             let mut bar = div()
                 .h(relative(minutes.min(60) as f32 / 60.))
-                .w(px(8.))
+                .w(px(HOURLY_BAR_WIDTH))
                 .flex()
                 .flex_col_reverse()
                 .overflow_hidden()
-                .rounded_t(px(3.));
+                .rounded_t(px(HOURLY_BAR_TOP_RADIUS));
             if grouped {
-                for (m, _, color) in segments {
+                let top_segment = segments.len().saturating_sub(1);
+                for (index, (m, _, color)) in segments.into_iter().enumerate() {
                     bar = bar.child(
                         div()
                             .w_full()
                             .h(relative(m as f32 / minutes as f32))
+                            .when(index == top_segment, |s| {
+                                s.rounded_t(px(HOURLY_BAR_TOP_RADIUS))
+                            })
                             .bg(color),
                     );
                 }
             } else {
-                bar = bar.bg(colors.accent);
+                bar = bar.bg(total_color);
             }
             if minutes > 0 && self.active_hour == Some(hour) {
                 tooltip = Some(
-                    panel(colors)
+                    panel(colors.border, colors.panel)
                         .id("hour-tooltip")
                         .role(Role::Tooltip)
                         .aria_label(tip.clone())
@@ -234,10 +274,10 @@ impl Today {
                     .flex()
                     .items_end()
                     .justify_center()
-                    .hover(move |s| s.bg(colors.hover))
                     .when(minutes > 0, |s| {
-                        s.track_focus(&self.hour_focus[hour])
-                            .focus_visible(move |s| s.border_1().border_color(colors.accent))
+                        s.hover(move |s| s.bg(colors.hover))
+                            .track_focus(&self.hour_focus[hour])
+                            .focus_visible(move |s| s.border_1().border_color(colors.secondary))
                             .on_hover(
                                 cx.listener(move |this, over, _, cx| {
                                     this.show_hour(hour, *over, cx)
@@ -259,14 +299,13 @@ impl Today {
             .min_h_0()
             .flex()
             .flex_col()
-            .pt(px(16.))
             .child(bars.children(tooltip))
             .child(
                 div()
                     .flex()
                     .justify_between()
-                    .mt(px(6.))
-                    .text_size(px(10.))
+                    .mt(px(HOURLY_AXIS_GAP))
+                    .text_size(px(HOURLY_AXIS_FONT_SIZE))
                     .text_color(colors.secondary)
                     .children(
                         [0, 6, 12, 18]
