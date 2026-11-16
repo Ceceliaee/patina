@@ -168,6 +168,7 @@ export interface UiText {
     "design": string;
     "development": string;
     "game": string;
+    "learning": string;
     "music": string;
     "office": string;
     "other": string;
@@ -177,6 +178,7 @@ export interface UiText {
       "design": string;
       "development": string;
       "game": string;
+      "learning": string;
       "music": string;
       "office": string;
       "other": string;
@@ -596,6 +598,7 @@ export interface UiText {
     "categoryDialogTitle": string;
     "categoryFilter": string;
     "categorySelectLabel": (label: string) => string;
+    "clearSearch": string;
     "color": string;
     "createCategoryAction": string;
     "createCategoryPlaceholder": string;
