@@ -232,11 +232,7 @@ unsafe fn is_application_top_level_window(hwnd: HWND) -> bool {
     }
 
     let extended_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32;
-    if (extended_style & WS_EX_TOOLWINDOW.0) != 0 {
-        return false;
-    }
-
-    true
+    (extended_style & WS_EX_TOOLWINDOW.0) == 0
 }
 
 unsafe fn get_root_owner_window(hwnd: HWND) -> HWND {

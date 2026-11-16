@@ -1,5 +1,5 @@
 use crate::domain::settings::RemoteStatusBridgeSettings;
-use crate::engine::tracking::runtime_snapshot::TrackingRuntimeSnapshotState;
+use crate::engine::tracking::runtime_snapshot::TrackingRuntimeSnapshot;
 use crc32fast::Hasher as Crc32Hasher;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
@@ -9,7 +9,6 @@ use std::hash::{Hash, Hasher};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::Mutex;
-use tauri::{AppHandle, Emitter, Listener, Manager, Runtime};
 use tokio::sync::watch;
 use tokio::time::{interval, sleep, Duration, Instant, MissedTickBehavior};
 use tokio_tungstenite::{
@@ -17,8 +16,6 @@ use tokio_tungstenite::{
     tungstenite::{Error as WsError, Message},
 };
 
-const SETTINGS_CHANGED_EVENT: &str = "app-settings-changed";
-const TRACKING_EVENT_NAMES: [&str; 2] = ["active-window-changed", "tracking-data-changed"];
 const HEARTBEAT_INTERVAL_SECS: u64 = 60;
 const AUTH_TIMEOUT_SECS: u64 = 5;
 const RECONNECT_BACKOFF_SECS: [u64; 5] = [1, 2, 5, 10, 30];
@@ -27,8 +24,7 @@ pub type RemoteStatusStoreFuture<'a, T> =
     Pin<Box<dyn Future<Output = Result<T, String>> + Send + 'a>>;
 
 pub trait RemoteStatusBridgeStore: Send + Sync {
-    fn load_settings(&self) -> RemoteStatusStoreFuture<'_, RemoteStatusBridgeSettings>;
-    fn save_machine_id<'a>(&'a self, machine_id: &'a str) -> RemoteStatusStoreFuture<'a, ()>;
+    fn snapshot(&self) -> Option<TrackingRuntimeSnapshot>;
     fn load_icon<'a>(&'a self, exe_name: &'a str) -> RemoteStatusStoreFuture<'a, Option<String>>;
 }
 
@@ -42,7 +38,7 @@ pub struct RemoteStatusBridgeRuntimeState {
 #[derive(Debug, Default)]
 struct RemoteStatusBridgeRuntimeInner {
     settings: RemoteStatusBridgeSettings,
-    task: Option<tauri::async_runtime::JoinHandle<()>>,
+    task: Option<tokio::task::JoinHandle<()>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -79,9 +75,9 @@ impl Default for RemoteStatusBridgeRuntimeState {
 }
 
 impl RemoteStatusBridgeRuntimeState {
-    pub fn update<R: Runtime + 'static>(
+    pub fn update(
         &self,
-        app: AppHandle<R>,
+
         store: Arc<dyn RemoteStatusBridgeStore>,
         settings: RemoteStatusBridgeSettings,
     ) {
@@ -97,7 +93,6 @@ impl RemoteStatusBridgeRuntimeState {
 
         if settings.enabled && (should_restart || inner.task.is_none()) {
             inner.task = Some(spawn_runtime_task(
-                app,
                 store,
                 settings.clone(),
                 self.wake_tx.subscribe(),
@@ -113,73 +108,16 @@ impl RemoteStatusBridgeRuntimeState {
     }
 }
 
-pub async fn ensure_machine_id<R: Runtime>(
-    app: &AppHandle<R>,
-    store: &dyn RemoteStatusBridgeStore,
-) -> Result<String, String> {
-    let current = store
-        .load_settings()
-        .await
-        .map_err(|error| format!("failed to load remote status bridge settings: {error}"))?;
-
-    if !current.machine_id.trim().is_empty() {
-        return Ok(current.machine_id);
-    }
-
-    let machine_id = generate_machine_id();
-    store.save_machine_id(&machine_id).await?;
-    app.emit(SETTINGS_CHANGED_EVENT, json!({}))
-        .map_err(|error| format!("failed to emit settings refresh event: {error}"))?;
-    Ok(machine_id)
-}
-
-pub fn start<R: Runtime + 'static>(app: AppHandle<R>, store: Arc<dyn RemoteStatusBridgeStore>) {
-    reload_runtime_settings(app.clone(), Arc::clone(&store));
-
-    let settings_app = app.clone();
-    let settings_store = Arc::clone(&store);
-    app.listen_any(SETTINGS_CHANGED_EVENT, move |_| {
-        reload_runtime_settings(settings_app.clone(), Arc::clone(&settings_store));
-    });
-
-    for event_name in TRACKING_EVENT_NAMES {
-        let tracking_app = app.clone();
-        app.listen_any(event_name, move |_| {
-            if let Some(state) = tracking_app.try_state::<RemoteStatusBridgeRuntimeState>() {
-                state.notify_snapshot_change();
-            }
-        });
-    }
-}
-
-fn reload_runtime_settings<R: Runtime + 'static>(
-    app: AppHandle<R>,
-    store: Arc<dyn RemoteStatusBridgeStore>,
-) {
-    tauri::async_runtime::spawn(async move {
-        match store.load_settings().await {
-            Ok(settings) => {
-                if let Some(state) = app.try_state::<RemoteStatusBridgeRuntimeState>() {
-                    state.update(app.clone(), Arc::clone(&store), settings);
-                }
-            }
-            Err(error) => eprintln!("[remote-status-bridge] failed to load settings: {error}"),
-        }
-    });
-}
-
-fn spawn_runtime_task<R: Runtime + 'static>(
-    app: AppHandle<R>,
+fn spawn_runtime_task(
     store: Arc<dyn RemoteStatusBridgeStore>,
     settings: RemoteStatusBridgeSettings,
     wake_rx: watch::Receiver<u64>,
     shutdown_rx: watch::Receiver<u64>,
-) -> tauri::async_runtime::JoinHandle<()> {
-    tauri::async_runtime::spawn(async move {
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
         let mut attempt = 0_usize;
         loop {
             let result = run_connection(
-                app.clone(),
                 Arc::clone(&store),
                 settings.clone(),
                 wake_rx.clone(),
@@ -215,8 +153,7 @@ fn spawn_runtime_task<R: Runtime + 'static>(
     })
 }
 
-async fn run_connection<R: Runtime>(
-    app: AppHandle<R>,
+async fn run_connection(
     store: Arc<dyn RemoteStatusBridgeStore>,
     settings: RemoteStatusBridgeSettings,
     mut wake_rx: watch::Receiver<u64>,
@@ -238,14 +175,14 @@ async fn run_connection<R: Runtime>(
     .await?;
 
     let auth_deadline = Instant::now() + Duration::from_secs(AUTH_TIMEOUT_SECS);
-    let mut pending_snapshot = build_snapshot_payload(&app, store.as_ref()).await.ok();
+    let mut pending_snapshot = build_snapshot_payload(store.as_ref()).await.ok();
     loop {
         let timeout_sleep = sleep_until_deadline(auth_deadline);
         tokio::pin!(timeout_sleep);
         tokio::select! {
             _ = shutdown_rx.changed() => return Ok(()),
             _ = wake_rx.changed() => {
-                pending_snapshot = build_snapshot_payload(&app, store.as_ref()).await.ok();
+                pending_snapshot = build_snapshot_payload(store.as_ref()).await.ok();
             }
             _ = &mut timeout_sleep => return Err("worker auth timed out".to_string()),
             next = socket_stream.next() => {
@@ -275,7 +212,7 @@ async fn run_connection<R: Runtime>(
 
     let initial_payload = match pending_snapshot.take() {
         Some(payload) => payload,
-        None => build_snapshot_payload(&app, store.as_ref()).await?,
+        None => build_snapshot_payload(store.as_ref()).await?,
     };
     let initial_snapshot = build_snapshot(&settings.machine_id, initial_payload, true);
     let mut last_sent_identity = snapshot_identity(&initial_snapshot);
@@ -286,7 +223,7 @@ async fn run_connection<R: Runtime>(
             _ = shutdown_rx.changed() => return Ok(()),
             _ = wake_rx.changed() => {
                 let next_snapshot = build_snapshot_for_change(
-                    &app,
+
                     store.as_ref(),
                     &settings.machine_id,
                     Some(&last_sent_identity),
@@ -299,7 +236,7 @@ async fn run_connection<R: Runtime>(
             }
             _ = heartbeat.tick() => {
                 let heartbeat_snapshot = build_snapshot_for_heartbeat(
-                    &app,
+
                     store.as_ref(),
                     &settings.machine_id,
                     &last_sent_identity,
@@ -323,13 +260,12 @@ async fn run_connection<R: Runtime>(
     }
 }
 
-async fn build_snapshot_for_change<R: Runtime>(
-    app: &AppHandle<R>,
+async fn build_snapshot_for_change(
     store: &dyn RemoteStatusBridgeStore,
     machine_id: &str,
     last_identity: Option<&SnapshotIdentity>,
 ) -> Result<Option<RemoteStatusBridgeSnapshot>, String> {
-    let payload = build_snapshot_payload(app, store).await?;
+    let payload = build_snapshot_payload(store).await?;
     let next_identity = snapshot_identity_from_payload(&payload);
     if last_identity == Some(&next_identity) {
         return Ok(None);
@@ -343,13 +279,12 @@ async fn build_snapshot_for_change<R: Runtime>(
     Ok(Some(snapshot))
 }
 
-async fn build_snapshot_for_heartbeat<R: Runtime>(
-    app: &AppHandle<R>,
+async fn build_snapshot_for_heartbeat(
     store: &dyn RemoteStatusBridgeStore,
     machine_id: &str,
     last_identity: &SnapshotIdentity,
 ) -> Result<RemoteStatusBridgeSnapshot, String> {
-    let payload = build_snapshot_payload(app, store).await?;
+    let payload = build_snapshot_payload(store).await?;
     let next_identity = snapshot_identity_from_payload(&payload);
     Ok(build_snapshot(
         machine_id,
@@ -358,13 +293,11 @@ async fn build_snapshot_for_heartbeat<R: Runtime>(
     ))
 }
 
-async fn build_snapshot_payload<R: Runtime>(
-    app: &AppHandle<R>,
+async fn build_snapshot_payload(
     store: &dyn RemoteStatusBridgeStore,
 ) -> Result<RemoteStatusBridgeSnapshotPayload, String> {
-    let runtime_snapshot = app
-        .try_state::<TrackingRuntimeSnapshotState>()
-        .and_then(|state| state.snapshot())
+    let runtime_snapshot = store
+        .snapshot()
         .ok_or_else(|| "tracking runtime snapshot is not ready".to_string())?;
 
     let app_name = runtime_snapshot
@@ -506,7 +439,7 @@ fn parse_message_type(message: &Message) -> Result<Option<String>, String> {
         .map(str::to_string))
 }
 
-fn generate_machine_id() -> String {
+pub(crate) fn generate_machine_id() -> String {
     let mut hasher = DefaultHasher::new();
     std::env::var("COMPUTERNAME")
         .unwrap_or_default()

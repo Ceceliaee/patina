@@ -7,6 +7,7 @@ pub mod storage_paths;
 pub mod storage_usage;
 pub mod web_activity_bridge;
 mod web_activity_bridge_lifecycle;
+pub(crate) mod web_activity_request;
 pub mod webdav;
 pub mod webview_cache;
 pub mod windows;

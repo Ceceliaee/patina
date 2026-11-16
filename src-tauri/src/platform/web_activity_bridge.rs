@@ -9,7 +9,6 @@ use std::io;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener as StdTcpListener};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Runtime};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::watch;
@@ -47,18 +46,17 @@ impl WebActivityBridgeHttpResponse {
     }
 }
 
-pub struct WebActivityBridgeRuntimeDeps<R: Runtime> {
-    pub handle_http_request:
-        fn(AppHandle<R>, WebActivityBridgeHttpRequest) -> WebActivityBridgeHttpFuture,
+pub struct WebActivityBridgeRuntimeDeps<H> {
+    pub handle_http_request: fn(H, WebActivityBridgeHttpRequest) -> WebActivityBridgeHttpFuture,
 }
 
-impl<R: Runtime> Clone for WebActivityBridgeRuntimeDeps<R> {
+impl<H> Clone for WebActivityBridgeRuntimeDeps<H> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<R: Runtime> Copy for WebActivityBridgeRuntimeDeps<R> {}
+impl<H> Copy for WebActivityBridgeRuntimeDeps<H> {}
 
 #[derive(Debug)]
 pub struct WebActivityBridgeRuntimeState {
@@ -71,7 +69,7 @@ pub struct WebActivityBridgeRuntimeState {
 #[derive(Debug, Default)]
 struct WebActivityBridgeRuntimeInner {
     settings: WebActivityBridgeSettings,
-    server_task: Option<tauri::async_runtime::JoinHandle<()>>,
+    server_task: Option<tokio::task::JoinHandle<()>>,
 }
 
 #[derive(Clone, Debug, serde::Serialize)]
@@ -113,11 +111,11 @@ impl Default for WebActivityBridgeRuntimeState {
 }
 
 impl WebActivityBridgeRuntimeState {
-    pub fn update<R: Runtime + 'static>(
+    pub fn update<H: Clone + Send + Sync + 'static>(
         &self,
-        app: AppHandle<R>,
+        app: H,
         settings: WebActivityBridgeSettings,
-        deps: WebActivityBridgeRuntimeDeps<R>,
+        deps: WebActivityBridgeRuntimeDeps<H>,
     ) -> bool {
         let mut inner = lock_inner(&self.inner);
         let has_active_task = inner.server_task.is_some();
@@ -152,6 +150,10 @@ impl WebActivityBridgeRuntimeState {
         should_restart || should_start
     }
 
+    #[allow(
+        dead_code,
+        reason = "the GPUI recording host reconciles listener settings"
+    )]
     pub fn current_settings(&self) -> WebActivityBridgeSettings {
         lock_inner(&self.inner).settings.clone()
     }
@@ -229,16 +231,16 @@ fn signal_shutdown(shutdown_tx: &watch::Sender<u64>) {
     });
 }
 
-fn spawn_server<R: Runtime + 'static>(
-    app: AppHandle<R>,
+fn spawn_server<H: Clone + Send + Sync + 'static>(
+    app: H,
     mut shutdown_rx: watch::Receiver<u64>,
     generation: u64,
     settings: WebActivityBridgeSettings,
-    deps: WebActivityBridgeRuntimeDeps<R>,
+    deps: WebActivityBridgeRuntimeDeps<H>,
     lifecycle: Arc<Mutex<WebActivityBridgeLifecycle>>,
     client_tracker: Arc<WebActivityClientTracker>,
-) -> tauri::async_runtime::JoinHandle<()> {
-    tauri::async_runtime::spawn(async move {
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
         let Some((address, std_listener)) = acquire_listener_with_retry(
             settings.port,
             generation,
@@ -286,7 +288,7 @@ fn spawn_server<R: Runtime + 'static>(
             let client_shutdown_rx = shutdown_rx.clone();
             let client_tracker = Arc::clone(&client_tracker);
 
-            tauri::async_runtime::spawn(async move {
+            tokio::spawn(async move {
                 let Some(_client_guard) = client_tracker.try_start() else {
                     let mut stream = stream;
                     let _ = write_http_response(
@@ -389,11 +391,11 @@ async fn acquire_listener_with_retry(
     }
 }
 
-async fn handle_client<R: Runtime>(
-    app: AppHandle<R>,
+async fn handle_client<H: Send + 'static>(
+    app: H,
     mut shutdown_rx: watch::Receiver<u64>,
     stream: TcpStream,
-    deps: WebActivityBridgeRuntimeDeps<R>,
+    deps: WebActivityBridgeRuntimeDeps<H>,
 ) -> Result<(), String> {
     tokio::select! {
         changed = shutdown_rx.changed() => shutdown_result(changed),
@@ -401,10 +403,10 @@ async fn handle_client<R: Runtime>(
     }
 }
 
-async fn handle_http_client<R: Runtime>(
-    app: AppHandle<R>,
+async fn handle_http_client<H: Send + 'static>(
+    app: H,
     mut stream: TcpStream,
-    deps: WebActivityBridgeRuntimeDeps<R>,
+    deps: WebActivityBridgeRuntimeDeps<H>,
 ) -> Result<(), String> {
     let response = match read_http_request(&mut stream).await {
         Ok(request) if request.method.eq_ignore_ascii_case("OPTIONS") => {

@@ -1,6 +1,5 @@
 use crate::data::app_settings_service;
 use crate::domain::settings::WebActivityBridgeSettings;
-use crate::engine::web_activity::WebActivityRuntimeState;
 use crate::platform::web_activity_bridge::{
     WebActivityBridgeHttpRequest, WebActivityBridgeHttpResponse, WebActivityBridgeRuntimeDeps,
     WebActivityBridgeRuntimeState, WEB_ACTIVITY_BRIDGE_SETTINGS_CHANGED_EVENT,
@@ -48,18 +47,13 @@ fn update_runtime_state<R: Runtime + 'static>(
     settings: WebActivityBridgeSettings,
 ) {
     if let Some(state) = app.try_state::<WebActivityBridgeRuntimeState>() {
-        let bridge_restarted = state.update(
+        state.update(
             app.clone(),
             settings,
             WebActivityBridgeRuntimeDeps {
                 handle_http_request: handle_http_request_boxed::<R>,
             },
         );
-        if bridge_restarted {
-            if let Some(web_activity_state) = app.try_state::<WebActivityRuntimeState>() {
-                web_activity_state.reset_client();
-            }
-        }
     }
 }
 
