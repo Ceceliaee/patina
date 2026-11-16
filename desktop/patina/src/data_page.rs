@@ -1,20 +1,26 @@
 use crate::{
     format::duration,
     history::History,
-    page_controls::{action, label, stamp},
+    page_controls::{label, stamp},
     windows_host::Client,
 };
 use chrono::{Datelike, Days, Local, NaiveDate};
 use gpui_kit::{
-    base::{
-        Input,
-        input::{InputAccessibility, InputState},
-    },
+    base::input::{InputAccessibility, InputEvent, InputState},
     prelude::*,
     *,
 };
 use patina_recorder::{SeriesKind, Trends, text};
-use std::{collections::BTreeSet, rc::Rc};
+use quietpro::{CARD_TITLE_GAP, content_card, heading, page as shell, page_title_row};
+use std::{
+    collections::{BTreeSet, HashMap},
+    rc::Rc,
+    sync::Arc,
+};
+mod range_picker;
+mod trend;
+use range_picker::{RangeControl, RangePicker, RangeTarget};
+
 fn noon(date: NaiveDate) -> Option<i64> {
     Some(
         date.and_hms_opt(12, 0, 0)?
@@ -25,21 +31,31 @@ fn noon(date: NaiveDate) -> Option<i64> {
 }
 pub(super) struct DataPage {
     client: Rc<Client>,
-    range: Option<(i64, i64)>,
     year: i32,
     recent_heat: bool,
     heat: Option<Trends>,
     heat_read: Option<Task<()>>,
     weekly: bool,
-    range_open: bool,
+    mode_focus: [FocusHandle; 3],
+    heatmap_mode_focus: [FocusHandle; 2],
+    range_picker: Option<RangePicker>,
+    ranges: [RangeControl; 2],
 
     kind: SeriesKind,
+    data_kind: SeriesKind,
     data: Option<Trends>,
-    overview: Option<Vec<i64>>,
+    overview: Option<Trends>,
+    overview_read: Option<Task<()>>,
     read: Option<Task<()>>,
     error: bool,
     selected: BTreeSet<String>,
-    dates: [Entity<InputState>; 2],
+    icons: HashMap<String, trend::SourceIcon>,
+    icon_read: Option<Task<()>>,
+    trend_heat: Option<(SeriesKind, Trends)>,
+    trend_heat_read: Option<Task<()>>,
+    trend_heat_year: Option<i32>,
+    trend_heat_weekly: bool,
+    trend_heat_mode_focus: [FocusHandle; 2],
     search: Entity<InputState>,
     detail: Option<Entity<History>>,
     detail_focus: FocusHandle,
@@ -48,10 +64,13 @@ pub(super) struct DataPage {
 impl DataPage {
     pub(super) fn new(client: Rc<Client>, win: &mut Window, cx: &mut Context<Self>) -> Self {
         let today = Local::now().date_naive();
-        let dates = [today - Days::new(6), today];
-        let fields =
-            dates.map(|d| cx.new(|cx| InputState::new(win, cx).default_value(d.to_string())));
         let search = cx.new(|cx| InputState::new(win, cx));
+        cx.subscribe(&search, |_, _, event, cx| {
+            if matches!(event, InputEvent::Focus | InputEvent::Blur) {
+                cx.notify();
+            }
+        })
+        .detach();
         cx.observe(&search, |_, _, cx| cx.notify()).detach();
         let mut this = Self {
             client,
@@ -60,15 +79,25 @@ impl DataPage {
             heat: None,
             heat_read: None,
             weekly: false,
-            range_open: false,
-            range: noon(dates[0]).zip(noon(today)),
+            mode_focus: std::array::from_fn(|_| cx.focus_handle()),
+            heatmap_mode_focus: std::array::from_fn(|_| cx.focus_handle()),
+            range_picker: None,
+            ranges: std::array::from_fn(|_| RangeControl::new(cx)),
             kind: SeriesKind::App,
+            data_kind: SeriesKind::App,
             data: None,
             overview: None,
+            overview_read: None,
             read: None,
             error: false,
             selected: BTreeSet::new(),
-            dates: fields,
+            icons: HashMap::new(),
+            icon_read: None,
+            trend_heat: None,
+            trend_heat_read: None,
+            trend_heat_year: None,
+            trend_heat_weekly: false,
+            trend_heat_mode_focus: std::array::from_fn(|_| cx.focus_handle()),
             search,
             detail: None,
             detail_focus: cx.focus_handle(),
@@ -104,25 +133,55 @@ impl DataPage {
     }
     fn refresh(&mut self, cx: &mut Context<Self>) {
         self.error = false;
-        self.data = None;
-        let read = self.client.trends(self.range, self.kind);
-        let overall =
-            (self.kind != SeriesKind::App).then(|| self.client.trends(self.range, SeriesKind::App));
-        self.read = Some(cx.spawn(async move |view, cx| {
-            let result = async {
-                let data = read.await?;
-                let overall = match overall {
-                    Some(r) => Some(daily_totals(&r.await?)),
-                    None => None,
-                };
-                Ok::<_, String>((data, overall))
-            }
-            .await;
+        self.load_overview(cx);
+        self.load_destination(cx);
+    }
+    fn load_overview(&mut self, cx: &mut Context<Self>) {
+        let read = self.client.trends(
+            self.ranges[RangeTarget::Overview as usize].range(),
+            SeriesKind::App,
+        );
+        self.overview_read = Some(cx.spawn(async move |view, cx| {
+            let result = read.await;
             let _ = view.update(cx, |this, cx| {
                 match result {
-                    Ok((data, overall)) => {
+                    Ok(data) => this.overview = Some(data),
+                    Err(_) => this.error = true,
+                }
+                cx.notify();
+            });
+        }));
+    }
+    fn load_destination(&mut self, cx: &mut Context<Self>) {
+        let kind = self.kind;
+        let read = self
+            .client
+            .trends(self.ranges[RangeTarget::Destination as usize].range(), kind);
+        self.read = Some(cx.spawn(async move |view, cx| {
+            let result = read.await;
+            let _ = view.update(cx, |this, cx| {
+                match result {
+                    Ok(data) => {
+                        if this.data_kind != kind {
+                            this.selected.clear();
+                        }
+                        this.data_kind = kind;
+                        this.selected
+                            .retain(|key| data.series.iter().any(|s| &s.key == key));
+                        if this.selected.is_empty()
+                            && let Some(first) = data.series.first()
+                        {
+                            this.selected.insert(first.key.clone());
+                        }
                         this.data = Some(data);
-                        this.overview = overall;
+                        this.load_icons(cx);
+                        if this
+                            .trend_heat
+                            .as_ref()
+                            .is_none_or(|(kind, _)| *kind != this.kind)
+                        {
+                            this.load_trend_heat(cx);
+                        }
                     }
                     Err(_) => this.error = true,
                 };
@@ -131,31 +190,13 @@ impl DataPage {
         }));
         cx.notify();
     }
-    fn rolling(&mut self, n: u64, win: &mut Window, cx: &mut Context<Self>) {
-        let end = Local::now().date_naive();
-        if n == 0 {
-            self.range = None;
-        } else {
-            let start = if n == 365 {
-                end.with_day(1).unwrap() - chrono::Months::new(11)
-            } else {
-                end - Days::new(n - 1)
-            };
-            self.range = noon(start).zip(noon(end));
-            for (field, date) in self.dates.iter().zip([start, end]) {
-                field.update(cx, |v, cx| v.set_value(date.to_string(), win, cx));
-            }
-        }
-        self.range_open = false;
-        self.refresh(cx);
-    }
 }
 impl Render for DataPage {
     fn render(&mut self, win: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let locale = self.client.locale.get();
         let tr = |k| text(locale, k);
         let colors = self.client.palette(win);
-        use crate::page_controls::{content_card, heading, page as shell, page_title_row};
+
         let mut page = shell(colors);
 
         page = page.child(page_title_row(
@@ -163,167 +204,54 @@ impl Render for DataPage {
             quietpro::Icon::ChartColumn,
             colors,
         ));
-        let mut ranges = div().flex().gap(px(3.)).items_center();
-        for (n, k) in [
-            (7, "data.pastSevenDays"),
-            (30, "data.pastThirtyDays"),
-            (365, "data.recentYear"),
-            (0, "data.allTime"),
-        ] {
-            ranges = ranges.child(action(
-                k,
-                tr(k),
-                tr(k),
-                true,
-                cx.listener(move |this, _, win, cx| this.rolling(n, win, cx)),
-            ));
-        }
-        for (i, field) in self.dates.iter().enumerate() {
-            let name = tr(if i == 0 {
-                "data.pickStartDate"
-            } else {
-                "data.pickEndDate"
-            });
-            field.update(cx, |f, _| {
-                f.set_accessibility(
-                    InputAccessibility::new(Some(Role::TextInput)).with_label(Some(name.into())),
-                )
-            });
-            ranges = ranges.child(div().w(px(112.)).child(Input::new(field)));
-        }
-        ranges = ranges.child(action(
-            "apply-dates",
-            tr("data.applyRange"),
-            tr("data.applyRange"),
-            true,
-            cx.listener(move |this, _, _, cx| {
-                let parsed = this.dates.each_ref().map(|f| {
-                    NaiveDate::parse_from_str(&f.read(cx).value(), "%Y-%m-%d")
-                        .ok()
-                        .and_then(noon)
-                });
-                if let [Some(a), Some(b)] = parsed
-                    && a <= b
-                    && stamp(b, "%Y-%m-%d") <= Local::now().date_naive().to_string()
-                {
-                    this.range = Some((a, b));
-                    this.refresh(cx);
-                } else {
-                    this.error = true;
-                    cx.notify();
-                }
-            }),
-        ));
-        let mut calendars = div().flex().gap(px(4.));
-        for (index, k) in [
-            "data.pickerModes.week",
-            "data.pickerModes.month",
-            "data.pickerModes.year",
-        ]
-        .iter()
-        .enumerate()
-        {
-            let k = *k;
-            calendars = calendars.child(action(
-                k,
-                tr(k),
-                tr(k),
-                true,
-                cx.listener(move |t, _, win, cx| {
-                    let today = Local::now().date_naive();
-                    let Ok(anchor) =
-                        NaiveDate::parse_from_str(&t.dates[0].read(cx).value(), "%Y-%m-%d")
-                    else {
-                        t.error = true;
-                        cx.notify();
-                        return;
-                    };
-                    let anchor = anchor.min(today);
-                    let (a, b) = match index {
-                        0 => {
-                            let a =
-                                anchor - Days::new(anchor.weekday().num_days_from_monday() as u64);
-                            (a, a + Days::new(6))
-                        }
-                        1 => {
-                            let a = anchor.with_day(1).unwrap();
-                            (a, a + chrono::Months::new(1) - Days::new(1))
-                        }
-                        _ => (
-                            NaiveDate::from_ymd_opt(anchor.year(), 1, 1).unwrap(),
-                            NaiveDate::from_ymd_opt(anchor.year(), 12, 31).unwrap(),
-                        ),
-                    };
-                    let b = b.min(today);
-                    for (f, d) in t.dates.iter().zip([a, b]) {
-                        f.update(cx, |f, cx| f.set_value(d.to_string(), win, cx));
-                    }
-                    t.range = noon(a).zip(noon(b));
-                    t.range_open = false;
-                    t.refresh(cx);
-                }),
-            ));
-        }
-        let mut modes = div().flex().gap(px(6.));
-        for (kind, k) in [
+        let mode_options = [
             (SeriesKind::App, "data.destinationApp"),
             (SeriesKind::Category, "data.destinationCategory"),
             (SeriesKind::Web, "data.destinationWeb"),
-        ] {
-            modes = modes.child(action(
-                k,
-                tr(k),
-                tr(k),
-                self.kind != kind,
-                cx.listener(move |this, _, _, cx| {
-                    this.kind = kind;
-                    this.selected.clear();
-                    this.refresh(cx);
-                }),
-            ));
-        }
+        ];
+        let view = cx.weak_entity();
+        let modes = quietpro::segmented(
+            "destination-mode",
+            tr("data.destinationMode"),
+            std::array::from_fn::<_, 3, _>(|i| {
+                let (kind, key) = mode_options[i];
+                (kind, tr(key), None, self.mode_focus[i].clone())
+            }),
+            self.kind,
+            true,
+            colors,
+            move |kind, _, cx| {
+                let _ = view.update(cx, |this, cx| {
+                    if this.kind != kind {
+                        this.kind = kind;
+                        this.load_destination(cx);
+                    }
+                });
+            },
+        );
 
         if self.error {
-            page = page
-                .child(label(tr("destinationDetail.dayError")))
-                .child(action(
-                    "retry",
-                    tr("common.retry"),
-                    tr("common.retry"),
-                    true,
-                    cx.listener(|this, _, _, cx| this.refresh(cx)),
-                ));
+            page = page.child(label(tr("destinationDetail.dayError"))).child({
+                let accessible_name = tr("common.retry");
+                quietpro::text_button("retry", tr("common.retry"), colors, true)
+                    .accessibility_label(accessible_name)
+                    .on_click(cx.listener(|this, _, _, cx| this.refresh(cx)))
+            });
         }
-        let Some(data) = &self.data else {
+        let (Some(data), Some(_)) = (&self.overview, &self.data) else {
             return page.child(label(tr("common.loading")));
         };
-        let mut totals = vec![0i64; data.days.len()];
-        for series in &data.series {
-            if self.selected.is_empty() || self.selected.contains(&series.key) {
-                for (&i, v) in &series.daily {
-                    totals[i] += v;
-                }
-            }
-        }
-        let sum = totals.iter().sum::<i64>();
-        let overall = self.overview.clone().unwrap_or_else(|| daily_totals(data));
+        let overall = daily_totals(data);
         let overview_total = overall.iter().sum::<i64>();
         let mut overview = content_card(colors.border, colors.panel)
             .id("data-overview")
             .flex_none()
             .gap(px(12.));
-        let range_name = match self.range {
-            None => tr("data.allTime"),
-            Some(_) if data.days.len() == 7 => tr("data.pastSevenDays"),
-            Some(_) if data.days.len() == 30 => tr("data.pastThirtyDays"),
-            Some(_) if data.days.len() == 365 => tr("data.recentYear"),
-            Some((a, b)) => format!("{} – {}", stamp(a, "%m/%d"), stamp(b, "%m/%d")),
-        };
         overview = overview.child(
             div()
                 .flex()
                 .items_center()
-                .gap(px(14.))
+                .gap(px(16.))
                 .child(heading(tr("data.activityTrend")).flex_1())
                 .child(label(format!(
                     "{} · {}",
@@ -335,20 +263,8 @@ impl Render for DataPage {
                     tr("data.appTrendAverage"),
                     duration(overview_total / data.days.len().max(1) as i64)
                 )))
-                .child(action(
-                    "open-range",
-                    tr("data.rangePickerTitle"),
-                    range_name,
-                    true,
-                    cx.listener(|this, _, _, cx| {
-                        this.range_open = !this.range_open;
-                        cx.notify();
-                    }),
-                )),
+                .child(self.range_control(RangeTarget::Overview, colors, cx)),
         );
-        if self.range_open {
-            overview = overview.child(calendars).child(ranges);
-        }
         let make_chart = |id: &'static str, values: &[i64], height: f32| {
             let mut points = std::collections::BTreeMap::<String, i64>::new();
             for (&day, &v) in data.days.iter().zip(values) {
@@ -364,184 +280,146 @@ impl Render for DataPage {
                     .or_default() += v;
             }
             let entries: Vec<_> = points.into_iter().collect();
-            let max_hours = entries.iter().map(|(_, v)| *v).max().unwrap_or(0) as f32 / 3_600_000.;
-            let raw = (max_hours / 3.).max(1.);
-            let magnitude = 10f32.powf(raw.log10().floor());
-            let limit = 3.
-                * magnitude
-                * [1., 2., 3., 4., 6., 8., 10.]
-                    .into_iter()
-                    .find(|n| *n >= raw / magnitude)
-                    .unwrap_or(10.);
-            let samples: Vec<_> = entries
+            let dates: Vec<_> = entries.iter().map(|(date, _)| date.clone()).collect();
+            let descriptions = entries
                 .iter()
-                .map(|(_, ms)| *ms as f32 / 3_600_000.)
+                .map(|(date, value)| format!("{date} · {}", duration(*value)))
                 .collect();
-            let plot = canvas(
-                |_, _, _| (),
-                move |bounds, _, win, _| {
-                    let width = f32::from(bounds.size.width);
-                    let h = f32::from(bounds.size.height);
-                    let count = samples.len();
-                    let step = width / ((count.saturating_sub(1)).max(1) as f32);
-                    let dots: Vec<_> = samples
-                        .iter()
-                        .enumerate()
-                        .map(|(i, y)| (i as f32 * step, (1. - *y / limit) * h))
-                        .collect();
-                    let area = gpui_kit::base::plot::shape::Area::new()
-                        .data(dots.iter().copied())
-                        .x(|p: &(f32, f32)| Some(p.0))
-                        .y0(h)
-                        .y1(|p| Some(p.1))
-                        .stroke(colors.accent)
-                        .fill(colors.accent.opacity(0.12));
-                    area.paint(&bounds, win);
-                    for (x, y) in dots {
-                        let pt = bounds.origin + point(px(x - 2.), px(y - 2.));
-                        win.paint_quad(
-                            fill(Bounds::new(pt, size(px(4.), px(4.))), colors.accent)
-                                .corner_radii(px(2.)),
-                        );
+            let days = data.days.clone();
+            let view = cx.weak_entity();
+            let activate = (data.days.len() <= 62).then(|| {
+                Rc::new(move |i: usize, win: &mut Window, cx: &mut App| {
+                    if let Some(&day) = days.get(i) {
+                        let _ = view.update(cx, |this, cx| {
+                            this.detail_trigger = win.focused(cx);
+                            win.focus(&this.detail_focus, cx);
+                            this.detail = Some(cx.new(|cx| {
+                                History::new_source(this.client.clone(), day, None, false, win, cx)
+                            }));
+                            cx.notify();
+                        });
                     }
-                },
-            )
-            .absolute()
-            .inset_0()
-            .size_full();
-            let mut grid = div()
-                .relative()
-                .flex_1()
-                .h_full()
-                .flex()
-                .flex_col()
-                .justify_between()
-                .children((0..4).map(|_| {
-                    div()
-                        .w_full()
-                        .border_b_1()
-                        .border_color(colors.border.opacity(0.65))
-                }))
-                .child(plot);
-            let mut hit = div().absolute().inset_0().size_full().flex();
-            for (date, v) in &entries {
-                let name = format!("{date} · {}", duration(*v));
-                hit = hit.child(
-                    div()
-                        .id(SharedString::from(format!("{id}-{date}")))
-                        .role(Role::Label)
-                        .aria_value(name)
-                        .h_full()
-                        .flex_1(),
-                );
-            }
-            grid = grid.child(hit);
-            let y_ticks = div()
-                .h_full()
-                .flex()
-                .flex_col()
-                .justify_between()
-                .text_size(px(10.))
-                .text_color(colors.secondary)
-                .children(
-                    (0..4)
-                        .rev()
-                        .map(|v| div().child(format!("{:.0}", v as f32 * limit / 3.))),
-                );
-            let tick_step = entries.len().div_ceil(8).max(1);
-            let ticks = div()
-                .flex()
-                .justify_between()
-                .text_size(px(10.))
-                .text_color(colors.secondary)
-                .children(
-                    entries
-                        .iter()
-                        .step_by(tick_step)
-                        .map(|(d, _)| div().child(d.get(5..).unwrap_or(d).to_owned())),
-                );
+                }) as Rc<dyn Fn(usize, &mut Window, &mut App)>
+            });
             div()
-                .id(id)
-                .flex()
-                .flex_col()
-                .gap(px(3.))
                 .w_full()
                 .h(px(height))
-                .child(
-                    div()
-                        .flex()
-                        .gap(px(8.))
-                        .flex_1()
-                        .min_h_0()
-                        .child(y_ticks)
-                        .child(grid),
-                )
-                .child(ticks)
+                .flex()
+                .flex_col()
+                .child(quietpro::TrendChart {
+                    id: id.into(),
+                    label: tr("data.activityTrend").into(),
+                    labels: dates,
+                    descriptions,
+                    series: vec![quietpro::TrendSeries {
+                        values: entries
+                            .iter()
+                            .map(|(_, ms)| *ms as f32 / 3_600_000.)
+                            .collect(),
+                        color: quietpro::activity_display_color(
+                            u32::from(colors.accent) >> 8,
+                            colors.panel,
+                            self.client.dark(win),
+                        ),
+                    }],
+                    colors,
+                    unit: "h".into(),
+                    activate,
+                })
         };
-        overview = overview.child(make_chart("overview-trend", &overall, 234.));
+        overview = overview.child(make_chart("overview-trend", &overall, 240.));
         let mut heat = div()
             .border_t_1()
             .border_color(colors.border)
             .pt(px(14.))
             .flex()
             .flex_col()
-            .gap(px(10.))
+            .gap(px(12.))
             .child(
                 div()
                     .flex()
                     .items_center()
                     .gap(px(8.))
                     .child(heading(tr("data.activityHeatmap")).flex_1())
-                    .children(
-                        [(false, "data.heatmapDaily"), (true, "data.heatmapWeekly")].map(
-                            |(weekly, k)| {
-                                action(
-                                    k,
-                                    tr(k),
-                                    tr(k),
-                                    self.weekly != weekly,
-                                    cx.listener(move |this, _, _, cx| {
-                                        this.weekly = weekly;
-                                        cx.notify();
-                                    }),
-                                )
+                    .child({
+                        let view = cx.weak_entity();
+                        quietpro::segmented(
+                            "heatmap-mode",
+                            tr("data.activityHeatmap"),
+                            std::array::from_fn::<_, 2, _>(|i| {
+                                let (weekly, key) =
+                                    [(false, "data.heatmapDaily"), (true, "data.heatmapWeekly")][i];
+                                (weekly, tr(key), None, self.heatmap_mode_focus[i].clone())
+                            }),
+                            self.weekly,
+                            true,
+                            colors,
+                            move |weekly, _, cx| {
+                                let _ = view.update(cx, |this, cx| {
+                                    this.weekly = weekly;
+                                    cx.notify();
+                                });
                             },
-                        ),
-                    )
-                    .child(action(
-                        "year-prev",
-                        tr("accessibility.history.previousMonth"),
-                        "‹".into(),
-                        self.year > 1970,
-                        cx.listener(|this, _, _, cx| {
-                            if this.recent_heat {
-                                this.recent_heat = false;
-                                this.year = Local::now().date_naive().year();
-                            } else {
-                                this.year -= 1;
-                            }
-                            this.load_heat(cx);
-                        }),
-                    ))
-                    .child(label(if self.recent_heat {
-                        tr("data.recentYear")
-                    } else {
-                        self.year.to_string()
-                    }))
-                    .child(action(
-                        "year-next",
-                        tr("accessibility.history.nextMonth"),
-                        "›".into(),
-                        !self.recent_heat,
-                        cx.listener(|this, _, _, cx| {
-                            if this.year == Local::now().date_naive().year() {
-                                this.recent_heat = true;
-                            } else {
-                                this.year += 1;
-                            }
-                            this.load_heat(cx);
-                        }),
-                    )),
+                        )
+                    })
+                    .child(
+                        quietpro::calendar_controls()
+                            .child(quietpro::calendar_arrow_frame(
+                                {
+                                    let accessible_name = tr("accessibility.history.previousMonth");
+                                    quietpro::IconControl::new(
+                                        "year-prev",
+                                        accessible_name,
+                                        quietpro::Icon::ChevronLeft,
+                                    )
+                                    .disabled(self.year <= 1970)
+                                    .button(colors)
+                                    .on_click(cx.listener(
+                                        |this, _, _, cx| {
+                                            if this.recent_heat {
+                                                this.recent_heat = false;
+                                                this.year = Local::now().date_naive().year();
+                                            } else {
+                                                this.year -= 1;
+                                            }
+                                            this.load_heat(cx);
+                                        },
+                                    ))
+                                },
+                                colors,
+                            ))
+                            .child(quietpro::calendar_caption(
+                                if self.recent_heat {
+                                    tr("data.recentYear")
+                                } else {
+                                    self.year.to_string()
+                                },
+                                colors,
+                            ))
+                            .child(quietpro::calendar_arrow_frame(
+                                {
+                                    let accessible_name = tr("accessibility.history.nextMonth");
+                                    quietpro::IconControl::new(
+                                        "year-next",
+                                        accessible_name,
+                                        quietpro::Icon::ChevronRight,
+                                    )
+                                    .disabled(self.recent_heat)
+                                    .button(colors)
+                                    .on_click(cx.listener(
+                                        |this, _, _, cx| {
+                                            if this.year == Local::now().date_naive().year() {
+                                                this.recent_heat = true;
+                                            } else {
+                                                this.year += 1;
+                                            }
+                                            this.load_heat(cx);
+                                        },
+                                    ))
+                                },
+                                colors,
+                            )),
+                    ),
             );
         if let Some(data) = &self.heat {
             let mut heat_totals = vec![0i64; data.days.len()];
@@ -641,132 +519,7 @@ impl Render for DataPage {
                 .pb(px(10.));
         }
         overview = overview.child(heat);
-        let query = self.search.read(cx).value().to_lowercase();
-        let name = tr(if self.kind == SeriesKind::Category {
-            "data.categorySearchPlaceholder"
-        } else {
-            "data.appSearchPlaceholder"
-        });
-        self.search.update(cx, |f, _| {
-            f.set_accessibility(
-                InputAccessibility::new(Some(Role::TextInput)).with_label(Some(name.into())),
-            )
-        });
-        let destination = content_card(colors.border, colors.panel)
-            .id("data-destination")
-            .h(px(465.))
-            .flex_none()
-            .gap(px(8.))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .child(heading(tr(match self.kind {
-                        SeriesKind::App => "data.appTrend",
-                        SeriesKind::Web => "data.webTrend",
-                        SeriesKind::Category => "data.categoryTrend",
-                    })))
-                    .child(modes),
-            )
-            .child(
-                div()
-                    .w(px(210.))
-                    .h(px(32.))
-                    .flex_none()
-                    .child(Input::new(&self.search)),
-            );
-        let mut objects = div()
-            .id("trend-objects")
-            .w(relative(0.45))
-            .overflow_y_scroll()
-            .flex()
-            .flex_col();
-        for s in &data.series {
-            if !s.name.to_lowercase().contains(&query) && !s.key.contains(&query) {
-                continue;
-            }
-            let key = s.key.clone();
-            let name = s.name.clone();
-            objects = objects.child(action(
-                SharedString::from(format!("series-{key}")),
-                name.clone(),
-                format!(
-                    "{} {}  {}",
-                    if self.selected.contains(&key) {
-                        "✓"
-                    } else {
-                        ""
-                    },
-                    name,
-                    duration(s.daily.values().sum())
-                ),
-                true,
-                cx.listener(move |this, _, _, cx| {
-                    if !this.selected.remove(&key) {
-                        this.selected.insert(key.clone());
-                    }
-                    cx.notify();
-                }),
-            ));
-        }
-        let mut days = div()
-            .id("trend-days")
-            .flex_1()
-            .overflow_y_scroll()
-            .flex()
-            .flex_col();
-        let selected = data
-            .series
-            .iter()
-            .find(|s| {
-                self.selected.len() == 1
-                    && self.selected.contains(&s.key)
-                    && self.kind == SeriesKind::App
-                    && s.key != "activity:anonymous"
-            })
-            .map(|s| (s.key.clone(), s.name.clone()));
-        for (&day, &ms) in data
-            .days
-            .iter()
-            .zip(&totals)
-            .rev()
-            .filter(|(_, ms)| **ms > 0)
-        {
-            let date = stamp(day, "%Y-%m-%d");
-            let target = selected.clone();
-            days = days.child(action(
-                SharedString::from(date.clone()),
-                date.clone(),
-                format!("{date}  {}", duration(ms)),
-                true,
-                cx.listener(move |this, _, win, cx| {
-                    this.detail_trigger = win.focused(cx);
-                    win.focus(&this.detail_focus, cx);
-                    this.detail =
-                        Some(cx.new(|cx| {
-                            History::new(this.client.clone(), day, target.clone(), win, cx)
-                        }));
-                    cx.notify();
-                }),
-            ));
-        }
-        let destination = destination.child(
-            div().flex().flex_1().min_h_0().child(objects).child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .flex_1()
-                    .min_h_0()
-                    .child(label(format!(
-                        "{} · {}",
-                        tr("data.appTrendTotal"),
-                        duration(sum)
-                    )))
-                    .child(make_chart("selection-trend", &totals, 100.))
-                    .child(days),
-            ),
-        );
+        let destination = self.trend_panel(modes, colors, win, cx);
         let page = page.child(
             div()
                 .id("data-scroll")
@@ -775,7 +528,7 @@ impl Render for DataPage {
                 .overflow_y_scroll()
                 .flex()
                 .flex_col()
-                .gap(px(crate::page_controls::CARD_GAP))
+                .gap(px(quietpro::CARD_GAP))
                 .child(overview)
                 .child(destination),
         );
@@ -795,10 +548,15 @@ impl Render for DataPage {
                         cx.notify();
                     });
                 },
+                win,
                 cx,
             ));
         }
-        page
+        if self.range_picker.is_some() {
+            page.child(self.range_popup(colors, win, cx))
+        } else {
+            page
+        }
     }
 }
 
