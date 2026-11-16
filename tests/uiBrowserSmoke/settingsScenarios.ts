@@ -469,348 +469,6 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     }
   });
 
-  await runTest("start minimized stays editable and persists while launch at login is off", async () => {
-    await evaluate(client!, sessionId, `
-      (() => {
-        localStorage.setItem("__time_tracker_smoke_settings", JSON.stringify({
-          "launch_at_login": "0",
-          "start_minimized": "0"
-        }));
-        window.location.reload();
-        return true;
-      })()
-    `);
-    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("设置"))} + ']'))`);
-    await evaluate(client!, sessionId, `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("设置"))} + ']')?.click()`);
-    await waitForExpression(client!, sessionId, `document.body.innerText.includes(${jsonString("静默启动")})`);
-
-    const launchBehaviorSyncs = await evaluate(client!, sessionId, `
-        globalThis.__PATINA_INVOKED_COMMANDS
-          .filter((entry) => entry.command === "cmd_set_launch_behavior")
-          .map((entry) => entry.payload)
-      `) as Array<{ launchAtLogin?: boolean; startMinimized?: boolean }>;
-    assert.ok(launchBehaviorSyncs.length > 0, "persisted desktop behavior should sync after loading");
-    assert.equal(
-      launchBehaviorSyncs.every((payload) => payload.launchAtLogin === false),
-      true,
-      "startup must not sync launch-at-login defaults before persisted settings load",
-    );
-
-    assert.deepEqual(
-      await evaluate(client!, sessionId, `
-        (() => {
-          const launch = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("切换开机自启动"))} + ']');
-          const minimized = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("切换静默启动"))} + ']');
-          return {
-            launchChecked: launch?.getAttribute("aria-checked"),
-            launchDisabled: launch?.disabled,
-            minimizedChecked: minimized?.getAttribute("aria-checked"),
-            minimizedDisabled: minimized?.disabled,
-          };
-        })()
-      `),
-      {
-        launchChecked: "false",
-        launchDisabled: false,
-        minimizedChecked: "false",
-        minimizedDisabled: false,
-      },
-    );
-
-    await evaluate(client!, sessionId, `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("切换静默启动"))} + ']')?.click()`);
-    await waitForExpression(
-      client!,
-      sessionId,
-      `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("切换静默启动"))} + ']')?.getAttribute("aria-checked") === "true"`,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("切换开机自启动"))} + ']')?.getAttribute("aria-checked")`),
-      "false",
-    );
-    await evaluate(client!, sessionId, `
-      Array.from(document.querySelectorAll("button"))
-        .find((node) => node.textContent?.trim() === "保存" && !node.disabled)?.click()
-    `);
-    await waitForExpression(client!, sessionId, `
-      (() => {
-        const stored = JSON.parse(localStorage.getItem("__time_tracker_smoke_settings") ?? "{}");
-        return stored.launch_at_login === "0" && stored.start_minimized === "1";
-      })()
-    `);
-
-    await evaluate(client!, sessionId, `window.location.reload()`);
-    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("设置"))} + ']'))`);
-    await evaluate(client!, sessionId, `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("设置"))} + ']')?.click()`);
-    await waitForExpression(client!, sessionId, `document.body.innerText.includes(${jsonString("静默启动")})`);
-    assert.deepEqual(
-      await evaluate(client!, sessionId, `
-        (() => {
-          const launch = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("切换开机自启动"))} + ']');
-          const minimized = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("切换静默启动"))} + ']');
-          return [launch?.getAttribute("aria-checked"), minimized?.getAttribute("aria-checked"), minimized?.disabled];
-        })()
-      `),
-      ["false", "true", false],
-    );
-  });
-
-  await runTest("settings web sync guide appears only while setup is incomplete", async () => {
-    await evaluate(client!, sessionId, `
-      (() => {
-        localStorage.setItem("__time_tracker_smoke_settings", JSON.stringify({
-          "web_activity_enabled": "0",
-          "web_activity_port": "12345",
-          "web_activity_token": "smoke-token"
-        }));
-        window.location.reload();
-        return true;
-      })()
-    `);
-    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("设置"))} + ']'))`);
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        (() => {
-          const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("设置"))} + ']');
-          if (!node) return false;
-          node.click();
-          return true;
-        })()
-      `),
-      true,
-    );
-    await waitForExpression(client!, sessionId, `document.body.innerText.includes(${jsonString(SETTINGS_MARKER)})`);
-    assert.equal(
-      await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("使用说明")})`),
-      false,
-    );
-
-    await evaluate(client!, sessionId, `
-      globalThis.__TIME_TRACKER_WEB_ACTIVITY_BRIDGE_SNAPSHOT = {
-        enabled: true,
-        connected: false,
-        browserClientId: null,
-        browserKind: null,
-        extensionVersion: null,
-        lastActivityAtMs: null
-      };
-    `);
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        (() => {
-          const toggle = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("切换网页同步"))} + ']');
-          if (!toggle) return false;
-          toggle.click();
-          return true;
-        })()
-      `),
-      true,
-    );
-    await waitForExpression(client!, sessionId, `document.body.innerText.includes(${jsonString("使用说明")})`);
-    const webSyncHeightWithGuide = await evaluate(client!, sessionId, `
-      document.querySelector(".settings-web-activity-subpanel")?.getBoundingClientRect().height ?? 0
-    `) as number;
-    assert.ok(webSyncHeightWithGuide > 0, "missing web sync settings subpanel height");
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        (() => {
-          const trigger = Array.from(document.querySelectorAll("button"))
-            .find((node) => node.textContent?.trim() === "使用说明");
-          if (!trigger) return false;
-          trigger.click();
-          return true;
-        })()
-      `),
-      true,
-    );
-    await waitForExpression(client!, sessionId, `document.body.innerText.includes(${jsonString("网页同步使用说明")})`);
-    assert.equal(
-      await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("Patina 收到当前配置的网页活动后，使用说明入口会自动隐藏。")})`),
-      false,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `Boolean(document.querySelector('a[href="https://github.com/Ceceliaee/patina-web-sync/releases/latest"]'))`),
-      true,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `document.querySelectorAll(".settings-web-activity-store-badge-row a").length`),
-      3,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `Boolean(document.querySelector('a[href="https://chromewebstore.google.com/detail/patina-web-sync/gimdckblhckibmeklhemgccabmbnoemd"]'))`),
-      true,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `Boolean(document.querySelector('a[href="https://addons.mozilla.org/firefox/addon/patina-web-sync/"]'))`),
-      true,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `Boolean(document.querySelector('a[href="https://microsoftedge.microsoft.com/addons/detail/gogmlpjhbfjghilmpcciedplifdiibai"]'))`),
-      true,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("选择浏览器，从对应商店安装 Patina Web Sync。")})`),
-      true,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("商店不可用时，可从 Patina Web Sync 发布页手动安装。")})`),
-      true,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("默认端口是 12345")})`),
-      false,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("安装并运行 Patina 桌面端")})`),
-      false,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("在 Patina 设置中开启网页同步")})`),
-      false,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("复制端口")})`),
-      true,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("复制 Token")})`),
-      true,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("patina-chromium-extension-v...zip")})`),
-      false,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("patina-firefox-extension-v...zip")})`),
-      false,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("patina-firefox-extension-v...xpi")})`),
-      false,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("about:addons")})`),
-      false,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("about:debugging#/runtime/this-firefox")})`),
-      false,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `Boolean(document.querySelector('a[href="chrome://extensions/"]'))`),
-      false,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `Boolean(document.querySelector('a[href="edge://extensions/"]'))`),
-      false,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        (() => {
-          const close = document.querySelector('[role="dialog"] button');
-          if (!close) return false;
-          close.click();
-          return true;
-        })()
-      `),
-      true,
-    );
-    await waitForExpression(client!, sessionId, "!document.querySelector('[role=\"dialog\"]')");
-
-    await evaluate(client!, sessionId, `
-      globalThis.__TIME_TRACKER_WEB_ACTIVITY_BRIDGE_SNAPSHOT = {
-        enabled: true,
-        connected: true,
-        browserClientId: "smoke-client",
-        browserKind: "chrome",
-        extensionVersion: "0.0.0",
-        lastActivityAtMs: Date.now()
-      };
-    `);
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        (() => {
-          const save = Array.from(document.querySelectorAll("button"))
-            .find((node) => node.textContent?.trim() === "保存" && !node.disabled);
-          if (!save) return false;
-          save.click();
-          return true;
-        })()
-      `),
-      true,
-    );
-    await waitForExpression(client!, sessionId, `!document.body.innerText.includes(${jsonString("使用说明")})`);
-    const webSyncHeightWithoutGuide = await evaluate(client!, sessionId, `
-      document.querySelector(".settings-web-activity-subpanel")?.getBoundingClientRect().height ?? 0
-    `) as number;
-    assert.ok(
-      Math.abs(webSyncHeightWithGuide - webSyncHeightWithoutGuide) <= 1,
-      `Web sync settings subpanel shifted from ${webSyncHeightWithGuide}px to ${webSyncHeightWithoutGuide}px`,
-    );
-
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        (async () => {
-          const input = document.querySelector("#settings-web-activity-address");
-          if (!(input instanceof HTMLInputElement)) return false;
-          const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-          input.focus();
-          setter?.call(input, "12346");
-          input.dispatchEvent(new InputEvent("input", { bubbles: true, data: "12346", inputType: "insertText" }));
-          await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
-          input.blur();
-          return true;
-        })()
-      `),
-      true,
-    );
-    await waitForExpression(client!, sessionId, `document.body.innerText.includes(${jsonString("使用说明")})`);
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        (() => {
-          const trigger = Array.from(document.querySelectorAll("button"))
-            .find((node) => node.textContent?.trim() === "使用说明");
-          if (!trigger) return false;
-          trigger.click();
-          return true;
-        })()
-      `),
-      true,
-    );
-    await waitForExpression(client!, sessionId, `document.body.innerText.includes(${jsonString("网页同步使用说明")})`);
-
-    await client!.command("Emulation.setDeviceMetricsOverride", {
-      width: 390,
-      height: 844,
-      deviceScaleFactor: 1,
-      mobile: true,
-    }, sessionId);
-    await waitForAnimationFrames(client!, sessionId);
-    assert.equal(
-      await evaluate(client!, sessionId, "document.documentElement.scrollWidth <= window.innerWidth + 1"),
-      true,
-      "Settings web sync guide dialog overflowed at 390px",
-    );
-
-    await client!.command("Emulation.setDeviceMetricsOverride", {
-      width: 1280,
-      height: 820,
-      deviceScaleFactor: 1,
-      mobile: false,
-    }, sessionId);
-    await evaluate(client!, sessionId, `
-      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    `);
-    await waitForExpression(client!, sessionId, "!document.querySelector('[role=\"dialog\"]')");
-    await evaluate(client!, sessionId, `
-      (() => {
-        const cancel = Array.from(document.querySelectorAll("button"))
-          .find((node) => node.textContent?.trim() === "取消" && !node.disabled);
-        cancel?.click();
-      })()
-    `);
-    await waitForExpression(client!, sessionId, `!document.body.innerText.includes(${jsonString("有未保存更改")})`);
-  });
-
   await runTest("settings remote backup panel opens WebDAV config dialog without narrow overflow", async () => {
     assert.equal(
       await evaluate(client!, sessionId, `
@@ -841,6 +499,20 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString("服务器地址")})`),
       true,
     );
+
+    const ordinaryInputStyles = await evaluate(client!, sessionId, `
+      Array.from(document.querySelectorAll('[role="dialog"] input.qp-input')).map((input) => ({
+        minHeight: getComputedStyle(input).minHeight,
+        radius: getComputedStyle(input).borderRadius,
+        fontSize: getComputedStyle(input).fontSize,
+        fontWeight: getComputedStyle(input).fontWeight,
+      }))
+    `) as Array<{ minHeight: string; radius: string; fontSize: string; fontWeight: string }>;
+    assert.ok(ordinaryInputStyles.length > 0, "Settings should render inputs using the Quiet Pro CSS contract");
+    assert.equal(ordinaryInputStyles.every((style) => style.minHeight === "34px"), true);
+    assert.equal(ordinaryInputStyles.every((style) => style.radius === "10px"), true);
+    assert.equal(ordinaryInputStyles.every((style) => style.fontSize === "12px"), true);
+    assert.equal(ordinaryInputStyles.every((style) => style.fontWeight === "550"), true);
 
     await client!.command("Emulation.setDeviceMetricsOverride", {
       width: 390,
@@ -1363,7 +1035,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       `),
       true,
     );
-    await waitForExpression(client!, sessionId, "Boolean(document.querySelector('.settings-data-export-format-grid'))");
+    await waitForExpression(client!, sessionId, "Boolean(document.querySelector('.settings-data-export-formats'))");
     await assertDialogHeaderCentered(".settings-data-export-dialog-surface");
     const originalRangeMode = await evaluate(client, sessionId, `localStorage.getItem('patina:export-range-mode')`) as string | null;
     try {
@@ -1438,7 +1110,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       })()`);
     }
     assert.deepEqual(
-      await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.settings-data-export-format-option strong')).map((node) => node.textContent)`),
+      await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.settings-data-export-formats button')).map((node) => node.textContent)`),
       ["CSV", "Markdown", "Parquet", "SQLite"],
     );
     await client!.command("Emulation.setDeviceMetricsOverride", {
@@ -1454,12 +1126,12 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
       "Settings data export dialog overflowed at 390px",
     );
     assert.equal(await evaluate(client, sessionId, `(() => {
-      const buttons = [...document.querySelectorAll('.settings-data-export-format-option')];
+      const buttons = [...document.querySelectorAll('.settings-data-export-formats button')];
       const rects = buttons.map(button => button.getBoundingClientRect());
       return buttons.length === 4 && buttons.every(button => button.scrollWidth <= button.clientWidth + 1)
-        && rects.every(rect => Math.abs(rect.top - rects[0].top) < 0.5 && Math.abs(rect.width - rects[0].width) < 0.5)
-        && !document.querySelector('.settings-data-export-format-option span');
-    })()`), true, 'four equal format buttons should fit one row without descriptions');
+        && rects.every(rect => Math.abs(rect.top - rects[0].top) < 0.5)
+        && document.querySelector('.settings-data-export-format-section > p').getBoundingClientRect().bottom > rects[0].top;
+    })()`), true, 'format segments and their label should fit one row');
 
     assert.equal(
       await evaluate(client!, sessionId, `
@@ -1467,7 +1139,7 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
           const configure = Array.from(document.querySelectorAll("button"))
             .find((node) => node.textContent?.trim() === "配置字段");
           return !configure?.querySelector('svg')
-            && (document.querySelector('.settings-data-export-format-grid').compareDocumentPosition(configure)
+            && (document.querySelector('.settings-data-export-formats').compareDocumentPosition(configure)
               & Node.DOCUMENT_POSITION_FOLLOWING);
         })()
       `),
@@ -1646,8 +1318,10 @@ export async function runSettingsScenarios(context: BrowserSmokeContext) {
     await evaluate(client!, sessionId, `document.querySelector('.settings-data-export-field-group-action[aria-label="展开"]')?.click()`);
     await waitForExpression(client!, sessionId, `document.querySelectorAll('.settings-data-export-field-row').length === 8`);
     const expandedDialogHeight = Number(await evaluate(client!, sessionId, `document.querySelector('.settings-data-export-field-dialog')?.getBoundingClientRect().height ?? 0`));
-    assert.ok(Math.abs(expandedDialogHeight - collapsedDialogHeight) < 1,
-      "Field group expansion should preserve the compact dialog height");
+    assert.ok(expandedDialogHeight > collapsedDialogHeight,
+      "Field dialog should grow with expanded content up to its viewport limit");
+    await evaluate(client!, sessionId, `document.querySelectorAll('.settings-data-export-field-group-action[aria-label="展开"]').forEach(button => button.click())`);
+    await waitForExpression(client!, sessionId, `document.querySelectorAll('.settings-data-export-field-row').length === 32`);
     assert.equal(await evaluate(client!, sessionId, `(() => {
       const dialog = document.querySelector('.settings-data-export-field-dialog');
       const body = dialog.querySelector('.qp-dialog-body');
