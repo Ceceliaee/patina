@@ -637,16 +637,16 @@ pub async fn snapshot_in_tx(tx: &mut Transaction<'_, Sqlite>) -> Result<WebLinks
 #[serde(rename_all = "camelCase")]
 pub struct WebActivityDetailSegment {
     id: i64,
-    browser_client_id: String,
-    browser_kind: String,
-    browser_exe_name: String,
-    domain: String,
-    normalized_domain: String,
+    pub(crate) browser_client_id: String,
+    pub(crate) browser_kind: String,
+    pub(crate) browser_exe_name: String,
+    pub(crate) domain: String,
+    pub(crate) normalized_domain: String,
     url: Option<String>,
-    title: Option<String>,
+    pub(crate) title: Option<String>,
     favicon_url: Option<String>,
-    start_time: i64,
-    end_time: i64,
+    pub(crate) start_time: i64,
+    pub(crate) end_time: i64,
     duration: i64,
 }
 

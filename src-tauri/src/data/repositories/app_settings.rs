@@ -222,6 +222,7 @@ fn is_allowed_app_setting_key(key: &str) -> bool {
             | "language"
             | "hourly_activity_chart_mode"
             | "history_timeline_mode"
+            | "classification_object_mode"
             | "dynamic_effects"
             | "color_scheme_light"
             | "color_scheme_dark"

@@ -23,18 +23,18 @@ pub enum Target {
 #[derive(Clone, Deserialize, Serialize, PartialEq, Eq, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Reminder {
-    id: i64,
-    label: String,
-    target: String,
-    shared: bool,
+    pub id: i64,
+    pub label: String,
+    pub target: String,
+    pub shared: bool,
 }
 
 #[derive(Clone, Deserialize, Serialize, PartialEq, Eq, Debug)]
 pub struct Impact {
     target: Target,
-    members: BTreeSet<String>,
-    links: BTreeSet<(String, String)>,
-    reminders: Vec<Reminder>,
+    pub members: BTreeSet<String>,
+    pub links: BTreeSet<(String, String)>,
+    pub reminders: Vec<Reminder>,
 }
 
 type Tx<'a> = Transaction<'a, Sqlite>;
@@ -192,6 +192,15 @@ async fn delete_apps(tx: &mut Tx<'_>, plan: &Impact) -> Result<(), sqlx::Error> 
             .execute(&mut **tx)
             .await?;
     }
+    if let Target::App(key) = &plan.target {
+        for query in [
+            "DELETE FROM recorded_app_catalog WHERE app_key=?",
+            "DELETE FROM activity_hourly_effective WHERE app_key=?",
+            "DELETE FROM app_catalog_dirty_keys WHERE app_key=?",
+        ] {
+            sqlx::query(query).bind(key).execute(&mut **tx).await?;
+        }
+    }
     Ok(())
 }
 
@@ -315,6 +324,8 @@ mod tests {
             INSERT INTO tool_activity_reminder_rules(target_kind,app_name,exe_name,label_snapshot,limit_ms,message,created_at,updated_at)
                 VALUES ('app','Editor','root.exe','Dedicated',60000,'',1,1),('app','Editor',NULL,'Shared',60000,'',1,1)").await.unwrap();
         let target = Target::App("root.exe".into());
+        pool.execute("INSERT INTO recorded_app_catalog(app_key,raw_exe_name,display_app_name,last_seen_ms,has_native_records,has_import_exact_records,has_import_bucket_records,computed_revision) VALUES ('root.exe','ROOT.EXE','Editor',10,1,0,0,1);
+            INSERT INTO activity_hourly_effective(bucket_start_ms,bucket_end_ms,app_key,raw_exe_name,display_app_name,origin,source_id,effective_duration_ms,computed_revision) VALUES (0,3600000,'root.exe','ROOT.EXE','Editor','native','1',10,1)").await.unwrap();
         let stale = run(&pool, &target, None).await.unwrap();
         assert_eq!(stale.links.len(), 1);
         assert!(stale
@@ -339,6 +350,19 @@ mod tests {
         );
         pool.execute("DROP TRIGGER refuse_icon").await.unwrap();
         run(&pool, &target, Some(plan)).await.unwrap();
+        for query in [
+            "SELECT count(*) FROM recorded_app_catalog WHERE app_key='root.exe'",
+            "SELECT count(*) FROM activity_hourly_effective WHERE app_key='root.exe'",
+            "SELECT count(*) FROM app_catalog_dirty_keys WHERE app_key='root.exe'",
+        ] {
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(query)
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap(),
+                0
+            );
+        }
         for (query,expected) in [("SELECT count(*) FROM sessions WHERE exe_name='child.exe'",1),("SELECT count(*) FROM sessions WHERE exe_name='root.exe'",0),("SELECT count(*) FROM icon_cache",1),("SELECT count(*) FROM settings WHERE key GLOB '__app_link::*'",0),("SELECT count(*) FROM settings WHERE key='__app_override::root.exe'",0),("SELECT count(*) FROM tool_activity_reminder_rules WHERE label_snapshot='Shared'",1),("SELECT count(*) FROM tool_activity_reminder_rules WHERE label_snapshot='Dedicated'",0)]{
             assert_eq!(sqlx::query_scalar::<_,i64>(query).fetch_one(&pool).await.unwrap(),expected);
         }

@@ -34,3 +34,6 @@ pub mod web_activity_store;
 #[cfg(test)]
 mod sqlite_pool_upgrade_tests;
 pub mod tool_notification_store;
+
+pub(crate) mod storage_jobs;
+mod storage_jobs_tauri;

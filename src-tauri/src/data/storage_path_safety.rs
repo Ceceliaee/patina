@@ -81,7 +81,7 @@ pub(super) fn resolved_paths_equal(left: &Path, right: &Path) -> Result<bool, St
     Ok(resolved_path_key(left)? == resolved_path_key(right)?)
 }
 
-pub(super) fn resolved_path_is_same_or_child(child: &Path, parent: &Path) -> Result<bool, String> {
+pub(crate) fn resolved_path_is_same_or_child(child: &Path, parent: &Path) -> Result<bool, String> {
     let child_key = resolved_path_key(child)?;
     let parent_key = resolved_path_key(parent)?;
     Ok(child_key == parent_key || child_key.starts_with(&format!("{parent_key}/")))

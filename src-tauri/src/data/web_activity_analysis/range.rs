@@ -131,6 +131,46 @@ fn aggregate_segments(
         .collect()
 }
 
+pub(crate) fn aggregate_website_snapshot(
+    snapshot: &crate::data::repositories::web_links::WebLinksSnapshot,
+    mapping: &crate::domain::classification::ClassificationSnapshot,
+    boundaries: &[i64],
+) -> Vec<WebActivityAggregateRecordDto> {
+    let mut segments: Vec<_> = snapshot
+        .segments
+        .iter()
+        .flatten()
+        .filter(|s| mapping.is_web_domain_enabled(&s.normalized_domain))
+        .map(|s| WebActivitySegmentSlice {
+            source_key: (
+                s.browser_client_id.clone(),
+                s.browser_kind.clone(),
+                s.browser_exe_name.clone(),
+            ),
+            normalized_domain: crate::domain::web_links::resolve_owner(
+                &s.normalized_domain,
+                &snapshot.rules,
+            ),
+            start_ms: s.start_time,
+            end_ms: s.end_time,
+        })
+        .collect();
+    segments.extend(
+        snapshot
+            .anonymous_activity
+            .iter()
+            .flatten()
+            .filter(|s| s.is_web)
+            .map(|s| WebActivitySegmentSlice {
+                source_key: (String::new(), String::new(), String::new()),
+                normalized_domain: ANONYMOUS_ACTIVITY_KEY.to_owned(),
+                start_ms: s.start_time,
+                end_ms: s.end_time.unwrap_or(s.observed_until),
+            }),
+    );
+    aggregate_segments(segments, boundaries)
+}
+
 fn normalize_domain_filter(
     normalized_domain: Option<&str>,
     normalized_domains: Option<&[String]>,

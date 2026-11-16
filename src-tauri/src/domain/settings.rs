@@ -19,7 +19,7 @@ pub enum CloseBehavior {
     Tray,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct DesktopBehaviorSettings {
     pub show_tray_icon: bool,
     pub close_behavior: CloseBehavior,
@@ -70,7 +70,7 @@ impl StartupSource {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WebActivityBridgeSettings {
     pub enabled: bool,
     pub port: u16,
@@ -83,7 +83,7 @@ pub struct WebActivitySettings {
     pub token: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RemoteStatusBridgeSettings {
     pub enabled: bool,
     pub url: String,

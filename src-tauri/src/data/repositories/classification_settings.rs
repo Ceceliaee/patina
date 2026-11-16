@@ -182,6 +182,7 @@ async fn load_classification_setting_rows(
 fn classification_settings_query() -> String {
     "SELECT key, value FROM settings
      WHERE key = 'language'
+        OR key GLOB '__category_default_color_assignment::*'
         OR substr(key,1,12) = '__app_link::'
         OR substr(key,1,12) = '__web_site::'
         OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ? OR key LIKE ?"

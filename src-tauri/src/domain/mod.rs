@@ -6,6 +6,8 @@ pub mod classification;
 pub mod export_schedule;
 pub mod focus_history;
 pub mod free_focus;
+#[cfg(test)]
+pub mod icon_color;
 pub mod lifecycle;
 pub mod localization;
 pub mod mini_window;

@@ -1,0 +1,116 @@
+use crate::data::repositories::web_activity;
+use crate::domain::web_activity::{WebActivityChange, WebActivitySegmentInput};
+use crate::engine::web_activity::{WebActivityStore, WebActivityStoreFuture};
+use sqlx::{Pool, Sqlite};
+
+pub struct SqliteWebActivityStore {
+    pool: Pool<Sqlite>,
+}
+
+impl SqliteWebActivityStore {
+    pub fn new(pool: Pool<Sqlite>) -> Self {
+        Self { pool }
+    }
+
+    pub async fn next_expiry(&self) -> Result<Option<i64>, String> {
+        web_activity::next_expiry(&self.pool)
+            .await
+            .map_err(|error| error.to_string())
+    }
+}
+
+impl WebActivityStore for SqliteWebActivityStore {
+    fn seal_anonymous(&self, now_ms: i64) -> WebActivityStoreFuture<'_, bool> {
+        Box::pin(async move {
+            crate::data::repositories::anonymous_activity::seal(&self.pool, now_ms)
+                .await
+                .map_err(|error| error.to_string())
+        })
+    }
+    fn record_anonymous(&self, now_ms: i64) -> WebActivityStoreFuture<'_, bool> {
+        Box::pin(async move {
+            crate::data::repositories::anonymous_activity::observe(&self.pool, now_ms, true)
+                .await
+                .map_err(|error| error.to_string())
+        })
+    }
+
+    fn browser_recording_enabled<'a>(
+        &'a self,
+        exe_name: &'a str,
+    ) -> WebActivityStoreFuture<'a, bool> {
+        Box::pin(async move {
+            crate::data::repositories::tracker_settings::load_tracking_enabled_setting_for_app(
+                &self.pool, exe_name,
+            )
+            .await
+            .map_err(|error| error.to_string())
+        })
+    }
+    fn expire_active_segment(&self, now_ms: i64) -> WebActivityStoreFuture<'_, bool> {
+        Box::pin(async move {
+            web_activity::expire_active_segment(&self.pool, now_ms)
+                .await
+                .map_err(|error| error.to_string())
+        })
+    }
+
+    fn seal_source<'a>(
+        &'a self,
+        client: &'a str,
+        native_session_id: i64,
+        now_ms: i64,
+    ) -> WebActivityStoreFuture<'a, bool> {
+        Box::pin(async move {
+            web_activity::end_active_segment_for_source(
+                &self.pool,
+                client,
+                native_session_id,
+                now_ms,
+            )
+            .await
+            .map_err(|error| error.to_string())
+        })
+    }
+    fn load_domain_recording_enabled<'a>(
+        &'a self,
+        normalized_domain: &'a str,
+    ) -> WebActivityStoreFuture<'a, bool> {
+        Box::pin(async move {
+            web_activity::load_domain_recording_enabled(&self.pool, normalized_domain)
+                .await
+                .map_err(|error| error.to_string())
+        })
+    }
+
+    fn load_domain_title_recording_enabled<'a>(
+        &'a self,
+        normalized_domain: &'a str,
+    ) -> WebActivityStoreFuture<'a, bool> {
+        Box::pin(async move {
+            web_activity::load_domain_title_recording_enabled(&self.pool, normalized_domain)
+                .await
+                .map_err(|error| error.to_string())
+        })
+    }
+
+    fn upsert_active_segment<'a>(
+        &'a self,
+        input: &'a WebActivitySegmentInput,
+        now_ms: i64,
+    ) -> WebActivityStoreFuture<'a, WebActivityChange> {
+        Box::pin(async move {
+            web_activity::upsert_active_segment(&self.pool, input, now_ms)
+                .await
+                .map_err(|error| error.to_string())
+        })
+    }
+
+    fn seal_active_segment(&self, now_ms: i64) -> WebActivityStoreFuture<'_, bool> {
+        Box::pin(async move {
+            web_activity::end_active_segment(&self.pool, now_ms)
+                .await
+                .map_err(|error| error.to_string())
+        })
+    }
+}

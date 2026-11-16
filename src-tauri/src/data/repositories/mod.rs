@@ -1,6 +1,8 @@
 pub mod anonymous_activity;
 pub mod app_links;
 pub mod app_settings;
+#[cfg(test)]
+pub mod category_management;
 pub mod classification_settings;
 pub mod icon_cache;
 pub(crate) mod icon_retention;

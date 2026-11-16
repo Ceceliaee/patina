@@ -45,20 +45,52 @@ const SYSTEM_EXECUTABLES: &[&str] = &[
 ];
 
 const SEEDED_CATEGORIES: &[&str] = &[
-    "ai",
-    "development",
     "office",
-    "browser",
     "communication",
+    "browser",
     "video",
-    "music",
     "game",
     "design",
+    "development",
+    "learning",
     "utility",
     "other",
     "system",
 ];
-const DEFAULT_ACCENT_COLOR: &str = "#4F5FD7";
+
+const CATEGORY_PALETTE: &[&str] = &[
+    "#4F5FD7", "#5968DE", "#6471E3", "#6F7AE6", "#4B78C8", "#5380CD", "#5D88D1", "#3F86C9",
+    "#4790CF", "#3293C8", "#399CCB", "#2E9FAE", "#35A69E", "#2FA58B", "#36AC7E", "#3D9C6B",
+    "#46956F", "#4F987F", "#5A9861", "#66955C", "#7C945C", "#8A9058", "#9A8C52", "#AA8752",
+    "#B07E55", "#B97A58", "#C07158", "#C56A73", "#BE657D", "#B6688B", "#A06A7D", "#976C90",
+    "#8C6FA1", "#8572A5", "#7E74A8", "#6F7F92", "#637D9F",
+];
+pub fn default_category_color(category: &str) -> String {
+    let seeded = match category {
+        "system" => Some(SYSTEM_CATEGORY_COLOR),
+        "other" => Some(OTHER_CATEGORY_COLOR),
+        "ai" => Some("#3293C8"),
+        "development" => Some("#4790CF"),
+        "office" => Some("#6F7AE6"),
+        "browser" => Some("#36AC7E"),
+        "communication" => Some("#C56A73"),
+        "video" => Some("#66955C"),
+        "music" => Some("#3D9C6B"),
+        "game" => Some("#B07E55"),
+        "design" => Some("#8C6FA1"),
+        "utility" => Some("#35A69E"),
+        "learning" => Some("#AA8752"),
+        _ => None,
+    };
+    if let Some(color) = seeded {
+        return color.into();
+    }
+    let hash = category.chars().fold(2166136261u32, |hash, ch| {
+        (hash ^ u32::from(ch.encode_utf16(&mut [0; 2])[0])).wrapping_mul(16777619)
+    });
+    CATEGORY_PALETTE[hash as usize % CATEGORY_PALETTE.len()].into()
+}
+
 const OTHER_CATEGORY_COLOR: &str = "#8F98A8";
 const SYSTEM_CATEGORY_COLOR: &str = "#475569";
 
@@ -85,6 +117,7 @@ pub struct ClassificationSnapshot {
     web_sites: crate::domain::web_links::WebLinkRules,
     label_overrides: HashMap<String, String>,
     color_overrides: HashMap<String, String>,
+    color_defaults: HashMap<String, String>,
     custom_categories: HashSet<String>,
     deleted_categories: HashSet<String>,
     locale: Locale,
@@ -129,6 +162,14 @@ impl ClassificationSnapshot {
                 }
                 continue;
             }
+            if let Some(category) = key.strip_prefix("__category_default_color_assignment::") {
+                if let Some(color) =
+                    normalize_hex_color(&value).filter(|c| CATEGORY_PALETTE.contains(&c.as_str()))
+                {
+                    snapshot.color_defaults.insert(category.to_string(), color);
+                }
+                continue;
+            }
             if let Some(category) = key.strip_prefix(CATEGORY_COLOR_OVERRIDE_KEY_PREFIX) {
                 if let Some(color) = normalize_hex_color(&value) {
                     snapshot.color_overrides.insert(category.to_string(), color);
@@ -167,6 +208,7 @@ impl ClassificationSnapshot {
     }
 
     pub fn category_is_available(&self, category: &str) -> bool {
+        let category = normalize_category_id(category);
         category != "system"
             && !self.deleted_categories.contains(category)
             && (SEEDED_CATEGORIES.contains(&category) || self.custom_categories.contains(category))
@@ -237,6 +279,7 @@ impl ClassificationSnapshot {
     }
 
     fn resolve_category(&self, raw_category: String) -> ResolvedCategory {
+        let raw_category = normalize_category_id(&raw_category).to_owned();
         let category = if raw_category != "system"
             && (!self.category_exists(&raw_category)
                 || self.deleted_categories.contains(&raw_category))
@@ -266,14 +309,23 @@ impl ClassificationSnapshot {
     }
 
     fn category_color(&self, category: &str) -> String {
-        if let Some(color) = self.color_overrides.get(category) {
-            return color.clone();
+        if let Some(color) = self.category_color_override(category) {
+            return color.to_owned();
         }
-        match category {
-            "system" => SYSTEM_CATEGORY_COLOR.to_string(),
-            "other" => OTHER_CATEGORY_COLOR.to_string(),
-            _ => DEFAULT_ACCENT_COLOR.to_string(),
+        self.default_category_color(category)
+    }
+
+    pub fn category_color_override(&self, category: &str) -> Option<&str> {
+        self.color_overrides.get(category).map(String::as_str)
+    }
+
+    pub fn default_category_color(&self, category: &str) -> String {
+        if !matches!(category, "other" | "system") {
+            if let Some(color) = self.color_defaults.get(category) {
+                return color.clone();
+            }
         }
+        default_category_color(category)
     }
 }
 
@@ -327,22 +379,7 @@ impl ClassificationSnapshot {
             c.color = defaults
                 .get(&format!("__category_default_color_assignment::{}", c.id))
                 .cloned()
-                .unwrap_or_else(|| {
-                    match c.id.as_str() {
-                        "ai" => "#3293C8",
-                        "development" => "#4790CF",
-                        "office" => "#6F7AE6",
-                        "browser" => "#36AC7E",
-                        "communication" => "#C56A73",
-                        "video" => "#66955C",
-                        "music" => "#3D9C6B",
-                        "game" => "#B07E55",
-                        "design" => "#8C6FA1",
-                        "utility" => "#35A69E",
-                        _ => DEFAULT_ACCENT_COLOR,
-                    }
-                    .into()
-                });
+                .unwrap_or_else(|| self.default_category_color(&c.id));
         }
         c
     }
@@ -350,6 +387,14 @@ impl ClassificationSnapshot {
 
 pub fn canonical_exe(value: &str) -> String {
     value.trim().trim_matches('"').to_ascii_lowercase()
+}
+
+pub(crate) fn normalize_category_id(category: &str) -> &str {
+    match category {
+        "ai" => "office",
+        "music" => "video",
+        _ => category,
+    }
 }
 
 pub fn normalize_domain_key(value: &str) -> String {
@@ -448,6 +493,75 @@ mod tests {
             rows.iter()
                 .map(|(key, value)| (key.to_string(), value.to_string())),
         )
+    }
+
+    #[test]
+    fn default_categories_are_nine_categories_and_unclassified() {
+        let classification = snapshot(&[("language", "zh-CN")]);
+        let categories = classification.available_categories();
+        let expected = [
+            ("office", "办公"),
+            ("communication", "社交"),
+            ("browser", "浏览"),
+            ("video", "影音"),
+            ("game", "游戏"),
+            ("design", "创作"),
+            ("development", "开发"),
+            ("learning", "学习"),
+            ("utility", "工具"),
+            ("other", "未分类"),
+        ];
+        assert_eq!(categories.len(), expected.len());
+        for (id, label) in expected {
+            let category = categories
+                .iter()
+                .find(|category| category.id == id)
+                .unwrap();
+            assert_eq!(category.label, label);
+        }
+        assert!(!classification.category_is_available("system"));
+    }
+
+    #[test]
+    fn legacy_categories_resolve_for_apps_domains_and_groups() {
+        let classification = snapshot(&[
+            (
+                "__app_override::assistant.exe",
+                r##"{"category":"ai","displayName":"Assistant","color":"#123456"}"##,
+            ),
+            ("__app_override::player.exe", r#"{"category":"music"}"#),
+            (
+                "__web_domain_override::standalone.test",
+                r#"{"category":"ai"}"#,
+            ),
+            (
+                "__web_site::example.com",
+                r#"{"version":2,"exceptions":[],"category":"music"}"#,
+            ),
+            ("__custom_category::custom:research", "1"),
+        ]);
+        assert_eq!(
+            classification.resolve_session_category("assistant.exe").id,
+            "office"
+        );
+        assert_eq!(
+            classification.resolve_session_category("player.exe").id,
+            "video"
+        );
+        assert_eq!(
+            classification.resolve_web_category("standalone.test").id,
+            "office"
+        );
+        assert_eq!(
+            classification.resolve_web_category("www.example.com").id,
+            "video"
+        );
+        assert_eq!(
+            classification.app_appearance("assistant.exe"),
+            (Some("Assistant"), Some("#123456"))
+        );
+        assert!(classification.category_is_available("custom:research"));
+        assert_eq!(classification.available_categories().len(), 11);
     }
 
     #[test]
