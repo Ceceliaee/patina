@@ -22,8 +22,11 @@ fn named(hwnd: HWND, name: &str) -> Option<IUIAutomationElement> {
 }
 
 #[test]
-#[ignore = "requires an interactive Windows desktop"]
+#[ignore = "isolated Win32 desktop"]
 fn accessible_controls() -> Result<(), Error> {
+    if !patina_test_desktop::run_case()? {
+        return Ok(());
+    }
     let _apartment = ComApartment::init()?;
     let build = Command::new(env!("CARGO"))
         .current_dir(env!("CARGO_MANIFEST_DIR"))

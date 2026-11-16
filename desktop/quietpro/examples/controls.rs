@@ -21,17 +21,17 @@ impl Render for Controls {
             .gap(px(8.))
             .bg(colors.canvas)
             .text_color(colors.text)
-            .child(IconControl::new("pin", "Pin", Icon::Pin).toggle(
-                colors,
-                self.pinned,
-                move |pressed, _, _, cx| {
-                    let _ = view.update(cx, |this, cx| {
-                        this.pinned = pressed;
-                        this.changes += 1;
-                        cx.notify();
-                    });
-                },
-            ))
+            .child(
+                IconControl::new("pin", "Pin", Icon::Pin)
+                    .selected_icon(quietpro::FILLED_PIN_ICON)
+                    .toggle(colors, self.pinned, move |pressed, _, _, cx| {
+                        let _ = view.update(cx, |this, cx| {
+                            this.pinned = pressed;
+                            this.changes += 1;
+                            cx.notify();
+                        });
+                    }),
+            )
             .child(
                 text_button("count", "Count", colors, self.pinned).on_click(cx.listener(
                     |this, _, _, cx| {
@@ -62,6 +62,11 @@ impl Render for Controls {
 }
 
 fn main() {
+    if std::env::args_os().any(|arg| arg == "--verify")
+        && !patina_test_desktop::run_verify_example().expect("isolated controls desktop")
+    {
+        return;
+    }
     gpui_kit::application()
         .with_assets(quietpro::QuietProAssets)
         .with_quit_mode(QuitMode::LastWindowClosed)

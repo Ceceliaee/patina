@@ -1,92 +1,36 @@
-use crate::{Icon, Palette, glyph};
+use crate::{Icon, Palette, glyph, superellipse::superellipse_layer};
 use gpui_kit::{
-    App, ClickEvent, ElementId, PathBuilder, SharedString, Window,
+    App, ClickEvent, ElementId, FocusHandle, SharedString, Window,
     base::{Button, Toggle},
-    canvas, div, point,
+    div,
     prelude::*,
     px, transparent_black,
 };
-use std::{f32::consts::TAU, sync::LazyLock};
 
 const CONTROL_GROUP: &str = "quietpro-icon-control";
+pub const ICON_CONTROL_SIZE: f32 = 28.;
 
-// Polar radius of |x|^4 + |y|^4 = 1, sampled at equal angles.
-static CONTOUR: LazyLock<[(f32, f32); 64]> = LazyLock::new(|| {
-    std::array::from_fn(|i| {
-        let (y, x) = (TAU * i as f32 / 64.).sin_cos();
-        let radius = (x.powi(4) + y.powi(4)).sqrt().sqrt().recip();
-        (x * radius, y * radius)
-    })
-});
-
-fn surface(outline: bool) -> impl IntoElement {
-    canvas(
-        |_, _, _| (),
-        move |bounds, (), window, _| {
-            let color = window.text_style().color;
-            if color.a == 0. {
-                return;
-            }
-            let (bounds, mut path) = if outline {
-                (bounds.inset(px(0.5)), PathBuilder::stroke(px(1.)))
-            } else {
-                (bounds, PathBuilder::fill())
-            };
-            let center = bounds.center();
-            let points = CONTOUR.map(|(x, y)| {
-                point(
-                    center.x + bounds.size.width * (0.5 * x),
-                    center.y + bounds.size.height * (0.5 * y),
-                )
-            });
-            path.add_polygon(&points, true);
-            if let Ok(path) = path.build() {
-                window.paint_path(path, color);
-            }
-        },
-    )
-    .absolute()
-    .inset_0()
-}
-
-fn control<C: Styled + StatefulInteractiveElement + ParentElement + FluentBuilder>(
+pub(crate) fn control_surface<
+    C: Styled + StatefulInteractiveElement + ParentElement + FluentBuilder,
+>(
     control: C,
     colors: Palette,
-    icon: Icon,
     disabled: bool,
-    pressed: bool,
 ) -> C {
     let fill = div()
         .id("surface")
         .absolute()
         .inset_0()
-        .text_color(if pressed {
-            colors.hover
-        } else {
-            transparent_black().into()
-        })
-        .when(!disabled && !pressed, |s| {
+        .text_color(transparent_black())
+        .when(!disabled, |s| {
             s.group_hover(CONTROL_GROUP, move |s| {
                 s.text_color(colors.secondary.opacity(0.08))
             })
         })
         .when(!disabled, |s| {
-            s.group_active(CONTROL_GROUP, move |s| {
-                s.text_color(if pressed {
-                    colors.accent.opacity(0.20)
-                } else {
-                    colors.track
-                })
-            })
+            s.group_active(CONTROL_GROUP, move |s| s.text_color(colors.track))
         })
-        .child(surface(false));
-    let icon_color = if disabled {
-        colors.disabled_text
-    } else if pressed {
-        colors.accent
-    } else {
-        colors.secondary
-    };
+        .child(superellipse_layer(false));
     control
         .group(CONTROL_GROUP)
         .relative()
@@ -94,19 +38,33 @@ fn control<C: Styled + StatefulInteractiveElement + ParentElement + FluentBuilde
         .items_center()
         .justify_center()
         .flex_none()
-        .size(px(28.))
-        .text_color(if pressed {
-            colors.accent.opacity(0.35)
-        } else {
-            transparent_black().into()
-        })
+        .size(px(ICON_CONTROL_SIZE))
+        .text_color(transparent_black())
         .when(!disabled, |s| {
             s.cursor_pointer()
-                .focus_visible(move |s| s.text_color(colors.accent))
+                .focus_visible(move |s| s.text_color(colors.secondary))
         })
         .child(fill)
-        .child(surface(true))
-        .child(glyph(icon, icon_color).size(px(16.)))
+        .child(superellipse_layer(true))
+}
+
+fn control<C: Styled + StatefulInteractiveElement + ParentElement + FluentBuilder>(
+    control: C,
+    colors: Palette,
+    icon: Icon,
+    disabled: bool,
+    icon_data: Option<&'static [u8]>,
+) -> C {
+    let icon_color = if disabled {
+        colors.disabled_text
+    } else {
+        colors.secondary
+    };
+    control_surface(control, colors, disabled).child(
+        glyph(icon, icon_color)
+            .when_some(icon_data, |icon, data| icon.data(data))
+            .size(px(16.)),
+    )
 }
 
 /// An icon-only control always has an identity and an accessible name.
@@ -115,6 +73,8 @@ pub struct IconControl {
     label: SharedString,
     icon: Icon,
     disabled: bool,
+    focus: Option<FocusHandle>,
+    selected_icon: Option<&'static [u8]>,
 }
 
 impl IconControl {
@@ -124,6 +84,8 @@ impl IconControl {
             label: label.into(),
             icon,
             disabled: false,
+            focus: None,
+            selected_icon: None,
         }
     }
 
@@ -132,21 +94,36 @@ impl IconControl {
         self
     }
 
-    pub fn action(
-        self,
-        colors: Palette,
-        click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
-    ) -> impl IntoElement {
+    pub fn track_focus(mut self, focus: &FocusHandle) -> Self {
+        self.focus = Some(focus.clone());
+        self
+    }
+
+    /// A functional toggle can distinguish its enabled state with a different glyph.
+    pub fn selected_icon(mut self, svg: &'static [u8]) -> Self {
+        self.selected_icon = Some(svg);
+        self
+    }
+
+    pub fn button(self, colors: Palette) -> Button {
         control(
             Button::new(self.id)
+                .when_some(self.focus, |button, focus| button.track_focus(&focus))
                 .accessibility_label(self.label)
                 .disabled(self.disabled),
             colors,
             self.icon,
             self.disabled,
-            false,
+            None,
         )
-        .on_click(click)
+    }
+
+    pub fn action(
+        self,
+        colors: Palette,
+        click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    ) -> impl IntoElement {
+        self.button(colors).on_click(click)
     }
 
     /// The caller owns the selected value. A pointer or keyboard activation
@@ -159,13 +136,14 @@ impl IconControl {
     ) -> impl IntoElement {
         control(
             Toggle::new(self.id)
+                .when_some(self.focus, |button, focus| button.track_focus(&focus))
                 .pressed(pressed)
                 .accessibility_label(self.label)
                 .disabled(self.disabled),
             colors,
             self.icon,
             self.disabled,
-            pressed,
+            self.selected_icon.filter(|_| pressed),
         )
         .on_change(change)
     }

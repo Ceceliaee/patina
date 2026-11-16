@@ -50,7 +50,7 @@ pub fn text_button(
             button
                 .cursor_pointer()
                 .hover(move |s| s.text_color(colors.border_strong))
-                .focus_visible(move |s| s.text_color(colors.accent))
+                .focus_visible(move |s| s.text_color(colors.secondary))
         })
         .child(continuous_corner_layer(px(CORNER_RADIUS), px(0.)))
         .child(face)
