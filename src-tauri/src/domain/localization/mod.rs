@@ -223,10 +223,20 @@ mod tests {
                 ),
                 format!("{count} {noun}")
             );
-            assert_eq!(format_text(locale, "native.tools.activityReminderDefaultBody", &[
-                ("targetName", "Code / 文档".into()),
-                ("usageMinutes", count.to_string()), ("limitMinutes", count.to_string()),
-            ]), format!("Активность «Code / 文档» за сегодня: {count} {minute}. Достигнут дневной лимит: {count} {minute}."));
+            assert_eq!(
+                format_text(
+                    locale,
+                    "native.tools.activityReminderDefaultBody",
+                    &[
+                        ("targetName", "Code / 文档".into()),
+                        ("usageMinutes", count.to_string()),
+                        ("limitMinutes", count.to_string()),
+                    ]
+                ),
+                format!(
+                    "Активность «Code / 文档» за сегодня: {count} {minute}. Достигнут дневной лимит: {count} {minute}."
+                )
+            );
         }
         assert_eq!(
             format_text(

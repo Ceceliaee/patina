@@ -1,5 +1,19 @@
 // Canonical language-neutral message contract. Do not derive this file from a locale at build time.
 export const MESSAGE_SCHEMA = {
+  "settings.storageFrequency": {"kind": "string", "params": [], "surface": "native", "description": "Frequency label for native scheduled storage tasks."},
+  "settings.storageCleanupBefore": {"kind": "message", "params": [{"name": "days", "type": "number", "optional": false}], "surface": "native", "description": "Native cleanup slider value: records from this many days ago and earlier."},
+
+  "settings.storageTime": {"kind": "string", "params": [], "surface": "native"},
+  "settings.storageWeekday": {"kind": "string", "params": [], "surface": "native"},
+  "settings.storageMovePending": {"kind": "string", "params": [], "surface": "native"},
+  "settings.storageScheduledBackup": {"kind": "string", "params": [], "surface": "native"},
+  "settings.storageWeekly": {"kind": "string", "params": [], "surface": "native"},
+  "settings.webDavDirectory": {"kind": "string", "params": [], "surface": "native"},
+  "settings.dataImport.batchesEmpty": {"kind": "string", "params": [], "surface": "native"},
+  "settings.servicePortInvalid": {"kind": "string", "params": [], "surface": "native"},
+  "settings.serviceTokenRequired": {"kind": "string", "params": [], "surface": "native"},
+  "settings.serviceEndpointInvalid": {"kind": "string", "params": [], "surface": "native"},
+  "settings.webSyncSetup": {"kind": "string", "params": [], "surface": "native"},
   "tools.timerAccess": {"kind": "string", "params": [], "surface": "native"},
   "tools.reinstall": {"kind": "string", "params": [], "surface": "native"},
   "tools.manager": {"kind": "string", "params": [], "surface": "native"},
@@ -79,10 +93,10 @@ export const MESSAGE_SCHEMA = {
 
   "mapping.webIndependent": {"kind": "string", "params": [], "surface": "frontend", "description": "Keep this exact domain outside its automatic website group"},
   "mapping.mergeWebDomain": {"kind": "message", "params": [{"name": "domain", "type": "string", "optional": false}], "surface": "frontend", "description": "Merge an independent domain into its automatic root group"},
-  "mapping.deletionMembers": { "kind": "string", "params": [], "surface": "frontend" },
-  "mapping.deletionLinks": { "kind": "string", "params": [], "surface": "frontend" },
-  "mapping.deletionReminders": { "kind": "string", "params": [], "surface": "frontend" },
-  "mapping.deletionSharedReminders": { "kind": "string", "params": [], "surface": "frontend" },
+  "mapping.deletionMembers": { "alsoNative": true, "kind": "string", "params": [], "surface": "frontend" },
+  "mapping.deletionLinks": { "alsoNative": true, "kind": "string", "params": [], "surface": "frontend" },
+  "mapping.deletionReminders": { "alsoNative": true, "kind": "string", "params": [], "surface": "frontend" },
+  "mapping.deletionSharedReminders": { "alsoNative": true, "kind": "string", "params": [], "surface": "frontend" },
   "mapping.deletionPendingChanges": { "kind": "string", "params": [], "surface": "frontend" },
   "mapping.objectDeleted": { "kind": "string", "params": [], "surface": "frontend" },
 
@@ -95,8 +109,8 @@ export const MESSAGE_SCHEMA = {
     "alsoNative": true,"kind": "string", "params": [], "surface": "frontend", "description": "Settings group heading: Theme"},
   "settings.interfaceGroupTitle": {
     "alsoNative": true,"kind": "string", "params": [], "surface": "frontend", "description": "Settings group heading: Interface"},
-  "settings.windowBehaviorTitle": {"kind": "string", "params": [], "surface": "frontend", "description": "Settings group heading: Window behavior"},
-  "settings.runtimeBehaviorTitle": {"kind": "string", "params": [], "surface": "frontend", "description": "Settings group heading: Runtime behavior"},
+  "settings.windowBehaviorTitle": {"kind": "string", "params": [], "surface": "frontend", "alsoNative": true, "description": "Settings group heading: Window behavior"},
+  "settings.runtimeBehaviorTitle": {"kind": "string", "params": [], "surface": "frontend", "alsoNative": true, "description": "Settings group heading: Runtime behavior"},
   "native.export.anonymousActivity": { "kind": "string", "params": [], "surface": "native", "description": "Anonymous activity label in exported data; identity fields remain empty." },
   "common.anonymousActivity": { "kind": "string", "params": [], "surface": "frontend", "alsoNative": true, "description": "Single anonymous activity identity; duration is retained without application or website identity." },
   "mapping.webLinks": { "kind": "string", "params": [], "surface": "frontend", "description": "Website grouping and exact-domain controls" },
@@ -196,7 +210,8 @@ export const MESSAGE_SCHEMA = {
   "accessibility.color.blueChannel": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "accessibility.color.color": {
     "kind": "string",
@@ -206,69 +221,80 @@ export const MESSAGE_SCHEMA = {
   "accessibility.color.colorFormat": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "accessibility.color.colorPicker": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "accessibility.color.eyedropper": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "accessibility.color.eyedropperUnsupported": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "accessibility.color.greenChannel": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "accessibility.color.hexValue": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "accessibility.color.hueChannel": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "accessibility.color.hueSlider": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "accessibility.color.lightnessChannel": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "accessibility.color.redChannel": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "accessibility.color.saturationChannel": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
-  "accessibility.data.appTrendRange": {
+  "accessibility.data.appTrendRange": { "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
-  "accessibility.data.categoryTrendRange": {
+  "accessibility.data.categoryTrendRange": { "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
-  "accessibility.data.earlierRange": {
+  "accessibility.data.earlierRange": { "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -289,7 +315,7 @@ export const MESSAGE_SCHEMA = {
     ],
     "surface": "frontend"
   },
-  "accessibility.data.heatmapRange": {
+  "accessibility.data.heatmapRange": { "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -299,17 +325,17 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "accessibility.data.longerTrendRange": {
+  "accessibility.data.longerTrendRange": { "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
-  "accessibility.data.newerRange": {
+  "accessibility.data.newerRange": { "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
-  "accessibility.data.nextPickerMode": {
+  "accessibility.data.nextPickerMode": { "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -324,7 +350,7 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "accessibility.data.previousPickerMode": {
+  "accessibility.data.previousPickerMode": { "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -334,7 +360,7 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "accessibility.data.resetTrendRange": {
+  "accessibility.data.resetTrendRange": { "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -344,12 +370,12 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "accessibility.data.shorterTrendRange": {
+  "accessibility.data.shorterTrendRange": { "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
-  "accessibility.data.trendRange": {
+  "accessibility.data.trendRange": { "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -359,7 +385,7 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "accessibility.data.webTrendRange": {
+  "accessibility.data.webTrendRange": { "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -460,16 +486,19 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "accessibility.settings.generateServiceToken": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "accessibility.settings.hideRemoteMachineId": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "accessibility.settings.hideServiceToken": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -480,11 +509,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "accessibility.settings.showRemoteMachineId": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "accessibility.settings.showServiceToken": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -756,6 +787,8 @@ export const MESSAGE_SCHEMA = {
     ],
     "surface": "frontend"
   },
+  "categories.learning": {"kind": "string", "params": [], "surface": "frontend", "description": "Learning, education, literature and scientific analysis software."},
+  "categories.short.learning": {"kind": "string", "params": [], "surface": "frontend", "description": "Learning, education, literature and scientific analysis software.", "alsoNative": true},
   "categories.ai": {
     "kind": "string",
     "params": [],
@@ -894,11 +927,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "common.default": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "common.hidePassword": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -950,6 +985,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "common.showPassword": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1086,6 +1122,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.appHeatmap": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1109,6 +1146,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.appTrendActiveDays": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1125,16 +1163,19 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.appTrendEmpty": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "data.appTrendNoMatch": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "data.appTrendPeakDay": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1151,11 +1192,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.categoryHeatmap": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "data.categoryInteractionHint": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1189,16 +1232,18 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.categoryTrendEmpty": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "data.categoryTrendNoMatch": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
-  "data.customDayCount": {
+  "data.customDayCount": { "alsoNative": true,
     "kind": "message",
     "params": [
       {
@@ -1227,6 +1272,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.destinationMode": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1260,16 +1306,18 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.interactionHint": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "data.monthlyAverage": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
-  "data.notStarted": {
+  "data.notStarted": { "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1286,7 +1334,7 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "data.pickDate": {
+  "data.pickDate": { "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1297,7 +1345,7 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "data.pickerModes.custom": {
+  "data.pickerModes.custom": { "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1381,7 +1429,7 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "data.shortRangeHint": {
+  "data.shortRangeHint": { "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1393,6 +1441,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.webHeatmap": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1408,6 +1457,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.webSearchPlaceholder": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1424,6 +1474,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.webTrendEmpty": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1434,6 +1485,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "data.webTrendNoMatch": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1458,7 +1510,7 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "data.weekLabel": {
+  "data.weekLabel": { "alsoNative": true,
     "kind": "message",
     "params": [
       {
@@ -1474,7 +1526,7 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "data.yearLabel": {
+  "data.yearLabel": { "alsoNative": true,
     "kind": "message",
     "params": [
       {
@@ -1500,7 +1552,7 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
-  "date.monthLabel": {
+  "date.monthLabel": { "alsoNative": true,
     "kind": "message",
     "params": [
       {
@@ -1512,6 +1564,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "date.pickDate": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1522,6 +1575,9 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
+  "date.compactPattern": {"kind": "string", "params": [], "surface": "native", "description": "Windows date format pattern for a short month and day label."},
+  "date.calendarMonth": {"kind": "message", "params": [{"name": "year", "type": "string", "optional": false}, {"name": "month", "type": "string", "optional": false}], "surface": "native"},
+  "date.calendarWeekday": {"kind": "message", "params": [{"name": "day", "type": "string", "optional": false}], "surface": "native", "description": "Monday-based short weekday label in the native calendar."},
   "date.weekdaysShort": {
     "kind": "string-array",
     "params": [],
@@ -1544,6 +1600,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "date.yesterday": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1726,6 +1783,7 @@ export const MESSAGE_SCHEMA = {
   "destinationDetail.records": {
     "kind": "string",
     "params": [],
+    "alsoNative": true,
     "surface": "frontend"
   },
   "destinationDetail.retry": {
@@ -1835,22 +1893,26 @@ export const MESSAGE_SCHEMA = {
   "dialog.confirm": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "dialog.confirmDanger": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.collapseFieldGroup": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.configFields": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.configFieldsCount": {
     "kind": "message",
@@ -1871,22 +1933,26 @@ export const MESSAGE_SCHEMA = {
   "export.configFieldsEmpty": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.configFieldsTitle": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.deselectGroupFields": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.expandFieldGroup": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.exportAction": {
     "kind": "string",
@@ -1917,9 +1983,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.app_name.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.app_name.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1927,9 +1995,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.browser_client_id.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.browser_client_id.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1937,9 +2007,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.browser_exe_name.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.browser_exe_name.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1947,9 +2019,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.browser_kind.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.browser_kind.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1957,9 +2031,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.category_color.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.category_color.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1967,9 +2043,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.category_id.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.category_id.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1977,9 +2055,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.category.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.category.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1987,9 +2067,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.continuity_group_start_time.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.continuity_group_start_time.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1997,9 +2079,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.created_at.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.created_at.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2007,9 +2091,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.domain.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.domain.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2017,9 +2103,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.duration_minutes.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.duration_minutes.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2027,9 +2115,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.duration_ms.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.duration_ms.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2037,9 +2127,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.end_time.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.end_time.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2047,9 +2139,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.exe_name.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.exe_name.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2057,9 +2151,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.favicon_url.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.favicon_url.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2067,9 +2163,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.local_date.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.local_date.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2077,9 +2175,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.local_month.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.local_month.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2087,9 +2187,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.local_week.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.local_week.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2097,9 +2199,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.normalized_domain.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.normalized_domain.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2107,9 +2211,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.page_title.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.page_title.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2117,9 +2223,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.record_type.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.record_type.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2127,9 +2235,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.session_id.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.session_id.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2137,9 +2247,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.source_key.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.source_key.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2147,9 +2259,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.source_name.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.source_name.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2157,9 +2271,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.start_hour.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.start_hour.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2167,9 +2283,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.start_time.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.start_time.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2177,9 +2295,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.updated_at.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.updated_at.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2187,9 +2307,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.url.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.url.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2197,9 +2319,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.web_segment_id.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.web_segment_id.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2207,9 +2331,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.web_source.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.web_source.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2217,9 +2343,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.weekday.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.weekday.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2227,9 +2355,11 @@ export const MESSAGE_SCHEMA = {
   "export.fields.window_title.desc": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.fields.window_title.label": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2240,6 +2370,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "export.formatLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2262,7 +2393,8 @@ export const MESSAGE_SCHEMA = {
   "export.groupActivity": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.groupActivityHint": {
     "kind": "string",
@@ -2272,7 +2404,8 @@ export const MESSAGE_SCHEMA = {
   "export.groupAnalysis": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.groupAnalysisHint": {
     "kind": "string",
@@ -2282,7 +2415,8 @@ export const MESSAGE_SCHEMA = {
   "export.groupApps": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.groupAppsHint": {
     "kind": "string",
@@ -2292,7 +2426,8 @@ export const MESSAGE_SCHEMA = {
   "export.groupAudit": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.groupAuditHint": {
     "kind": "string",
@@ -2302,7 +2437,8 @@ export const MESSAGE_SCHEMA = {
   "export.groupClassification": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.groupClassificationHint": {
     "kind": "string",
@@ -2312,7 +2448,8 @@ export const MESSAGE_SCHEMA = {
   "export.groupWeb": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.groupWebHint": {
     "kind": "string",
@@ -2347,12 +2484,14 @@ export const MESSAGE_SCHEMA = {
   "export.restoreFormatDefaults": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.selectGroupFields": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.scheduledErrors": {
     "kind": "string-record",
@@ -2360,6 +2499,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "export.scheduledTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2370,6 +2510,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "export.timeRangeInvalid": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2377,7 +2518,8 @@ export const MESSAGE_SCHEMA = {
   "export.timeRangeLabel": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "export.timeRangeMissing": {
     "kind": "string",
@@ -2385,26 +2527,31 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "export.timeRangeModeDay": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "export.timeRangeModeMonth": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "export.timeRangeModeWeek": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "export.timeRangeModeYear": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "export.title": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2427,6 +2574,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "history.activitySegmentCount": {
+    "alsoNative": true,
     "kind": "message",
     "params": [
       {
@@ -2477,6 +2625,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "history.emptyDay": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2488,6 +2637,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "history.horizontalTimeline.ariaLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2553,6 +2703,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "history.sessionCount": {
+    "alsoNative": true,
     "kind": "message",
     "params": [
       {
@@ -2597,6 +2748,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "history.timelineAppLanes": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2608,6 +2760,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "history.timelineCategoryLanes": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2619,6 +2772,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "history.timelineHoursValue": {
+    "alsoNative": true,
     "kind": "message",
     "params": [
       {
@@ -2658,21 +2812,25 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "history.timelineTabApp": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "history.timelineTabWeb": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "history.timelineWebLanes": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "history.timelineWindowHours": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2712,6 +2870,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "history.titleRowCount": {
+    "alsoNative": true,
     "kind": "message",
     "params": [
       {
@@ -2742,6 +2901,13 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend", "alsoNative": true
   },
+  "mapping.clearSearch": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend",
+    "alsoNative": true,
+    "description": "Accessible name for the button that clears the application search query."
+  },
   "mapping.appSearchPlaceholder": {
     "alsoNative": true,
     "kind": "string",
@@ -2761,9 +2927,11 @@ export const MESSAGE_SCHEMA = {
     "description": "Classification category filter control and results."
 },
   "mapping.categoryControl": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "description": "Short action label opening category management on the classification page."
   },
   "mapping.categoryDialogTitle": {
     "alsoNative": true,
@@ -2797,19 +2965,22 @@ export const MESSAGE_SCHEMA = {
   "mapping.createCategoryPlaceholder": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "mapping.createCategoryTitle": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "mapping.deleteAppRecords": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
-  "mapping.deleteObjectDetail": {
+  "mapping.deleteObjectDetail": { "alsoNative": true,
     "kind": "message",
     "params": [
       {
@@ -2829,7 +3000,8 @@ export const MESSAGE_SCHEMA = {
         "optional": false
       }
     ],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "mapping.deleteCategoryDetail": {
     "kind": "message",
@@ -2840,14 +3012,17 @@ export const MESSAGE_SCHEMA = {
         "optional": false
       }
     ],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "mapping.deleteCategoryTitle": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "mapping.deleteWebRecords": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2874,11 +3049,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "mapping.editWebDomainName": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "mapping.emptyState": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2948,11 +3125,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "mapping.objectModeApp": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "mapping.objectModeWeb": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2965,7 +3144,7 @@ export const MESSAGE_SCHEMA = {
   "mapping.quickChangeCategory": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "mapping.quickMenuLabel": {
     "kind": "message",
@@ -3011,7 +3190,7 @@ export const MESSAGE_SCHEMA = {
   "mapping.quickSetCategory": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "mapping.quickUnclassified": {
     "kind": "string",
@@ -3027,7 +3206,8 @@ export const MESSAGE_SCHEMA = {
         "optional": false
       }
     ],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "mapping.renameCategoryDuplicateDetail": {
     "kind": "message",
@@ -3038,12 +3218,14 @@ export const MESSAGE_SCHEMA = {
         "optional": false
       }
     ],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "mapping.renameCategoryDuplicateTitle": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "mapping.renameCategoryPlaceholder": {
     "alsoNative": true,
@@ -3054,12 +3236,14 @@ export const MESSAGE_SCHEMA = {
   "mapping.renameCategoryTitle": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "mapping.restoreDefaultColor": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "mapping.restoreStats": {
     "kind": "string",
@@ -3115,15 +3299,18 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "mapping.webEmptyState": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "mapping.webSearchPlaceholder": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
+  "native.category.learning": {"kind": "string", "params": [], "surface": "native", "description": "Learning, education, literature and scientific analysis software."},
   "native.category.ai": {
     "kind": "string",
     "params": [],
@@ -3545,6 +3732,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.backupExportAction": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3560,6 +3748,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.backupRestoreAction": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3570,6 +3759,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.backupRestoreTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3585,6 +3775,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.backupTargetLocalTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3595,11 +3786,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.backupTargetRemoteTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.backupTargetTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3641,16 +3834,19 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.cleanupHint": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.cleanupNow": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.cleanupRangeLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3666,11 +3862,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.cleanupTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.showTrayIconLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3681,6 +3879,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.closeToTrayLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3691,11 +3890,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.colorSchemeLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.colorSchemeSaving": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3706,11 +3907,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.dataExportAction": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.dataExportTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3726,6 +3929,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.dataImport.batchesTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3762,6 +3966,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.dataImport.csvTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3817,6 +4022,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.dataImport.destructureTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3836,21 +4042,25 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.dataImport.dialogTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.dataImport.duplicateLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.dataImport.errorLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.dataImport.exactLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3890,16 +4100,19 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.dataImport.previewTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.dataImportAction": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.dataSafetyTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3907,7 +4120,8 @@ export const MESSAGE_SCHEMA = {
   "settings.decreaseCleanupRange": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "settings.decreaseMinute": {
     "kind": "message",
@@ -3966,7 +4180,8 @@ export const MESSAGE_SCHEMA = {
   "settings.increaseCleanupRange": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "settings.increaseMinute": {
     "kind": "message",
@@ -4002,6 +4217,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.launchAtLoginLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4033,26 +4249,31 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.remoteStatusBridgeMachineIdLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.remoteStatusBridgeTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.remoteStatusBridgeTokenLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.remoteStatusBridgeUrlLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.residentTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4089,6 +4310,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.restoreSourceLocalTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4099,6 +4321,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.restoreSourceRemoteTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4106,7 +4329,8 @@ export const MESSAGE_SCHEMA = {
   "settings.restoreSourceTitle": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend",
+    "alsoNative": true
   },
   "settings.restoreStrategyHint": {
     "kind": "string",
@@ -4119,21 +4343,25 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.restoreStrategyOptionHints.merge": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.restoreStrategyOptionHints.replace": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.restoreStrategyOptions.merge": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.restoreStrategyOptions.replace": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4154,6 +4382,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.saveFailed": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4174,31 +4403,37 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.servicesTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.startMinimizedLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.storage.changePathAction": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.storage.dataDirectoryLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.storage.installDirectoryLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.storage.openDirectoryAction": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4209,6 +4444,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.storage.restoreDefaultPathAction": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4251,11 +4487,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.storage.storageDataMigrationConfirmTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.storage.storageDirectoryTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4303,6 +4541,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.storage.storageSnapshotRefreshAction": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4338,11 +4577,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.themeLibraryOptions.dark": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.themeLibraryOptions.light": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4412,36 +4653,43 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.webActivityAddressLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.webActivityHelpAction": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.webActivityHelpCopiedAction": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.webActivityHelpCopyPortAction": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.webActivityHelpCopyTokenAction": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.webActivityHelpNote": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.webActivityHelpSteps": {
+    "alsoNative": true,
     "kind": "data",
     "params": [],
     "surface": "frontend",
@@ -4449,21 +4697,25 @@ export const MESSAGE_SCHEMA = {
     "resultType": "Array<{ title: string; description: string; showStoreBadges?: boolean; details: Array<string | { text: string; links: Array<{ label: string; href: string }> }> }>"
   },
   "settings.webActivityHelpTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.webActivityTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.webActivityTokenLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.webDavConfigTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4474,26 +4726,31 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.webDavDeleteAction": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.webDavDeleteDetail": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.webDavDeleteTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.webDavEdit": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.webDavPassword": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4504,11 +4761,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.webDavRemoteBackupsEmpty": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
-"settings.webDavUploadTitle": {"kind": "string", "params": [], "surface": "frontend"},
+"settings.webDavUploadTitle": {
+    "alsoNative": true,"kind": "string", "params": [], "surface": "frontend"},
 "settings.webDavUploadDescription": {"kind": "string", "params": [], "surface": "frontend"},
 "settings.webDavUploadAction": {"kind": "string", "params": [], "surface": "frontend"},
 "settings.webDavFileName": {"kind": "string", "params": [], "surface": "frontend"},
@@ -4518,6 +4777,7 @@ export const MESSAGE_SCHEMA = {
 "settings.webDavDirectoryFailed": {"kind": "string", "params": [], "surface": "frontend"},
 "settings.webDavUploadUncertain": {"kind": "string", "params": [], "surface": "frontend"},
   "settings.webDavRemoteBackupsTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4528,11 +4788,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.webDavServerUrl": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.webDavTestConnection": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4543,6 +4805,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.webDavUsername": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5007,14 +5270,14 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "tools.notificationGroup": { "kind": "string", "params": [], "surface": "frontend" },
-  "tools.notificationDelivery": { "kind": "string", "params": [], "surface": "frontend" },
-  "tools.notificationSoftware": { "kind": "string", "params": [], "surface": "frontend" },
-  "tools.notificationDialog": { "kind": "string", "params": [], "surface": "frontend" },
-  "tools.notificationSound": { "kind": "string", "params": [], "surface": "frontend" },
-  "tools.notificationSoundDefault": { "kind": "string", "params": [], "surface": "frontend" },
-  "tools.notificationSoundBell": { "kind": "string", "params": [], "surface": "frontend" },
-  "tools.notificationSoundClear": { "kind": "string", "params": [], "surface": "frontend" },
-  "tools.notificationSoundNone": { "kind": "string", "params": [], "surface": "frontend" },
+  "tools.notificationDelivery": { "alsoNative": true, "kind": "string", "params": [], "surface": "frontend" },
+  "tools.notificationSoftware": { "alsoNative": true, "kind": "string", "params": [], "surface": "frontend" },
+  "tools.notificationDialog": { "alsoNative": true, "kind": "string", "params": [], "surface": "frontend" },
+  "tools.notificationSound": { "alsoNative": true, "kind": "string", "params": [], "surface": "frontend" },
+  "tools.notificationSoundDefault": { "alsoNative": true, "kind": "string", "params": [], "surface": "frontend" },
+  "tools.notificationSoundBell": { "alsoNative": true, "kind": "string", "params": [], "surface": "frontend" },
+  "tools.notificationSoundClear": { "alsoNative": true, "kind": "string", "params": [], "surface": "frontend" },
+  "tools.notificationSoundNone": { "alsoNative": true, "kind": "string", "params": [], "surface": "frontend" },
   "tools.notificationSaveFailed": { "kind": "string", "params": [], "surface": "frontend" },
   "tools.notificationDisplayFailed": { "kind": "string", "params": [], "surface": "frontend" },
   "tools.settingsEmpty": {
@@ -5132,11 +5395,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "update.dialogDownloaded": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "update.dialogDownloadedDetail": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5194,6 +5459,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "update.downloadFailed": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5204,6 +5470,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "update.downloading": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5214,6 +5481,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "update.downloadNow": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5241,6 +5509,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "update.foundVersion": {
+    "alsoNative": true,
     "kind": "message",
     "params": [
       {
@@ -5267,6 +5536,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "update.installFailed": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5277,6 +5547,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "update.installing": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5346,6 +5617,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "update.restartInstall": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5398,6 +5670,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "update.upToDate": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5428,10 +5701,11 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend", "alsoNative": true
   },
   "mapping.saveFailed": { "kind": "string", "params": [], "surface": "frontend" },
-  "mapping.deleteFailed": { "kind": "string", "params": [], "surface": "frontend" },
+  "mapping.deleteFailed": { "alsoNative": true, "kind": "string", "params": [], "surface": "frontend" },
   "mapping.titleCaptureOnHint": { "kind": "string", "params": [], "surface": "frontend" },
   "mapping.titleCaptureOffHint": { "kind": "string", "params": [], "surface": "frontend" },
   "mapping.trackingOnHint": { "kind": "string", "params": [], "surface": "frontend", "description": "Enable anonymous timing: retain duration without recording identity and hide existing named history." },
   "mapping.trackingOffHint": { "kind": "string", "params": [], "surface": "frontend", "description": "Restore named tracking and show existing named history; past anonymous activity remains anonymous." },
-  "export.fieldsSectionTitle": { "kind": "string", "params": [], "surface": "frontend", "description": "Heading above the selected export field count; distinct from the configure button." }
+  "export.fieldsSectionTitle": {
+    "alsoNative": true, "kind": "string", "params": [], "surface": "frontend", "description": "Heading above the selected export field count; distinct from the configure button." }
 } as const;

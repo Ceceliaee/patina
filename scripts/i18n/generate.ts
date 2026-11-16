@@ -108,45 +108,58 @@ function rustLocaleVariant(locale: string): string {
   return locale.split(/[^A-Za-z0-9]+/).map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1).toLowerCase()}`).join("");
 }
 
-function renderRustExpression(expression: unknown): string {
+function renderRustExpression(expression: unknown, locale: string): string {
   if (typeof expression === "string") return `NativeExpr::Literal(${rustString(expression)})`;
   if (!expression || typeof expression !== "object" || Array.isArray(expression)) throw new Error("Native messages only support string expression nodes");
   const node = expression as Record<string, unknown>;
   if (node.$op === "arg" && typeof node.name === "string") return `NativeExpr::Arg(${rustString(node.name)})`;
   if (node.$op === "concat" && Array.isArray(node.parts)) {
-    return `NativeExpr::Concat(&[${node.parts.map(renderRustExpression).join(", ")}])`;
+    return `NativeExpr::Concat(&[${node.parts.map((part) => renderRustExpression(part, locale)).join(", ")}])`;
   }
   if (node.$op === "if") {
-    const test = node.when as { $op?: string; left?: { $op?: string; name?: string }; right?: string };
-    if (test?.$op === "eq" && test.left?.$op === "arg" && typeof test.left.name === "string" && typeof test.right === "string") {
-      return `NativeExpr::IfEqual(${rustString(test.left.name)}, ${rustString(test.right)}, &${renderRustExpression(node.then)}, &${renderRustExpression(node.else)})`;
+    const test = node.when as { $op?: string; left?: { $op?: string; name?: string }; right?: string | number };
+    if (test?.$op === "eq" && test.left?.$op === "arg" && typeof test.left.name === "string" && (typeof test.right === "string" || typeof test.right === "number")) {
+      return `NativeExpr::IfEqual(${rustString(test.left.name)}, ${rustString(String(test.right))}, &${renderRustExpression(node.then, locale)}, &${renderRustExpression(node.else, locale)})`;
     }
   }
   if (node.$op === "plural" && typeof node.arg === "string" && node.cases && typeof node.cases === "object" && !Array.isArray(node.cases)) {
     const cases = Object.entries(node.cases as Record<string, unknown>)
       .sort(([left], [right]) => left.localeCompare(right))
-      .map(([category, value]) => `(${rustString(category)}, ${renderRustExpression(value)})`)
+      .map(([category, value]) => `(${rustString(category)}, ${renderRustExpression(value, locale)})`)
       .join(", ");
     return `NativeExpr::Plural { arg: ${rustString(node.arg)}, cases: &[${cases}] }`;
+  }
+  if (node.$op === "monthName") {
+    const month = node.zeroBasedMonth as { $op?: string; left?: { $op?: string; name?: string }; right?: number };
+    if (month?.$op === "subtract" && month.left?.$op === "arg" && typeof month.left.name === "string" && month.right === 1) {
+      const formatter = new Intl.DateTimeFormat(locale, { month: node.style === "long" ? "long" : "short", timeZone: "UTC" });
+      let expression = `NativeExpr::Literal("")`;
+      for (let i = 12; i >= 1; i--) {
+        const name = formatter.format(new Date(Date.UTC(2020, i - 1, 1)));
+        expression = `NativeExpr::IfEqual(${rustString(month.left.name)}, ${rustString(String(i))}, &NativeExpr::Literal(${rustString(name)}), &${expression})`;
+      }
+      return expression;
+    }
   }
   throw new Error(`Native generated message uses unsupported op ${String(node.$op)}`);
 }
 
-function nativeExpression(value: MessageValue): string {
-  if (typeof value === "string") return renderRustExpression(value);
+function nativeExpression(value: MessageValue, locale: string): string {
+  if (typeof value === "string") return renderRustExpression(value, locale);
   if (value && typeof value === "object" && !Array.isArray(value) && (value as MessageDescriptor).$type === "message") {
-    return renderRustExpression((value as MessageDescriptor).body);
+    return renderRustExpression((value as MessageDescriptor).body, locale);
   }
   throw new Error("Native message must be a string or supported expression descriptor");
 }
 
 function renderRustResources(allMessages: Record<string, Record<string, MessageValue>>): string {
-  const nativeKeys = schemaEntriesBySurface("native").map(([key]) => key).sort();
+  const nativeEntries = schemaEntriesBySurface("native");
+  const nativeKeys = nativeEntries.filter(([, entry]) => entry.kind !== "data").map(([key]) => key).sort();
   const arms: string[] = [];
   for (const locale of Object.keys(LOCALE_REGISTRY)) {
     const variant = `Locale::${rustLocaleVariant(locale)}`;
     for (const key of nativeKeys) {
-      arms.push(`        (${variant}, ${rustString(key)}) => Some(${nativeExpression(allMessages[locale][key])}),`);
+      arms.push(`        (${variant}, ${rustString(key)}) => Some(${nativeExpression(allMessages[locale][key], locale)}),`);
     }
   }
   const russianCases = (RUSSIAN_FIXTURE["fixture.cases"] as readonly string[]).map((entry) => {
@@ -159,7 +172,19 @@ function renderRustResources(allMessages: Record<string, Record<string, MessageV
   const variants = locales.map((locale) => `    ${locale === canonicalSourceLocale ? "#[default]\n    " : ""}${rustLocaleVariant(locale)},`).join("\n");
   const parsers = locales.map((locale) => `            Some(value) if value.eq_ignore_ascii_case(${rustString(locale)}) => Self::${rustLocaleVariant(locale)},`).join("\n");
   const tags = locales.map((locale) => `            Self::${rustLocaleVariant(locale)} => ${rustString(locale)},`).join("\n");
-  return `// Generated by scripts/i18n/generate.ts. Do not edit.\n\nuse super::NativeExpr;\n\n#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]\npub enum Locale {\n${variants}\n}\n\npub const SOURCE_LOCALE: Locale = Locale::${rustLocaleVariant(canonicalSourceLocale)};\n\nimpl Locale {\n    pub fn from_tag(raw: Option<&str>) -> Self {\n        match raw.map(str::trim) {\n${parsers}\n            Some(value) if !value.is_empty() => {\n                eprintln!("[i18n] unsupported locale {value:?}; falling back to ${canonicalSourceLocale}");\n                SOURCE_LOCALE\n            }\n            _ => SOURCE_LOCALE,\n        }\n    }\n\n    pub fn tag(self) -> &'static str {\n        match self {\n${tags}\n        }\n    }\n}\n\n#[cfg(test)]\npub(super) const RUSSIAN_CARDINAL_CASES: &[(i64, &str)] = &[\n${russianCases}\n];\n\n#[cfg(test)]\n#[rustfmt::skip]\npub(super) const RUSSIAN_CARDINAL_MESSAGE: NativeExpr = ${renderRustExpression(russianMessage.body)};\n\n#[rustfmt::skip]\npub(super) fn lookup(locale: Locale, key: &str) -> Option<NativeExpr> {\n    match (locale, key) {\n${arms.join("\n")}\n        _ => None,\n    }\n}\n`;
+  return `// Generated by scripts/i18n/generate.ts. Do not edit.\n\nuse super::NativeExpr;\n\n#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]\npub enum Locale {\n${variants}\n}\n\npub const SOURCE_LOCALE: Locale = Locale::${rustLocaleVariant(canonicalSourceLocale)};\n\nimpl Locale {\n    pub fn from_tag(raw: Option<&str>) -> Self {\n        match raw.map(str::trim) {\n${parsers}\n            Some(value) if !value.is_empty() => {\n                eprintln!("[i18n] unsupported locale {value:?}; falling back to ${canonicalSourceLocale}");\n                SOURCE_LOCALE\n            }\n            _ => SOURCE_LOCALE,\n        }\n    }\n\n    pub fn tag(self) -> &'static str {\n        match self {\n${tags}\n        }\n    }\n}\n\n#[cfg(test)]\npub(super) const RUSSIAN_CARDINAL_CASES: &[(i64, &str)] = &[\n${russianCases}\n];\n\n#[cfg(test)]\n#[rustfmt::skip]\npub(super) const RUSSIAN_CARDINAL_MESSAGE: NativeExpr = ${renderRustExpression(russianMessage.body, "ru-RU")};\n\n#[rustfmt::skip]\npub(super) fn lookup(locale: Locale, key: &str) -> Option<NativeExpr> {\n    match (locale, key) {\n${arms.join("\n")}\n        _ => None,\n    }\n}\n`;
+}
+
+function renderRustData(allMessages: Record<string, Record<string, MessageValue>>): string {
+  const dataKeys = schemaEntriesBySurface("native").filter(([, entry]) => entry.kind === "data").map(([key]) => key).sort();
+  const arms: string[] = [];
+  for (const locale of Object.keys(LOCALE_REGISTRY)) {
+    const variant = `Locale::${rustLocaleVariant(locale)}`;
+    for (const key of dataKeys) {
+      arms.push(`        (${variant}, ${rustString(key)}) => Some(${rustString(JSON.stringify(allMessages[locale][key]))}),`);
+    }
+  }
+  return `// Generated by scripts/i18n/generate.ts. Do not edit.\n\nuse crate::domain::localization::Locale;\n\n#[rustfmt::skip]\npub(super) fn lookup_data(locale: Locale, key: &str) -> Option<&'static str> {\n    match (locale, key) {\n${arms.join("\n")}\n        _ => None,\n    }\n}\n`;
 }
 
 function expectedFiles(allMessages: Record<string, Record<string, MessageValue>>): Record<string, string> {
@@ -168,6 +193,7 @@ function expectedFiles(allMessages: Record<string, Record<string, MessageValue>>
     [join(FRONTEND_GENERATED_ROOT, "contract.ts")]: `// Generated by scripts/i18n/generate.ts. Do not edit.\nexport const SUPPORTED_LOCALES = ${JSON.stringify(Object.keys(LOCALE_REGISTRY))} as const;\nexport type Locale = (typeof SUPPORTED_LOCALES)[number];\nexport const LOCALE_METADATA = ${JSON.stringify(LOCALE_REGISTRY, null, 2)} as const satisfies Record<Locale, { label: string; source: boolean; direction: "ltr" | "rtl"; production: boolean }>;\n\n${buildUiTextType(schemaEntriesBySurface("frontend"))}`,
     [join(FRONTEND_GENERATED_ROOT, "resources.ts")]: renderFrontendResources(allMessages),
     [RUST_GENERATED_PATH]: renderRustResources(allMessages),
+    [join(dirname(RUST_GENERATED_PATH), "generated_data.rs")]: renderRustData(allMessages),
   };
   for (const [locale, messages] of Object.entries(allMessages)) {
     files[join(FRONTEND_GENERATED_ROOT, "locales", `${locale}.ts`)] = renderFrontendLocaleResources(messages, frontendEntries);
