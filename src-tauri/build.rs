@@ -73,7 +73,6 @@ const APP_COMMANDS: &[&str] = &[
     "cmd_check_for_updates",
     "cmd_download_update",
     "cmd_install_update",
-    "cmd_get_web_activity_bridge_snapshot",
     "cmd_get_web_activity_aggregate_range",
     "cmd_pick_backup_save_file",
     "cmd_pick_backup_file",

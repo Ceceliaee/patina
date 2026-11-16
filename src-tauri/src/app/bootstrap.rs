@@ -203,7 +203,6 @@ fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Build
         commands::update::cmd_check_for_updates,
         commands::update::cmd_download_update,
         commands::update::cmd_install_update,
-        commands::web_activity::cmd_get_web_activity_bridge_snapshot,
         commands::web_activity_analysis::cmd_get_web_activity_aggregate_range,
         commands::backup::cmd_pick_backup_save_file,
         commands::backup::cmd_pick_backup_file,

@@ -32,7 +32,6 @@ impl WebActivityChange {
 
 const MAX_BROWSER_CLIENT_ID_CHARS: usize = 128;
 const MAX_BROWSER_KIND_CHARS: usize = 32;
-const MAX_EXTENSION_VERSION_CHARS: usize = 64;
 const MAX_TITLE_CHARS: usize = 512;
 const MAX_FAVICON_URL_CHARS: usize = 8192;
 
@@ -123,17 +122,6 @@ impl WebActivitySegmentInput {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WebActivityBridgeSnapshot {
-    pub enabled: bool,
-    pub connected: bool,
-    pub browser_client_id: Option<String>,
-    pub browser_kind: Option<String>,
-    pub extension_version: Option<String>,
-    pub last_activity_at_ms: Option<i64>,
-}
-
 #[derive(Clone, Debug, Deserialize)]
 pub struct WebDomainOverrideStorageValue {
     pub enabled: Option<bool>,
@@ -158,10 +146,6 @@ pub fn sanitize_browser_kind(value: Option<&str>) -> String {
         .unwrap_or("chrome")
         .to_ascii_lowercase();
     truncate_chars(&normalized, MAX_BROWSER_KIND_CHARS)
-}
-
-pub fn sanitize_extension_version(value: Option<&str>) -> Option<String> {
-    sanitize_optional_text(value, MAX_EXTENSION_VERSION_CHARS)
 }
 
 pub fn sanitize_active_tab_payload(

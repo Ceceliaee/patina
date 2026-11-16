@@ -669,12 +669,6 @@
           "markdownDescription": "Enables the cmd_get_web_activity_aggregate_range command without any pre-configured scope."
         },
         {
-          "description": "Enables the cmd_get_web_activity_bridge_snapshot command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-get-web-activity-bridge-snapshot",
-          "markdownDescription": "Enables the cmd_get_web_activity_bridge_snapshot command without any pre-configured scope."
-        },
-        {
           "description": "Enables the cmd_get_web_activity_segment_rows command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-get-web-activity-segment-rows",
@@ -1369,12 +1363,6 @@
           "type": "string",
           "const": "deny-cmd-get-web-activity-aggregate-range",
           "markdownDescription": "Denies the cmd_get_web_activity_aggregate_range command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the cmd_get_web_activity_bridge_snapshot command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-get-web-activity-bridge-snapshot",
-          "markdownDescription": "Denies the cmd_get_web_activity_bridge_snapshot command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_get_web_activity_segment_rows command without any pre-configured scope.",
