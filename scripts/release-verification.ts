@@ -9,6 +9,8 @@ const requiredJobs = [
   "Rust checks (x64)",
   "Rust checks (arm64)",
   "Tauri runtime smoke",
+  "Native desktop checks (x64)",
+  "Native desktop checks (arm64)",
 ];
 
 function readApi(path: string) {

@@ -17,6 +17,7 @@
     }
   },
   "bundle": {
+    "publisher": "Ceceliaee",
     "active": true,
     "createUpdaterArtifacts": true,
     "targets": "all",

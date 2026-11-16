@@ -815,18 +815,19 @@ function testVerifyRunsAfterSuccessfulIntake() {
   assert.match(workflow, /head_sha: \$\{\{ steps\.verify\.outputs\.head_sha \}\}/);
   assert.match(workflow, /node --experimental-strip-types scripts\/check-verify-candidate\.ts/);
   assert.doesNotMatch(workflow, /refs\/pull\/|cache: pnpm|cache-dependency-path|secrets\./);
-  for (const name of ["frontend", "rust-quality", "tauri-runtime-smoke"]) {
+  for (const name of ["frontend", "rust-quality", "native-desktop", "tauri-runtime-smoke"]) {
     const section = workflow.split(`  ${name}:`)[1].split(/\r?\n  [a-z][\w-]*:/)[0];
     assert.match(section, /needs: candidate/);
     assert.match(section, /ref: \$\{\{ needs\.candidate\.outputs\.head_sha \}\}/);
     assert.match(section, /persist-credentials: false/);
     assert.match(section, /allow-unsafe-pr-checkout: \$\{\{ github\.event_name == 'workflow_run' && needs\.candidate\.result == 'success' \}\}/);
-    assert.match(section, /package-manager-cache: false/);
+    if (name !== "native-desktop") assert.match(section, /package-manager-cache: false/);
     assert.match(section, /\$actual -cne \$env:VERIFIED_HEAD_SHA/);
-    assert.ok(section.indexOf("Assert verified candidate") < section.indexOf("Install pinned pnpm"));
+    const firstSetup = name === "native-desktop" ? "Setup Rust from desktop/" : "Install pinned pnpm";
+    assert.ok(section.indexOf("Assert verified candidate") < section.indexOf(firstSetup));
     assert.doesNotMatch(section, /permissions:|actions: write|contents: write/);
   }
-  assert.equal(workflow.match(/allow-unsafe-pr-checkout:/g)?.length, 3);
+  assert.equal(workflow.match(/allow-unsafe-pr-checkout:/g)?.length, 4);
   const trusted = workflow.split('  candidate:')[1].split('  frontend:')[0];
   assert.doesNotMatch(trusted, /allow-unsafe-pr-checkout/);
   for (const file of ['.github/workflows/pr-intake.yml', '.github/workflows/prepare-release.yml']) {

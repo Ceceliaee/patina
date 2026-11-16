@@ -175,6 +175,86 @@ jobs:
       - name: Audit JavaScript and Rust dependencies
         run: pnpm run check:dependencies
 
+  native-desktop:
+    name: Native desktop checks (${{ matrix.arch }})
+    needs: candidate
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+          - arch: arm64
+            runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+
+    steps:
+      - name: Checkout verified candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.candidate.outputs.head_sha }}
+          # Fork code requires the trusted candidate gate; jobs retain fixed SHA and read-only permissions.
+          allow-unsafe-pr-checkout: ${{ github.event_name == 'workflow_run' && needs.candidate.result == 'success' }}
+          persist-credentials: false
+
+      - name: Assert verified candidate before executing repository code
+        shell: pwsh
+        env:
+          VERIFIED_HEAD_SHA: ${{ needs.candidate.outputs.head_sha }}
+        run: |
+          $actual = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0 -or $actual -cne $env:VERIFIED_HEAD_SHA) { throw "Verified candidate HEAD mismatch" }
+          Write-Output "Executing verified candidate $actual"
+
+      - name: Setup Rust from desktop/rust-toolchain.toml
+        shell: pwsh
+        working-directory: desktop
+        run: |
+          rustup set default-host ${{ matrix.target }}
+          if ($LASTEXITCODE -ne 0) { throw "Rust host configuration failed" }
+          rustup toolchain install --no-self-update --component rustfmt --component clippy
+          if ($LASTEXITCODE -ne 0) { throw "Rust installation failed" }
+          $hostInfo = rustc -vV
+          if ($hostInfo -notcontains "host: ${{ matrix.target }}") { throw "Rust host architecture mismatch" }
+
+      - name: Check native workspace
+        shell: pwsh
+        working-directory: desktop
+        run: |
+          cargo fmt --all -- --check
+          if ($LASTEXITCODE -ne 0) { throw "Native format check failed" }
+          cargo test --locked --workspace
+          if ($LASTEXITCODE -ne 0) { throw "Native workspace tests failed" }
+          cargo clippy --locked --workspace --all-targets -- -D warnings
+          if ($LASTEXITCODE -ne 0) { throw "Native Clippy failed" }
+
+      - name: Install NSIS for lifecycle tests
+        shell: pwsh
+        run: |
+          choco install nsis --version=3.11.0 -y --no-progress
+          if ($LASTEXITCODE -ne 0) { throw "NSIS installation failed" }
+
+      - name: Verify update interactions and installer lifecycle
+        shell: pwsh
+        working-directory: desktop
+        run: |
+          $env:PATINA_TEST_MAKENSIS = "${env:ProgramFiles(x86)}/NSIS/makensis.exe"
+          cargo test --locked -p patina-gpui --test updater native_update_download_confirmation_and_navigation -- --ignored --exact --test-threads=1
+          if ($LASTEXITCODE -ne 0) { throw "Native update interaction test failed" }
+          cargo test --locked -p patina-updater --test installer native_install_upgrade_shutdown_and_uninstall -- --ignored --exact --test-threads=1
+          if ($LASTEXITCODE -ne 0) { throw "Installer lifecycle test failed" }
+
+      - name: Audit native dependencies
+        working-directory: desktop
+        shell: pwsh
+        run: |
+          cargo install cargo-audit --version 0.22.2 --locked
+          if ($LASTEXITCODE -ne 0) { throw "Audit tool installation failed" }
+          cargo audit --file Cargo.lock
+          if ($LASTEXITCODE -ne 0) { throw "Native dependency audit failed" }
+
   tauri-runtime-smoke:
     name: Tauri runtime smoke
     needs: candidate

@@ -13,6 +13,8 @@ const TAURI_DEV_CONFIG_PATH = path.join(ROOT, "src-tauri", "tauri.dev.conf.json"
 const TAURI_LOCAL_CONFIG_PATH = path.join(ROOT, "src-tauri", "tauri.local.conf.json");
 const CARGO_TOML_PATH = path.join(ROOT, "src-tauri", "Cargo.toml");
 const CARGO_LOCK_PATH = path.join(ROOT, "src-tauri", "Cargo.lock");
+const NATIVE_CARGO_TOML_PATH = path.join(ROOT, "desktop", "patina", "Cargo.toml");
+const NATIVE_CARGO_LOCK_PATH = path.join(ROOT, "desktop", "Cargo.lock");
 
 const VERSION_PATTERN =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9A-Za-z-][0-9A-Za-z-]*))*))?$/;
@@ -330,10 +332,14 @@ async function validateReleaseVersionFiles(version) {
   if (errors.length > 0) {
     fail(`version files are not ready for ${version}:\n- ${errors.join("\n- ")}`);
   }
+  const { validateNativeVersionFiles } = await import("./native-release.ts");
+  validateNativeVersionFiles(version, await readText(NATIVE_CARGO_TOML_PATH), await readText(NATIVE_CARGO_LOCK_PATH));
 }
 
 async function syncVersion(version) {
   assertVersion(version);
+  const { syncNativeVersionText } = await import("./native-release.ts");
+  const native = syncNativeVersionText(version, await readText(NATIVE_CARGO_TOML_PATH), await readText(NATIVE_CARGO_LOCK_PATH));
 
   await updateJsonVersion(PACKAGE_JSON_PATH, version);
 
@@ -365,6 +371,8 @@ async function syncVersion(version) {
   );
 
   await writeFile(CARGO_TOML_PATH, updatedCargoToml, "utf8");
+  await writeFile(NATIVE_CARGO_TOML_PATH, native.manifest, "utf8");
+  await writeFile(NATIVE_CARGO_LOCK_PATH, native.lock, "utf8");
 }
 
 async function resolveTargetVersion(version) {
@@ -480,7 +488,7 @@ export function validateReleaseNoteVisibleChangeCount(parsed) {
   return null;
 }
 
-async function parseChangelog(version) {
+export async function parseChangelog(version) {
   const targetVersion = await resolveTargetVersion(version);
 
   const changelog = await readText(CHANGELOG_PATH);

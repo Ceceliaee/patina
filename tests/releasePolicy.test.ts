@@ -323,7 +323,7 @@ function testReleaseVisibleChangeCountLimits() {
 }
 
 function testReleaseWorkflowDoesNotPublishBrowserExtensionAssets() {
-  const workflow = readFileSync(".github/workflows/prepare-release.yml", "utf8");
+  const workflow = readFileSync(".github/workflows/prepare-release.yml", "utf8").replaceAll("\r\n", "\n");
 
   assert.doesNotMatch(workflow, /pnpm run extension:chromium:package/);
   assert.doesNotMatch(workflow, /pnpm run extension:firefox:sign/);
@@ -331,12 +331,12 @@ function testReleaseWorkflowDoesNotPublishBrowserExtensionAssets() {
   assert.doesNotMatch(workflow, /patina-chromium-extension|patina-firefox-extension/);
   assert.match(workflow, /dist-release\/Patina_\$\{\{ needs\.resolve\.outputs\.version \}\}_x64-setup\.exe/);
   assert.equal(workflow.match(/dist-release\/SHA256SUMS\.txt/g)?.length, 2);
-  assert.match(workflow, /dist-release\/latest\.json/);
+  assert.match(workflow, /dist-release\/gpui-latest\.json/);
   assert.doesNotMatch(workflow.slice(workflow.indexOf("\n  r2:")), /SHA256SUMS\.txt/);
 }
 
 function testReleaseWorkflowSplitsQualityGatesBeforePublish() {
-  const workflow = readFileSync(".github/workflows/prepare-release.yml", "utf8");
+  const workflow = readFileSync(".github/workflows/prepare-release.yml", "utf8").replaceAll("\r\n", "\n");
 
   assert.match(workflow, /^  version-files:/m);
   assert.match(workflow, /^  changelog:/m);
@@ -377,8 +377,8 @@ function testReleaseRequiresGreenMainPush() {
     repository: { full_name: repo }, head_repository: { full_name: repo },
     head_branch: "main", head_sha: sha, status: "completed", conclusion: "success",
   };
-  const verifyWorkflow = readFileSync(".github/workflows/verify.yml", "utf8");
-  const jobNames = ["Resolve and verify immutable candidate", "Frontend checks", "Rust checks (x64)", "Rust checks (arm64)", "Tauri runtime smoke"];
+  const verifyWorkflow = readFileSync(".github/workflows/verify.yml", "utf8").replaceAll("\r\n", "\n");
+  const jobNames = ["Resolve and verify immutable candidate", "Frontend checks", "Rust checks (x64)", "Rust checks (arm64)", "Tauri runtime smoke", "Native desktop checks (x64)", "Native desktop checks (arm64)"];
   for (const name of jobNames) {
     assert.ok(verifyWorkflow.includes(`name: ${name.replace(/\((x64|arm64)\)/, "(${{ matrix.arch }})")}`));
   }
@@ -408,7 +408,7 @@ function testReleaseRequiresGreenMainPush() {
 }
 
 function testReleaseWorkflowAttestsVerifiedFinalInstallerWithMinimumPermissions() {
-  const workflow = readFileSync(".github/workflows/prepare-release.yml", "utf8");
+  const workflow = readFileSync(".github/workflows/prepare-release.yml", "utf8").replaceAll("\r\n", "\n");
   const publishStart = workflow.indexOf("\n  publish:");
   const r2Start = workflow.indexOf("\n  r2:", publishStart);
   assert.ok(publishStart > 0 && r2Start > publishStart);
@@ -442,19 +442,25 @@ function testReleaseWorkflowAttestsVerifiedFinalInstallerWithMinimumPermissions(
 }
 
 function testDualArchitectureWorkflowBoundaries() {
-  const workflow = readFileSync(".github/workflows/prepare-release.yml", "utf8");
-  assert.match(workflow, /name: tauri-bundle-\$\{\{ matrix.arch \}\}/);
+  const workflow = readFileSync(".github/workflows/prepare-release.yml", "utf8").replaceAll("\r\n", "\n");
+  assert.match(workflow, /name: native-bundle-\$\{\{ matrix.arch \}\}/);
   assert.match(workflow, /target: aarch64-pc-windows-msvc/);
   assert.match(workflow, /runner: windows-11-arm/);
-  assert.match(workflow, /--bundles nsis --target \$\{\{ matrix.target \}\}/);
+  assert.match(workflow, /package-gpui\.ps1 -Targets '\$\{\{ matrix.target \}\}'/);
+  assert.doesNotMatch(workflow, /tauri build|signtool|gpui-v/);
   assert.match(workflow, /subject-path: dist-release\/Patina_\$\{\{ needs.resolve.outputs.version \}\}_arm64-setup.exe/);
   const mirror = workflow.slice(workflow.indexOf("      - name: Upload R2 updater mirror"));
   const digestIndex = mirror.indexOf("R2 digest mismatch");
-  const manifestIndex = mirror.indexOf('"s3://$env:R2_BUCKET/latest.json"');
+  const manifestIndex = mirror.indexOf('"s3://$env:R2_BUCKET/gpui-latest.json"', digestIndex);
   const uploadFailureIndex = mirror.indexOf("R2 manifest upload failed");
   const cleanupIndex = mirror.indexOf("Clean old R2 updater mirrors");
   assert.ok([digestIndex, manifestIndex, uploadFailureIndex, cleanupIndex].every((index) => index >= 0));
   assert.ok(digestIndex < manifestIndex && manifestIndex < uploadFailureIndex && uploadFailureIndex < cleanupIndex);
+  assert.ok(mirror.indexOf("R2 manifest bytes differ") < cleanupIndex);
+  assert.match(mirror, /--prefix "desktop\/releases\/"/);
+  assert.ok(mirror.indexOf("mirror-advance") < mirror.indexOf("R2 installer upload failed"));
+  assert.match(workflow, /group: patina-updater-mirror\s+cancel-in-progress: false/);
+  assert.ok(workflow.indexOf("name: Verify published bytes") > workflow.indexOf("uses: softprops/action-gh-release"));
 }
 
 function testToolchainContractsStayAligned() {
@@ -477,7 +483,7 @@ function testWorkflowsUseNodeVersionFileAsSingleSource() {
     ".github/workflows/verify.yml",
     ".github/workflows/prepare-release.yml",
   ]) {
-    const workflow = readFileSync(workflowPath, "utf8");
+    const workflow = readFileSync(workflowPath, "utf8").replaceAll("\r\n", "\n");
     const setupNodeCount = workflow.match(/uses: actions\/setup-node@/g)?.length ?? 0;
     const versionFileCount = workflow.match(/node-version-file: \.node-version/g)?.length ?? 0;
 
@@ -493,7 +499,7 @@ function testWorkflowsPinThirdPartyActionsToReviewedCommits() {
     ".github/workflows/verify.yml",
     ".github/workflows/prepare-release.yml",
   ]) {
-    const workflow = readFileSync(workflowPath, "utf8");
+    const workflow = readFileSync(workflowPath, "utf8").replaceAll("\r\n", "\n");
     const usesCount = workflow.match(/^\s+uses:/gm)?.length ?? 0;
     const pinnedCount = workflow.match(
       /^\s+uses: [^@\s]+@[0-9a-f]{40} # v\d+$/gm,
@@ -515,7 +521,7 @@ function testWorkflowsUseReviewedNode24ActionRevisions() {
     ".github/workflows/prepare-release.yml",
   ].map((workflowPath) => ({
     path: workflowPath,
-    source: readFileSync(workflowPath, "utf8"),
+    source: readFileSync(workflowPath, "utf8").replaceAll("\r\n", "\n"),
   }));
   const reviewedActions = [
     {

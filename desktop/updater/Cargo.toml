@@ -1,0 +1,19 @@
+[package]
+name = "patina-updater"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+base64 = "0.22"
+minisign-verify = "0.2.5"
+semver = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
+url = "2"
+windows = { version = "0.62.2", features = ["Win32_Networking_WinHttp"] }
+
+[dev-dependencies]
+patina-test-desktop = { path = "../test-support" }
+winreg = "0.56"
