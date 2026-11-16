@@ -1,16 +1,11 @@
 use crate::{
-    page_controls::{action, content_card, label, page, page_actions, page_title_row, panel},
-    tool_service::ToolRequest,
-    window_process::Query,
-    windows_host::Client,
+    page_controls::label, tool_service::ToolRequest, window_process::Query, windows_host::Client,
 };
-use gpui_kit::base::{
-    Input,
-    input::{InputAccessibility, InputState},
-};
+use gpui_kit::base::input::{InputAccessibility, InputEvent, InputState};
 use gpui_kit::{prelude::*, *};
 use patina_recorder::text;
 use patina_tool_host::{Control, Installed, Preview};
+use quietpro::{content_card, page, page_actions, page_title_row};
 use serde::de::DeserializeOwned;
 use std::{path::PathBuf, rc::Rc};
 
@@ -37,6 +32,8 @@ pub(super) struct Tools {
     choices: std::collections::BTreeMap<String, String>,
     manager: bool,
     preferences: Option<patina_recorder::NoticePreferences>,
+    delivery_focus: [FocusHandle; 2],
+    sound_focus: [FocusHandle; 4],
     target: Option<patina_recorder::ToolTarget>,
     pending: Option<Confirm>,
     modal_focus: Option<FocusHandle>,
@@ -64,6 +61,8 @@ impl Tools {
             choices: Default::default(),
             manager: false,
             preferences: None,
+            delivery_focus: std::array::from_fn(|_| cx.focus_handle()),
+            sound_focus: std::array::from_fn(|_| cx.focus_handle()),
             target,
             pending: None,
             modal_focus: None,
@@ -253,7 +252,7 @@ impl Render for Tools {
         let locale = self.client.locale.get();
         let tr = |key| text(locale, key);
         let ready = !self.busy && self.pending.is_none();
-        let mut content = content_card(colors.border, colors.panel).gap(px(10.));
+        let mut content = content_card(colors.border, colors.panel).gap(px(12.));
         let manager = quietpro::text_button("tool-manager", tr("tools.manager"), colors, ready)
             .track_focus(&self.manager_focus)
             .on_click(cx.listener(|this, _, _, cx| {
@@ -278,86 +277,107 @@ impl Render for Tools {
             .child(page_actions().child(manager).child(preferences));
         let mut rail = content_card(colors.border, colors.panel)
             .w(px(165.))
-            .gap(px(6.));
+            .gap(px(8.));
         for tool in &self.tools {
             let tool = tool.clone();
             let title = tool_name(&tool.manifest.id, &tool.manifest.name, locale);
-            rail = rail.child(action(
-                SharedString::from(tool.manifest.id.clone()),
-                title.clone(),
-                title,
-                ready,
-                cx.listener(move |this, _, _, cx| {
+            rail = rail.child({
+                let accessible_name = title.clone();
+                quietpro::text_button(
+                    SharedString::from(tool.manifest.id.clone()),
+                    title,
+                    colors,
+                    ready,
+                )
+                .accessibility_label(accessible_name)
+                .on_click(cx.listener(move |this, _, _, cx| {
                     this.manager = false;
                     this.preferences = None;
                     this.selected = Some(tool.clone());
                     this.controls.clear();
                     this.load(None, cx);
-                }),
-            ));
+                }))
+            });
         }
         if let Some(p) = &self.preferences {
             use patina_recorder::{
                 NoticeDelivery as D, NoticePreferencesPatch as Patch, NoticeSound as S,
             };
             content = content.child(label(tr("tools.notificationDelivery")));
-            for (d, key) in [
+            let delivery_options = [
                 (D::Notification, "tools.notificationSoftware"),
                 (D::Dialog, "tools.notificationDialog"),
-            ] {
-                content = content.child(action(
-                    key,
-                    tr(key),
-                    tr(key),
-                    ready && d != p.delivery,
-                    cx.listener(move |t, _, _, cx| {
-                        t.run(
-                            ToolRequest::SavePreferences(Patch {
-                                delivery: Some(d),
-                                sound: None,
-                            }),
-                            |t, p, _| t.preferences = Some(p),
-                            cx,
-                        );
-                    }),
-                ));
-            }
+            ];
+            let view = cx.weak_entity();
+            content = content.child(div().flex().child(quietpro::segmented(
+                "notification-delivery",
+                tr("tools.notificationDelivery"),
+                std::array::from_fn::<_, 2, _>(|i| {
+                    let (value, key) = delivery_options[i];
+                    (value, tr(key), None, self.delivery_focus[i].clone())
+                }),
+                p.delivery,
+                ready,
+                colors,
+                move |d, _, cx| {
+                    let _ = view.update(cx, |t, cx| {
+                        if t.preferences.as_ref().is_some_and(|p| p.delivery != d) {
+                            t.run(
+                                ToolRequest::SavePreferences(Patch {
+                                    delivery: Some(d),
+                                    sound: None,
+                                }),
+                                |t, p, _| t.preferences = Some(p),
+                                cx,
+                            );
+                        }
+                    });
+                },
+            )));
             content = content.child(label(tr("tools.notificationSound")));
-            for (s, key) in [
+            let sound_options = [
                 (S::Default, "tools.notificationSoundDefault"),
                 (S::Bell, "tools.notificationSoundBell"),
                 (S::Clear, "tools.notificationSoundClear"),
                 (S::None, "tools.notificationSoundNone"),
-            ] {
-                content = content.child(action(
-                    key,
-                    tr(key),
-                    tr(key),
-                    ready && s != p.sound,
-                    cx.listener(move |t, _, _, cx| {
-                        t.run(
-                            ToolRequest::SavePreferences(Patch {
-                                delivery: None,
-                                sound: Some(s),
-                            }),
-                            |t, p, _| t.preferences = Some(p),
-                            cx,
-                        );
-                    }),
-                ));
-            }
+            ];
+            let view = cx.weak_entity();
+            content = content.child(div().flex().child(quietpro::segmented(
+                "notification-sound",
+                tr("tools.notificationSound"),
+                std::array::from_fn::<_, 4, _>(|i| {
+                    let (value, key) = sound_options[i];
+                    (value, tr(key), None, self.sound_focus[i].clone())
+                }),
+                p.sound,
+                ready,
+                colors,
+                move |s, _, cx| {
+                    let _ = view.update(cx, |t, cx| {
+                        if t.preferences.as_ref().is_some_and(|p| p.sound != s) {
+                            t.run(
+                                ToolRequest::SavePreferences(Patch {
+                                    delivery: None,
+                                    sound: Some(s),
+                                }),
+                                |t, p, _| t.preferences = Some(p),
+                                cx,
+                            );
+                        }
+                    });
+                },
+            )));
         } else if self.manager || self.tools.is_empty() {
             if self.tools.is_empty() && !self.busy {
                 content = content.child(label(tr("tools.empty")));
             }
             if !self.tools.is_empty() || !self.busy {
-                content = content.child(action(
-                    "install-tool",
-                    tr("tools.install"),
-                    tr("tools.install"),
-                    ready,
-                    cx.listener(|t, _, _, cx| t.choose(cx)),
-                ));
+                content = content.child({
+                    let accessible_name = tr("tools.install");
+                    quietpro::text_button("install-tool", tr("tools.install"), colors, ready)
+                        .accessibility_label(accessible_name)
+                        .on_click(cx.listener(|t, _, _, cx| t.choose(cx)))
+                });
             }
             for tool in &self.tools {
                 let tool = tool.clone();
@@ -368,54 +388,59 @@ impl Render for Tools {
                         .gap(px(8.))
                         .items_center()
                         .child(label(title.clone()))
-                        .child(action(
-                            SharedString::from(format!("remove-{}", tool.manifest.id)),
-                            format!("{} {}", tr("tools.uninstall"), title),
-                            tr("tools.uninstall"),
-                            ready,
-                            cx.listener(move |t, _, _, cx| {
-                                let selected = tool.clone();
-                                t.run(
-                                    ToolRequest::Stopping(
-                                        tool.manifest.id.clone(),
-                                        tool.generation.clone(),
-                                    ),
-                                    move |t, labels, cx| {
-                                        t.pending = Some(Confirm::Remove(selected, labels));
-                                        cx.notify();
-                                    },
-                                    cx,
-                                );
-                            }),
-                        )),
+                        .child({
+                            let accessible_name = format!("{} {}", tr("tools.uninstall"), title);
+                            quietpro::text_button(
+                                SharedString::from(format!("remove-{}", tool.manifest.id)),
+                                tr("tools.uninstall"),
+                                colors,
+                                ready,
+                            )
+                            .accessibility_label(accessible_name)
+                            .on_click(cx.listener(
+                                move |t, _, _, cx| {
+                                    let selected = tool.clone();
+                                    t.run(
+                                        ToolRequest::Stopping(
+                                            tool.manifest.id.clone(),
+                                            tool.generation.clone(),
+                                        ),
+                                        move |t, labels, cx| {
+                                            t.pending = Some(Confirm::Remove(selected, labels));
+                                            cx.notify();
+                                        },
+                                        cx,
+                                    );
+                                },
+                            ))
+                        }),
                 );
             }
             for id in crate::bundled_tools::IDS {
                 if !self.tools.iter().any(|p| p.manifest.id == id) {
                     let title =
                         format!("{} · {}", tr("tools.reinstall"), tool_name(id, id, locale));
-                    content = content.child(action(
-                        id,
-                        title.clone(),
-                        title,
-                        ready,
-                        cx.listener(move |t, _, _, cx| {
-                            t.run(
-                                ToolRequest::Restore(id.into()),
-                                |t, tool: Installed, cx| {
-                                    t.selected = Some(tool);
-                                    t.manager = false;
-                                    t.list(cx);
-                                },
-                                cx,
-                            );
-                        }),
-                    ));
+                    content = content.child({
+                        let accessible_name = title.clone();
+                        quietpro::text_button(id, title, colors, ready)
+                            .accessibility_label(accessible_name)
+                            .on_click(cx.listener(move |t, _, _, cx| {
+                                t.run(
+                                    ToolRequest::Restore(id.into()),
+                                    |t, tool: Installed, cx| {
+                                        t.selected = Some(tool);
+                                        t.manager = false;
+                                        t.list(cx);
+                                    },
+                                    cx,
+                                );
+                            }))
+                    });
                 }
             }
         } else {
             if let Some(tool) = &self.selected {
-                content = content.child(crate::page_controls::heading(tool_name(
+                content = content.child(quietpro::heading(tool_name(
                     &tool.manifest.id,
                     &tool.manifest.name,
                     locale,
@@ -457,16 +482,22 @@ impl Render for Tools {
                         for (val, display) in choices {
                             let field = id.clone();
                             let val = val.clone();
-                            row = row.child(action(
-                                SharedString::from(format!("choice-{id}-{val}")),
-                                display.clone(),
-                                display.clone(),
-                                ready && val != selected,
-                                cx.listener(move |t, _, _, cx| {
-                                    t.choices.insert(field.clone(), val.clone());
-                                    cx.notify();
-                                }),
-                            ));
+                            row = row.child({
+                                let accessible_name = display.clone();
+                                quietpro::text_button(
+                                    SharedString::from(format!("choice-{id}-{val}")),
+                                    display.clone(),
+                                    colors,
+                                    ready && val != selected,
+                                )
+                                .accessibility_label(accessible_name)
+                                .on_click(cx.listener(
+                                    move |t, _, _, cx| {
+                                        t.choices.insert(field.clone(), val.clone());
+                                        cx.notify();
+                                    },
+                                ))
+                            });
                         }
                         content
                             .child(label(name.clone()).id(("tool-choice", index)))
@@ -478,7 +509,7 @@ impl Render for Tools {
                         value,
                     } => {
                         let input = self.inputs.entry(id.clone()).or_insert_with(|| {
-                            cx.new(|cx| {
+                            let input = cx.new(|cx| {
                                 let mut input = InputState::new(win, cx);
                                 input.set_accessibility(
                                     InputAccessibility::new(Some(Role::TextInput))
@@ -486,67 +517,90 @@ impl Render for Tools {
                                 );
                                 input.set_value(value.clone(), win, cx);
                                 input
+                            });
+                            cx.subscribe(&input, |_, _, event, cx| {
+                                if matches!(event, InputEvent::Focus | InputEvent::Blur) {
+                                    cx.notify();
+                                }
                             })
+                            .detach();
+                            input
                         });
                         content
                             .child(label(name.clone()).id(("tool-field", index)))
-                            .child(Input::new(input))
+                            .child(
+                                div().flex().flex_none().child(
+                                    quietpro::TextInput::new(
+                                        SharedString::from(format!("tool-input-{id}")),
+                                        input,
+                                        colors,
+                                    )
+                                    .disabled(!ready),
+                                ),
+                            )
                     }
                     Control::Submit { id, label: name } => {
                         let button = id.clone();
-                        content.child(action(
-                            SharedString::from(format!("submit-{id}")),
-                            name.clone(),
-                            name.clone(),
-                            ready,
-                            cx.listener(move |t, _, _, cx| {
-                                if let Some(tool) = &t.selected {
-                                    let mut fields = t.choices.clone();
-                                    fields.extend(
-                                        t.inputs.iter().map(|(k, v)| {
+                        content.child({
+                            let accessible_name = name.clone();
+                            quietpro::text_button(
+                                SharedString::from(format!("submit-{id}")),
+                                name.clone(),
+                                colors,
+                                ready,
+                            )
+                            .accessibility_label(accessible_name)
+                            .on_click(cx.listener(
+                                move |t, _, _, cx| {
+                                    if let Some(tool) = &t.selected {
+                                        let mut fields = t.choices.clone();
+                                        fields.extend(t.inputs.iter().map(|(k, v)| {
                                             (k.clone(), v.read(cx).value().to_string())
-                                        }),
-                                    );
-                                    let request = ToolRequest::Submit {
-                                        id: tool.manifest.id.clone(),
-                                        generation: tool.generation.clone(),
-                                        button: button.clone(),
-                                        fields,
-                                    };
-                                    t.run(
-                                        request,
-                                        |t, controls, _| {
-                                            t.controls = controls;
-                                            t.inputs.clear();
-                                            t.choices.clear();
-                                        },
-                                        cx,
-                                    );
-                                }
-                            }),
-                        ))
+                                        }));
+                                        let request = ToolRequest::Submit {
+                                            id: tool.manifest.id.clone(),
+                                            generation: tool.generation.clone(),
+                                            button: button.clone(),
+                                            fields,
+                                        };
+                                        t.run(
+                                            request,
+                                            |t, controls, _| {
+                                                t.controls = controls;
+                                                t.inputs.clear();
+                                                t.choices.clear();
+                                            },
+                                            cx,
+                                        );
+                                    }
+                                },
+                            ))
+                        })
                     }
                     Control::Button { id, label: name } => {
                         let id = id.clone();
-                        content.child(action(
-                            SharedString::from(format!("plugin-action-{id}")),
-                            name.clone(),
-                            name.clone(),
-                            ready,
-                            cx.listener(move |t, _, _, cx| t.load(Some(id.clone()), cx)),
-                        ))
+                        content.child({
+                            let accessible_name = name.clone();
+                            quietpro::text_button(
+                                SharedString::from(format!("plugin-action-{id}")),
+                                name.clone(),
+                                colors,
+                                ready,
+                            )
+                            .accessibility_label(accessible_name)
+                            .on_click(cx.listener(move |t, _, _, cx| t.load(Some(id.clone()), cx)))
+                        })
                     }
                 };
             }
         }
         if let Some(error) = &self.error {
-            content = content.child(label(error.clone())).child(action(
-                "retry-tools",
-                tr("common.retry"),
-                tr("common.retry"),
-                ready,
-                cx.listener(|t, _, _, cx| t.list(cx)),
-            ));
+            content = content.child(label(error.clone())).child({
+                let accessible_name = tr("common.retry");
+                quietpro::text_button("retry-tools", tr("common.retry"), colors, ready)
+                    .accessibility_label(accessible_name)
+                    .on_click(cx.listener(|t, _, _, cx| t.list(cx)))
+            });
         }
         if self.busy {
             content = content.child(label(tr("common.loading")));
@@ -554,21 +608,20 @@ impl Render for Tools {
         if self.display_failed {
             content = content
                 .child(label(tr("tools.notificationDisplayFailed")))
-                .child(action(
-                    "retry-notice",
-                    tr("common.retry"),
-                    tr("common.retry"),
-                    ready,
-                    cx.listener(|t, _, _, cx| {
-                        t.run(ToolRequest::RetryDisplay, |t, (): (), cx| t.list(cx), cx)
-                    }),
-                ));
+                .child({
+                    let accessible_name = tr("common.retry");
+                    quietpro::text_button("retry-notice", tr("common.retry"), colors, ready)
+                        .accessibility_label(accessible_name)
+                        .on_click(cx.listener(|t, _, _, cx| {
+                            t.run(ToolRequest::RetryDisplay, |t, (): (), cx| t.list(cx), cx)
+                        }))
+                });
         }
         let shell = page(colors).child(top).child(
             div()
                 .flex()
                 .flex_1()
-                .gap(px(crate::page_controls::CARD_GAP))
+                .gap(px(quietpro::CARD_GAP))
                 .min_h_0()
                 .child(rail)
                 .child(
@@ -581,7 +634,13 @@ impl Render for Tools {
                 ),
         );
         if let Some(confirm) = &self.pending {
-            let mut content = panel(colors).w(px(480.)).max_h(px(460.)).gap(px(8.));
+            let mut content = div()
+                .id("tool-consent-body")
+                .flex()
+                .flex_col()
+                .min_h_0()
+                .gap(px(12.))
+                .overflow_y_scroll();
             match confirm {
                 Confirm::Install(path, preview) => {
                     content = content
@@ -614,34 +673,28 @@ impl Render for Tools {
                     }
                 }
             }
-            content = content
+            let actions = quietpro::dialog_actions()
                 .child(
-                    action(
-                        "cancel-tool",
-                        tr("common.cancel"),
-                        tr("common.cancel"),
-                        true,
-                        cx.listener(|t, _, win, cx| {
+                    quietpro::text_button("cancel-tool", tr("common.cancel"), colors, true)
+                        .on_click(cx.listener(|t, _, win, cx| {
                             win.focus(&t.manager_focus, cx);
                             t.pending = None;
                             cx.notify();
-                        }),
-                    )
-                    .track_focus(&self.cancel_focus),
+                        }))
+                        .track_focus(&self.cancel_focus),
                 )
                 .child(
-                    action(
-                        "confirm-tool",
-                        tr("common.confirm"),
-                        tr("common.confirm"),
-                        true,
-                        cx.listener(|t, _, win, cx| {
+                    quietpro::text_button("confirm-tool", tr("common.confirm"), colors, true)
+                        .on_click(cx.listener(|t, _, win, cx| {
                             win.focus(&t.manager_focus, cx);
                             t.confirm(cx);
-                        }),
-                    )
-                    .track_focus(&self.confirm_focus),
+                        }))
+                        .track_focus(&self.confirm_focus),
                 );
+            let content = quietpro::dialog_surface(colors, win.viewport_size())
+                .max_w((win.viewport_size().width - px(48.)).min(px(640.)))
+                .child(content)
+                .child(actions);
             let focus = self
                 .modal_focus
                 .get_or_insert_with(|| {
@@ -669,11 +722,8 @@ impl Render for Tools {
                         });
                         false
                     })
-                    .backdrop(div().size_full().bg(rgba(0x00000055)))
-                    .popup(
-                        gpui_kit::base::DialogPopup::new()
-                            .child(content.id("tool-consent").overflow_y_scroll()),
-                    )
+                    .backdrop(quietpro::dialog_backdrop())
+                    .popup(gpui_kit::base::DialogPopup::new().child(content.id("tool-consent")))
                     .on_open_change(move |open, _, win, cx| {
                         if !open {
                             let _ = weak.update(cx, |t, cx| {

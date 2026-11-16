@@ -1,11 +1,9 @@
 use crate::{
-    page_controls::{action, label, panel},
-    tool_service::ToolRequest,
-    window_process::Query,
-    windows_host::Client,
+    page_controls::label, tool_service::ToolRequest, window_process::Query, windows_host::Client,
 };
 use gpui_kit::{prelude::*, *};
 use patina_tool_host::Notice;
+use quietpro::content_card as panel;
 use std::rc::Rc;
 
 pub(super) struct ToolNotice {
@@ -101,7 +99,12 @@ impl Render for ToolNotice {
         if self.item.is_none() && self.error.is_none() {
             return div().into_any_element();
         }
-        let mut body = panel(self.client.palette(win)).gap(px(8.));
+        let colors = self.client.palette(win);
+        let mut body = if self.dialog {
+            quietpro::dialog_surface(colors, win.viewport_size())
+        } else {
+            panel(colors.border, colors.panel).gap(px(quietpro::CARD_TITLE_GAP))
+        };
         if let Some(item) = self.item.clone() {
             let identity = (item.generation.clone(), item.source, item.usage, item.at_ms);
             if self.presented.as_ref() != Some(&identity) {
@@ -138,51 +141,48 @@ impl Render for ToolNotice {
             let mut row = div().flex().flex_wrap().gap(px(4.));
             for (choice, name) in actions {
                 let item = item.clone();
-                row = row.child(action(
-                    choice,
-                    name.clone(),
-                    name,
-                    true,
-                    cx.listener(move |t, _, _, cx| {
-                        let task = t
-                            .client
-                            .request::<()>(Query::Tools(ToolRequest::Acknowledge(
-                                item.clone(),
-                                choice.into(),
-                            )));
-                        cx.spawn(async move |view, cx| {
-                            let result = task.await;
-                            let _ = view.update(cx, |t, cx| match result {
-                                Err(e) => {
-                                    t.error = Some(e);
-                                    cx.notify();
-                                }
-                                Ok(()) => t.refresh(cx),
-                            });
-                        })
-                        .detach();
-                    }),
-                ));
+                row = row.child({
+                    let accessible_name = name.clone();
+                    quietpro::text_button(choice, name, colors, true)
+                        .accessibility_label(accessible_name)
+                        .on_click(cx.listener(move |t, _, _, cx| {
+                            let task =
+                                t.client
+                                    .request::<()>(Query::Tools(ToolRequest::Acknowledge(
+                                        item.clone(),
+                                        choice.into(),
+                                    )));
+                            cx.spawn(async move |view, cx| {
+                                let result = task.await;
+                                let _ = view.update(cx, |t, cx| match result {
+                                    Err(e) => {
+                                        t.error = Some(e);
+                                        cx.notify();
+                                    }
+                                    Ok(()) => t.refresh(cx),
+                                });
+                            })
+                            .detach();
+                        }))
+                });
             }
             body = body.child(label(item.label.clone())).child(row);
         }
         if let Some(error) = &self.error {
-            body = body.child(label(error.clone())).child(action(
-                "notice-retry",
-                tr("common.retry"),
-                tr("common.retry"),
-                true,
-                cx.listener(|t, _, _, cx| t.refresh(cx)),
-            ));
+            body = body.child(label(error.clone())).child({
+                let accessible_name = tr("common.retry");
+                quietpro::text_button("notice-retry", tr("common.retry"), colors, true)
+                    .accessibility_label(accessible_name)
+                    .on_click(cx.listener(|t, _, _, cx| t.refresh(cx)))
+            });
         }
         if self.dialog {
-            div()
+            quietpro::dialog_backdrop()
                 .absolute()
                 .inset_0()
                 .flex()
                 .items_center()
                 .justify_center()
-                .bg(rgba(0x00000044))
                 .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
                 .child(body)
                 .into_any_element()
