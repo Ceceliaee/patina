@@ -1,32 +1,150 @@
 use crate::{format::duration, windows_host::Client};
 use chrono::Local;
 use gpui_kit::{prelude::*, *};
-use patina_recorder::{HistoryDay, format_text, text};
-use quietpro::Palette;
-use std::{rc::Rc, time::Duration};
+use patina_recorder::{HistoryDay, HistoryRecord, Locale, format_text, text};
+use quietpro::{CARD_TITLE_GAP, content_card, heading, page as shell, page_title_row};
+use quietpro::{
+    HOURLY_AXIS_FONT_SIZE, HOURLY_AXIS_GAP, HOURLY_BAR_TOP_RADIUS, HOURLY_BAR_WIDTH,
+    HOURLY_PLOT_MIN_HEIGHT, Palette,
+};
+use std::{
+    collections::{HashMap, HashSet},
+    rc::Rc,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
+mod calendar;
+mod icons;
+mod records;
+mod timeline;
 
 const HOUR: i64 = 3_600_000;
-use crate::page_controls::{action, label, stamp};
+use crate::page_controls::{label, stamp};
+
+fn detail_record(r: &HistoryRecord, index: usize, titles: bool, colors: Palette) -> Stateful<Div> {
+    let range = format!(
+        "{}–{}",
+        stamp(r.start, "%H:%M:%S"),
+        stamp(r.end, "%H:%M:%S")
+    );
+    let elapsed = if r.end - r.start < 60_000 {
+        format!("{}s", (r.end - r.start) / 1000)
+    } else {
+        duration(r.end - r.start)
+    };
+    let mut record = div()
+        .id(("detail-record", index))
+        .role(Role::Group)
+        .aria_label(format!("{range}  {}  {elapsed}", r.name))
+        .flex_none()
+        .flex()
+        .flex_col()
+        .gap(px(8.))
+        .py(px(8.))
+        .border_b_1()
+        .border_color(colors.border)
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .gap(px(16.))
+                .child(label(range))
+                .child(label(elapsed).flex_none()),
+        );
+    if titles {
+        for (a, b, title) in &r.titles {
+            record = record.child(
+                label(format!(
+                    "{}–{}  {title}",
+                    stamp(*a, "%H:%M:%S"),
+                    stamp(*b, "%H:%M:%S")
+                ))
+                .pl(px(12.))
+                .text_color(colors.secondary)
+                .text_size(px(12.)),
+            );
+        }
+    }
+    record
+}
+
+fn detail_timeline(
+    total: i64,
+    locale: Locale,
+    colors: Palette,
+    tools: Stateful<Div>,
+    strip: Stateful<Div>,
+    range: String,
+) -> Div {
+    div()
+        .flex_none()
+        .flex()
+        .flex_col()
+        .gap(px(12.))
+        .pb(px(16.))
+        .border_b_1()
+        .border_color(colors.border)
+        .child(
+            div()
+                .flex()
+                .items_baseline()
+                .gap(px(8.))
+                .child(
+                    label(text(locale, "history.activeDuration"))
+                        .text_color(colors.secondary)
+                        .text_size(px(12.)),
+                )
+                .child(
+                    label(duration(total))
+                        .text_size(px(20.))
+                        .font_weight(FontWeight::SEMIBOLD),
+                ),
+        )
+        .child(tools)
+        .child(strip.h(px(40.)))
+        .child(label(range).text_color(colors.secondary).text_size(px(12.)))
+}
+
 #[derive(Clone, Copy, PartialEq)]
 enum Overlay {
     Zoom,
     Records,
-    Calendar,
+}
+struct HistoryIcon {
+    image: Arc<Image>,
+    color: Option<u32>,
+    source: Option<String>,
 }
 pub(super) struct History {
     overlay: Option<(Overlay, FocusHandle, Option<FocusHandle>)>,
+    web: bool,
+    by_web: bool,
+    timeline_web: bool,
+    web_data: Option<HistoryDay>,
+    web_error: bool,
+    favicon_read: Option<Task<()>>,
     by_category: bool,
     timeline_categories: bool,
     grouped_hours: bool,
-    month: chrono::NaiveDate,
+    hour_focus: [FocusHandle; 24],
+    active_hour: Option<usize>,
+    calendar: Option<calendar::Calendar>,
+    date_focus: FocusHandle,
+    distribution_focus: [FocusHandle; 3],
+    date_bounds: Rc<std::cell::Cell<Bounds<Pixels>>>,
 
     client: Rc<Client>,
     date: i64,
     target: Option<(String, String)>,
     data: Option<HistoryDay>,
+    icons: HashMap<String, HistoryIcon>,
     read: Option<Task<()>>,
     error: bool,
     hours: f32,
+    zoom_view: timeline::ZoomState,
+    records_view: records::RecordsState,
     offset: Option<i64>,
     plot_bounds: Rc<std::cell::Cell<Bounds<Pixels>>>,
     drag: Option<(Pixels, i64)>,
@@ -38,6 +156,167 @@ pub(super) struct History {
     detail_trigger: Option<FocusHandle>,
 }
 impl History {
+    fn hourly(&self, day: &HistoryDay, colors: Palette, dark: bool, cx: &mut Context<Self>) -> Div {
+        use quietpro::{Icon, IconControl};
+        let locale = self.client.locale.get();
+        let tr = |key| text(locale, key);
+        let color_for = |key: &str, category: bool, background: Rgba| {
+            quietpro::activity_display_color(
+                self.source_color(day, key, category),
+                background,
+                dark,
+            )
+        };
+        let mut tooltip = None;
+        let mut bars = div()
+            .relative()
+            .flex()
+            .items_end()
+            .flex_1()
+            .w_full()
+            .min_h(px(HOURLY_PLOT_MIN_HEIGHT))
+            .border_b_1()
+            .border_color(colors.track);
+        for (h, &ms) in day.hours.iter().enumerate() {
+            let mut tip = format!(
+                "{h:02}:00 · {} {}",
+                tr("hourlyActivityChart.activeMinutes"),
+                duration(ms)
+            );
+            let mut bar = div()
+                .w(px(HOURLY_BAR_WIDTH))
+                .rounded_t(px(HOURLY_BAR_TOP_RADIUS))
+                .h(relative((ms as f32 / HOUR as f32).min(1.)))
+                .bg(quietpro::activity_display_color(
+                    u32::from(colors.accent) >> 8,
+                    colors.panel,
+                    dark,
+                ))
+                .flex()
+                .flex_col_reverse();
+            if self.grouped_hours && ms > 0 {
+                let mut segments: Vec<_> = day
+                    .category_hours
+                    .iter()
+                    .filter(|(_, hours)| hours[h] > 0)
+                    .collect();
+                segments.sort_by_key(|(_, hours)| hours[h]);
+                for (name, hours) in segments.iter().rev() {
+                    tip.push_str(&format!("\n{name} {}", duration(hours[h])));
+                }
+                let top_segment = segments.len().saturating_sub(1);
+                for (index, (name, hours)) in segments.into_iter().enumerate() {
+                    bar = bar.child(
+                        div()
+                            .w_full()
+                            .h(relative(hours[h] as f32 / ms as f32))
+                            .when(index == top_segment, |s| {
+                                s.rounded_t(px(HOURLY_BAR_TOP_RADIUS))
+                            })
+                            .bg(color_for(name, true, colors.panel)),
+                    );
+                }
+            }
+            if ms > 0 && self.active_hour == Some(h) {
+                tooltip = Some(
+                    content_card(colors.border, colors.panel)
+                        .id("history-hour-tooltip")
+                        .role(Role::Tooltip)
+                        .aria_label(tip.clone())
+                        .absolute()
+                        .bottom(px(4.))
+                        .when_else(h < 12, |s| s.right_0(), |s| s.left_0())
+                        .p(px(8.))
+                        .text_size(px(12.))
+                        .text_color(colors.text)
+                        .child(tip.clone()),
+                );
+            }
+            bars = bars.child(
+                div()
+                    .id(("history-hour", h))
+                    .role(Role::Label)
+                    .aria_value(tip)
+                    .h_full()
+                    .flex_1()
+                    .flex()
+                    .items_end()
+                    .justify_center()
+                    .when(ms > 0, |s| {
+                        s.hover(move |s| s.bg(colors.hover))
+                            .track_focus(&self.hour_focus[h])
+                            .focus_visible(move |s| s.border_1().border_color(colors.secondary))
+                            .on_hover(cx.listener(move |this, over, _, cx| {
+                                this.show_hour(h, *over, cx);
+                            }))
+                            .on_key_down(cx.listener(|this, e: &KeyDownEvent, _, cx| {
+                                if e.keystroke.key == "escape" && this.active_hour.take().is_some()
+                                {
+                                    cx.notify();
+                                    cx.stop_propagation();
+                                }
+                            }))
+                    })
+                    .child(bar),
+            );
+        }
+        let hourly = content_card(colors.border, colors.panel)
+            .min_h_0()
+            .flex_1()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .child(heading(tr("history.dailyHourlyActivity")).flex_1())
+                    .child(
+                        IconControl::new(
+                            "history-hour-mode",
+                            tr(if self.grouped_hours {
+                                "history.showTotalHourlyActivity"
+                            } else {
+                                "history.showHourlyActivityByCategory"
+                            }),
+                            Icon::Layers,
+                        )
+                        .action(
+                            colors,
+                            cx.listener(|this, _, _, cx| {
+                                this.grouped_hours = !this.grouped_hours;
+                                cx.notify();
+                            }),
+                        ),
+                    ),
+            )
+            .child(bars.children(tooltip).mt(px(CARD_TITLE_GAP)))
+            .child(axis().mt(px(HOURLY_AXIS_GAP)).text_color(colors.secondary));
+        hourly
+    }
+
+    fn show_hour(&mut self, hour: usize, visible: bool, cx: &mut Context<Self>) {
+        if visible || self.active_hour == Some(hour) {
+            let next = visible.then_some(hour);
+            if self.active_hour != next {
+                self.active_hour = next;
+                cx.notify();
+            }
+        }
+    }
+
+    fn open_detail(
+        &mut self,
+        target: (String, String),
+        web: bool,
+        win: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.read = None;
+        self.detail_trigger = win.focused(cx);
+        win.focus(&self.detail_focus, cx);
+        self.detail = Some(cx.new(|cx| {
+            Self::new_source(self.client.clone(), self.date, Some(target), web, win, cx)
+        }));
+        cx.notify();
+    }
     pub(super) fn new(
         client: Rc<Client>,
         date: i64,
@@ -45,20 +324,58 @@ impl History {
         win: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
+        Self::new_source(client, date, target, false, win, cx)
+    }
+    pub(super) fn new_source(
+        client: Rc<Client>,
+        date: i64,
+        target: Option<(String, String)>,
+        web: bool,
+        win: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let detail = target.is_some();
+        let hours = if detail { 24. } else { 4. };
+        let zoom_view = timeline::ZoomState::new(hours, cx);
+        let hour_focus = std::array::from_fn(|hour| {
+            let focus = cx.focus_handle().tab_stop(true);
+            cx.on_focus(&focus, win, move |_, win, cx| {
+                cx.defer_in(win, move |this, _, cx| this.show_hour(hour, true, cx));
+            })
+            .detach();
+            cx.on_blur(&focus, win, move |_, win, cx| {
+                cx.defer_in(win, move |this, _, cx| this.show_hour(hour, false, cx));
+            })
+            .detach();
+            focus
+        });
         let mut this = Self {
             overlay: None,
+            web,
+            by_web: false,
+            timeline_web: false,
+            web_data: None,
+            web_error: false,
+            favicon_read: None,
             by_category: false,
             timeline_categories: false,
             grouped_hours: false,
-            month: Local::now().date_naive(),
+            hour_focus,
+            active_hour: None,
+            calendar: None,
+            date_focus: cx.focus_handle(),
+            distribution_focus: std::array::from_fn(|_| cx.focus_handle()),
+            date_bounds: Default::default(),
             client,
             date,
             target,
             data: None,
+            icons: HashMap::new(),
             read: None,
             error: false,
-            hours: if detail { 24. } else { 4. },
+            hours,
+            zoom_view,
+            records_view: records::RecordsState::new(cx),
             offset: None,
             plot_bounds: Default::default(),
             drag: None,
@@ -74,6 +391,9 @@ impl History {
                 this.refresh(cx);
             } else {
                 this.read = None;
+                if this.calendar.take().is_some() {
+                    cx.notify();
+                }
             }
         })
         .detach();
@@ -81,13 +401,27 @@ impl History {
         this
     }
     fn open_overlay(&mut self, kind: Overlay, win: &mut Window, cx: &mut Context<Self>) {
+        if kind == Overlay::Zoom && self.timeline_data().is_none() {
+            return;
+        }
         let old = win.focused(cx);
         let focus = cx.focus_handle();
         win.focus(&focus, cx);
         self.overlay = Some((kind, focus, old));
+        if kind == Overlay::Zoom {
+            self.prepare_zoom(cx);
+        } else {
+            self.records_view.close_details();
+            if !self.titles {
+                self.titles = true;
+                self.refresh(cx);
+            }
+        }
         cx.notify();
     }
     fn close_overlay(&mut self, win: &mut Window, cx: &mut Context<Self>) {
+        self.drag = None;
+        self.records_view.close_details();
         if let Some((_, _, Some(old))) = self.overlay.take() {
             win.focus(&old, cx);
         }
@@ -98,14 +432,82 @@ impl History {
         let date = self.date;
         let app = self.target.as_ref().map(|t| t.0.clone());
         let titles = self.titles;
+        let web = self.web;
         self.read = Some(cx.spawn(async move |view, cx| {
+            let mut checked = HashSet::new();
+            let mut checked_at = Instant::now();
             loop {
-                let result = client.history(date, app.clone(), titles).await;
+                let result = client.history(date, app.clone(), titles, web).await;
+                let web_result = if !web && app.is_none() {
+                    Some(client.history(date, None, titles, true).await)
+                } else {
+                    None
+                };
+                let mut images = Vec::new();
+                if !web && let Ok(day) = &result {
+                    if checked_at.elapsed() >= Duration::from_secs(60) {
+                        checked.clear();
+                        checked_at = Instant::now();
+                    }
+                    let missing: Vec<_> = day
+                        .apps
+                        .iter()
+                        .filter(|app| {
+                            app.0 != "activity:anonymous" && checked.insert(app.0.clone())
+                        })
+                        .map(|app| app.0.clone())
+                        .collect();
+                    if !missing.is_empty() {
+                        match client.icons(missing).await {
+                            Ok(icons) => images = icons,
+                            Err(error) => eprintln!("read History icons: {error}"),
+                        }
+                    }
+                }
                 let repeat = view.update(cx, |this, cx| {
+                    if let Some(web_result) = web_result {
+                        match web_result {
+                            Ok(day) => {
+                                this.web_data = Some(day);
+                                this.web_error = false;
+                            }
+                            Err(_) => {
+                                this.web_data = None;
+                                this.web_error = true;
+                            }
+                        }
+                    }
                     match result {
                         Ok(day) => {
+                            this.icons.retain(|key, _| {
+                                day.apps.iter().any(|app| &app.0 == key)
+                                    || this
+                                        .web_data
+                                        .as_ref()
+                                        .is_some_and(|d| d.apps.iter().any(|app| &app.0 == key))
+                            });
+                            for (key, bytes) in images {
+                                if !this
+                                    .icons
+                                    .get(&key)
+                                    .is_some_and(|icon| icon.image.bytes == bytes)
+                                {
+                                    this.icons.insert(
+                                        key,
+                                        HistoryIcon {
+                                            source: None,
+                                            color: patina_recorder::icon_color(&bytes),
+                                            image: Arc::new(Image::from_bytes(
+                                                ImageFormat::Png,
+                                                bytes,
+                                            )),
+                                        },
+                                    );
+                                }
+                            }
                             this.minimum.get_or_insert(day.minimum_seconds);
                             this.data = Some(day);
+                            this.load_favicons(cx);
                             this.error = false;
                         }
                         Err(_) => this.error = true,
@@ -127,12 +529,24 @@ impl History {
         }));
     }
     fn change_day(&mut self, date: i64, cx: &mut Context<Self>) {
+        self.active_hour = None;
         self.date = date;
+        self.records_view.close_details();
         self.data = None;
+        self.web_data = None;
+        self.web_error = false;
+        self.favicon_read = None;
         self.offset = None;
         self.error = false;
         self.refresh(cx);
         cx.notify();
+    }
+    fn source_color(&self, day: &HistoryDay, key: &str, category: bool) -> u32 {
+        if category {
+            day.colors.get(key).copied().unwrap_or(0x8f98a8)
+        } else {
+            day.app_source_color(key, self.icons.get(key).and_then(|icon| icon.color))
+        }
     }
     fn viewport(&self, day: &HistoryDay) -> (i64, i64) {
         let width = ((self.hours * HOUR as f32).round() as i64).min(day.end - day.start);
@@ -144,9 +558,10 @@ impl History {
         (left, left + width)
     }
     fn zoom(&mut self, delta: f32, ratio: f32, cx: &mut Context<Self>) {
-        if let Some(day) = &self.data {
+        if let Some(day) = self.timeline_data() {
             let (a, b) = self.viewport(day);
-            self.hours = (self.hours + delta).clamp(1., (day.end - day.start) as f32 / HOUR as f32);
+            self.hours = (((self.hours + delta) * 5.).round() / 5.)
+                .clamp(1., (day.end - day.start) as f32 / HOUR as f32);
             self.offset = Some(
                 a + ((b - a) as f32 * ratio) as i64 - (self.hours * HOUR as f32 * ratio) as i64,
             );
@@ -154,13 +569,135 @@ impl History {
         }
     }
     fn pan(&mut self, dir: i64, cx: &mut Context<Self>) {
-        if let Some(day) = &self.data {
+        if let Some(day) = self.timeline_data() {
             let (a, b) = self.viewport(day);
             self.offset = Some(a + dir * (b - a) / 2);
             cx.notify();
         }
     }
 }
+impl History {
+    fn day_timeline(
+        &self,
+        day: &HistoryDay,
+        colors: Palette,
+        dark: bool,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        use quietpro::{Icon, IconControl};
+        let locale = self.client.locale.get();
+        let tr = |key| text(locale, key);
+        let color_for = |key: &str| {
+            quietpro::activity_display_color(
+                self.source_color(day, key, self.timeline_categories),
+                colors.canvas,
+                dark,
+            )
+        };
+        let (start, end) = (day.start, day.end);
+        let mut full = div()
+            .relative()
+            .w_full()
+            .flex_1()
+            .min_h(px(24.))
+            .border_1()
+            .border_color(colors.border.opacity(0.65))
+            .bg(colors.canvas)
+            .rounded(px(6.))
+            .overflow_hidden();
+        for r in day
+            .records
+            .iter()
+            .filter(|_| !self.timeline_web || self.web_data.is_some())
+        {
+            full = full.child(
+                div()
+                    .absolute()
+                    .top(px(5.))
+                    .bottom(px(5.))
+                    .rounded(px(3.))
+                    .left(relative((r.start - start) as f32 / (end - start) as f32))
+                    .w(relative((r.end - r.start) as f32 / (end - start) as f32))
+                    .bg(color_for(if self.timeline_categories {
+                        &r.category
+                    } else {
+                        &r.key
+                    })),
+            );
+        }
+        let mut toolbar = div()
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .child(heading(tr("history.timelineAxis")).flex_1());
+        let legend: Vec<_> = if self.timeline_web && self.web_data.is_none() {
+            Vec::new()
+        } else if self.timeline_categories {
+            day.categories.iter().map(|(key, _)| (key, key)).collect()
+        } else {
+            day.apps.iter().map(|(key, name, _)| (key, name)).collect()
+        };
+        for (key, name) in legend.iter().copied().take(7) {
+            toolbar = toolbar.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(4.))
+                    .child(div().size(px(6.)).rounded_full().bg(color_for(key)))
+                    .child(name.clone())
+                    .text_size(px(11.)),
+            );
+        }
+        let mode_label = self.timeline_mode_label();
+        let mut actions = quietpro::icon_actions().child(
+            IconControl::new("timeline-mode", mode_label, Icon::Tags).action(
+                colors,
+                cx.listener(|this, _, _, cx| {
+                    this.cycle_timeline(cx);
+                }),
+            ),
+        );
+        for (id, key, icon, kind) in [
+            (
+                "zoom",
+                "history.openTimelineZoom",
+                Icon::ZoomIn,
+                Overlay::Zoom,
+            ),
+            (
+                "records",
+                "history.openTimeline",
+                Icon::Expand,
+                Overlay::Records,
+            ),
+        ] {
+            actions = actions.child(IconControl::new(id, tr(key), icon).action(
+                colors,
+                cx.listener(move |this, _, win, cx| this.open_overlay(kind, win, cx)),
+            ));
+        }
+        div().flex_1().min_h(px(120.)).flex().child(
+            content_card(colors.border, colors.panel)
+                .flex_1()
+                .gap(px(8.))
+                .child(toolbar.child(actions))
+                .child(full)
+                .when(self.timeline_web && self.web_error, |card| {
+                    card.child(label(tr("destinationDetail.dayError")))
+                })
+                .child(
+                    div()
+                        .w_full()
+                        .flex()
+                        .justify_between()
+                        .text_color(colors.secondary)
+                        .text_size(px(11.))
+                        .children(["00:00", "06:00", "12:00", "18:00", "24:00"]),
+                ),
+        )
+    }
+}
+
 impl Render for History {
     fn render(&mut self, win: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let colors = self.client.palette(win);
