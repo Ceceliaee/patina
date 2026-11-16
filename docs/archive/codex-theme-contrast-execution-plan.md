@@ -66,9 +66,8 @@
 | 主题切换 | [useAppThemeMode.ts](../../src/app/hooks/useAppThemeMode.ts) 根据设置和系统偏好写入 `data-theme`、`data-color-scheme` 等 HTML 属性 |
 | 预设与派生 | [tokens.css](../../src/styles/tokens.css) 同时包含逐主题常量和后置的固定比例混色覆盖；Catppuccin 浅色种子已包含用户提供的紫色 |
 | 组件消费 | `--qp-*` 由 Quiet Pro CSS 和组件消费；[App.css](../../src/App.css) 汇总 Tailwind 与各样式 owner |
-| 配色卡片 | [colorSchemeOptions.ts](../../src/shared/settings/colorSchemeOptions.ts) 持有列表与色样 |
-| 弹窗 | [SettingsAppearancePanel.tsx](../../src/features/settings/components/SettingsAppearancePanel.tsx) 记录打开时配色，取消时恢复，确认成功才关闭 |
-| 保存 | [useSettingsPageState.ts](../../src/features/settings/hooks/useSettingsPageState.ts) 的配色确认只提交当前配色字段，不保存其余设置草稿 |
+| 配色卡片 | 当时由 `src/shared/settings/colorSchemeOptions.ts` 持有列表与色样；已随 Tauri 配色弹窗移除，可在 `tauri-maintenance` 查阅 |
+| 弹窗与保存 | 当时由 `SettingsAppearancePanel.tsx` 与 `useSettingsPageState.ts` 管理预览、取消和单字段保存；现由 [GPUI 配色弹窗](../../desktop/patina/src/settings/schemes.rs)承接 |
 | 设置类型与读取 | [appSettings.ts](../../src/shared/settings/appSettings.ts)、[appSettingsNormalization.ts](../../src/shared/settings/appSettingsNormalization.ts)、[appSettingsStore.ts](../../src/platform/persistence/appSettingsStore.ts) |
 | 写侧与挂件快照 | [app_settings.rs](../../src-tauri/src/data/repositories/app_settings.rs)、`src-tauri/src/data/repositories/widget_runtime.rs`、`src/platform/desktop/widgetRuntimeGateway.ts`（后两项为已移除的旧挂件路径） |
 | 弹窗扩展位置 | [QuietDialog.tsx](../../src/shared/components/QuietDialog.tsx) 已提供 `headerAside`，可用于放置对比度控件 |

@@ -108,6 +108,10 @@ Quiet Pro 不鼓励“这个页面再发明一个更顺眼的新档位”。
 
 GPUI 组件的内边距、组件间距和普通圆角按 4 px 网格取值。同层级、同用途的组件共用一个圆角档位。字号与图标尺寸按阅读和识别需要取值，细边框可使用 1 px。
 
+GPUI 方形按钮的整圈外轮廓采用指数 n = 4 的超椭圆，由键面边长决定。设置页的滑动开关使用胶囊轨道和圆形滑块，左关右开，点击范围限于开关本体。
+
+GPUI 按钮的鼠标点击与选中状态不添加强调色描边。图标切换按钮共用透明背景和中性图标色，悬浮与按下时提供中性底色反馈。显示方式切换（如导航名称、图表分组）不突出某一种状态；功能开关用图标形态表达状态，例如迷你窗未钉住时使用线框图钉，钉住时使用实心图钉。切换值仍通过可访问状态表达。键盘操作通过中性色焦点环标出当前位置，保留 Tab、Enter 和空格等既有交互。
+
 主页面按阅读任务选择文字角色，具体字号和行高由 token 持有：
 
 | 阅读任务 | 文字角色 |
@@ -136,7 +140,7 @@ GPUI 组件的内边距、组件间距和普通圆角按 4 px 网格取值。同
 - `src/styles/app-shell.css`：应用壳层、通用页面与响应式规则
 - `src/styles/features/*`：对应 feature 的局部样式
 
-主题色样和预设默认对比度由 [themePresets.ts](../src/shared/theme/themePresets.ts) 持有；[colorSchemeOptions.ts](../src/shared/settings/colorSchemeOptions.ts) 保留可选项及显示名称。颜色计算和 Patina 语义映射由 [deriveTheme.ts](../src/shared/theme/deriveTheme.ts) 持有，组件消费 `--qp-*`，不再维护逐主题 CSS 色板。
+Web 与原生窗口从同一份[配色预设](../src/shared/theme/presets.json)读取方案名称、色样和默认对比度。Web 组件使用 [deriveTheme.ts](../src/shared/theme/deriveTheme.ts) 生成的 `--qp-*` 变量，原生控件使用 [Quiet Pro 调色板](../desktop/quietpro/src/theme.rs)。
 
 #### 主题与颜色派生
 
@@ -259,6 +263,10 @@ Feature 私有表面也必须使用同一状态语义，但其布局和交互细
 - 能明确写出状态、键盘、焦点和测试责任。
 
 只服务一个 feature 的业务组合默认留在该 feature。标题栏、侧栏和 mini 控件留在 `app/*`。两个组件只是外观相近，但操作目标、状态机或未来变化方向不同，不构成共享理由。
+
+GPUI 的定稿组件外观由 [`desktop/quietpro`](../desktop/quietpro/src/lib.rs) 持有：主题配色在 `theme.rs`，页面与卡片的公共尺寸在 `layout.rs`，控件的轮廓、文字、悬浮、按下、焦点和禁用样式在 `controls/`。新消费者直接使用公共组件；已定稿原型不在业务文件中另存一份样式。
+
+`desktop/patina/src` 保留页面组合、本地化文案、业务状态和操作。例如存储模块管理导入方式与字段草稿，历史模块管理日期计算，分类模块管理颜色草稿与系统取色；对应的选择卡片、复选框、日历格和色板外观由 QuietPro 提供。系统文件选择器和托盘菜单保留系统外观，图表数据绘制仍由相应页面负责。
 
 原生 `button / input / select / textarea` 不是视觉债务。语义正确、行为专用且没有重复状态机时，可以继续使用原生元素；不要建立“原生标签清零”目标。
 

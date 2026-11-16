@@ -372,7 +372,9 @@ For prose-only work, go directly to [documentation checks](#64-documentation-onl
 Run focused checks while implementing, then run the required validation before
 requesting review. Validation requirements are owned by
 [`docs/engineering-quality.md`](docs/engineering-quality.md#5-默认验证门槛);
-[`package.json`](package.json) defines each command's checks and execution order.
+[`package.json`](package.json) defines pnpm checks and execution order; the
+[`desktop` workspace](desktop/Cargo.toml) and its crate manifests and module trees
+define GPUI test entry points.
 
 For validation stages, evidence reuse and local/CI responsibilities, follow the
 [layered entry guide](docs/engineering-quality.md#51-测试分层与稳定性治理).
@@ -389,8 +391,15 @@ pnpm run check
 
 ### 6.2 Rust And Architecture Validation
 
+For GPUI, run Cargo from `desktop/` to use its pinned toolchain. Choose the crate,
+test target and named case through the
+[GPUI test guide](docs/engineering-quality.md#gpui-测试文件与定向入口).
+Recorder data contracts do not require launching a GPUI window.
+
 When [engineering quality §5](docs/engineering-quality.md#5-默认验证门槛)
-requires full validation for the actual change, run:
+requires full validation, use the affected architecture's aggregate. For the
+GPUI workspace, run `cargo test --locked --workspace` from `desktop/` and the
+required static and native checks. For the retained Tauri/TypeScript application:
 
 ```bash
 pnpm run check:full

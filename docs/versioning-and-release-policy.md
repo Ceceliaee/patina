@@ -44,9 +44,10 @@
 - `package.json` 的 `version`
 - `src-tauri/tauri.conf.json` 的 `version`
 - `src-tauri/Cargo.toml` 中 `[package].version`
+- `desktop/patina/Cargo.toml` 中 `[package].version` 与 `desktop/Cargo.lock` 对应条目
 - Git tag
 - GitHub Release 标题
-- 更新通道中的 `latest.json`
+- 原生更新通道中的 `gpui-latest.json`
 
 长期政策不保存当前版本副本。发布 validator 负责比较版本文件、tag、Release 与 updater manifest，避免靠人工同步 prose。
 
@@ -346,25 +347,25 @@ GitHub Release 中的 Windows 安装包附件统一使用无空格文件名，�
 
 每次正式发布还必须携带根级 `SHA256SUMS.txt`：
 
-- 校验文件按 x64、ARM64 顺序恰好记录两个最终公开安装包，不记录 Tauri bundle 中间路径或 `latest.json`。
+- 校验文件按 x64、ARM64 顺序恰好记录两个最终公开安装包，不记录构建中间路径或更新清单。
 - 记录格式固定为 64 位小写 SHA-256、两个空格和无路径前缀的安装包文件名，并以单个 LF 换行结束。
 - SHA-256 必须在公开文件完成复制与重命名后，分别从 `dist-release/` 中两个最终公开安装包重新读取计算。
-- 发布工作流必须同时比较 Tauri 输入安装包与最终公开安装包的摘要；字节不一致时不得发布。
+- 发布工作流必须同时比较签名输入安装包与最终公开安装包的摘要；字节不一致时不得发布。
 - `SHA256SUMS.txt` 只证明文件字节一致性，不单独证明发布者身份或软件绝对安全。
 
 最终公开安装包还必须生成 GitHub Artifact Attestation：
 
 - 两个安装包分别生成 attestation；每个 subject 必须是 `dist-release/` 下对应最终公开安装包的明确路径，不能是原始 bundle 路径或目录 glob。
 - attestation 必须在独立发布资产校验通过后、GitHub Release 对外发布前生成；生成失败必须阻断 Release。
-- attestation 用于把安装包摘要与 Patina 仓库、源码引用和发布工作流关联，不替代 Tauri updater 签名或 Windows Authenticode。
+- attestation 用于把安装包摘要与 Patina 仓库、源码引用和发布工作流关联，不替代 Minisign 更新签名或 Windows Authenticode。当前发布流程不使用 Windows Authenticode。
 
 Patina Web Sync 浏览器扩展由独立公开仓库 [`patina-web-sync`](https://github.com/Ceceliaee/patina-web-sync) 发布，不再作为 Patina Release 的必备附件。
 
-Patina Release 只发布 x64 与 ARM64 两个主应用安装包、`SHA256SUMS.txt`、`latest.json` 与更新通道所需资产。浏览器扩展的安装来源、版本号、商店素材、三店提交、AMO 公开 listed XPI 与扩展 release asset 由 `patina-web-sync` 仓库负责。
+Patina Release 只发布 x64 与 ARM64 两个主应用安装包、`SHA256SUMS.txt` 和 `gpui-latest.json`。浏览器扩展的安装来源、版本号、商店素材、三店提交、AMO 公开 listed XPI 与扩展 release asset 由 `patina-web-sync` 仓库负责。
 
 浏览器扩展的用户配置说明由 Patina README 与 Patina 设置页承载。Patina 设置页应指向 `patina-web-sync` 的发布页或商店入口，并继续说明本机端口与 token 配置步骤。
 
-双架构使用同一版本和源码引用，分别构建 `x86_64-pc-windows-msvc` 与 `aarch64-pc-windows-msvc`。一份 `latest.json` 同时包含 `windows-x86_64` 与 `windows-aarch64`，任一路构建、验证或证明失败均阻断公开发布。应用自动更新按已安装应用架构选包；ARM 设备上的 x64 应用继续取得 x64 更新，不自动迁移架构。
+双架构使用同一版本和源码引用，分别构建 `x86_64-pc-windows-msvc` 与 `aarch64-pc-windows-msvc`。一份 `gpui-latest.json` 同时包含 `windows-x86_64` 与 `windows-aarch64`，任一路构建、验证或证明失败均阻断公开发布。应用自动更新按已安装应用架构选包；ARM 设备上的 x64 应用继续取得 x64 更新，不自动迁移架构。
 
 发布说明通过 Windows 下载表提供两个安装包的直链与架构标签，不重复展示校验步骤；`SHA256SUMS.txt` 和 GitHub Artifact Attestation 仍由发布资产与工作流承载。ARM64 以原生 CI、自动化测试和资产验证为发布门槛，不以实体设备人工验收作为发布前置，也不将自动化覆盖之外的真实桌面行为描述为已验证。
 
@@ -386,11 +387,12 @@ Patina Release 只发布 x64 与 ARM64 两个主应用安装包、`SHA256SUMS.tx
 
 GitHub Release 继续作为正式发布源、主下载入口和主更新清单来源。
 
-应用内 updater 默认优先读取 GitHub Release asset 上的 `latest.json`。如果配置了 Cloudflare R2 备用镜像，R2 只承担更新兜底职责：
+原生更新器默认优先读取 GitHub Release asset 上的 `gpui-latest.json`。如果配置了 Cloudflare R2 备用镜像，R2 只承担更新兜底职责：
 
 - R2 endpoint 排在 GitHub endpoint 之后
-- R2 版 `latest.json` 中的安装包 URL 指向 R2 镜像对象
-- R2 默认只保留当前版本的两个安装包和根路径 `latest.json`；两个包上传并回读校验成功后才更新根清单，清单成功后才清理旧版本。
+- R2 版 `gpui-latest.json` 中的安装包 URL 指向 `desktop/releases/v<version>/` 下的镜像对象
+- R2 只接收稳定版；同步串行执行，拒绝用较低版本覆盖当前清单，也拒绝替换同版本的不同资产。
+- 原生镜像只保留当前版本的两个安装包和根路径 `gpui-latest.json`；两个包上传并回读校验成功后才更新根清单，清单回读一致后才清理 `desktop/releases/` 下的旧版本。旧 `latest.json` 和 `releases/` 对象不在清理范围内。
 - R2 不同步浏览器扩展包；浏览器扩展由 `patina-web-sync` 独立发布
 - GitHub Releases 继续保留完整历史版本
 - R2 未配置、同步失败或被停用时，不改变 GitHub Release 的主发布事实
@@ -398,6 +400,24 @@ GitHub Release 继续作为正式发布源、主下载入口和主更新清单�
 不要把 R2 当作完整历史发布仓库，也不要让 R2 同步反过来阻塞已经完成的 GitHub Release 主发布。
 
 ---
+
+### 9.6 GPUI 原生更新包
+
+原生更新使用独立的 `gpui-latest.json` 和 NSIS 安装包，不依赖 Tauri updater。[`prepare-release.yml`](../.github/workflows/prepare-release.yml) 已接入原生打包，沿用 `vX.Y.Z` 标签和 `Patina vX.Y.Z` 发布标题。当前程序仍使用独立安装身份及实验版资料目录；首次正式发布前必须完成旧安装版的安装身份、数据路径和版本衔接验收。工作流接线不代表迁移验收完成，也不能将原生包写入旧 `latest.json`。
+
+[`desktop/updater/config.json`](../desktop/updater/config.json) 拥有更新源及公钥：先检查 GitHub Releases，访问或解析失败再尝试 R2。两个通道发布同版本、同字节的资产。清单包含 `schema: 1`、`application`、SemVer `version`、可选 `notes`，以及按 `windows-x86_64`、`windows-aarch64` 索引的 `platforms`；每个包提供 HTTPS `url`、字节数 `size` 和 Base64 编码的完整 Minisign `signature`。
+
+安装包签名使用预哈希 Minisign，签名的 trusted comment 必须严格等于 `patina-gpui <version> <platform>`。客户端同时验证包字节和该签名注释，防止把旧版本、其他架构或 Tauri 安装包改名后作为 GPUI 更新。版本不高于当前版本时不提供安装；稳定版不接受预发布版。更新签名与 Windows Authenticode 是不同契约。
+
+构建前安装 `desktop/rust-toolchain.toml` 指定的 Rust、两个 Windows 目标和 Wasm 目标，并准备 NSIS、独立 Minisign CLI 及与公钥匹配的私钥文件。先按仓库网络偏好检查代理，然后从仓库根目录执行；以下变量指向维护者准备好的本地工具、私钥、发布说明和候选资产 URL：
+
+```powershell
+./scripts/package-gpui.ps1 -Makensis $makensis -Minisign $minisign -SigningKey $signingKey -DownloadBaseUrl $assetBaseUrl -NotesFile $notesFile
+```
+
+[`package-gpui.ps1`](../scripts/package-gpui.ps1) 从 GPUI Cargo manifest 读取版本，构建双架构、生成 NSIS 包、签名并用应用公钥复验，全部成功后才写清单。默认输出到 `desktop/target/gpui-release`，已存在的同名包或清单不会被覆盖；重试时使用新的 `-OutputDirectory`。`-Unsigned` 仅生成本地验证安装包，不生成更新清单。安装器的 Windows 发布者及文件公司名称统一为 `Ceceliaee`。
+
+脚本只生成本地资产，不发布 GitHub Release 或 R2。发布工作流在各架构的原生 Windows runner 上调用该脚本，再合并和独立校验两份清单，完成摘要与 attestation 后发布。签名沿用 `TAURI_SIGNING_PRIVATE_KEY` 和 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 两个 secret 名称；前者保存 Base64 编码的 Minisign 私钥文件，后者经进程标准输入提供，临时私钥在成功或失败后均删除。名称沿用不引入 Tauri 构建依赖；私钥必须与应用内公钥匹配。
 
 ## 10. 发布前的最低验证门槛
 
@@ -409,14 +429,16 @@ GitHub Release 继续作为正式发布源、主下载入口和主更新清单�
 `package.json` 拥有 `release:check` 的检查组成与执行顺序；通用质量门槛由
 [`engineering-quality.md`](./engineering-quality.md#5-默认验证门槛) 拥有。正式发布前，目标提交必须在本仓库 `main` 的 push 事件上通过 `Verify`。发布工作流按 tag 的完整提交 SHA 查验最近一次对应运行及其全部作业；记录缺失、运行未结束、作业未全绿或查询失败时停止。通过后，版本、changelog 和安装包均取自该提交。
 
+`Verify` 包括双架构原生 workspace 测试、Clippy、格式与依赖审计，以及隔离桌面中的更新交互和安装、升级、卸载验收。版本一致性校验同时覆盖原生 Cargo manifest 与 lockfile；`release:sync-version` 同步这两处，仍需按原有版本准备流程刷新和校验旧后端 lockfile。
+
 GitHub Actions 生成正式发布资产后、发布 GitHub Release 前，还必须执行：
 
-- `pnpm run release:verify-assets <version> <bundle-dir> <output-dir> <repository>`
+- `pnpm run release:verify-assets <version> <bundle-dir> <output-dir> <repository> v<version>`
 
-该 gate 必须重新读取磁盘产物。`<bundle-dir>` 下使用 `x64/` 与 `arm64/` 两个子目录，每个目录包含 `Patina.exe` 和 `nsis/` 下唯一 `.exe/.exe.sig` 配对；校验主程序 PE 架构、输入与最终安装包 SHA-256、完整 `SHA256SUMS.txt`、`latest.json` 版本、平台、下载 URL，并使用配置中的 updater 公钥验证最终安装包签名。生成命令成功不能代替独立校验命令成功。
+该 gate 必须重新读取磁盘产物。`<bundle-dir>` 下使用 `x64/` 与 `arm64/` 两个子目录，每个目录包含 `patina-gpui.exe`、签名安装包和该架构的 `gpui-latest.json`；校验主程序 PE 架构、输入与最终安装包 SHA-256、完整 `SHA256SUMS.txt`、清单版本、平台、字节数和下载 URL，并使用应用公钥验证最终安装包签名及版本、架构注释。生成命令成功不能代替独立校验命令成功。发布后还须从 GitHub 下载四个公开附件，逐一比对本地产物摘要；回读失败阻断镜像同步，但不能覆盖已发布资产。
 
-默认不在本地手工生成 `dist-release`、安装包或 `latest.json`。
-`write-release-notes`、`pnpm run tauri build --bundles nsis` 与 `pnpm run release:prepare-assets`
+默认不在本地手工生成 `dist-release`、安装包或更新清单。
+`write-release-notes`、`scripts/package-gpui.ps1` 与 `pnpm run release:prepare-assets`
 默认属于 GitHub Actions 工作流 [`prepare-release.yml`](../.github/workflows/prepare-release.yml)
 中的 `Publish Release` 流程，只有在明确需要排查发布流水线问题时才例外。
 浏览器商店提交、AMO 公开 listed XPI 获取与扩展 GitHub Release 不属于 Patina 主应用发布流程；它们由 `patina-web-sync` 仓库负责。

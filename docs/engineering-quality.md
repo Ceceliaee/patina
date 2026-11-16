@@ -69,18 +69,19 @@
 | 实际改动 | 本地验收范围 |
 | --- | --- |
 | 纯文档 | `pnpm run check:docs`，核对事实、UTF-8、链接和义务；治理或验证政策变化追加 `pnpm run check:docs:self-test` 及受影响规则的正反场景 |
-| 局部前端行为、展示或选项持久化 | 相关单元/契约测试、受影响交互的 browser 组，以及相关类型、Lint、架构或本地化检查；不运行无关页面回归 |
+| 局部 GPUI/QuietPro 界面或选项持久化 | 所属 Rust 模块或 Recorder 契约、受影响的具名原生交互用例，以及相关格式、编译或本地化检查；不运行无关页面与资源长测 |
+| 局部 Tauri/TypeScript 前端行为、展示或选项持久化 | 相关单元/契约测试、受影响交互的 browser 组，以及相关类型、Lint、架构或本地化检查；不运行无关页面回归 |
 | 局部 Rust、tracking、SQLite 或桌面 runtime 行为 | 受影响模块及真实消费者的测试、相关 Rust 静态检查和命中风险的原生/数据专项；不因涉及 Rust 或持久化就运行全仓测试 |
-| 跨模块改动 | 前端跨模块行为运行 `pnpm run check`；涉及 Rust、跨进程契约、公共依赖或构建/测试基础设施时运行 `pnpm run check:full`，并补命中风险的专项 |
+| 跨模块改动 | GPUI workspace 运行 `cargo test --locked --workspace` 及受影响 crate 的格式、编译和 Clippy 检查，并补命中风险的原生专项；现存 Tauri/TypeScript 跨模块行为运行 `pnpm run check`，涉及其 Rust、跨进程契约、公共依赖或构建/测试基础设施时运行 `pnpm run check:full`；共享实现同时覆盖两侧实际消费者 |
 | 正式发布 | `pnpm run release:check`，并遵循[发布验收](versioning-and-release-policy.md#10-发布前的最低验证门槛) |
 
 按行为影响判断跨模块，不按文件数量判断：一个功能的组件、存储 helper 和测试可以属于局部改动；公共 API、共享状态、全局样式、schema、权限或依赖变化若影响多个消费者，则覆盖这些消费者并使用跨模块门槛。影响范围不明时先追踪调用与数据流，再扩大到能覆盖影响的范围。
 
-检查器、模板或操作说明变化还须验证真实使用路径，扩展名不能豁免风险。纯文档不默认运行应用构建、browser 或 Rust 全套。`package.json` 是命令组合、顺序与叶子测试的唯一 owner；长期 prose 不复制执行图。顶层门禁不得静默移除既有检查、测试、coverage include 或阈值。
+检查器、模板或操作说明变化还须验证真实使用路径，扩展名不能豁免风险。纯文档不默认运行应用构建、browser 或 Rust 全套。`package.json` 拥有 pnpm 命令图，`desktop/Cargo.toml` 与各 crate manifest、Cargo module tree 拥有 GPUI 测试入口；长期 prose 不复制执行图。顶层门禁不得静默移除既有检查、测试、coverage include 或阈值。
 
 `check:full` 覆盖前端完整检查、Rust 边界、格式、编译、测试、clippy 与依赖安全。依赖审计只允许经 Windows target 依赖树证明不可达的精确 advisory；受控离线模式仍须运行本地快照和例外可达性校验，但不能替代发布 CI 的联网新鲜度。
 
-Node 与 Rust 工具链版本分别由根 `.node-version` 与 `rust-toolchain.toml` 拥有；pnpm 版本由 `package.json#packageManager` 拥有。CI 读取这些来源，`engines` 保持受测试的精确镜像。安装布局、依赖构建脚本许可和 override 由 `pnpm-workspace.yaml` 拥有；冻结安装消费唯一 JS 锁文件 `pnpm-lock.yaml`，仓库仍使用 npm registry。第三方 GitHub Actions 固定到完整 commit SHA，并保留对应主版本注释；可移动 tag 不能成为长期执行引用。
+Node 与 Tauri Rust 工具链版本分别由根 `.node-version` 与 `rust-toolchain.toml` 拥有；GPUI 使用 `desktop/rust-toolchain.toml`，Cargo 命令从 `desktop/` 执行以选中该工具链。pnpm 版本由 `package.json#packageManager` 拥有。CI 读取对应来源，`engines` 保持受测试的精确镜像。安装布局、依赖构建脚本许可和 override 由 `pnpm-workspace.yaml` 拥有；冻结安装消费唯一 JS 锁文件 `pnpm-lock.yaml`，仓库仍使用 npm registry。第三方 GitHub Actions 固定到完整 commit SHA，并保留对应主版本注释；可移动 tag 不能成为长期执行引用。
 
 JS 离线审计只接受最近 24 小时内成功联网审计生成、且 SHA-256 与当前 pnpm 锁文件一致的本地报告。报告缺失、过期、损坏或锁文件变化均失败；Rust 离线快照及例外可达性校验继续执行。
 
@@ -91,6 +92,31 @@ JS 离线审计只接受最近 24 小时内成功联网审计生成、且 SHA-25
 ### 5.1 测试分层与稳定性治理
 
 GPUI 桌面版和 QuietPro 的自动化测试统一用 Rust 编写，包括控件交互、Windows 桌面验收和资源采样测试。单元测试随被测模块维护，集成测试放在对应 crate 的 `tests/` 目录，通过 `cargo test` 运行。需要交互式桌面或长时间采样的集成测试标记为 `#[ignore]`，验收时按测试名显式运行。
+
+#### GPUI 测试文件与定向入口
+
+按被测行为放置测试：
+
+- 纯计算、状态转换和控件模型的单元测试留在所属生产模块。
+- Recorder 公开接口的数据、事务、恢复与本地化契约放在 [`desktop/recorder/tests/contracts.rs`](../desktop/recorder/tests/contracts.rs) 及其领域子模块；这些用例不启动 GPUI。共享模块的内部单元测试仍由原 Rust target 承载，不能强制对 `patina-recorder` 执行 `--lib` 来编译未适配的 Tauri 测试。
+- 页面窗口交互放在 `desktop/patina/tests/pages/`，由 `pages.rs` 注册；Today 交互由 `today.rs` 注册，QuietPro 控件交互放在 `desktop/quietpro/tests/`。布局用例直接进入对应页面或弹窗，不以导入、备份等无关长流程作为前置步骤。
+- 专用会话资源采样与基线对照保留具名 ignored 用例；普通页面布局修改不自动触发资源长测。跨 target 复用的环境与 fixture 放在 `desktop/test-support/`，页面私有断言留在页面测试模块。
+
+以下命令从 `desktop/` 执行；依赖已缓存时可加 `--offline`。名称不确定时，用 `cargo test --locked -p <crate> --test <target> -- --list` 核对完整名称，再执行所需用例。例如：
+
+```sh
+cargo test --locked -p patina-recorder --test contracts services::web_sync_guide_data_is_localized_and_preserves_actions -- --exact
+cargo test --locked -p patina-gpui --test pages storage::settings_webdav_layout -- --ignored --exact --test-threads=1
+cargo test --locked -p quietpro --test controls accessible_controls -- --ignored --exact --test-threads=1
+```
+
+一次执行同一领域时可使用模块过滤器；不能用 `--include-ignored` 无差别执行带资源、凭据或专用会话前提的用例。Cargo 零匹配可能返回成功退出码，验收还须核对实际执行数非零；`--no-run` 只证明编译。移动测试时核对新旧清单、断言与 ignore 理由，保持默认聚合可达。
+
+GPUI 窗口用例从 Cargo 入口自动进入[临时 Win32 测试桌面](../desktop/test-support/src/lib.rs)，驱动、Patina 和渲染进程在同一非输入桌面完成交互，退出后释放。纯数据和控件模型用例直接运行。
+
+验收真实前台焦点、系统托盘、物理鼠标或交互会话资源基线时，使用专用 Windows 虚拟机或独立交互登录会话。在该环境的 PowerShell 中设置进程级 `$env:PATINA_DEDICATED_TEST_SESSION = '1'`，再运行对应的具名用例或 `native-lifecycle` 示例。这个变量声明运行环境已经专用，设置它本身不会创建会话。日常桌面保持未设置；显式选中这类用例时，测试会在启动窗口前报告缺少专用会话。
+
+局部 GPUI 修改不由旧版 `pnpm run check:full` 代替验收，也不因 recorder 复用 `src-tauri` 源文件而自动运行旧版全套。共享实现变化应按真实调用关系追加原 Rust target 的定向测试。迁移删除涉及全局主题、IPC、权限或公共生成器时，仍覆盖受影响的旧版消费者；新界面通过不能替代这些证据。
 
 编辑时运行命中 owner 的最小有效检查；完成时确认相关检查覆盖实际消费者及故障路径，局部改动即可结束本地验证。跨模块改动和正式发布按第 5 节运行全量入口。修复失败后只重验失效范围；共享状态、执行顺序或聚合编排改变时重验对应组合。数据安全、权限和跨进程风险应在实现过程中验证。
 
@@ -103,8 +129,9 @@ GPUI 桌面版和 QuietPro 的自动化测试统一用 Rust 编写，包括控�
 | TS/model、SSR、共享组件 | 使用 `package.json` 中对应叶子；单文件可直接 `node --experimental-strip-types tests/<file>.test.ts` | 公共 helper/组件覆盖实际消费者；影响跨模块时运行全量 |
 | 文档、i18n、结构检查器 | 文档按第 5 节选择检查及 self-test；资源变化运行对应 checker；检查器、生成器及相关契约或依赖变化追加相应自测，消息资源按第 7 节验证 | 政策或命令变化验证真实使用路径；扩展名不决定风险 |
 | Browser | `pnpm run test:ui-browser-smoke --group <name>`；可选组由[参数 owner](../tests/uiBrowserSmoke/options.ts)持有 | stub IPC 只证明 DOM/交互；权限、落盘与原生行为进入 runtime |
-| Rust、SQLite、权限模型 | `pnpm run test:rust:focused --filter <module-or-name>`；集成测试加 `--test <target>`，精确名称加 `--exact` | 共享类型、并发和恢复覆盖消费者；真实数据/权限边界补对应 runtime 组 |
-| 原生窗口、进程、恢复、输入 | `pnpm run test:tauri-runtime-smoke --group <name> --feedback --prepared <manifest>` | feedback 不证明完整 acceptance；时间边界与资源风险仍运行原组或资源入口 |
+| GPUI、QuietPro、Recorder 契约 | 按 [GPUI 定向入口](#gpui-测试文件与定向入口)选择 crate、target 和具名用例 | 共享控件或测试辅助代码覆盖实际消费者；系统焦点与资源风险进入专用会话用例 |
+| Tauri Rust、共享 SQLite 内部测试、权限模型 | `pnpm run test:rust:focused --filter <module-or-name>`；集成测试加 `--test <target>`，精确名称加 `--exact` | 共享类型、并发和恢复覆盖消费者；真实数据/权限边界补对应 runtime 组 |
+| Tauri 原生窗口、进程、恢复、输入 | `pnpm run test:tauri-runtime-smoke --group <name> --feedback --prepared <manifest>` | feedback 不证明完整 acceptance；时间边界与资源风险仍运行原组或资源入口 |
 | 性能、coverage、mutation、发布 | 使用所属专项的现有入口，先做命中低层行为/契约验证 | 样本、阈值、真实设备及发布完整责任仍按各自 owner 验收 |
 
 定向参数必须拒绝未知、重复、冲突和零匹配。Rust focused 使用独立质量 target 和缓存依赖，只有实际非零测试通过才成功；依赖缺失时先准备环境。Browser 的启动检查不计入所选业务组的非零结果。测试过滤与 coverage 源码范围是两件事：上述叶子反馈不隐式采集 coverage；需要 coverage 时使用原风险域或全仓入口，保留全部 include 和逐文件阈值。局部行为通过不能当成缩小 coverage 范围的理由，也不能合并同一测试在不同包装/环境中的独有证据。
@@ -133,6 +160,7 @@ GPUI 桌面版和 QuietPro 的自动化测试统一用 Rust 编写，包括控�
 
 - 禁止失败后自动重跑整项测试来掩盖 flaky behavior。
 - 等待状态变化必须使用有界条件轮询、事件、显式闸门或可观察 runtime 状态；超时只作为安全上限，并应报告最后观测值。
+- 操作只发送一次，轮询只观察结果。请求完成须对应本次调用、修订或值变化；旧提示、操作前已启用的按钮和旧数据不能充当完成信号。GPUI 滚动在目标几何发生变化后继续；找不到目标或未移入视口必须失败，不能在固定延时后盲目点击。非输入桌面的键盘用例以目标控件的选择、值变化或弹窗开关验证结果；UIA `HasKeyboardFocus` 还依赖宿主窗口的前台焦点，不能作为隐藏桌面的统一前置条件。真实系统焦点仍在专用会话验收。
 - 固定 sleep 只允许直接验证时间预算或刻意构造“操作超过超时”的输入，必须写清理由；不能把 sleep 当作正常同步手段。
 - 测试创建的进程、端口、数据库和临时目录必须在成功、失败、超时路径清理。删除临时目录前必须验证绝对路径属于测试专属根目录，终止进程必须使用本测试创建的 PID，不能按进程名误杀。
 - 时间、日期、时区、语言、主题、storage、缓存和随机输入必须由 fixture 控制或在测试后恢复，测试不能依赖执行顺序和前一项留下的状态。

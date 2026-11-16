@@ -44,7 +44,7 @@ Patina 自己维护 Windows 桌面入口。平台层通过现有的 `windows` cr
 
 [原生工作区](../../desktop/Cargo.toml)使用 `gpui-kit 0.9.1`、`gpui-base 0.9.1` 和 `gpui-pre 0.3.12`。QuietPro 启用 Kit 的 `assets` 功能，使用 `icon_assets!` 登记界面实际用到的 Lucide 图标。桌面入口和控件示例注册同一个资源源，控件按 `IconName` 使用图标。图标清单由 [QuietPro](../../desktop/quietpro/src/lib.rs) 持有。
 
-[实验入口](../../desktop/patina/src/lib.rs)在常驻进程中使用 GPUI 的 `WindowingRequest::Headless`，接收 Win32 托盘和电源消息，并持有唯一的记录引擎。打开第一个 Today 或 Mini 时启动[窗口进程](../../desktop/patina/src/window_process.rs)。两个窗口共享图形设备；关闭 Today 时若 Mini 仍在，保留原来的 Mini 和设备。最后一个窗口关闭后，窗口进程退出，托盘继续采样并写入同一数据库。
+[实验入口](../../desktop/patina/src/lib.rs)在常驻进程中使用 GPUI 的 `WindowingRequest::Headless`，接收 Win32 托盘和电源消息，并持有唯一的记录引擎。打开第一个 Today 或 Mini 时启动[窗口进程](../../desktop/patina/src/window_process.rs)。两个窗口共享图形设备。启用「关闭到后台」时，关闭主窗口后 Mini 可继续使用，最后一个窗口关闭后仅保留常驻进程，继续记录。关闭该选项后，关闭主窗口会一并退出 Mini 和记录进程。
 
 在 Windows 仓库根目录运行 `cargo run` 启动 GPUI 开发预览，默认打开主窗口。用 `cargo run -- --mini` 预览 Mini。启动器按原生工作区的工具链编译，监听 Rust 源码和内嵌资源。保存后编译成功会重启预览，主窗口回到上次浏览的页面。页面草稿和弹窗随重启关闭。编译报错时可以继续操作上一次成功的预览，修正并保存后会再次编译。按 Ctrl+C 或从预览托盘退出即可结束。开发预览使用 `%LOCALAPPDATA%/Patina.GPUI.Dev/Patina.GPUI.Experimental/`，也可通过 `PATINA_GPUI_PROFILE_PARENT` 指定已有的绝对目录。
 
@@ -54,7 +54,9 @@ Patina 自己维护 Windows 桌面入口。平台层通过现有的 `windows` cr
 cargo +1.100.0 run --locked --manifest-path desktop/Cargo.toml -p patina-gpui -- --mini
 ```
 
-不带窗口参数时只挂托盘。`--mini` 打开 Mini，`--today` 打开今天页。左键单击「Patina · GPUI」托盘图标打开主窗口。右键菜单可打开主窗口或 Mini、暂停或恢复记录，以及退出应用。默认数据位于 `%LOCALAPPDATA%/Patina.GPUI.Experimental/`。需要另一个测试库时，把 `PATINA_GPUI_PROFILE_PARENT` 设为已存在的绝对目录；程序仍使用该目录中的 `Patina.GPUI.Experimental/` 子目录。正式旧库的迁移历史修复与升级演练在主线接替前完成。
+不带窗口参数时，首次启动按「静默启动」偏好决定是否打开主窗口，再次启动会打开同一配置的主窗口，隐藏托盘图标后也可通过此方式返回。`--mini` 打开 Mini，`--today` 打开主窗口。左键单击「Patina · GPUI」托盘图标打开主窗口。右键菜单可打开主窗口或 Mini、暂停或恢复记录，以及退出应用。
+
+在「设置 → 常驻」保存「开机自启动」后，Windows 会在当前用户登录时启动相应配置的 GPUI 程序。新实验配置默认关闭该选项，启用静默启动和关闭到后台。默认数据位于 `%LOCALAPPDATA%/Patina.GPUI.Experimental/`。需要另一个测试库时，把 `PATINA_GPUI_PROFILE_PARENT` 设为已存在的绝对目录，程序仍使用该目录中的 `Patina.GPUI.Experimental/` 子目录。正式旧库的迁移历史修复与升级演练在主线接替前完成。
 
 使用 `cargo +1.100.0 run --locked --manifest-path desktop/Cargo.toml -p patina-gpui --example native-lifecycle` 在独立临时库验收实际窗口、真实采样循环与退出。前台应用由原有的调试探测样本提供，程序结束后释放临时库。
 
@@ -210,8 +212,16 @@ cargo test --locked -p patina-gpui --test today main_window_lifecycle -- --ignor
 | 历史 | 从侧栏进入，前后切日，在应用与分类时间轴之间切换，打开时间线缩放弹窗，改变最短时长。从历史与 Today 打开 Studio，核对标题样本的日期范围。含时段导入的样本日总量为 72 分钟，其中可定位的时间线为 70 分钟。 | 时间轴模式偏好持久化、网站历史视图、关联成员的来源标识及完整标题分组与现版逐项对照。 |
 | 数据 | 七天总量 1 小时 40 分，选 Studio 后 1 小时 15 分，切到三十天保留选择。可按锚点日期选择自然周、月或年。Office 为 20 分，空网站分组为零。从日读数进入应用详情。应用与网站分别消费共享 SQLite 聚合查询。 | 所选对象热力图、网站详情及无障碍图表交互。 |
 | 分类 | 双列应用卡片中改分类，取消后恢复；修改名称与分类并保存，Today 排行和重开页面都读到新名称。创建自定义分类后可直接分配并保存。多项改动在一个 SQLite 事务内提交，遇到冲突时先前的写入一并回滚。 | 应用关联、分类合并/删除、网站分类及删除前的记录预览。 |
-| 设置 | 时间规则从 3 改到 4 分钟，取消恢复；再次修改并保存后 SQLite 为 240 秒。选择深色并保存，重开后仍为深色。 | 常驻与启动行为、本机服务、存储路径、导入导出、备份恢复、远端备份及配色预设的原生接入。 |
+| 设置 | 时间规则和主题支持保存与取消。「配色方案」分别预览和保存浅色、深色预设。常驻设置控制关窗、托盘和启动行为。网页同步和远程推送随记录进程运行。「存储」提供导出与导入、本地与 WebDAV 快照、定时任务、历史清理和数据库目录迁移。更改数据目录后重启生效，插件和本机凭据保留在配置目录内。 | — |
 | 关于 | 核对运行中的 GPUI 版本，打开反馈与赞助弹窗，在测试窗口中读出两组二维码说明及对应外部入口，关闭后回到同页。 | 已发布的签名安装包供 Tauri 使用。实验版可以查询正式版清单、打开发布页；GPUI 安装包与安装更新链路仍待发行阶段验收。 |
+
+本分支的 Tauri 设置页已移除记录规则、暂停记录、全局标题记录、「常驻」「远程推送」、主题模式控件和「配色方案」弹窗，关于页已移除反馈与赞助弹窗及专用资源。旧实现可在 `tauri-maintenance` 查阅。共享设置模型、主题预设和已保存配色保留；Tauri 窗口按已保存的主题模式显示，仍支持跟随系统主题。关于页的四张二维码仍供 GPUI 使用。Tauri 关于页继续提供版本、仓库、更新日志和更新流程。
+
+2026-11-16，GPUI 网页同步通过 `services::settings_services` 原生验收，覆盖安装指南、手动安装入口、Token 轮换、本地请求、关窗后台运行及重启恢复。Tauri 网页同步设置面板、安装指南和专用轮询已移除，同时删除连接快照命令、权限及专用状态缓存；GPUI 使用的三张商店图片和共享文案保留。网页记录、共享设置及历史、数据页的网页展示保留。剩余设置保存只提交实际修改的字段，不再整理网页同步 Token 或启用状态。清理后 Settings 分块为 15.46 KiB gzip，预算从 24 收紧至 16 KiB，保留至少 3% 余量；入口与总预算不变。
+
+2026-11-16，GPUI 四种语言的选择、保存和切页通过 `repeated_sidebar_navigation_keeps_window_alive` 原生复验。Tauri 语言选择控件及专用预览状态已移除；已保存语言的加载、资源失败回退和多语言文案保留。设置页继续保留动态效果与存储入口，保存动态效果时不改写语言。共用下拉框的键盘回归由独立控件 fixture 覆盖。
+
+GPUI 的[常驻设置验收](../../desktop/patina/tests/pages/resident.rs)、[服务设置验收](../../desktop/patina/tests/pages/services.rs)和[配色方案验收](../../desktop/patina/tests/pages/schemes.rs)均使用独立测试配置。记录设置和关于页由[原生页面测试](../../desktop/patina/tests/pages.rs)中的 `settings_navigation`、`about_navigation` 验证；本轮删除前两项均已通过。
 
 ### 同机原版对照
 
@@ -235,7 +245,7 @@ cargo test --locked -p patina-gpui --test today main_window_lifecycle -- --ignor
 
 [Windows 适配器修补](../../desktop/vendor/accesskit_windows/README.md)让这类请求返回 `UIA_E_ELEMENTNOTAVAILABLE`。复验 `handles-20261112T025312.863Z` 和 `handles-20261112T025928.911Z` 使用相同操作。每次有、无 UIA 主动读取各开关 15 轮，每组的渲染进程均正常退出，四份标准错误日志均为空。第 3、8、15 轮的托盘进程均为 273 个句柄，目标 Section 与 Mutant 均为零。两次固定 Mini 各开关 15 轮后，原窗口和固定状态均保留。另连续执行 15 次立即重开与渲染进程恢复测试，各次错误输出均无 panic。
 
-[页面回归](../../desktop/patina/tests/pages.rs)使用独立的临时 SQLite 库，覆盖页面导航、布局对照、精确记录与时段导入、事务冲突回滚。中文空库用例从数据页点击历史，验证“活跃跨度”和“高峰时段”的两个空值都可通过 UI Automation 读取，再通过侧栏返回今天。在交互式 Windows 桌面从 `desktop/` 运行。布局对照需要第 5 节基线目录中的 `original-pages.json`、`tauri.json` 和同目录的样本库。
+[页面回归](../../desktop/patina/tests/pages.rs)使用独立的临时 SQLite 库，覆盖页面导航、布局对照、精确记录与时段导入、事务冲突回滚。中文空库用例从数据页点击历史，验证“活跃跨度”和“高峰时段”的两个空值都可通过 UI Automation 读取，再通过侧栏返回今天。日常页面交互由测试入口分配临时桌面。以下全套验收命令在[专用 Windows 测试会话](../engineering-quality.md#5-默认验证门槛)中从 `desktop/` 运行。布局对照需要第 5 节基线目录中的 `original-pages.json`、`tauri.json` 和同目录的样本库。
 
 ```powershell
 $env:PATINA_PAGE_BASELINE = (Resolve-Path ../artifacts/runtime-smoke/today-20261111T094101.988Z/original-pages.json).Path
@@ -257,6 +267,8 @@ cargo test --locked -p patina-gpui --test pages -- --include-ignored --test-thre
 | 其余懒加载辅助模块 | 清理后共 8.69，其中启动器占 2.60，其余占 6.09 | 4.36 → 6.30（+44.5%） |
 
 各分块继续保留 3% 余量，首屏、主要懒加载页面和全产物的总上限沿用原值。历史与数据切页继续验证冷启动、缓存交接和对象详情。
+
+清理 Tauri 配色弹窗后，共享主题预设仍在首屏加载。移除设置页的直接消费者会让打包器将预设合入入口；构建配置显式保留原有独立分块，并由源码归属检查约束。入口和总预算不变，主题预设新增单独上限。同环境下恢复旧配色实现作构建对照，入口为 46.83 KiB；清理并固定分块后为 46.75 KiB，主题预设为 2.55 KiB，首屏 JS/CSS 为 194.56 KiB，总产物为 398.97 KiB。配色预览与保存由 GPUI 原生专项验证，Tauri 主题对比度回归使用保留的导出弹窗。
 
 ## 后续里程碑
 

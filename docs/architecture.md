@@ -266,6 +266,12 @@ GPUI 主窗口在「分类」与「设置」之间提供「工具」入口。窗
 
 专注和提醒随程序分发为两个独立 Wasm 包。两者各自拥有面板及任务动作，绑定的原生数据适配器复用已有 SQLite 任务、阶段转换、专注历史和日程事务。旧任务沿用原 ID、历史关系和备份身份。卸载专注会结算活动区间，卸载提醒会暂停日程与使用规则。宿主保留数据和卸载选择；重启会完成中断的撤销，主动重装后由用户重新启动任务。通知确认还校验当前事件及其来源任务。[随附插件](../desktop/plugins/official) · [原生数据适配器](../src-tauri/src/recording/tools.rs) · [通知与使用提醒](../desktop/patina/src/tool_events.rs)
 
+### 4.7 GPUI 原生更新
+
+[`desktop/updater`](../desktop/updater/src/lib.rs) 拥有更新清单、版本比较、HTTPS 下载、Minisign 验签和安装交接。常驻宿主持有更新服务，窗口只请求操作并读取状态；关闭窗口或切换导航不会取消下载。[关于页](../desktop/patina/src/about.rs) 在下载完成后提供独立安装确认。
+
+安装请求由[宿主消息循环](../desktop/patina/src/window_process.rs)串行处理，只能执行服务持有并再次验签的安装包。启动安装器后，宿主关闭窗口进程、停止工具任务并结算录制，成功后写入退出凭据。[NSIS 安装器](../desktop/installer/patina.nsi)等待宿主退出并检查该凭据，之后替换程序文件。安装器不清理用户数据；包格式、签名与分发规则见[发布规范](versioning-and-release-policy.md#96-gpui-原生更新包)。
+
 ## 5. 前端长期结构
 
 当前前端长期结构为：

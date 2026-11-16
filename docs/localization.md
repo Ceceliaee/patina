@@ -98,7 +98,7 @@ pnpm test
 pnpm run check:rust
 ```
 
-语言选择器、前端 `Locale` 类型、Rust `Locale` enum、资源表和方向元数据均由注册表生成；新增现有契约可表达的语言不需要修改 React 组件或 Rust 业务模块。
+前端 `Locale` 类型、Rust `Locale` enum、资源表和方向元数据均由注册表生成。GPUI 设置页的语言选项由 [`settings.rs`](../desktop/patina/src/settings.rs) 持有；新增语言时同步更新该选项列表。
 
 新增语言不等于自动解决布局问题。正式发布前仍需检查长文本、字体覆盖、输入法，以及 RTL 语言的镜像布局。它们是界面兼容性验收，不是复数算法。
 
@@ -201,7 +201,7 @@ schema 声明参数名和类型，资源使用 `arg` 与 `concat`：
 
 ## 前端资源装载与 locale 激活
 
-生成器为每个生产 locale 输出独立资源模块，并生成只包含明确动态 import 的 loader manifest。标准原文 `zh-CN` 作为同步可用的初始资源进入默认启动图；其他语言只在已保存设置、预览选择或窗口恢复实际需要时加载。每个 locale chunk 都应有稳定 owner、独立 bundle 预算和构建图断言，不能落入无 owner support aggregate，也不能让新增语言继续线性抬高初始 localization runtime。
+生成器为每个生产 locale 输出独立资源模块，并生成只包含明确动态 import 的 loader manifest。标准原文 `zh-CN` 作为同步可用的初始资源进入默认启动图；其他语言只在已保存设置或窗口恢复实际需要时加载。每个 locale chunk 都应有稳定 owner、独立 bundle 预算和构建图断言，不能落入无 owner support aggregate，也不能让新增语言继续线性抬高初始 localization runtime。
 
 前端运行时遵守以下契约：
 
@@ -220,7 +220,9 @@ schema 声明参数名和类型，资源使用 `arg` 与 `concat`：
 
 托盘、GPUI 页面、Tools 到期提醒、Markdown 导出和内置分类名通过 `domain/localization` 获取文案。调用方传 key 和命名参数。生成的 Rust 消息支持文本、参数、拼接和 ICU4X 基数复数，也支持以 `if` 判断命名参数是否等于指定字符串。例如 Today 的昨日对比使用 `direction` 参数选择增长、减少或持平的译文。
 
-未知持久化 locale 会记录诊断并回退到注册表中的标准语言。缺失 key 会先回退标准语言，仍缺失时记录诊断并返回 key，避免静默空白。
+未知持久化 locale 会记录诊断并回退到注册表中的标准语言。文本缺失 key 会先回退标准语言，仍缺失时记录诊断并返回 key，避免静默空白。
+
+步骤说明等 `kind: "data"` 资源也可标记 `alsoNative: true`，由 `data(locale, key)` 读取结构化内容。读取失败时先回退标准语言，仍不可用则返回 `None`；调用方不另存一份译文。GPUI 通过 recorder 的 `localized_data` 导出使用该接口。
 
 CSV、SQLite 和 Parquet 的稳定字段名是数据契约，不随 UI locale 改变；只有 Markdown 的用户展示标签本地化。
 
