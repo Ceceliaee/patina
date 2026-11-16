@@ -304,13 +304,13 @@ export async function runLocaleScenarios(context: BrowserSmokeContext) {
       `),
       true,
     );
-    await waitForExpression(client!, sessionId, "Boolean(document.querySelector('.settings-data-export-format-grid'))");
+    await waitForExpression(client!, sessionId, "Boolean(document.querySelector('.settings-data-export-formats'))");
     assert.equal(
       await evaluate(client!, sessionId, `document.querySelector('.settings-data-export-range-label')?.textContent?.trim()`),
       "This month",
     );
     assert.deepEqual(
-      await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.settings-data-export-format-option strong')).map((node) => node.textContent?.trim())`),
+      await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.settings-data-export-formats button')).map((node) => node.textContent?.trim())`),
       ["CSV", "Markdown", "Parquet", "SQLite"],
     );
     await evaluate(client!, sessionId, `document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
@@ -338,9 +338,9 @@ export async function runLocaleScenarios(context: BrowserSmokeContext) {
       await evaluate(client, sessionId, `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(labels[4]))} + ']')?.click()`);
       await waitForExpression(client, sessionId, `document.body.innerText.includes(${jsonString(localeCase.exportTitle)})`);
       await evaluate(client, sessionId, `Array.from(document.querySelectorAll('button')).find(n => n.textContent?.trim() === ${jsonString(localeCase.exportAction)})?.click()`);
-      await waitForExpression(client, sessionId, "Boolean(document.querySelector('.settings-data-export-format-grid'))");
+      await waitForExpression(client, sessionId, "Boolean(document.querySelector('.settings-data-export-formats'))");
       assert.equal(await evaluate(client, sessionId, "document.querySelector('.settings-data-export-range-label')?.textContent?.trim()"), localeCase.month);
-      assert.deepEqual(await evaluate(client, sessionId, `Array.from(document.querySelectorAll('.settings-data-export-format-option')).map(n => n.textContent.trim())`), ['CSV', 'Markdown', 'Parquet', 'SQLite']);
+      assert.deepEqual(await evaluate(client, sessionId, `Array.from(document.querySelectorAll('.settings-data-export-formats button')).map(n => n.textContent.trim())`), ['CSV', 'Markdown', 'Parquet', 'SQLite']);
       await evaluate(client, sessionId, "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))");
       await waitForExpression(client, sessionId, "!document.querySelector('[role=\"dialog\"]')");
     } finally {

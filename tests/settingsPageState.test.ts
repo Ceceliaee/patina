@@ -29,17 +29,10 @@ import {
   saveRemoteBackupConfig,
 } from "../src/platform/persistence/remoteBackupSettingsStore.ts";
 import {
-  createSettingsToken,
-} from "../src/features/settings/services/settingsTokenService.ts";
-import {
-  shouldShowWebActivityHelp,
-} from "../src/features/settings/services/webActivitySetupState.ts";
-import {
   toUserVisibleStoragePath,
 } from "../src/features/settings/services/storagePathDisplay.ts";
 import { formatRemoteBackupTargetSummary } from "../src/features/settings/services/remoteBackupTargetSummary.ts";
 import { defaultRemoteBackupFileName, isValidRemoteBackupFileName, sameRemoteBackupTarget } from "../src/features/settings/services/remoteBackupUploadDraft.ts";
-import { prepareSettingsLanguagePreview } from "../src/features/settings/services/settingsLanguagePreview.ts";
 
 const ZH_TEXT = getLocaleText("zh-CN");
 
@@ -365,17 +358,28 @@ await runTest("commitSettingsPatchWithDeps does not attempt runtime sync when pe
   assert.deepEqual(events, ["persist"]);
 });
 
-await runTest("saveSettingsPageStateWithDeps normalizes service settings", async () => {
+await runTest("saveSettingsPageStateWithDeps preserves migrated preferences when saving appearance", async () => {
   let committedPatch: Partial<AppSettings> | null = null;
-  const savedSettings = buildSettings();
-  const draftSettings = buildSettings({
-    webActivityEnabled: true,
-    webActivityToken: "  web-token  ",
+  const savedSettings = buildSettings({
+    language: "es",
+    launchAtLogin: true,
+    showTrayIcon: false,
     remoteStatusBridgeEnabled: true,
-    remoteStatusBridgeUrl: "  wss://worker.example/ws  ",
-    remoteStatusBridgeToken: "  remote-token  ",
-    remoteStatusBridgeMachineId: "  machine-1  ",
+    remoteStatusBridgeUrl: "wss://worker.example/ws",
+    remoteStatusBridgeToken: "  existing-token  ",
+    remoteStatusBridgeMachineId: "machine-1",
+    idleTimeoutSecs: 1200,
+    timelineMergeGapSecs: 240,
+    trackingPaused: true,
+    titleRecordingEnabled: false,
+    themeMode: "system",
+    colorSchemeLight: "catppuccin",
+    colorSchemeDark: "nord",
+    webActivityEnabled: true,
+    webActivityPort: 12346,
+    webActivityToken: "  web-token  ",
   });
+  const draftSettings = { ...savedSettings, dynamicEffects: false };
 
   const result = await saveSettingsPageStateWithDeps({
     savedSettings,
@@ -397,21 +401,11 @@ await runTest("saveSettingsPageStateWithDeps normalizes service settings", async
 
   assert.equal(result.accepted, true);
   assert.equal(result.nextSavedSettings?.webActivityEnabled, true);
-  assert.equal(result.nextSavedSettings?.webActivityToken, "web-token");
-  assert.equal(result.nextSavedSettings?.remoteStatusBridgeEnabled, true);
-  assert.equal(result.nextSavedSettings?.remoteStatusBridgeUrl, "wss://worker.example/ws");
-  assert.equal(result.nextSavedSettings?.remoteStatusBridgeToken, "remote-token");
-  assert.equal(result.nextSavedSettings?.remoteStatusBridgeMachineId, "machine-1");
-  assert.equal(result.nextDraftSettings?.webActivityToken, "web-token");
-  assert.equal(result.nextBootstrap?.settings.webActivityToken, "web-token");
-  assert.deepEqual(committedPatch, {
-    webActivityEnabled: true,
-    webActivityToken: "web-token",
-    remoteStatusBridgeEnabled: true,
-    remoteStatusBridgeUrl: "wss://worker.example/ws",
-    remoteStatusBridgeToken: "remote-token",
-    remoteStatusBridgeMachineId: "machine-1",
-  });
+  assert.equal(result.nextSavedSettings?.webActivityToken, "  web-token  ");
+  assert.equal(result.nextDraftSettings?.webActivityToken, "  web-token  ");
+  assert.equal(result.nextBootstrap?.settings.webActivityToken, "  web-token  ");
+  assert.deepEqual(result.nextSavedSettings, draftSettings);
+  assert.deepEqual(committedPatch, { dynamicEffects: false });
 });
 
 await runTest("external title setting sync updates only the global title field", () => {
@@ -425,42 +419,6 @@ await runTest("external title setting sync updates only the global title field",
 await runTest("external settings sync rejects an older async response", () => {
   assert.equal(isLatestExternalSettingsSync(1, 2), false);
   assert.equal(isLatestExternalSettingsSync(2, 2), true);
-});
-
-await runTest("saveSettingsPageStateWithDeps preserves remote push switch while endpoint is empty", async () => {
-  let committedPatch: Partial<AppSettings> | null = null;
-  const savedSettings = buildSettings();
-  const draftSettings = buildSettings({
-    remoteStatusBridgeEnabled: true,
-    remoteStatusBridgeUrl: "",
-    remoteStatusBridgeToken: "  remote-token  ",
-  });
-
-  const result = await saveSettingsPageStateWithDeps({
-    savedSettings,
-    draftSettings,
-    appVersion: "1.2.0",
-    hasUnsavedChanges: true,
-    saveStatus: "idle",
-  }, {
-    buildPatch: SettingsRuntimeAdapterService.buildSettingsPatch,
-    commitPatch: async (patch) => {
-      committedPatch = patch;
-      return {
-        persisted: true,
-        runtimeSync: "not-needed",
-        runtimeSyncErrors: [],
-      };
-    },
-  });
-
-  assert.equal(result.accepted, true);
-  assert.equal(result.nextSavedSettings?.remoteStatusBridgeEnabled, true);
-  assert.equal(result.nextDraftSettings?.remoteStatusBridgeEnabled, true);
-  assert.deepEqual(committedPatch, {
-    remoteStatusBridgeEnabled: true,
-    remoteStatusBridgeToken: "remote-token",
-  });
 });
 
 await runTest("normalizeSettingsRecord applies defaults and validates current settings", () => {
@@ -586,24 +544,6 @@ await runTest("normalizeSettingsRecord accepts UI language and falls back to Chi
   assert.equal(normalizeSettingsRecord({ language: "fr-FR" }).language, "zh-CN");
 });
 
-await runTest("settings language preview only accepts a locale after its packaged resources load", async () => {
-  const loaded: AppLanguage[] = [];
-  assert.deepEqual(
-    await prepareSettingsLanguagePreview("en-US", async (language) => {
-      loaded.push(language);
-    }),
-    { ready: true, error: null },
-  );
-  assert.deepEqual(loaded, ["en-US"]);
-
-  const loadError = new Error("locale chunk unavailable");
-  const failed = await prepareSettingsLanguagePreview("en-US", async () => {
-    throw loadError;
-  });
-  assert.equal(failed.ready, false);
-  assert.strictEqual(failed.error, loadError);
-});
-
 await runTest("normalizeSettingsRecord accepts hourly activity chart modes and falls back to total", () => {
   assert.equal(normalizeSettingsRecord({ hourly_activity_chart_mode: "total" }).hourlyActivityChartMode, "total");
   assert.equal(normalizeSettingsRecord({ hourly_activity_chart_mode: "category" }).hourlyActivityChartMode, "category");
@@ -666,63 +606,6 @@ await runTest("normalizeSettingsRecord accepts color schemes and falls back to d
   assert.equal(normalizeSettingsRecord({ color_scheme_light: "marketplace" }).colorSchemeLight, "default");
   assert.equal(normalizeSettingsRecord({ color_scheme: "github" }).colorSchemeLight, "default");
   assert.equal(normalizeSettingsRecord({ color_scheme: "github" }).colorSchemeDark, "default");
-});
-
-await runTest("settings token generation creates hex tokens", () => {
-  const token = createSettingsToken((bytes) => {
-    bytes.fill(10);
-    return bytes;
-  });
-  assert.equal(token, "0a".repeat(24));
-});
-
-await runTest("web activity help visibility follows setup state", () => {
-  const baseInput = {
-    draftEnabled: true,
-    draftPort: 12345,
-    draftToken: "secret",
-    savedEnabled: true,
-    savedPort: 12345,
-    savedToken: "secret",
-    snapshot: {
-      enabled: true,
-      connected: true,
-    },
-  };
-
-  assert.equal(shouldShowWebActivityHelp({
-    ...baseInput,
-    draftEnabled: false,
-  }), false);
-  assert.equal(shouldShowWebActivityHelp({
-    ...baseInput,
-    snapshot: null,
-  }), true);
-  assert.equal(shouldShowWebActivityHelp(baseInput), false);
-  assert.equal(shouldShowWebActivityHelp({
-    ...baseInput,
-    snapshot: {
-      enabled: false,
-      connected: true,
-    },
-  }), true);
-  assert.equal(shouldShowWebActivityHelp({
-    ...baseInput,
-    draftToken: "   ",
-  }), true);
-  assert.equal(shouldShowWebActivityHelp({
-    ...baseInput,
-    draftToken: "next-secret",
-  }), true);
-  assert.equal(shouldShowWebActivityHelp({
-    ...baseInput,
-    draftPort: 12346,
-  }), true);
-  assert.equal(shouldShowWebActivityHelp({
-    ...baseInput,
-    draftToken: "  secret  ",
-    savedToken: "secret",
-  }), false);
 });
 
 await runTest("runSettingsCleanupFlow executes confirmed cleanup and reloads", async () => {

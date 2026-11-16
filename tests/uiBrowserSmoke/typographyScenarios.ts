@@ -59,12 +59,11 @@ export async function runTypographyScenarios({ client, sessionId, appUrl, runTes
             assert.ok(weights.every(weight => weight === (role === "rows" || role === "meta" ? "550" : "650")), JSON.stringify({ role, ...report }));
           }
           if (page.id === "mapping" || page.id === "settings") assert.ok(state.roleWeights.rows.length > 0);
-          if (page.id === "about") assert.ok(state.roleWeights.buttons.length >= 4);
+          if (page.id === "about") assert.ok(state.roleWeights.buttons.length >= 3);
           assert.equal(state.header, "18px", JSON.stringify(report));
           assert.ok(state.sections.every(size => size === "16px"), JSON.stringify(report));
           assert.ok(state.rows.every(size => size === "14px"), JSON.stringify(report));
           assert.ok(state.compact.every(size => size === "10px"), JSON.stringify(report));
-          if (page.id === "settings") assert.ok(state.controls.length > 0, JSON.stringify(report));
           assert.ok(state.controls.every(control => control.size === "12px" && control.lineHeight === "18px"), JSON.stringify(report));
           assert.equal(state.headerMetrics.lineHeight, "24px");
           assert.equal(state.headerMetrics.weight, "650");

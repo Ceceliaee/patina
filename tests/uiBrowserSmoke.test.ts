@@ -186,7 +186,7 @@ try {
   } else if (group === "theme") {
     const { runThemeContrastScenarios } = await import("./uiBrowserSmoke/themeContrastScenarios.ts");
     await evaluate(client!, sessionId, `document.querySelector('[aria-label="设置"]')?.click()`);
-    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.settings-theme-entry'))`);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.settings-button-preview'))`);
     await runThemeContrastScenarios(smokeContext);
   } else if (group === "category-filter") {
     const { runClassificationCategoryFilterScenarios } = await import("./uiBrowserSmoke/classificationCategoryFilterScenarios.ts");

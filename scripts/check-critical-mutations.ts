@@ -156,14 +156,14 @@ const SOURCE_CONTRACT_MUTANTS: SourceContractMutant[] = [
   },
   {
     name: "credential allocation is detached before fallible UTF-8 decoding",
-    source: CREDENTIALS_SOURCE,
+    source: "src-tauri/src/platform/credentials/windows_credentials.rs",
     search: "let allocation = CredentialAllocation(credential);",
     replacement: "let allocation = CredentialAllocation(ptr::null_mut());",
     verify: verifyCredentialAllocationContract,
   },
   {
     name: "credential blob reads dereference a null pointer for an empty legacy secret",
-    source: CREDENTIALS_SOURCE,
+    source: "src-tauri/src/platform/credentials/windows_credentials.rs",
     search: "if size == 0 {\n            return Ok(Vec::new());\n        }",
     replacement: "if size == usize::MAX {\n            return Ok(Vec::new());\n        }",
     verify: verifyCredentialAllocationContract,
@@ -369,12 +369,12 @@ function verifyCredentialProfileContract(source: string) {
 
 function verifyCredentialAllocationContract(source: string) {
   const readOwner = source.match(
-    /pub fn read_webdav_password[\s\S]*?\n    \}/,
+    /pub fn read_webdav_password[\s\S]*?\n\}/,
   )?.[0] ?? "";
   assert.match(readOwner, /let allocation = CredentialAllocation\(credential\);/);
   assert.match(readOwner, /String::from_utf8[\s\S]*?\?/);
   assert.match(source, /unsafe \{ CredFree\(self\.0\.cast\(\)\) \}/);
-  const blobCopy = source.match(/fn copy_credential_blob[\s\S]*?\n    \}/)?.[0] ?? "";
+  const blobCopy = source.match(/fn copy_credential_blob[\s\S]*?\n\}/)?.[0] ?? "";
   assert.match(blobCopy, /if size == 0 \{\s*return Ok\(Vec::new\(\)\);/);
   assert.match(blobCopy, /if blob\.is_null\(\) \{/);
 }

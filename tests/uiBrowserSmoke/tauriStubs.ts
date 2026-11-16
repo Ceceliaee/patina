@@ -851,16 +851,6 @@ function tauriStubFor(path: string) {
             .filter((batch) => batch.id !== payload.batchId);
           return { deletedExactSessions: 0, deletedHourBuckets: 2 };
         }
-        if (command === "cmd_get_web_activity_bridge_snapshot") {
-          return globalThis.__TIME_TRACKER_WEB_ACTIVITY_BRIDGE_SNAPSHOT ?? {
-            enabled: true,
-            connected: false,
-            browserClientId: null,
-            browserKind: null,
-            extensionVersion: null,
-            lastActivityAtMs: null,
-          };
-        }
         if (command === "cmd_get_scheduled_backup_snapshot") {
           globalThis.__PATINA_SCHEDULED_BACKUP_SNAPSHOT ??= {
             config: {
@@ -978,21 +968,11 @@ function tauriStubFor(path: string) {
           return settings.history_timeline_mode;
         }
         if (command === "cmd_commit_app_settings") {
-          if (globalThis.__PATINA_REJECT_TRAY_SAVE && (payload.mutations ?? []).some(m => m.key === 'show_tray_icon')) {
-            throw { code: 'SQLITE_WRITE_FAILED', message: 'fixture write failure', retryable: false };
-          }
-          if (globalThis.__PATINA_REJECT_THEME_SAVE) throw new Error("Theme save rejected by fixture");
-          if (globalThis.__PATINA_HOLD_THEME_SAVE) {
-            await new Promise(resolve => { globalThis.__PATINA_RELEASE_THEME_SAVE = resolve; });
-          }
           const settings = loadStoredSettings();
           for (const mutation of payload.mutations ?? []) {
             settings[mutation.key] = mutation.value;
           }
           storeSettings(settings);
-          if (globalThis.__PATINA_REJECT_TRAY_APPLY && (payload.mutations ?? []).some(m => m.key === 'show_tray_icon')) {
-            throw { code: 'SETTINGS_APPLY_FAILED', message: 'fixture tray failure', retryable: false };
-          }
         }
         if (command === "cmd_get_web_links") {
           if (globalThis.__PATINA_REJECT_WEB_LINKS_READ) throw new Error("Web snapshot rejected by fixture");

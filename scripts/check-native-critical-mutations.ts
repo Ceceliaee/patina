@@ -6,7 +6,7 @@ import { qualityCargoEnv, qualityCargoProfile } from "./run-cargo-quality.ts";
 
 // This opt-in gate restores exact source bytes even when compilation or the
 // behavioral assertion fails. Never run it concurrently with another Rust build.
-const source = "src-tauri/src/data/remote_backup_config.rs";
+const source = "src-tauri/src/data/remote_backup_config/core.rs";
 const original = readFileSync(source);
 const text = original.toString("utf8");
 const search = "let id = store.prepare(&identity)?;";

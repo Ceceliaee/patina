@@ -36,75 +36,16 @@ export async function runThemeContrastScenarios({ client, sessionId, runTest }: 
       }
     }, 15_000);
   };
-  const open = async (dark = false) => {
-    await read(`document.querySelectorAll('.settings-theme-entry')[${dark ? 1 : 0}].click()`);
-    await wait(`document.activeElement?.matches('.settings-color-scheme-option[aria-pressed="true"]')`);
-  };
-  const choose = async (label: string) => {
-    await read(`Array.from(document.querySelectorAll('.settings-color-scheme-option')).find(b => b.textContent.trim() === ${JSON.stringify(label)}).click()`);
-  };
-  const close = async (confirm = false) => {
-    await read(`document.querySelectorAll('.qp-dialog-action')[${confirm ? 1 : 0}].click()`);
-    await wait(`!document.querySelector('.qp-theme-dialog-surface')`);
-  };
   const stored = `JSON.parse(localStorage.getItem('__time_tracker_smoke_settings') || '{}')`;
-  const commits = `globalThis.__PATINA_INVOKED_COMMANDS.filter(c => c.command === 'cmd_commit_app_settings')`;
+  const open = async () => {
+    await read(`document.querySelector('.settings-data-action-row button').click()`);
+    await wait(`Boolean(document.querySelector('.settings-data-export-dialog-surface'))`);
+  };
+  const close = async () => {
+    await read(`document.querySelector('.settings-data-export-dialog-surface .qp-dialog-actions button').click()`);
+    await wait(`!document.querySelector('.settings-data-export-dialog-surface')`);
+  };
 
-  await runTest("theme previews without writes and confirms only the chosen scheme", async () => {
-    const initial = await read(`JSON.stringify(${stored})`);
-    await open();
-    assert.equal(await read(`document.querySelector('.qp-theme-dialog-surface input[type="range"]')`), null);
-    await choose("Catppuccin");
-    await wait(`document.documentElement.dataset.colorScheme === 'catppuccin'`);
-    assert.equal(await read(`document.documentElement.dataset.themeContrast`), "45");
-    assert.equal(await read(`JSON.stringify(${stored})`), initial);
-    await close();
-    await wait(`document.documentElement.dataset.colorScheme === 'default'`);
-    await open();
-    await choose("Vercel");
-    await close(true);
-    assert.deepEqual(await read(`${commits}.at(-1).payload.mutations`), [{ key: "color_scheme_light", value: "vercel" }]);
-    await open();
-    await choose("Catppuccin");
-    await client.command("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, sessionId);
-    await client.command("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, sessionId);
-    await wait(`!document.querySelector('.qp-theme-dialog-surface') && document.documentElement.dataset.colorScheme === 'vercel'`);
-    await open();
-    await choose("Catppuccin");
-    await read(`document.querySelector('.qp-dialog-backdrop').dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))`);
-    await wait(`!document.querySelector('.qp-theme-dialog-surface') && document.documentElement.dataset.colorScheme === 'vercel'`);
-  });
-
-  await runTest("theme failure preserves selection and pending save blocks reentry", async () => {
-    await open();
-    await choose("Catppuccin");
-    await read(`(() => {
-      globalThis.__PATINA_REJECT_THEME_SAVE = true;
-      const original = console.error;
-      globalThis.__restoreThemeConsole = () => { console.error = original; };
-      console.error = (...args) => { if (args[0] !== 'save color scheme failed') original(...args); };
-      document.querySelectorAll('.qp-dialog-action')[1].click();
-    })()`);
-    try {
-      await wait(`document.querySelector('.qp-dialog-action.qp-button-primary')?.disabled === false`);
-      assert.equal(await read(`document.documentElement.dataset.colorScheme`), "catppuccin");
-      assert.equal(await read(`${stored}.color_scheme_light`), "vercel");
-    } finally {
-      await read(`globalThis.__PATINA_REJECT_THEME_SAVE = false; globalThis.__restoreThemeConsole(); delete globalThis.__restoreThemeConsole;`);
-    }
-    await read(`globalThis.__PATINA_HOLD_THEME_SAVE = true; document.querySelectorAll('.qp-dialog-action')[1].click()`);
-    await wait(`typeof globalThis.__PATINA_RELEASE_THEME_SAVE === 'function'`);
-    const before = await read(`${commits}.length`);
-    await read(`document.querySelectorAll('.qp-dialog-action')[1].click(); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));`);
-    assert.equal(await read(`Array.from(document.querySelectorAll('.settings-color-scheme-option')).every(b => b.disabled)`), true);
-    assert.equal(await read(`${commits}.length`), before);
-    await read(`globalThis.__PATINA_HOLD_THEME_SAVE = false; globalThis.__PATINA_RELEASE_THEME_SAVE(); delete globalThis.__PATINA_RELEASE_THEME_SAVE;`);
-    await wait(`!document.querySelector('.qp-theme-dialog-surface')`);
-    assert.equal(await read(`${stored}.color_scheme_light`), "catppuccin");
-    await open();
-    await choose("默认");
-    await close(true);
-  });
   await runTest("theme defaults ignore removed overrides across reload, system mode, languages and desktop scales", async () => {
     const initial = await read(`localStorage.getItem('__time_tracker_smoke_settings')`);
     const evidence = join(tmpdir(), "patina-theme-contrast-review");
@@ -127,7 +68,7 @@ export async function runThemeContrastScenarios({ client, sessionId, runTest }: 
         })); localStorage.setItem('patina:last-active-view', 'settings');`);
         await client.command("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: sample.variant }] }, sessionId);
         await client.command("Emulation.setDeviceMetricsOverride", { width: sample.width, height: 760, deviceScaleFactor: sample.scale, mobile: false }, sessionId);
-        await reloadAndWait(`document.documentElement.dataset.themeContrast === '${sample.contrast}' && Boolean(document.querySelector('.settings-theme-entry'))`);
+        await reloadAndWait(`document.documentElement.dataset.themeContrast === '${sample.contrast}' && Boolean(document.querySelector('.settings-button-preview'))`);
         const hoverTarget = await read(`(() => {
           const button = document.querySelector('[data-sidebar-nav-item]:not(.qp-nav-item-active)');
           const r = button.getBoundingClientRect();
@@ -148,9 +89,13 @@ export async function runThemeContrastScenarios({ client, sessionId, runTest }: 
             && button.getBoundingClientRect().height === ${hoverTarget.height};
         })()`), true, "hover uses the nested surface without changing navigation geometry");
         await client.command("Input.dispatchMouseEvent", { type: "mouseMoved", x: 0, y: 0 }, sessionId);
+        await read(`document.querySelector('[data-sidebar-nav-item="history"]').click()`);
+        await wait(`Boolean(document.querySelector('.history-timeline-zoom-open'))`);
+        await read(`document.querySelector('.history-timeline-zoom-open').click()`);
+        await wait(`Boolean(document.querySelector('.history-timeline-hour-slider input[type="range"]'))`);
         const expectedControls = controls.find(row => row.variant === sample.variant && row.scheme === sample.scheme)!.expected;
         assert.equal(await read(`(() => {
-          const input = document.querySelector('input[type="range"]');
+          const input = document.querySelector('.history-timeline-hour-slider input[type="range"]');
           const expected = ${JSON.stringify(expectedControls)};
           const probe = document.createElement('div');
           probe.style.backgroundImage = input.style.backgroundImage;
@@ -158,10 +103,15 @@ export async function runThemeContrastScenarios({ client, sessionId, runTest }: 
           document.body.append(probe);
           try { return getComputedStyle(input).backgroundImage === getComputedStyle(probe).backgroundImage; }
           finally { probe.remove(); }
-        })()`), true, "settings slider retains the prior foreground and track colors");
-        await open(sample.variant === "dark");
+        })()`), true, "history slider retains the prior foreground and track colors");
+        assert.equal(await read(`getComputedStyle(document.querySelector('.history-timeline-hour-slider .qp-button-secondary')).borderRadius`), "10px");
+        await read(`document.querySelector('.history-timeline-zoom-dialog-surface .qp-dialog-close-button').click()`);
+        await wait(`!document.querySelector('.history-timeline-zoom-dialog-surface')`);
+        await read(`document.querySelector('[data-sidebar-nav-item="settings"]').click()`);
+        await wait(`Boolean(document.querySelector('.settings-button-preview'))`);
+        await open();
         const readPrimaryColors = async () => await read(`(() => {
-          const button = document.querySelector('.qp-dialog-action.qp-button-primary');
+          const button = document.querySelector('.settings-data-export-dialog-surface .qp-dialog-actions .qp-button-primary');
           const style = getComputedStyle(button), rect = button.getBoundingClientRect();
           return { foreground: style.color, background: style.backgroundColor, x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
         })()`) as { foreground: string; background: string; x: number; y: number };
@@ -171,7 +121,7 @@ export async function runThemeContrastScenarios({ client, sessionId, runTest }: 
         assert.ok(normalContrast >= 4.5, `${sample.variant}/${sample.scheme}: rendered primary text contrast ${normalContrast} must reach 4.5:1`);
         await client.command("Input.dispatchMouseEvent", { type: "mouseMoved", x: normal.x, y: normal.y }, sessionId);
         await wait(`(() => {
-          const button = document.querySelector('.qp-dialog-action.qp-button-primary');
+          const button = document.querySelector('.settings-data-export-dialog-surface .qp-dialog-actions .qp-button-primary');
           return button.matches(':hover') && button.getAnimations().every(animation => animation.playState !== 'running');
         })()`);
         const hovered = await readPrimaryColors();
@@ -182,7 +132,7 @@ export async function runThemeContrastScenarios({ client, sessionId, runTest }: 
           const probe = document.createElement('div');
           probe.style.background = 'color-mix(in srgb, var(--qp-button-primary-bg) 92%, black)';
           document.body.append(probe);
-          try { return getComputedStyle(probe).backgroundColor === getComputedStyle(document.querySelector('.qp-dialog-action.qp-button-primary')).backgroundColor; }
+          try { return getComputedStyle(probe).backgroundColor === getComputedStyle(document.querySelector('.settings-data-export-dialog-surface .qp-dialog-actions .qp-button-primary')).backgroundColor; }
           finally { probe.remove(); }
         })()`), true, "primary hover preserves its existing 92% background blend");
         primaryContrasts.push({ variant: sample.variant, scheme: sample.scheme, locale: sample.locale, foreground: normal.foreground, background: normal.background, hoverBackground: hovered.background, normal: normalContrast, hover: hoverContrast });
@@ -196,13 +146,12 @@ export async function runThemeContrastScenarios({ client, sessionId, runTest }: 
             return getComputedStyle(document.querySelector('.qp-panel')).borderTopColor === getComputedStyle(probe).borderTopColor;
           } finally { probe.remove(); }
         })()`), true, "panel borders preserve the previous theme color");
-        assert.equal(await read(`document.querySelector('.qp-theme-dialog-surface input[type="range"]')`), null);
         await client.command("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 }, sessionId);
         await client.command("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 }, sessionId);
         assert.equal(await read(`document.activeElement.matches(':focus-visible') && getComputedStyle(document.activeElement).outlineStyle === 'solid' && getComputedStyle(document.activeElement).outlineWidth === '2px'`), true, "keyboard navigation retains the original visible focus ring");
         assert.equal(await read(`(() => {
-          const dialog = document.querySelector('.qp-theme-dialog-surface');
-          const controls = [...dialog.querySelectorAll('.settings-color-scheme-option, .qp-dialog-action')];
+          const dialog = document.querySelector('.settings-data-export-dialog-surface');
+          const controls = [...dialog.querySelectorAll('button, input')];
           const bounds = dialog.getBoundingClientRect();
           return bounds.left >= 0 && bounds.right <= innerWidth && dialog.scrollWidth <= dialog.clientWidth + 1
             && controls.every(e => { const r = e.getBoundingClientRect(); return r.left >= bounds.left && r.right <= bounds.right; });
@@ -221,7 +170,7 @@ export async function runThemeContrastScenarios({ client, sessionId, runTest }: 
       await read(`localStorage.setItem('__time_tracker_smoke_settings', ${JSON.stringify(initial)}); localStorage.setItem('patina:last-active-view', 'settings');`);
       await client.command("Emulation.setEmulatedMedia", { features: [] }, sessionId);
       await client.command("Emulation.setDeviceMetricsOverride", { width: 1280, height: 820, deviceScaleFactor: 1, mobile: false }, sessionId);
-      await reloadAndWait(`Boolean(document.querySelector('.settings-theme-entry')) && document.documentElement.lang === 'zh-CN'`);
+      await reloadAndWait(`Boolean(document.querySelector('.settings-button-preview')) && document.documentElement.lang === 'zh-CN'`);
     }
   });
 

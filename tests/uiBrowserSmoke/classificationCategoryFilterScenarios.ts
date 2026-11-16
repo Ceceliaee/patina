@@ -124,7 +124,9 @@ export async function runClassificationCategoryFilterScenarios({ client, session
       })()`), true);
       await input('no-match');
       await open();
-      assert.deepEqual(await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.qp-category-filter-option')).map(n=>n.textContent.trim())`), ['开发','办公']);
+      assert.deepEqual(await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.qp-category-filter-option')).map(n=>n.textContent.trim())`), ['办公','开发']);
+      await key('ArrowDown',40);
+      await waitForExpression(client!, sessionId, `document.querySelector('.qp-category-filter-option-active')?.textContent.trim() === '开发'`);
       await key('Enter',13);
       await waitForExpression(client!, sessionId, `document.querySelectorAll('[data-classification-app]').length === 2`);
       assert.equal(await evaluate(client!, sessionId, `document.querySelector('.qp-category-search input').value`), '开发');
