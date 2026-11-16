@@ -1,5 +1,5 @@
 import { useLocaleText } from "../../../shared/i18n/index.ts";
-import { FileText, MessageSquare, Rose } from "lucide-react";
+import { FileText } from "lucide-react";
 import type { ReactNode } from "react";
 import appIconUrl from "../../../../src-tauri/icons/icon.png";
 import type { UpdateSnapshot } from "../../../shared/types/update";
@@ -19,8 +19,6 @@ type AboutPanelProps = {
   onOpenUpdateDownload?: () => void;
   onOpenReleaseNotes: () => void;
   onOpenRepository: () => void;
-  onOpenFeedback: () => void;
-  onOpenSupportDialog: () => void;
 };
 
 type AboutLinkButtonProps = {
@@ -60,8 +58,6 @@ export default function AboutPanel({
   onOpenUpdateDownload,
   onOpenReleaseNotes,
   onOpenRepository,
-  onOpenFeedback,
-  onOpenSupportDialog,
 }: AboutPanelProps) {
   const UI_TEXT = useLocaleText();
   const versionLabel = appVersion === "-" || appVersion === "unknown"
@@ -96,33 +92,18 @@ export default function AboutPanel({
             label={UI_TEXT.update.releaseNotes}
             onClick={onOpenReleaseNotes}
           />
-          <AboutLinkButton
-            icon={<MessageSquare size={14} />}
-            label={UI_TEXT.update.feedback}
-            onClick={onOpenFeedback}
-          />
-          <AboutLinkButton
-            icon={<Rose className="about-support-pill-icon" size={14} />}
-            label={UI_TEXT.update.support}
-            onClick={onOpenSupportDialog}
-          />
         </div>
 
         <UpdateStatusPanel
           className="about-center-update"
-          variant="compact"
           snapshot={effectiveUpdateSnapshot}
           checking={updateChecking}
           installing={updateInstalling}
           suppressProgress={updateDialogOpen}
-          showSupportLinks={false}
           onCheckUpdates={() => onCheckForUpdates?.()}
           onOpenConfirmDialog={() => onOpenUpdateDialog?.()}
           onOpenUpdateReleasePage={() => onOpenUpdateReleasePage?.()}
           onOpenUpdateDownload={() => onOpenUpdateDownload?.()}
-          onOpenReleaseNotes={onOpenReleaseNotes}
-          onOpenFeedback={onOpenFeedback}
-          onOpenSupport={onOpenSupportDialog}
         />
       </section>
     </div>

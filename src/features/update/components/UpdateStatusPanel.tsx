@@ -3,25 +3,21 @@ import { RefreshCw } from "lucide-react";
 import QuietButton from "../../../shared/components/QuietButton";
 import type { UpdateSnapshot } from "../../../shared/types/update";
 import {
-  buildUpdateStatusPanelModel, type UpdateActionModel, } from "../services/updateViewModel";
+  buildUpdateStatusPanelModel,
+  type UpdateActionModel,
+} from "../services/updateViewModel";
 import UpdateProgressBar from "./UpdateProgressBar";
-
 
 interface UpdateStatusPanelProps {
   snapshot: UpdateSnapshot;
   checking: boolean;
   installing: boolean;
   suppressProgress?: boolean;
-  showSupportLinks?: boolean;
-  variant?: "default" | "compact";
   className?: string;
   onCheckUpdates: () => void;
   onOpenConfirmDialog: () => void;
   onOpenUpdateReleasePage: () => void;
   onOpenUpdateDownload: () => void;
-  onOpenReleaseNotes: () => void;
-  onOpenFeedback: () => void;
-  onOpenSupport: () => void;
 }
 
 function renderActionLabel(action: UpdateActionModel) {
@@ -38,16 +34,11 @@ export default function UpdateStatusPanel({
   checking,
   installing,
   suppressProgress = false,
-  showSupportLinks = true,
-  variant = "default",
   className,
   onCheckUpdates,
   onOpenConfirmDialog,
   onOpenUpdateReleasePage,
   onOpenUpdateDownload,
-  onOpenReleaseNotes,
-  onOpenFeedback,
-  onOpenSupport,
 }: UpdateStatusPanelProps) {
   const UI_TEXT = useLocaleText();
   const viewModel = buildUpdateStatusPanelModel(snapshot, checking, installing, UI_TEXT);
@@ -93,41 +84,18 @@ export default function UpdateStatusPanel({
     </div>
   );
 
-  if (variant === "compact") {
-    return (
-      <div className={`qp-subpanel update-status-compact ${className ?? ""}`.trim()}>
-        <div className="update-status-compact-main">
-          <div className="update-status-compact-copy">
-            <p className="update-status-compact-title">{UI_TEXT.update.appUpdate}</p>
-            <p className="update-status-compact-state">{viewModel.statusTitle}</p>
-            {viewModel.statusDetail ? (
-              <p className="update-status-compact-detail">{viewModel.statusDetail}</p>
-            ) : null}
-          </div>
-          {actions}
-        </div>
-        {viewModel.progress && !suppressProgress ? (
-          <UpdateProgressBar
-            className="mt-3"
-            percent={viewModel.progress.percent}
-            label={viewModel.progress.label}
-            valueText={viewModel.progress.valueText}
-            indeterminate={viewModel.progress.indeterminate}
-          />
-        ) : null}
-      </div>
-    );
-  }
-
   return (
-    <div className={`qp-subpanel ${className ?? ""}`.trim()}>
-      <p className="qp-text-body qp-weight-emphasis text-[var(--qp-text-primary)]">{UI_TEXT.update.appUpdate}</p>
-      <p className="mt-2 qp-text-body qp-weight-emphasis text-[var(--qp-text-primary)]">{viewModel.statusTitle}</p>
-      {viewModel.statusDetail ? (
-        <p className="mt-1 qp-text-caption leading-relaxed break-words text-[var(--qp-text-secondary)]">
-          {viewModel.statusDetail}
-        </p>
-      ) : null}
+    <div className={`qp-subpanel update-status-compact ${className ?? ""}`.trim()}>
+      <div className="update-status-compact-main">
+        <div className="update-status-compact-copy">
+          <p className="update-status-compact-title">{UI_TEXT.update.appUpdate}</p>
+          <p className="update-status-compact-state">{viewModel.statusTitle}</p>
+          {viewModel.statusDetail ? (
+            <p className="update-status-compact-detail">{viewModel.statusDetail}</p>
+          ) : null}
+        </div>
+        {actions}
+      </div>
       {viewModel.progress && !suppressProgress ? (
         <UpdateProgressBar
           className="mt-3"
@@ -137,37 +105,6 @@ export default function UpdateStatusPanel({
           indeterminate={viewModel.progress.indeterminate}
         />
       ) : null}
-
-      <div className={`mt-4 flex flex-wrap items-end gap-3 ${showSupportLinks ? "justify-between" : "justify-end"}`}>
-        {showSupportLinks ? (
-          <div className="flex items-center gap-1.5 qp-text-caption text-[var(--qp-text-tertiary)]">
-            <button
-              type="button"
-              onClick={onOpenReleaseNotes}
-              className="qp-text-caption text-[var(--qp-text-tertiary)] hover:text-[var(--qp-text-secondary)]"
-            >
-              {UI_TEXT.update.releaseNotes}
-            </button>
-            <span aria-hidden>·</span>
-            <button
-              type="button"
-              onClick={onOpenFeedback}
-              className="qp-text-caption text-[var(--qp-text-tertiary)] hover:text-[var(--qp-text-secondary)]"
-            >
-              {UI_TEXT.update.feedback}
-            </button>
-            <span aria-hidden>·</span>
-            <button
-              type="button"
-              onClick={onOpenSupport}
-              className="qp-text-caption text-[var(--qp-text-tertiary)] hover:text-[var(--qp-text-secondary)]"
-            >
-              {UI_TEXT.update.support}
-            </button>
-          </div>
-        ) : null}
-        {actions}
-      </div>
     </div>
   );
 }
