@@ -41,6 +41,7 @@ export default defineConfig({
           if (normalizedId.endsWith("/src/shared/classification/appClassification.ts")) return "appClassification";
           if (normalizedId.endsWith("/src/shared/classification/objectColor.ts")) return "objectColor";
           if (normalizedId.endsWith("/src/platform/browser/browserStorageGateway.ts")) return "browserStorage";
+          if (normalizedId.endsWith("/src/shared/theme/themePresets.ts")) return "themePresets";
           const localeResourceMatch = normalizedId.match(
             /\/src\/shared\/i18n\/generated\/locales\/([^/?]+)\.ts(?:\?.*)?$/,
           );
@@ -53,7 +54,7 @@ export default defineConfig({
 
           // Shared actions stay lazy together instead of paying a module
           // header and request for each tiny icon on settings and tool surfaces.
-          if (/\/node_modules\/lucide-react\/dist\/esm\/icons\/(square|pencil-line|save|refresh-cw|play|pause)\.mjs$/.test(normalizedId)) {
+          if (/\/node_modules\/lucide-react\/dist\/esm\/icons\/(square|pencil-line|save|refresh-cw|play|pause|plus|trash)\.mjs$/.test(normalizedId)) {
             return "lazy-action-icons";
           }
 

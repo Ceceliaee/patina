@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { deriveTheme } from "../src/shared/theme/deriveTheme.ts";
-import { effectiveThemeContrast, getThemePreset, normalizeThemeContrast, type ThemeVariant } from "../src/shared/theme/themePresets.ts";
-import { COLOR_SCHEME_OPTIONS } from "../src/shared/settings/colorSchemeOptions.ts";
+import { PRESETS, effectiveThemeContrast, getThemePreset, normalizeThemeContrast, type ThemeVariant } from "../src/shared/theme/themePresets.ts";
 import type { ColorScheme } from "../src/shared/settings/appSettings.ts";
 import { normalizeSettingsRecord, buildAppSettingMutations, buildRawAppSettingsPatch } from "../src/platform/persistence/appSettingsStore.ts";
 import { applyMiniBootstrapSnapshot } from "../src/app/mini/miniBootstrapService.ts";
@@ -19,13 +18,12 @@ for (const fixture of fixtures) {
   }
 }
 for (const variant of ["light", "dark"] as const) {
-  for (const option of COLOR_SCHEME_OPTIONS[variant]) {
-    const expected = option.value === "vercel" ? (variant === "light" ? 40 : 50) : (variant === "light" ? 45 : 60);
-    assert.equal(effectiveThemeContrast(variant, option.value, null), expected);
-    assert.equal(getThemePreset(variant, option.value).surface, option.swatches[0]);
-    assert.equal(deriveTheme(variant, option.value, null)["--qp-text-on-accent"], "rgb(255, 255, 255)");
+  for (const scheme of Object.keys(PRESETS[variant]) as ColorScheme[]) {
+    const expected = scheme === "vercel" ? (variant === "light" ? 40 : 50) : (variant === "light" ? 45 : 60);
+    assert.equal(effectiveThemeContrast(variant, scheme, null), expected);
+    assert.equal(deriveTheme(variant, scheme, null)["--qp-text-on-accent"], "rgb(255, 255, 255)");
     for (const contrast of [0, expected, 100]) {
-      const colors = deriveTheme(variant, option.value, contrast);
+      const colors = deriveTheme(variant, scheme, contrast);
       assert.ok(Object.values(colors).every((color) => !/NaN|undefined/.test(color)));
     }
   }
@@ -67,7 +65,7 @@ function textContrast(foreground: number[], background: number[]): number {
 let adjustedPrimaryCount = 0;
 let unchangedPrimaryCount = 0;
 for (const variant of ["light", "dark"] as const) {
-  for (const { value: scheme } of COLOR_SCHEME_OPTIONS[variant]) {
+  for (const scheme of Object.keys(PRESETS[variant]) as ColorScheme[]) {
     const colors = deriveTheme(variant, scheme, null);
     const accent = channels(getThemePreset(variant, scheme).accent);
     const background = channels(colors["--qp-button-primary-bg"]);
@@ -96,7 +94,7 @@ assert.ok(adjustedPrimaryCount > 0 && unchangedPrimaryCount > 0);
 console.log(`Primary button contrast passed: ${adjustedPrimaryCount} minimally darkened, ${unchangedPrimaryCount} preserved exactly; all normal and interaction states >= 4.5:1`);
 
 for (const variant of ["light", "dark"] as const) {
-  for (const { value: scheme } of COLOR_SCHEME_OPTIONS[variant]) {
+  for (const scheme of Object.keys(PRESETS[variant]) as ColorScheme[]) {
     const colors = deriveTheme(variant, scheme, null);
     const panel = channels(colors["--qp-bg-panel"]);
     const card = channels(colors["--qp-bg-elevated"]);

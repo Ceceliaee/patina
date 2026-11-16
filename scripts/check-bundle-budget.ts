@@ -33,6 +33,7 @@ const TOTAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 417.7;
 const INITIAL_CHUNK_BUDGETS = [
   { label: "index", pattern: /^index-.*\.js$/, gzipKiB: 49 },
   { label: "browser storage", pattern: /^browserStorage-.*\.js$/, gzipKiB: 0.197 },
+  { label: "theme presets", pattern: /^themePresets-.*\.js$/, gzipKiB: 2.67 },
   { label: "react-vendor", pattern: /^react-vendor-.*\.js$/, gzipKiB: 66.8 },
   { label: "icons", pattern: /^icons-.*\.js$/, gzipKiB: 8 },
   { label: "tauri", pattern: /^tauri-.*\.js$/, gzipKiB: 6 },
@@ -62,7 +63,7 @@ const SOURCE_LOCALE = Object.entries(LOCALE_REGISTRY).find(([, metadata]) => met
 if (!SOURCE_LOCALE) throw new Error("Bundle budget check requires one source locale.");
 
 const LAZY_PAGE_CHUNK_BUDGETS = [
-  { label: "Settings", pattern: /^Settings-.*\.js$/, gzipKiB: 24 },
+  { label: "Settings", pattern: /^Settings-.*\.js$/, gzipKiB: 16 },
   // Scoped cost review: docs/archive/classification-link-layout-bundle-decision.md.
   { label: "AppMapping", pattern: /^AppMapping-.*\.js$/, gzipKiB: 19.7 },
   { label: "History", pattern: /^History-.*\.js$/, gzipKiB: 17.7 },
@@ -253,10 +254,10 @@ function measureCopyDomains() {
 }
 
 function main() {
-  const fixtureFiles = ["browserStorage-fixture.js", "SettingsDataExportDialog-fixture.js", "QuietSwitch-fixture.js"];
+  const fixtureFiles = ["browserStorage-fixture.js", "themePresets-fixture.js", "SettingsDataExportDialog-fixture.js", "QuietSwitch-fixture.js"];
   const fixture = Object.fromEntries(BUNDLE_SOURCE_OWNERS.map((owner, index) => [owner.source, [fixtureFiles[index]]]));
   const fixtureAssets = new Set(fixtureFiles);
-  const fixtureInitial = new Set([fixtureFiles[0]]);
+  const fixtureInitial = new Set([fixtureFiles[0], fixtureFiles[1]]);
   if (validateBundleOwnership(fixture, fixtureAssets, fixtureInitial).length
     || validateBundleOwnership(fixture, fixtureAssets, new Set(fixtureFiles)).length === 0
     || validateBundleOwnership(fixture, new Set(), fixtureInitial).length === 0
