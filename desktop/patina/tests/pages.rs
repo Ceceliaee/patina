@@ -1,11 +1,35 @@
+#[path = "pages/category_manager.rs"]
+mod category_manager;
 #[path = "../../test-support/children.rs"]
 mod children;
+#[path = "pages/classification_color.rs"]
+mod classification_color;
+#[path = "pages/classification_delete.rs"]
+mod classification_delete;
+#[path = "pages/classification_web.rs"]
+mod classification_web;
+#[path = "pages/data_range.rs"]
+mod data_range;
 #[path = "../../test-support/windows.rs"]
 mod desktop;
+#[path = "pages/history_calendar.rs"]
+mod history_calendar;
+#[path = "pages/history_timeline.rs"]
+mod history_timeline;
+#[path = "pages/resident.rs"]
+mod resident;
+#[path = "pages/schemes.rs"]
+mod schemes;
+#[path = "pages/services.rs"]
+mod services;
+#[path = "pages/storage.rs"]
+mod storage;
 mod support;
 #[path = "pages/tools.rs"]
 mod tools;
-use chrono::{Local, TimeZone, Utc};
+#[path = "pages/trend_chart.rs"]
+mod trend_chart;
+use chrono::{Local, Utc};
 use desktop::{ComApartment, Error, TestChild, controls, wait, window};
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
 use std::{fs, path::Path, process::Command};
@@ -20,6 +44,28 @@ use windows::{
 
 use std::path::PathBuf;
 
+fn classification_filter_counts(hwnd: HWND) -> Option<[usize; 3]> {
+    let labels: Vec<_> = controls(hwnd)
+        .ok()?
+        .into_iter()
+        .filter_map(|el| unsafe {
+            (el.CurrentControlType().ok()? == UIA_RadioButtonControlTypeId)
+                .then(|| el.CurrentName().ok().map(|name| name.to_string()))
+                .flatten()
+        })
+        .collect();
+    let count = |prefix: &str| {
+        labels
+            .iter()
+            .find_map(|label| label.strip_prefix(prefix)?.strip_suffix(')')?.parse().ok())
+    };
+    Some([
+        count("All (")?,
+        count("Classified (")?,
+        count("Unclassified (")?,
+    ])
+}
+
 fn button(hwnd: HWND, label: &str) -> Option<IUIAutomationElement> {
     controls(hwnd).ok()?.into_iter().rev().find(|el| unsafe {
         el.CurrentControlType().ok() == Some(UIA_ButtonControlTypeId)
@@ -32,13 +78,48 @@ fn click(hwnd: HWND, label: &str) -> Result<(), Error> {
 fn press(hwnd: HWND, label: &str) -> Result<(), Error> {
     activate(hwnd, label, true)
 }
+fn segment(hwnd: HWND, label: &str) -> Option<IUIAutomationElement> {
+    controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+        el.CurrentControlType().ok() == Some(UIA_RadioButtonControlTypeId)
+            && el.CurrentName().is_ok_and(|n| n == label)
+    })
+}
+fn selected_segment(hwnd: HWND, label: &str) -> Option<()> {
+    let el = segment(hwnd, label)?;
+    unsafe {
+        (el.CurrentIsEnabled().ok()?.as_bool()
+            && el
+                .GetCurrentPatternAs::<IUIAutomationSelectionItemPattern>(
+                    UIA_SelectionItemPatternId,
+                )
+                .ok()?
+                .CurrentIsSelected()
+                .ok()?
+                .as_bool())
+        .then_some(())
+    }
+}
+fn select_segment(hwnd: HWND, label: &str) -> Result<(), Error> {
+    let el = wait(label, || segment(hwnd, label))?;
+    activate_control(hwnd, &el, false)?;
+    wait(
+        &format!("selected segment remains enabled: {label}"),
+        || selected_segment(hwnd, label),
+    )
+    .map_err(|e| format!("{e}; nodes {:?}", names(hwnd)))?;
+    Ok(())
+}
 fn activate(hwnd: HWND, label: &str, keyboard: bool) -> Result<(), Error> {
     let el = wait(label, || {
         button(hwnd, label).filter(|el| unsafe { el.CurrentIsEnabled().is_ok_and(|b| b.as_bool()) })
     })
     .map_err(|e| format!("{e}; nodes {:?}", names(hwnd)))?;
+    activate_control(hwnd, &el, keyboard)
+}
+
+fn activate_control(hwnd: HWND, el: &IUIAutomationElement, keyboard: bool) -> Result<(), Error> {
     // Bring lower cards in the scrolling page into view before invoking their button.
-    for _ in 0..16 {
+    for attempt in 0..=16 {
         let r = unsafe { el.CurrentBoundingRectangle()? };
         let mut window = RECT::default();
         unsafe {
@@ -47,6 +128,12 @@ fn activate(hwnd: HWND, label: &str, keyboard: bool) -> Result<(), Error> {
         let center = (r.top + r.bottom) / 2;
         if r.bottom > r.top && center > window.top + 60 && center < window.bottom - 20 {
             break;
+        }
+        if attempt == 16 {
+            return Err(format!(
+                "control remains outside viewport: control={r:?}, window={window:?}"
+            )
+            .into());
         }
         let direction = if center >= window.bottom - 20 {
             -1i32
@@ -63,15 +150,24 @@ fn activate(hwnd: HWND, label: &str, keyboard: bool) -> Result<(), Error> {
                 LPARAM((y as isize) << 16 | x as isize),
             )?;
         }
-        std::thread::sleep(std::time::Duration::from_millis(75));
+        desktop::wait_observed("scroll moves target control", || {
+            let next = unsafe { el.CurrentBoundingRectangle() }.map_err(|e| e.to_string())?;
+            if next.top != r.top || next.bottom != r.bottom {
+                Ok(())
+            } else {
+                Err(format!("control={next:?}, window={window:?}"))
+            }
+        })?;
     }
     if keyboard {
         unsafe {
             el.SetFocus()?;
         }
+        // UIA HasKeyboardFocus also requires host foreground focus, unavailable on
+        // the non-input desktop. The caller observes this key's resulting state.
         key(hwnd, 13)?;
     } else {
-        let position = client_center(hwnd, &el)?;
+        let position = client_center(hwnd, el)?;
         unsafe {
             PostMessageW(Some(hwnd), WM_MOUSEMOVE, WPARAM(0), position)?;
             PostMessageW(Some(hwnd), WM_LBUTTONDOWN, WPARAM(1), position)?;
@@ -81,8 +177,11 @@ fn activate(hwnd: HWND, label: &str, keyboard: bool) -> Result<(), Error> {
     Ok(())
 }
 #[test]
-#[ignore = "Windows desktop, isolated SQLite profile"]
+#[ignore = "isolated Win32 desktop"]
 fn sidebar_opens_empty_history() -> Result<(), Error> {
+    if !patina_test_desktop::run_case()? {
+        return Ok(());
+    }
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
@@ -94,7 +193,7 @@ fn sidebar_opens_empty_history() -> Result<(), Error> {
         .build()?;
     rt.block_on(async {
         let pool = patina_recorder::open_database(&db).await?;
-        sqlx::query("INSERT OR REPLACE INTO settings(key,value) VALUES ('language','zh-CN'),('tracking_paused','1')")
+        sqlx::query("INSERT OR REPLACE INTO settings(key,value) VALUES ('language','zh-CN'),('tracking_paused','1'),('show_tray_icon','0')")
             .execute(&pool).await?;
         pool.close().await;
         Ok::<_, Error>(())
@@ -136,9 +235,222 @@ fn sample(dir: &Option<PathBuf>, pid: u32, name: &str) -> Result<(), Error> {
     }
     Ok(())
 }
+
 #[test]
-#[ignore = "Windows desktop, isolated SQLite profile"]
+#[ignore = "isolated Win32 desktop"]
+fn repeated_sidebar_navigation_keeps_window_alive() -> Result<(), Error> {
+    if !patina_test_desktop::run_case()? {
+        return Ok(());
+    }
+    let _com = ComApartment::init()?;
+    unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
+    for tag in ["es", "ru-RU", "zh-CN", "en-US"] {
+        navigate_in_locale(tag).map_err(|e| format!("{tag}: {e}"))?;
+    }
+    Ok(())
+}
+
+fn navigate_in_locale(tag: &str) -> Result<(), Error> {
+    let root = tempfile::tempdir()?;
+    let profile = root.path().join(patina_gpui::APP_ID);
+    fs::create_dir(&profile)?;
+    seed(&profile.join("patina.db"))?;
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    rt.block_on(async {
+        let mut db = SqliteConnection::connect_with(
+            &SqliteConnectOptions::new().filename(profile.join("patina.db")),
+        )
+        .await?;
+        sqlx::query("UPDATE settings SET value=? WHERE key='language'")
+            .bind(tag)
+            .execute(&mut db)
+            .await?;
+        Ok::<_, Error>(())
+    })?;
+    let locale = patina_recorder::Locale::from_tag(Some(tag));
+    let stderr = root.path().join("renderer.log");
+    let mut host = TestChild(
+        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env_remove("PATINA_GPUI_DEV_SESSION")
+            .env("RUST_BACKTRACE", "1")
+            .stderr(fs::File::create(&stderr)?)
+            .arg("--today")
+            .spawn()?,
+    );
+    let pid = host.0.id();
+    let outcome = (|| -> Result<(), Error> {
+        let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
+        for (width, height) in [(1200, 800), (810, 540)] {
+            let dpi = unsafe { GetDpiForWindow(hwnd) } as i32;
+            unsafe {
+                SetWindowPos(
+                    hwnd,
+                    None,
+                    0,
+                    0,
+                    width * dpi / 96,
+                    height * dpi / 96,
+                    SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOZORDER,
+                )?;
+            }
+            for round in 0..20 {
+                for key in [
+                    "history.title",
+                    "data.title",
+                    "mapping.title",
+                    "tools.title",
+                    "settings.title",
+                    "about.title",
+                    "dashboard.title",
+                ] {
+                    navigate_sidebar(hwnd, locale, key)?;
+                    assert!(
+                        unsafe { IsWindow(Some(hwnd)).as_bool() },
+                        "window lost in round {round}: {key}"
+                    );
+                }
+            }
+        }
+        click(hwnd, &patina_recorder::text(locale, "settings.title"))?;
+        let language_name = patina_recorder::text(locale, "settings.languageLabel");
+        let language = wait("language selector", || {
+            controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+                el.CurrentControlType().ok() == Some(UIA_ComboBoxControlTypeId)
+                    && el.CurrentName().is_ok_and(|n| n == language_name.as_str())
+            })
+        })?;
+        activate_control(hwnd, &language, false)?;
+        let (next_tag, next_name) = match tag {
+            "es" => ("ru-RU", "Русский"),
+            "ru-RU" => ("zh-CN", "简体中文"),
+            "zh-CN" => ("en-US", "English"),
+            _ => ("es", "Español"),
+        };
+        let option = wait(next_name, || {
+            controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+                el.CurrentControlType().ok() == Some(UIA_ListItemControlTypeId)
+                    && el.CurrentName().is_ok_and(|n| n == next_name)
+            })
+        })?;
+        activate_control(hwnd, &option, false)?;
+        press(hwnd, &patina_recorder::text(locale, "common.save"))?;
+        let next_locale = patina_recorder::Locale::from_tag(Some(next_tag));
+        wait("saved language applied", || {
+            named(hwnd, &patina_recorder::text(next_locale, "settings.title"))
+        })?;
+        for key in [
+            "history.title",
+            "data.title",
+            "mapping.title",
+            "tools.title",
+            "about.title",
+            "dashboard.title",
+            "settings.title",
+        ] {
+            navigate_sidebar(hwnd, next_locale, key)?;
+        }
+        wait("translated preferences ready", || {
+            named(
+                hwnd,
+                &patina_recorder::text(next_locale, "settings.themeModeLabel"),
+            )
+        })?;
+        command(window(pid, w!("Patina GPUI")).ok_or("missing tray")?, 2)?;
+        assert!(wait("exit", || host.0.try_wait().ok().flatten())?.success());
+        Ok(())
+    })();
+    outcome.map_err(|e| format!("{e}\n{}", fs::read_to_string(stderr).unwrap_or_default()).into())
+}
+
+fn navigate_sidebar(hwnd: HWND, locale: patina_recorder::Locale, key: &str) -> Result<(), Error> {
+    let page = patina_recorder::text(locale, key);
+    // The sidebar precedes page controls that may have the same translated name.
+    let button = wait(&page, || {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentControlType().ok() == Some(UIA_ButtonControlTypeId)
+                && el.CurrentName().is_ok_and(|n| n == page.as_str())
+        })
+    })?;
+    activate_control(hwnd, &button, false)?;
+    wait(&page, || {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentAutomationId().is_ok_and(|id| id == "page-title")
+                && el.CurrentName().is_ok_and(|n| n == page.as_str())
+        })
+    })
+    .map_err(|e| format!("{key}: {e}; nodes {:?}", names(hwnd)))?;
+    Ok(())
+}
+fn check_history_hourly(hwnd: HWND) -> Result<(), Error> {
+    let tooltip = || -> Option<String> {
+        controls(hwnd).ok()?.into_iter().find_map(|el| unsafe {
+            (el.CurrentControlType().ok()? == UIA_ToolTipControlTypeId)
+                .then(|| el.CurrentName().ok().map(|s| s.to_string()))
+                .flatten()
+        })
+    };
+    for grouped in [false, true] {
+        let mode = if grouped {
+            "Show total activity"
+        } else {
+            "Show by category"
+        };
+        let toggle = wait("history hourly mode", || named(hwnd, mode))?;
+        let hour = wait("history first active hour", || {
+            controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+                el.CurrentName()
+                    .is_ok_and(|s| s.to_string().starts_with("00:00 · Active "))
+                    && el.CurrentControlType().ok() != Some(UIA_ToolTipControlTypeId)
+            })
+        })?;
+        unsafe {
+            PostMessageW(
+                Some(hwnd),
+                WM_MOUSEMOVE,
+                WPARAM(0),
+                client_center(hwnd, &hour)?,
+            )?;
+        }
+        let tip = wait("history hour hover tooltip", || {
+            tooltip().filter(|s| s.starts_with("00:00 · Active "))
+        })?;
+        assert_eq!(tip.contains('\n'), grouped, "{tip}");
+        unsafe {
+            PostMessageW(
+                Some(hwnd),
+                WM_MOUSEMOVE,
+                WPARAM(0),
+                client_center(hwnd, &toggle)?,
+            )?;
+        }
+        wait("history hour pointer leaves", || {
+            tooltip().is_none().then_some(())
+        })?;
+        unsafe {
+            hour.SetFocus()?;
+        }
+        wait("history hour focus tooltip", || tooltip())?;
+        key(hwnd, 27)?;
+        wait("history hour Escape", || tooltip().is_none().then_some(()))?;
+        unsafe {
+            toggle.SetFocus()?;
+        }
+        let empty = named(hwnd, "02:00 · Active 0m").ok_or("missing empty history hour")?;
+        assert!(!unsafe { empty.CurrentIsKeyboardFocusable()? }.as_bool());
+        click(hwnd, mode)?;
+    }
+    Ok(())
+}
+
+#[test]
+#[ignore = "isolated Win32 desktop"]
 fn history_navigation() -> Result<(), Error> {
+    if !patina_test_desktop::run_case()? {
+        return Ok(());
+    }
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
@@ -191,6 +503,10 @@ fn history_navigation() -> Result<(), Error> {
     wait("history day", || named(hwnd, &date))?;
     let includes = |q: &str| names(hwnd).into_iter().any(|s| s.contains(q));
     wait("daily aggregate", || includes("1h 10m").then_some(()))?;
+    check_history_hourly(hwnd)?;
+    select_segment(hwnd, "Categories")?;
+    wait("category distribution", || named(hwnd, "Office"))?;
+    select_segment(hwnd, "Apps")?;
     click(hwnd, "Previous day")?;
     let previous = now.date_naive().pred_opt().unwrap().to_string();
     wait("previous date", || named(hwnd, &previous))?;
@@ -198,20 +514,19 @@ fn history_navigation() -> Result<(), Error> {
     click(hwnd, "Next day")?;
     wait("today date", || named(hwnd, &date))?;
     click(hwnd, "Currently showing Apps; switch to Categories")?;
-    click(hwnd, "Currently showing Categories; switch to Apps")?;
-    click(hwnd, "Open timeline zoom")?;
-    click(hwnd, "Decrease by one hour")?;
-    wait("three hour viewport", || named(hwnd, "3.0 h"))?;
+    click(hwnd, "Currently showing Categories; switch to Web")?;
+    click(hwnd, "Currently showing Web; switch to Apps")?;
+    history_timeline::check_zoom(hwnd)?;
+    click(hwnd, "Open timeline")?;
+    history_timeline::check_records(hwnd)?;
     click(hwnd, "Decrease display minutes by 1 minute")?;
-    wait("short fragment visible", || {
-        includes("Brief  0m").then_some(())
-    })?;
+    wait("short fragment visible", || named(hwnd, "Brief · 30s"))?;
     click(hwnd, "Increase display minutes by 1 minute")?;
     wait("only short fragment hidden", || {
-        (!includes("Brief  0m")).then_some(())
+        named(hwnd, "Brief · 30s").is_none().then_some(())
     })?;
     key(hwnd, 27)?;
-    click(hwnd, "View details for Studio")?;
+    history_timeline::open_icon_details(hwnd, "Studio")?;
     click(hwnd, "Title details")?;
     wait("recorded title", || {
         includes("Design fixture").then_some(())
@@ -260,45 +575,11 @@ fn history_navigation() -> Result<(), Error> {
 }
 
 #[test]
-fn history_exact_and_bucket_data() -> Result<(), Error> {
-    let root = tempfile::tempdir()?;
-    let db = root.path().join("patina.db");
-    seed(&db)?;
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?;
-    let start = Local::now()
-        .date_naive()
-        .and_hms_opt(0, 0, 0)
-        .unwrap()
-        .and_local_timezone(Local)
-        .earliest()
-        .unwrap()
-        .timestamp_millis();
-    rt.block_on(async{
-        let mut c=SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&db)).await?;
-        sqlx::query("INSERT INTO import_time_buckets(batch_id,fingerprint,exe_name,app_name,bucket_start_time,duration) VALUES('test','bucket','bucket.exe','Bucket',?,120000)").bind(start+2*3600000).execute(&mut c).await?;
-        Ok::<_,Error>(())
-    })?;
-    let r = patina_recorder::Recorder::start(&db, || {})?;
-    let day = rt.block_on(r.history(start, None, false))?;
-    assert_eq!(day.apps.iter().map(|a| a.2).sum::<i64>(), 72 * 60000);
-    assert_eq!(
-        day.records.iter().map(|r| r.end - r.start).sum::<i64>(),
-        70 * 60000
-    );
-    assert!(!day.records.iter().any(|r| r.key == "bucket.exe"));
-    let writer = rt.block_on(r.history(start, Some("writer.exe".into()), true))?;
-    assert_eq!(
-        writer.records.iter().map(|r| r.end - r.start).sum::<i64>(),
-        20 * 60000
-    );
-    r.shutdown()?;
-    Ok(())
-}
-#[test]
-#[ignore = "Windows desktop, isolated SQLite profile"]
+#[ignore = "isolated Win32 desktop"]
 fn data_navigation() -> Result<(), Error> {
+    if !patina_test_desktop::run_case()? {
+        return Ok(());
+    }
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
@@ -317,25 +598,61 @@ fn data_navigation() -> Result<(), Error> {
     wait("seven day cross-midnight total", || {
         named(hwnd, "Total · 1h 40m")
     })?;
+    trend_chart::check(hwnd)?;
     press(hwnd, "Studio")?;
     wait("selected app total", || named(hwnd, "Total · 1h 15m"))
         .map_err(|e| format!("{e}; {:?}", names(hwnd)))?;
-    press(hwnd, "Select range")?;
-    press(hwnd, "Week")?;
-    wait("week range applied", || {
-        button(hwnd, "Week").is_none().then_some(())
+    wait("trend metrics", || named(hwnd, "Active days · 2"))?;
+    let by_id = |id: &str| {
+        controls(hwnd)
+            .ok()?
+            .into_iter()
+            .find(|el| unsafe { el.CurrentAutomationId().is_ok_and(|value| value == id) })
+    };
+    let list = unsafe {
+        wait("trend object list", || by_id("trend-objects"))?.CurrentBoundingRectangle()?
+    };
+    let chart =
+        unsafe { wait("trend plot", || by_id("selection-trend"))?.CurrentBoundingRectangle()? };
+    assert!(list.right < chart.left && list.right - list.left < chart.right - chart.left);
+    press(hwnd, "Writer")?;
+    wait("single selection replaces Studio", || {
+        named(hwnd, "Total · 20m")
     })?;
-    press(hwnd, "Select range")?;
-    press(hwnd, "Last 30 days")?;
+    press(hwnd, "Studio")?;
+    let search = wait("trend search", || named(hwnd, "Search apps"))?;
+    let edit: IUIAutomationValuePattern =
+        unsafe { search.GetCurrentPatternAs(UIA_ValuePatternId)? };
+    unsafe {
+        edit.SetValue(&windows::core::BSTR::from("no-such-app"))?;
+    }
+    wait("no matching apps", || named(hwnd, "No matching apps"))?;
+    assert!(named(hwnd, "Total · 1h 15m").is_some());
+    unsafe {
+        edit.SetValue(&windows::core::BSTR::from(""))?;
+    }
+    wait("cleared search", || button(hwnd, "Studio"))?;
+    activate_control(
+        hwnd,
+        &data_range::range_button(hwnd, "Select trend range", "Expand trend range")
+            .ok_or("overview range")?,
+        true,
+    )?;
+    wait("expanded trend loaded", || {
+        named(
+            hwnd,
+            &format!("{} · 0m", Local::now().date_naive() - chrono::Days::new(29)),
+        )
+    })?;
     wait("changed range preserves app", || {
         named(hwnd, "Total · 1h 15m")
     })?;
-    press(hwnd, "Categories")?;
+    select_segment(hwnd, "Categories")?;
     press(hwnd, "Office")?;
     wait("category total", || named(hwnd, "Total · 20m"))?;
-    press(hwnd, "Web")?;
+    select_segment(hwnd, "Web")?;
     wait("empty websites", || named(hwnd, "Total · 0m"))?;
-    press(hwnd, "Apps")?;
+    select_segment(hwnd, "Apps")?;
     press(hwnd, "Studio")?;
     let date = Local::now().date_naive().to_string();
     press(hwnd, &date)?;
@@ -346,8 +663,30 @@ fn data_navigation() -> Result<(), Error> {
             &Local::now().date_naive().pred_opt().unwrap().to_string(),
         )
     })?;
-    press(hwnd, "Close")?;
+    click(hwnd, "Close")?;
+    wait("data detail dismissed", || {
+        button(hwnd, "Close").is_none().then_some(())
+    })?;
     wait("restored selection", || named(hwnd, "Total · 1h 15m"))?;
+    activate_control(
+        hwnd,
+        &segment(hwnd, "Weekly").ok_or("weekly segment")?,
+        true,
+    )?;
+    wait("weekly heatmap selected", || {
+        selected_segment(hwnd, "Weekly")
+    })?;
+    unsafe {
+        segment(hwnd, "Weekly")
+            .ok_or("weekly segment")?
+            .SetFocus()?;
+    }
+    key(hwnd, 37)?;
+    wait("heatmap keyboard selection", || {
+        selected_segment(hwnd, "Daily")
+    })?;
+    press(hwnd, "Previous month")?;
+    press(hwnd, "Next month")?;
     let tray = window(pid, w!("Patina GPUI")).unwrap();
     command(tray, 2)?;
     assert!(wait("exit", || host.0.try_wait().ok().flatten())?.success());

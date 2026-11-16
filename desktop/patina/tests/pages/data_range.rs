@@ -1,0 +1,411 @@
+use super::*;
+use chrono::{Datelike, Days};
+
+use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance};
+
+pub(super) fn range_button(hwnd: HWND, scope: &str, name: &str) -> Option<IUIAutomationElement> {
+    let group = controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+        el.CurrentControlType().ok() == Some(UIA_GroupControlTypeId)
+            && el.CurrentName().is_ok_and(|value| value == scope)
+    })?;
+    unsafe {
+        let ui: IUIAutomation =
+            CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER).ok()?;
+        let children = group
+            .FindAll(TreeScope_Descendants, &ui.CreateTrueCondition().ok()?)
+            .ok()?;
+        (0..children.Length().ok()?)
+            .filter_map(|i| children.GetElement(i).ok())
+            .find(|el| {
+                el.CurrentControlType().ok() == Some(UIA_ButtonControlTypeId)
+                    && el.CurrentName().is_ok_and(|value| value == name)
+            })
+    }
+}
+
+fn button(hwnd: HWND, name: &str) -> Option<IUIAutomationElement> {
+    range_button(hwnd, "Select trend range", name).or_else(|| super::button(hwnd, name))
+}
+
+fn press(hwnd: HWND, name: &str) -> Result<(), Error> {
+    activate_control(hwnd, &wait(name, || button(hwnd, name))?, true)
+}
+
+fn popup(hwnd: HWND) -> Option<IUIAutomationElement> {
+    controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+        el.CurrentName().is_ok_and(|n| n == "Select range")
+            && el.CurrentControlType().ok() == Some(UIA_GroupControlTypeId)
+    })
+}
+
+fn day(hwnd: HWND, date: chrono::NaiveDate) -> Option<IUIAutomationElement> {
+    controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+        el.CurrentName().is_ok_and(|n| n == date.to_string())
+            && el.CurrentControlType().ok() != Some(UIA_ButtonControlTypeId)
+    })
+}
+
+#[test]
+#[ignore = "isolated Win32 desktop"]
+fn range_draft_apply_and_dismiss() -> Result<(), Error> {
+    if !patina_test_desktop::run_case()? {
+        return Ok(());
+    }
+    let _com = ComApartment::init()?;
+    unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
+    let root = tempfile::tempdir()?;
+    let profile = root.path().join(patina_gpui::APP_ID);
+    fs::create_dir(&profile)?;
+    seed(&profile.join("patina.db"))?;
+    let mut host = TestChild(
+        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .arg("--today")
+            .spawn()?,
+    );
+    let hwnd = wait("main", || {
+        children::find(host.0.id(), |p| window(p, w!("Patina")))
+    })?;
+    click(hwnd, "Data")?;
+    wait("data loaded", || named(hwnd, "Total · 1h 40m"))?;
+    let today = Local::now().date_naive();
+    let scale = unsafe { GetDpiForWindow(hwnd) } as f64 / 96.;
+    for name in ["Select range", "Shorten trend range", "Expand trend range"] {
+        let rect = unsafe {
+            button(hwnd, name)
+                .ok_or("range control")?
+                .CurrentBoundingRectangle()?
+        };
+        assert!(
+            ((rect.bottom - rect.top) as f64 / scale - 28.).abs() <= 1.,
+            "{name}: {rect:?}"
+        );
+    }
+    let close = || wait("range closed", || popup(hwnd).is_none().then_some(()));
+    press(hwnd, "Select range")?;
+    let bounds = unsafe { wait("range popup", || popup(hwnd))?.CurrentBoundingRectangle()? };
+    assert!(((bounds.right - bounds.left) as f64 / scale - 228.).abs() <= 1.);
+    let cell = wait("today", || day(hwnd, today))?;
+    let cell_bounds = unsafe { cell.CurrentBoundingRectangle()? };
+    assert!(((cell_bounds.right - cell_bounds.left) as f64 / scale - 28.).abs() <= 1.);
+    assert!(((cell_bounds.bottom - cell_bounds.top) as f64 / scale - 28.).abs() <= 1.);
+    let other_week = if today.day() > 7 {
+        today - Days::new(7)
+    } else {
+        today + Days::new(7)
+    };
+    let other_bounds = unsafe {
+        day(hwnd, other_week)
+            .ok_or("adjacent week")?
+            .CurrentBoundingRectangle()?
+    };
+    assert!(((cell_bounds.top - other_bounds.top).abs() as f64 / scale - 28.).abs() <= 1.);
+    if today.day() < 28 {
+        assert!(!unsafe {
+            day(hwnd, today + Days::new(1))
+                .ok_or("future date")?
+                .CurrentIsEnabled()?
+                .as_bool()
+        });
+    }
+    // Reversed endpoints are normalized; incomplete selections cannot be applied.
+    activate_control(hwnd, &cell, false)?;
+    wait("incomplete draft", || {
+        button(hwnd, "Apply")
+            .filter(|el| unsafe { el.CurrentIsEnabled().is_ok_and(|v| !v.as_bool()) })
+    })?;
+    let earlier = today - Days::new(2);
+    if earlier.month() != today.month() {
+        click(hwnd, "Previous month")?;
+    }
+    let cell = wait("earlier date", || day(hwnd, earlier))?;
+    activate_control(hwnd, &cell, false)?;
+    wait("ordered draft", || {
+        named(hwnd, &format!("{earlier} – {today}"))
+    })?;
+    assert!(named(hwnd, "Total · 1h 40m").is_some());
+    press(hwnd, "Cancel")?;
+    close()?;
+    press(hwnd, "Select range")?;
+    wait("fresh custom draft", || named(hwnd, "Start date"))?;
+    click(hwnd, "Next range mode")?;
+    wait("week mode", || named(hwnd, "Select date"))?;
+    assert!(popup(hwnd).is_some());
+    key(hwnd, 27)?;
+    close()?;
+    key(hwnd, 13)?;
+    wait("reopened by keyboard", || popup(hwnd))?;
+    // Keyboard selection supports a single-day range and leaves commit to Apply.
+    let grid = wait("range grid", || {
+        controls(hwnd)
+            .ok()?
+            .into_iter()
+            .find(|el| unsafe { el.CurrentControlType().ok() == Some(UIA_DataGridControlTypeId) })
+    })?;
+    unsafe {
+        grid.SetFocus()?;
+    }
+    key(hwnd, 13)?;
+    wait("end selection", || named(hwnd, "End date"))?;
+    key(hwnd, 13)?;
+    wait("single day draft", || {
+        named(hwnd, &format!("{today} – {today}"))
+    })?;
+    press(hwnd, "Apply")?;
+    close()?;
+    wait("today data", || named(hwnd, "Total · 1h 10m"))
+        .map_err(|e| format!("{e}; {:?}", names(hwnd)))?;
+    press(hwnd, "Select range")?;
+    click(hwnd, "Next range mode")?;
+    let outside = client_center(hwnd, &named(hwnd, "Activity Trend").ok_or("heading")?)?;
+    unsafe {
+        PostMessageW(Some(hwnd), WM_LBUTTONDOWN, WPARAM(1), outside)?;
+        PostMessageW(Some(hwnd), WM_LBUTTONUP, WPARAM(0), outside)?;
+    }
+    close()?;
+    press(hwnd, "Select range")?;
+    wait("outside discarded draft", || named(hwnd, "Start date"))?;
+    click(hwnd, "Next range mode")?;
+    activate_control(hwnd, &wait("period date", || day(hwnd, today))?, false)?;
+    wait("period apply", || {
+        button(hwnd, "Apply")
+            .filter(|el| unsafe { el.CurrentIsEnabled().is_ok_and(|v| v.as_bool()) })
+    })?;
+    press(hwnd, "Apply")?;
+    close()?;
+    wait("reset available", || button(hwnd, "Reset to last 7 days"))?;
+    press(hwnd, "Reset to last 7 days")?;
+    wait("range restored", || named(hwnd, "Total · 1h 40m"))?;
+    press(hwnd, "Expand trend range")?;
+    wait("expanded range data", || named(hwnd, "Total · 1h 40m"))?;
+    press(hwnd, "Shorten trend range")?;
+    wait("shortened range data", || named(hwnd, "Total · 1h 40m"))?;
+    // Destination range commits affect only the selected object's metrics and curve.
+    let destination = wait("destination range", || {
+        range_button(hwnd, "Select app trend range", "Select range")
+    })?;
+    activate_control(hwnd, &destination, true)?;
+    wait("destination calendar", || popup(hwnd))?;
+    let anchor = unsafe { destination.CurrentBoundingRectangle()? };
+    let calendar = unsafe {
+        popup(hwnd)
+            .ok_or("destination popup")?
+            .CurrentBoundingRectangle()?
+    };
+    assert!(calendar.left < anchor.right && calendar.right > anchor.left);
+    let cell = wait("destination today", || day(hwnd, today))?;
+    activate_control(hwnd, &cell, false)?;
+    activate_control(hwnd, &cell, false)?;
+    press(hwnd, "Apply")?;
+    close()?;
+    wait("single-day app total", || named(hwnd, "Total · 45m"))?;
+    assert!(
+        named(hwnd, "Total · 1h 40m").is_some(),
+        "overview range must remain seven days"
+    );
+    activate_control(
+        hwnd,
+        &range_button(hwnd, "Select app trend range", "Select range").ok_or("range trigger")?,
+        true,
+    )?;
+    wait("destination draft", || popup(hwnd))?;
+    key(hwnd, 27)?;
+    close()?;
+    key(hwnd, 13)?;
+    wait("focus returned to destination trigger", || popup(hwnd))?;
+    press(hwnd, "Cancel")?;
+    close()?;
+    activate_control(
+        hwnd,
+        &range_button(hwnd, "Select app trend range", "Reset to last 7 days")
+            .ok_or("destination reset")?,
+        true,
+    )?;
+    wait("app range restored", || named(hwnd, "Total · 1h 15m"))?;
+    assert!(named(hwnd, "Total · 1h 40m").is_some());
+    let tray = window(host.0.id(), w!("Patina GPUI")).ok_or("tray")?;
+    command(tray, 2)?;
+    assert!(wait("exit", || host.0.try_wait().ok().flatten())?.success());
+    Ok(())
+}
+
+#[test]
+#[ignore = "isolated Win32 desktop"]
+fn destination_heatmap_year_range() -> Result<(), Error> {
+    if !patina_test_desktop::run_case()? {
+        return Ok(());
+    }
+    let _com = ComApartment::init()?;
+    unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
+    let root = tempfile::tempdir()?;
+    let profile = root.path().join(patina_gpui::APP_ID);
+    fs::create_dir(&profile)?;
+    let db = profile.join("patina.db");
+    seed(&db)?;
+    let today = Local::now().date_naive();
+    let old_date = chrono::NaiveDate::from_ymd_opt(today.year() - 1, 1, 15).unwrap();
+    let old_date = old_date - Days::new(old_date.weekday().num_days_from_monday().into());
+    let old_start = old_date
+        .and_hms_opt(12, 0, 0)
+        .unwrap()
+        .and_local_timezone(Local)
+        .earliest()
+        .unwrap()
+        .timestamp_millis();
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    rt.block_on(async {
+        let mut db = SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&db)).await?;
+        sqlx::query("INSERT INTO sessions(exe_name,app_name,start_time,end_time,duration) VALUES ('studio.exe','Studio',?,?,300000)")
+            .bind(old_start).bind(old_start+300000).execute(&mut db).await?;
+        sqlx::query("INSERT INTO sessions(exe_name,app_name,start_time,end_time,duration) VALUES ('studio.exe','Studio',?,?,600000)")
+            .bind(old_start+86_400_000).bind(old_start+86_400_000+600000).execute(&mut db).await?;
+        Ok::<(), Error>(())
+    })?;
+    let mut host = TestChild(
+        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .arg("--today")
+            .spawn()?,
+    );
+    let hwnd = wait("main", || {
+        children::find(host.0.id(), |p| window(p, w!("Patina")))
+    })?;
+    click(hwnd, "Data")?;
+    wait("overview loaded", || named(hwnd, "Total · 1h 40m"))?;
+    let heat_button = |name: &str| range_button(hwnd, "Select heatmap range", name);
+    let enabled = |name: &str| {
+        heat_button(name).filter(|el| unsafe { el.CurrentIsEnabled().is_ok_and(|v| v.as_bool()) })
+    };
+    let disabled = |name: &str| {
+        heat_button(name).filter(|el| unsafe { el.CurrentIsEnabled().is_ok_and(|v| !v.as_bool()) })
+    };
+    let older = wait("heatmap ready", || enabled("Switch to earlier range"))?;
+    assert!(disabled("Switch to newer range").is_some());
+    activate_control(hwnd, &older, true)?;
+    wait("current year", || named(hwnd, &today.year().to_string()))
+        .map_err(|e| format!("{e}; {:?}", names(hwnd)))?;
+    activate_control(
+        hwnd,
+        &wait("older year available", || {
+            enabled("Switch to earlier range")
+        })?,
+        true,
+    )?;
+    wait("previous year", || {
+        named(hwnd, &(today.year() - 1).to_string())
+    })?;
+    wait("earliest year boundary", || {
+        disabled("Switch to earlier range")
+    })?;
+    let historic_cell = wait("historic date loaded", || {
+        super::button(hwnd, &old_date.to_string())
+    })?;
+    let description =
+        unsafe { historic_cell.GetCurrentPropertyValue(UIA_FullDescriptionPropertyId)? };
+    assert!(
+        windows::core::BSTR::try_from(&description)?
+            .to_string()
+            .contains("5m")
+    );
+    let heat_segment = |name: &str| {
+        controls(hwnd).ok()?.into_iter().rev().find(|el| unsafe {
+            el.CurrentControlType().ok() == Some(UIA_RadioButtonControlTypeId)
+                && el.CurrentName().is_ok_and(|s| s == name)
+        })
+    };
+    let heat_selected = |name: &str| {
+        heat_segment(name).filter(|el| unsafe {
+            el.GetCurrentPatternAs::<IUIAutomationSelectionItemPattern>(UIA_SelectionItemPatternId)
+                .ok()
+                .and_then(|p| p.CurrentIsSelected().ok())
+                .is_some_and(|v| v.as_bool())
+        })
+    };
+    let heat_bounds = || -> Result<RECT, Error> {
+        let panel = controls(hwnd)?
+            .into_iter()
+            .find(|el| unsafe {
+                el.CurrentAutomationId()
+                    .is_ok_and(|id| id == "destination-heatmap")
+            })
+            .ok_or("heatmap panel")?;
+        Ok(unsafe { panel.CurrentBoundingRectangle()? })
+    };
+    let daily_bounds = heat_bounds()?;
+    activate_control(hwnd, &heat_segment("Weekly").ok_or("weekly mode")?, true)?;
+    wait("destination weekly selected", || heat_selected("Weekly"))?;
+    let description =
+        unsafe { historic_cell.GetCurrentPropertyValue(UIA_FullDescriptionPropertyId)? };
+    let description = windows::core::BSTR::try_from(&description)?.to_string();
+    assert!(description.contains("15m"), "{description}");
+    assert!(
+        description.contains(&(old_date + Days::new(6)).to_string()),
+        "{description}"
+    );
+    assert!(
+        super::selected_segment(hwnd, "Daily").is_some(),
+        "overview granularity must remain daily"
+    );
+    let weekly_bounds = heat_bounds()?;
+    assert_eq!(
+        daily_bounds.bottom - daily_bounds.top,
+        weekly_bounds.bottom - weekly_bounds.top
+    );
+    unsafe {
+        heat_segment("Weekly").ok_or("weekly focus")?.SetFocus()?;
+    }
+    key(hwnd, 37)?;
+    wait("daily keyboard selection", || heat_selected("Daily"))?;
+    let description =
+        unsafe { historic_cell.GetCurrentPropertyValue(UIA_FullDescriptionPropertyId)? };
+    assert!(
+        windows::core::BSTR::try_from(&description)?
+            .to_string()
+            .ends_with(" · 5m")
+    );
+    activate_control(hwnd, &heat_segment("Weekly").ok_or("weekly mode")?, true)?;
+    wait("weekly restored", || heat_selected("Weekly"))?;
+    assert!(named(hwnd, "Total · 1h 40m").is_some());
+    assert!(named(hwnd, "Total · 1h 15m").is_some());
+    activate_control(
+        hwnd,
+        &wait("newer year", || enabled("Switch to newer range"))?,
+        true,
+    )?;
+    wait("current year restored", || {
+        named(hwnd, &today.year().to_string())
+    })?;
+    activate_control(
+        hwnd,
+        &wait("recent year", || enabled("Switch to newer range"))?,
+        true,
+    )?;
+    wait("recent year boundary", || disabled("Switch to newer range"))?;
+    assert!(
+        heat_selected("Weekly").is_some(),
+        "year switch must preserve granularity"
+    );
+    select_segment(hwnd, "Web")?;
+    wait("empty web heatmap ready", || {
+        enabled("Switch to earlier range")
+    })?;
+    activate_control(
+        hwnd,
+        &heat_button("Switch to earlier range").ok_or("web year")?,
+        true,
+    )?;
+    wait("empty web earliest year", || {
+        disabled("Switch to earlier range")
+    })?;
+    assert!(named(hwnd, "Total · 0m").is_some());
+    assert!(
+        heat_selected("Weekly").is_some(),
+        "destination mode must preserve granularity"
+    );
+    let tray = window(host.0.id(), w!("Patina GPUI")).ok_or("tray")?;
+    command(tray, 2)?;
+    assert!(wait("exit", || host.0.try_wait().ok().flatten())?.success());
+    Ok(())
+}

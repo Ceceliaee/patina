@@ -1,0 +1,275 @@
+use super::*;
+
+pub(super) fn open_icon_details(hwnd: HWND, name: &str) -> Result<(), Error> {
+    let icon = wait("detail icon", || {
+        button(hwnd, &format!("View details for {name}"))
+    })?;
+    let rect = unsafe { icon.CurrentBoundingRectangle()? };
+    assert!(rect.right - rect.left <= 40 && rect.bottom - rect.top <= 40);
+    activate_control(hwnd, &icon, false)?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(600);
+    while std::time::Instant::now() < deadline {
+        assert!(
+            button(hwnd, "Close").is_none(),
+            "single icon click opened details"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let label = wait("distribution name", || named(hwnd, name))?;
+    activate_control(hwnd, &label, false)?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(600);
+    while std::time::Instant::now() < deadline {
+        assert!(button(hwnd, "Close").is_none(), "row name opened details");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let at = client_center(hwnd, &icon)?;
+    unsafe {
+        PostMessageW(Some(hwnd), WM_MOUSEMOVE, WPARAM(0), at)?;
+        for _ in 0..2 {
+            PostMessageW(Some(hwnd), WM_LBUTTONDOWN, WPARAM(1), at)?;
+            PostMessageW(Some(hwnd), WM_LBUTTONUP, WPARAM(0), at)?;
+        }
+    }
+    wait("double icon click opens details", || button(hwnd, "Close"))?;
+    Ok(())
+}
+
+fn records_panel(hwnd: HWND) -> Option<IUIAutomationElement> {
+    controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+        el.CurrentAutomationId()
+            .is_ok_and(|id| id == "timeline-records-dialog")
+    })
+}
+
+fn record_mode(hwnd: HWND, name: &str) -> Result<(), Error> {
+    let tab = wait("record mode tab", || {
+        controls(hwnd).ok()?.into_iter().rev().find(|el| unsafe {
+            el.CurrentControlType().ok() == Some(UIA_RadioButtonControlTypeId)
+                && el.CurrentName().is_ok_and(|n| n == name)
+        })
+    })?;
+    activate_control(hwnd, &tab, false)
+}
+
+pub(super) fn check_records(hwnd: HWND) -> Result<(), Error> {
+    let panel = wait("card timeline dialog", || records_panel(hwnd))?;
+    let before = unsafe { panel.CurrentBoundingRectangle()? };
+    wait("effective Studio group", || named(hwnd, "Studio · 45m"))?;
+    press(hwnd, "Title details · Studio")?;
+    wait("title popover", || {
+        names(hwnd)
+            .iter()
+            .any(|s| s == "Design fixture")
+            .then_some(())
+    })?;
+    key(hwnd, 27)?;
+    wait("only title popover closes", || {
+        (records_panel(hwnd).is_some() && !names(hwnd).iter().any(|s| s == "Design fixture"))
+            .then_some(())
+    })?;
+    record_mode(hwnd, "Web")?;
+    wait("empty web list", || {
+        named(
+            hwnd,
+            &patina_recorder::text(patina_recorder::Locale::EnUs, "history.emptyDay"),
+        )
+    })?;
+    let after = unsafe {
+        records_panel(hwnd)
+            .ok_or("records dialog disappeared")?
+            .CurrentBoundingRectangle()?
+    };
+    assert_eq!(
+        (before.right - before.left, before.bottom - before.top),
+        (after.right - after.left, after.bottom - after.top)
+    );
+    record_mode(hwnd, "Apps")?;
+    wait("app records restored", || named(hwnd, "Studio · 45m"))?;
+    click(hwnd, "Previous day")?;
+    wait("dialog date changed", || named(hwnd, "Studio · 30m"))?;
+    assert!(records_panel(hwnd).is_some());
+    click(hwnd, "Next day")?;
+    wait("dialog date restored", || named(hwnd, "Studio · 45m"))?;
+    Ok(())
+}
+
+#[test]
+#[ignore = "isolated Win32 desktop"]
+fn website_history_navigation() -> Result<(), Error> {
+    if !patina_test_desktop::run_case()? {
+        return Ok(());
+    }
+    let _com = ComApartment::init()?;
+    unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
+    let root = tempfile::tempdir()?;
+    let profile = root.path().join(patina_gpui::APP_ID);
+    fs::create_dir(&profile)?;
+    let db = profile.join("patina.db");
+    seed(&db)?;
+    let start = Local::now()
+        .date_naive()
+        .and_hms_opt(0, 0, 0)
+        .unwrap()
+        .and_local_timezone(Local)
+        .earliest()
+        .unwrap()
+        .timestamp_millis();
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    rt.block_on(async {
+        let mut c = SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&db)).await?;
+        sqlx::query("INSERT INTO web_activity_segments(browser_client_id,browser_kind,browser_exe_name,domain,normalized_domain,title,start_time,end_time,duration,created_at,updated_at) VALUES('fixture','chromium','chrome.exe','docs.example.com','docs.example.com','Web fixture',?,?,600000,?,?)")
+            .bind(start).bind(start+600000).bind(start).bind(start+600000).execute(&mut c).await?;
+        sqlx::query("INSERT INTO web_favicon_cache(normalized_domain,favicon_url,updated_at) VALUES('docs.example.com','data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGNQSDjwH4QZYAwASvQI/dnllI8AAAAASUVORK5CYII=',?)")
+            .bind(start).execute(&mut c).await?;
+        Ok::<_, Error>(())
+    })?;
+    let mut child = TestChild(
+        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .arg("--today")
+            .spawn()?,
+    );
+    let pid = child.0.id();
+    let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
+    let tray = wait("tray", || window(pid, w!("Patina GPUI")))?;
+    click(hwnd, "History")?;
+    assert!(
+        !controls(hwnd)?
+            .iter()
+            .any(|el| unsafe { el.CurrentControlType().ok() == Some(UIA_ComboBoxControlTypeId) })
+    );
+    select_segment(hwnd, "Web")?;
+    wait("website distribution", || named(hwnd, "example.com"))?;
+    wait("application summary is unchanged", || named(hwnd, "1h 10m"))?;
+    wait("website icon loaded", || {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentControlType().ok() == Some(UIA_ImageControlTypeId)
+                && el.CurrentName().is_ok_and(|n| n == "example.com")
+        })
+    })?;
+    click(hwnd, "Currently showing Apps; switch to Categories")?;
+    click(hwnd, "Currently showing Categories; switch to Web")?;
+    assert!(button(hwnd, "View details for Studio").is_none());
+    press(hwnd, "Open timeline zoom")?;
+    wait("website lanes", || named(hwnd, "Web lanes"))?;
+    wait("website lane duration", || named(hwnd, "example.com · 10m"))?;
+    key(hwnd, 27)?;
+    press(hwnd, "Open timeline")?;
+    wait("timeline cards", || records_panel(hwnd))?;
+    record_mode(hwnd, "Web")?;
+    wait("website record card", || named(hwnd, "example.com · 10m"))?;
+    press(hwnd, "Title details · example.com")?;
+    wait("website record title", || named(hwnd, "Web fixture"))?;
+    key(hwnd, 27)?;
+    wait("website title closes", || {
+        named(hwnd, "Web fixture").is_none().then_some(())
+    })?;
+    key(hwnd, 27)?;
+    wait("website records closes", || {
+        records_panel(hwnd).is_none().then_some(())
+    })?;
+    open_icon_details(hwnd, "example.com")?;
+    click(hwnd, "Title details")?;
+    wait("website detail title", || {
+        names(hwnd)
+            .iter()
+            .any(|n| n.contains("Web fixture"))
+            .then_some(())
+    })?;
+    key(hwnd, 27)?;
+    click(hwnd, "Previous day")?;
+    wait("empty website day", || {
+        button(hwnd, "View details for example.com")
+            .is_none()
+            .then_some(())
+    })?;
+    click(hwnd, "Next day")?;
+    wait("website date restored", || {
+        button(hwnd, "View details for example.com")
+    })?;
+    select_segment(hwnd, "Apps")?;
+    wait("application distribution restored", || {
+        button(hwnd, "View details for Studio")
+    })?;
+    assert!(button(hwnd, "View details for example.com").is_none());
+    command(tray, 2)?;
+    assert!(wait("exit", || child.0.try_wait().ok().flatten())?.success());
+    Ok(())
+}
+
+pub(super) fn check_zoom(hwnd: HWND) -> Result<(), Error> {
+    press(hwnd, "Open timeline zoom")?;
+    wait("app timeline lanes", || named(hwnd, "App lanes"))?;
+    click(hwnd, "Decrease by one hour")?;
+    wait("three hour viewport", || named(hwnd, "3.0 h"))?;
+    let slider = wait("zoom slider", || named(hwnd, "Time window in hours"))?;
+    let range: IUIAutomationRangeValuePattern =
+        unsafe { slider.GetCurrentPatternAs(UIA_RangeValuePatternId)? };
+    let point = unsafe { slider.CurrentBoundingRectangle()? };
+    let mut at = windows::Win32::Foundation::POINT {
+        x: point.right - 2,
+        y: (point.top + point.bottom) / 2,
+    };
+    unsafe {
+        windows::Win32::Graphics::Gdi::ScreenToClient(hwnd, &mut at).ok()?;
+        let pos = LPARAM(((at.y as isize) << 16) | at.x as isize);
+        PostMessageW(Some(hwnd), WM_MOUSEMOVE, WPARAM(0), pos)?;
+        PostMessageW(Some(hwnd), WM_LBUTTONDOWN, WPARAM(1), pos)?;
+        PostMessageW(Some(hwnd), WM_LBUTTONUP, WPARAM(0), pos)?;
+    }
+    wait("pointer moves slider", || named(hwnd, "24.0 h"))?;
+    unsafe {
+        slider.SetFocus()?;
+    }
+    key(hwnd, 36)?;
+    wait("slider home", || named(hwnd, "1.0 h"))?;
+    for _ in 0..35 {
+        key(hwnd, 39)?;
+    }
+    wait("slider updates window", || named(hwnd, "8.0 h"))?;
+    unsafe {
+        slider.SetFocus()?;
+    }
+    key(hwnd, 39)?;
+    wait("keyboard adjusts slider", || named(hwnd, "8.2 h"))?;
+    key(hwnd, 37)?;
+    wait("slider reset", || named(hwnd, "8.0 h"))?;
+    assert!((unsafe { range.CurrentValue()? } - 8.).abs() < 0.01);
+    click(hwnd, "Currently showing Apps; switch to Categories")?;
+    wait("category timeline lanes", || named(hwnd, "Category lanes"))?;
+    click(hwnd, "Currently showing Categories; switch to Web")?;
+    click(hwnd, "Currently showing Web; switch to Apps")?;
+    wait("app lanes restored", || named(hwnd, "App lanes"))?;
+    let track = wait("overview timeline", || {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentAutomationId()
+                .is_ok_and(|id| id == "zoom-overview")
+        })
+    })?;
+    unsafe {
+        track.SetFocus()?;
+    }
+    key(hwnd, 36)?;
+    wait("eight hour range", || named(hwnd, "00:00 – 08:00"))?;
+    key(hwnd, 39)?;
+    wait("keyboard pans window", || named(hwnd, "04:00 – 12:00"))?;
+    wait("empty visible range", || {
+        named(hwnd, "No records in this time range")
+    })?;
+    key(hwnd, 37)?;
+    wait("keyboard restores range", || named(hwnd, "00:00 – 08:00"))?;
+    wait("visible lane total", || named(hwnd, "Studio · 45m"))?;
+    key(hwnd, 27)?;
+    wait("zoom dismissed", || {
+        named(hwnd, "App lanes").is_none().then_some(())
+    })?;
+    key(hwnd, 13)?;
+    wait("zoom trigger regains focus", || named(hwnd, "App lanes"))?;
+    click(hwnd, "Close")?;
+    wait("close button dismisses zoom", || {
+        named(hwnd, "App lanes").is_none().then_some(())
+    })?;
+    Ok(())
+}

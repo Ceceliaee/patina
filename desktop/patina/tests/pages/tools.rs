@@ -17,8 +17,59 @@ fn picker(owner: HWND) -> Option<HWND> {
 }
 
 #[test]
-#[ignore = "Windows desktop, Mini and main-window lifecycle"]
+#[ignore = "isolated Win32 desktop"]
+fn preference_segments_persist_and_support_keyboard() -> Result<(), Error> {
+    if !patina_test_desktop::run_case()? {
+        return Ok(());
+    }
+    let _com = ComApartment::init()?;
+    let root = tempfile::tempdir()?;
+    let profile = root.path().join(patina_gpui::APP_ID);
+    fs::create_dir(&profile)?;
+    seed(&profile.join("patina.db"))?;
+    let mut app = TestChild(
+        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+            .arg("--today")
+            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .spawn()?,
+    );
+    let pid = app.0.id();
+    let hwnd = wait("main", || children::find(pid, |p| window(p, w!("Patina"))))?;
+    click(hwnd, "Tools")?;
+    click(hwnd, "Tools settings")?;
+    select_segment(hwnd, "Reminder dialog")?;
+    select_segment(hwnd, "Soft bell")?;
+    unsafe {
+        segment(hwnd, "Soft bell")
+            .ok_or("sound segment")?
+            .SetFocus()?;
+    }
+    key(hwnd, 39)?;
+    wait("keyboard selects clear tone", || {
+        selected_segment(hwnd, "Clear tone")
+    })?;
+    click(hwnd, "Tools settings")?;
+    wait("preferences closed", || {
+        segment(hwnd, "Clear tone").is_none().then_some(())
+    })?;
+    click(hwnd, "Tools settings")?;
+    wait("delivery persisted", || {
+        selected_segment(hwnd, "Reminder dialog")
+    })?;
+    wait("sound persisted", || selected_segment(hwnd, "Clear tone"))?;
+    select_segment(hwnd, "App notification")?;
+    select_segment(hwnd, "None")?;
+    command(window(pid, w!("Patina GPUI")).ok_or("tray")?, 2)?;
+    assert!(wait("exit", || app.0.try_wait().ok().flatten())?.success());
+    Ok(())
+}
+
+#[test]
+#[ignore = "isolated Win32 desktop"]
 fn mini_opens_the_selected_tool_and_keeps_dirty_settings() -> Result<(), Error> {
+    if !patina_test_desktop::run_case()? {
+        return Ok(());
+    }
     let _com = ComApartment::init()?;
     let root = tempfile::tempdir()?;
     let profile = root.path().join(patina_gpui::APP_ID);
@@ -28,7 +79,7 @@ fn mini_opens_the_selected_tool_and_keeps_dirty_settings() -> Result<(), Error> 
         .build()?;
     rt.block_on(async{
         let pool=patina_recorder::open_database(&profile.join("patina.db")).await?;
-        sqlx::query("INSERT OR REPLACE INTO settings(key,value) VALUES ('language','en-US'),('tracking_paused','1')").execute(&pool).await?;
+        sqlx::query("INSERT OR REPLACE INTO settings(key,value) VALUES ('language','en-US'),('show_tray_icon','0'),('tracking_paused','1')").execute(&pool).await?;
         let now=Utc::now().timestamp_millis();
         for (name,at) in [("Review",now+3_600_000),("Tomorrow",now+100_000_000)]{
             sqlx::query("INSERT INTO tool_reminders(label,scheduled_at,created_at,status) VALUES(?,?,?,'scheduled')").bind(name).bind(at).bind(now).execute(&pool).await?;
@@ -98,8 +149,9 @@ fn mini_opens_the_selected_tool_and_keeps_dirty_settings() -> Result<(), Error> 
 }
 
 #[test]
-#[ignore = "Windows desktop, native file picker, themes and DPI compatibility modes"]
+#[ignore = "dedicated Windows session: file picker and native foreground focus"]
 fn navigation_and_consent_keyboard() -> Result<(), Error> {
+    patina_test_desktop::dedicated_session()?;
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let mut observed = std::collections::BTreeSet::new();
@@ -262,8 +314,11 @@ fn pick_file(hwnd: HWND, path: &Path) -> Result<(), Error> {
 }
 
 #[test]
-#[ignore = "Windows desktop and isolated experimental profile"]
+#[ignore = "isolated Win32 desktop"]
 fn bundled_tools_can_be_removed_independently() -> Result<(), Error> {
+    if !patina_test_desktop::run_case()? {
+        return Ok(());
+    }
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
@@ -275,7 +330,7 @@ fn bundled_tools_can_be_removed_independently() -> Result<(), Error> {
         .build()?;
     rt.block_on(async {
         let pool=patina_recorder::open_database(&db).await?;
-        sqlx::query("INSERT OR REPLACE INTO settings(key,value) VALUES ('language','en-US'),('tracking_paused','1')")
+        sqlx::query("INSERT OR REPLACE INTO settings(key,value) VALUES ('language','en-US'),('show_tray_icon','0'),('tracking_paused','1')")
             .execute(&pool).await?;
         pool.close().await;
         Ok::<_,Error>(())
@@ -352,14 +407,18 @@ fn bundled_tools_can_be_removed_independently() -> Result<(), Error> {
 }
 
 #[test]
-#[ignore = "Windows desktop, real tray and notification windows"]
+#[ignore = "dedicated Windows session: passive notification foreground"]
 fn timed_reminder_survives_window_release() -> Result<(), Error> {
+    patina_test_desktop::dedicated_session()?;
     verify_reminder_delivery(false)
 }
 
 #[test]
-#[ignore = "Windows desktop and in-window notification"]
+#[ignore = "isolated Win32 desktop"]
 fn in_window_reminder_uses_the_selected_delivery() -> Result<(), Error> {
+    if !patina_test_desktop::run_case()? {
+        return Ok(());
+    }
     verify_reminder_delivery(true)
 }
 
@@ -375,7 +434,7 @@ fn verify_reminder_delivery(dialog: bool) -> Result<(), Error> {
     let pool = rt.block_on(patina_recorder::open_database(&db))?;
     let deadline = Utc::now().timestamp_millis() + 12_000;
     rt.block_on(async{
-        sqlx::query("INSERT OR REPLACE INTO settings(key,value) VALUES ('language','en-US'),('tracking_paused','1'),('tools_notification_preferences',?)")
+        sqlx::query("INSERT OR REPLACE INTO settings(key,value) VALUES ('language','en-US'),('show_tray_icon','0'),('tracking_paused','1'),('tools_notification_preferences',?)")
             .bind(serde_json::json!({"delivery":if dialog{"dialog"}else{"notification"},"sound":"none"}).to_string()).execute(&pool).await?;
         sqlx::query("INSERT INTO tool_reminders(label,scheduled_at,created_at,status) VALUES('Tray deadline',?,?,'scheduled')").bind(deadline).bind(deadline-60000).execute(&pool).await?;
         Ok::<_,Error>(())
@@ -436,8 +495,9 @@ fn verify_reminder_delivery(dialog: bool) -> Result<(), Error> {
 }
 
 #[test]
-#[ignore = "four 30-second Windows process-tree samples"]
+#[ignore = "dedicated Windows session: tray resource samples"]
 fn tool_tray_resources() -> Result<(), Error> {
+    patina_test_desktop::dedicated_session()?;
     use windows::Win32::System::Threading::{
         GetProcessHandleCount, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
     };
@@ -559,8 +619,11 @@ fn tool_tray_resources() -> Result<(), Error> {
 }
 
 #[test]
-#[ignore = "Windows desktop, one real one-minute focus session"]
+#[ignore = "isolated Win32 desktop and one-minute timer"]
 fn focus_completes_in_tray_and_starts_break_from_notice() -> Result<(), Error> {
+    if !patina_test_desktop::run_case()? {
+        return Ok(());
+    }
     let _com = ComApartment::init()?;
     let root = tempfile::tempdir()?;
     let profile = root.path().join(patina_gpui::APP_ID);
@@ -569,7 +632,7 @@ fn focus_completes_in_tray_and_starts_break_from_notice() -> Result<(), Error> {
         .enable_all()
         .build()?;
     let pool = rt.block_on(patina_recorder::open_database(&profile.join("patina.db")))?;
-    rt.block_on(sqlx::query("INSERT OR REPLACE INTO settings(key,value) VALUES ('language','en-US'),('tracking_paused','1'),('tools_notification_preferences','{\"delivery\":\"notification\",\"sound\":\"none\"}')").execute(&pool))?;
+    rt.block_on(sqlx::query("INSERT OR REPLACE INTO settings(key,value) VALUES ('language','en-US'),('show_tray_icon','0'),('tracking_paused','1'),('tools_notification_preferences','{\"delivery\":\"notification\",\"sound\":\"none\"}')").execute(&pool))?;
     let mut app = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
@@ -581,17 +644,24 @@ fn focus_completes_in_tray_and_starts_break_from_notice() -> Result<(), Error> {
     let hwnd = wait("main", main)?;
     click(hwnd, "Tools")?;
     click(hwnd, "Focus")?;
-    let input = wait("focus duration", || {
-        controls(hwnd).ok()?.into_iter().find(|e| unsafe {
-            e.CurrentControlType().ok() == Some(UIA_EditControlTypeId)
-                && e.CurrentName().is_ok_and(|s| s == "Focus duration")
-        })
+    wait("focus duration set to one minute", || {
+        let field = controls(hwnd).ok()?.into_iter().find_map(|e| unsafe {
+            if e.CurrentControlType().ok()? != UIA_EditControlTypeId
+                || e.CurrentName().ok()? != "Focus duration"
+            {
+                return None;
+            }
+            e.GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId)
+                .ok()
+        })?;
+        unsafe {
+            if field.CurrentValue().ok()? == "1" {
+                return Some(());
+            }
+            field.SetValue(&BSTR::from("1")).ok()?;
+        }
+        None
     })?;
-    let field: IUIAutomationValuePattern =
-        unsafe { input.GetCurrentPatternAs(UIA_ValuePatternId)? };
-    unsafe {
-        field.SetValue(&BSTR::from("1"))?;
-    }
     press(hwnd, "New focus session")?;
     click(hwnd, "Start")?;
     wait("running timer", || button(hwnd, "Pause"))?;
@@ -632,8 +702,11 @@ fn focus_completes_in_tray_and_starts_break_from_notice() -> Result<(), Error> {
 }
 
 #[test]
-#[ignore = "Windows desktop and two independently built counter packages"]
+#[ignore = "isolated Win32 desktop and compiled counter packages"]
 fn install_update_uninstall_counter() -> Result<(), Error> {
+    if !patina_test_desktop::run_case()? {
+        return Ok(());
+    }
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
@@ -641,7 +714,7 @@ fn install_update_uninstall_counter() -> Result<(), Error> {
     fs::create_dir(&profile)?;
     tokio::runtime::Builder::new_current_thread().enable_all().build()?.block_on(async {
         let pool = patina_recorder::open_database(&profile.join("patina.db")).await?;
-        sqlx::query("INSERT OR REPLACE INTO settings(key,value) VALUES ('language','en-US'),('tracking_paused','1')").execute(&pool).await?;
+        sqlx::query("INSERT OR REPLACE INTO settings(key,value) VALUES ('language','en-US'),('show_tray_icon','0'),('tracking_paused','1')").execute(&pool).await?;
         pool.close().await;
         Ok::<_, Error>(())
     })?;
