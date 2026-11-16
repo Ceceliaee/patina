@@ -46,6 +46,7 @@ dependencies = [
  "hashbrown",
  "once_cell",
  "parking_lot",
+ "patina-test-desktop",
  "scopeguard",
  "static_assertions",
  "windows",
@@ -834,6 +835,13 @@ dependencies = [
  "redox_syscall 0.5.13",
  "smallvec",
  "windows-targets 0.52.6",
+]
+
+[[package]]
+name = "patina-test-desktop"
+version = "0.1.0"
+dependencies = [
+ "windows",
 ]
 
 [[package]]

@@ -12,18 +12,23 @@ gpui-kit.workspace = true
 quietpro = { path = "../quietpro" }
 patina-tool-host = { path = "../tool-host" }
 patina-recorder = { path = "../recorder" }
+patina-updater = { path = "../updater" }
 async-channel = "2"
 raw-window-handle = "0.6"
+getrandom = "0.3"
+winreg = "0.56"
+sha2 = "0.10"
 windows = { version = "0.62.2", features = [
-  "Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_Shell",
-  "Win32_System_JobObjects", "Web_Http",
+  "Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_Shell", "Win32_Globalization",
+  "Win32_System_JobObjects", "Web_Http", "Storage_Streams",
   "Win32_UI_WindowsAndMessaging", "Win32_UI_HiDpi", "Win32_System_LibraryLoader", "Win32_System_RemoteDesktop",
 ] }
 
 chrono = "0.4"
 
 [dev-dependencies]
-sha2 = "0.10"
+patina-test-desktop = { path = "../test-support" }
+tungstenite = "0.28"
 windows = { version = "0.62.2", features = [
   "Win32_System_Com", "Win32_UI_Accessibility", "Win32_Graphics_Direct3D11",
   "Win32_Graphics_Direct3D", "Win32_Graphics_Dxgi_Common", "Win32_System_Diagnostics_ProcessSnapshotting",

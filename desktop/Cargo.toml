@@ -1,5 +1,5 @@
 [workspace]
-members = ["patina", "quietpro", "recorder", "plugin-sdk", "tool-host"]
+members = ["patina", "quietpro", "recorder", "plugin-sdk", "tool-host", "test-support", "updater"]
 exclude = ["vendor/accesskit_windows", "plugins/counter"]
 resolver = "3"
 

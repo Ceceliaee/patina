@@ -11,6 +11,20 @@ test = false
 doctest = false
 
 [dependencies]
+same-file = "1"
+percent-encoding = "2"
+tokio-util = { version = "0.7", features = ["io"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
+quick-xml = "0.41.0"
+tempfile = "3.27.0"
+zip = { version = "9.0.5", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+arrow = { version = "59.3", default-features = false, features = ["ipc"] }
+parquet = { version = "59.3", default-features = false, features = ["arrow"] }
+csv = "1.3"
+tokio-tungstenite = { version = "0.28", features = ["rustls-tls-native-roots"] }
+# tokio-tungstenite leaves the TLS crypto provider to the host.
+rustls = { version = "0.23", default-features = false, features = ["ring", "tls12"] }
+crc32fast = "1.4"
 sha2="0.10"
 base64 = "0.22.1"
 chrono = "0.4.44"
@@ -23,13 +37,13 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 libsqlite3-sys = { version = "0.39.1", default-features = false }
 sqlx.workspace = true
-tokio = { version = "1", features = ["rt-multi-thread", "time", "sync", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "time", "sync", "macros", "net", "io-util"] }
 url = "2"
 uuid = { version = "1", features = ["v4"] }
 windows-core = "0.62.2"
 windows = { version = "0.62.2", features = [
   "Media", "Media_Control", "Win32_Foundation", "Win32_Graphics_Gdi",
-  "Win32_Media_Audio", "Win32_Security", "Win32_Storage_FileSystem",
+  "Win32_Media_Audio", "Win32_Security", "Win32_Security_Credentials", "Win32_Storage_FileSystem",
   "Win32_Storage_Packaging_Appx", "Win32_System_Com", "Win32_System_Com_StructuredStorage",
   "Win32_System_Diagnostics_Debug", "Win32_System_Diagnostics_ToolHelp", "Win32_System_JobObjects",
   "Win32_System_Kernel", "Win32_System_LibraryLoader", "Win32_System_Memory",
