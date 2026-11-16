@@ -50,10 +50,7 @@ fn convert_tai_text(csv_text: &str) -> Result<TaiCsvConversion, String> {
     }
 
     let mut conversion = TaiCsvConversion::default();
-    let mut data_line = 1usize;
-
-    for result in reader.records() {
-        data_line += 1;
+    for (data_line, result) in (2usize..).zip(reader.records()) {
         let record = match result {
             Ok(record) => record,
             Err(_) => {
@@ -238,6 +235,15 @@ mod tests {
         assert_eq!(conversion.rows_parsed, 4);
         assert_eq!(conversion.rows.len(), 1);
         assert_eq!(conversion.skipped.len(), 3);
+        assert_eq!(
+            conversion
+                .skipped
+                .iter()
+                .map(|row| row.line)
+                .collect::<Vec<_>>(),
+            [2, 3, 4]
+        );
+        assert_eq!(conversion.rows[0].source_line, 5);
         assert_eq!(conversion.rows[0].exe_name, "c.exe");
         assert_eq!(conversion.rows[0].category, None);
     }

@@ -5,21 +5,19 @@ use crate::data::import::model::{
     MAX_PREVIEW_ERRORS,
 };
 use crate::data::repositories::import_batches;
-use crate::data::sqlite_pool::wait_for_sqlite_pool;
+
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use tauri::{AppHandle, Runtime};
 
-pub async fn preview_canonical_import<R: Runtime>(
-    app: &AppHandle<R>,
+pub async fn preview_in_pool(
+    pool: &sqlx::SqlitePool,
     file_path: String,
 ) -> Result<ImportPreviewDto, String> {
     let path = validate_canonical_path(&file_path)?;
     let (bytes, file_fingerprint, parsed) = load_canonical_file(&path).await?;
     drop(bytes);
-    let pool = wait_for_sqlite_pool(app).await?;
-    let mut known_fingerprints = import_batches::load_fingerprints(&pool).await?;
+    let mut known_fingerprints = import_batches::load_fingerprints(pool).await?;
     let mut duplicate_records = 0usize;
     for record in &parsed.records {
         if !known_fingerprints.insert(record_fingerprint(record)) {
@@ -124,7 +122,7 @@ fn build_preview_dto(
     }
 }
 
-fn collect_category_candidates(
+pub(crate) fn collect_category_candidates(
     records: &[CanonicalImportRecord],
 ) -> Vec<ImportCategoryCandidateDto> {
     let mut candidates = BTreeMap::<String, BTreeMap<String, String>>::new();

@@ -7,13 +7,11 @@ use crate::data::backup::records::{load_backup_records, RestoreStrategy};
 use crate::data::repositories;
 use crate::data::sqlite_pool::{
     checkpoint_sqlite_pool, open_single_connection_sqlite_pool, prepare_pool_schema,
-    replace_product_db_from_candidate, wait_for_sqlite_pool,
 };
 use sqlx::{Sqlite, Transaction};
 use std::path::Path;
-use tauri::AppHandle;
 
-pub(in crate::data::backup) async fn prepare_snapshot_backup(
+pub(crate) async fn prepare_snapshot_backup(
     backup_path: &Path,
     strategy: RestoreStrategy,
 ) -> Result<ExtractedSnapshot, String> {
@@ -63,24 +61,6 @@ pub(in crate::data::backup) async fn prepare_snapshot_backup(
     Ok(extracted)
 }
 
-pub(in crate::data::backup) async fn restore_snapshot_backup(
-    extracted: ExtractedSnapshot,
-    app: &AppHandle,
-    strategy: RestoreStrategy,
-) -> Result<(), String> {
-    match strategy {
-        RestoreStrategy::Replace => {
-            replace_product_db_from_candidate(app, &extracted.db_path).await
-        }
-        RestoreStrategy::Merge => {
-            let pool = wait_for_sqlite_pool(app).await?;
-            let candidate_pool =
-                open_single_connection_sqlite_pool(&extracted.db_path, false).await?;
-            merge_snapshot_backup(candidate_pool, &pool).await
-        }
-    }
-}
-
 pub(super) async fn prepare_snapshot_restore(
     candidate_pool: &sqlx::SqlitePool,
     exported_at_ms: u64,
@@ -118,7 +98,7 @@ pub(super) async fn prepare_snapshot_restore(
     checkpoint_sqlite_pool(candidate_pool).await
 }
 
-pub(super) async fn merge_snapshot_backup(
+pub(crate) async fn merge_snapshot_backup(
     candidate_pool: sqlx::SqlitePool,
     pool: &sqlx::SqlitePool,
 ) -> Result<(), String> {

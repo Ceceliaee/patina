@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 const MAX_BACKUP_FILE_BYTES: u64 = snapshot::MAX_DATABASE_BYTES + 2 * 1024 * 1024;
 
-pub(super) fn prepare_snapshot_source(
+pub(crate) fn prepare_snapshot_source(
     path: &str,
     expected_hash: Option<&str>,
 ) -> Result<PreparedBackupSource, BackupError> {
@@ -20,10 +20,10 @@ pub(super) fn prepare_snapshot_source(
     Ok(source)
 }
 
-pub(super) struct PreparedBackupSource {
+pub(crate) struct PreparedBackupSource {
     work_dir: PathBuf,
-    pub(super) path: PathBuf,
-    pub(super) content_sha256: String,
+    pub(crate) path: PathBuf,
+    pub(crate) content_sha256: String,
 }
 
 impl Drop for PreparedBackupSource {

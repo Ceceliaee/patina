@@ -1,7 +1,5 @@
 use crate::data::schema;
-use crate::data::sqlite_pool::{
-    acquire_sqlite_maintenance, expected_migration_metadata, wait_for_sqlite_pool,
-};
+use crate::data::sqlite_pool::expected_migration_metadata;
 use crate::domain::backup::{BackupPreview, CURRENT_BACKUP_VERSION};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -12,7 +10,7 @@ use std::fs::{self, File};
 use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use tauri::AppHandle;
+
 use zip::read::ZipReadOptions;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
@@ -23,7 +21,7 @@ mod restore;
 #[cfg(test)]
 mod widget_retirement_tests;
 
-pub(super) use restore::{prepare_snapshot_backup, restore_snapshot_backup};
+pub(crate) use restore::{merge_snapshot_backup, prepare_snapshot_backup};
 
 pub(super) const SNAPSHOT_FORMAT: &str = "PatinaSQLiteSnapshot-1";
 const MANIFEST_ENTRY: &str = "manifest.json";
@@ -32,22 +30,6 @@ const DATABASE_ENTRY: &str = "database/patina.db";
 const MAX_METADATA_BYTES: u64 = 256 * 1024;
 pub(crate) const MAX_DATABASE_BYTES: u64 = 512 * 1024 * 1024;
 static UNIQUE_COUNTER: AtomicU64 = AtomicU64::new(0);
-
-pub(crate) async fn export_scheduled_backup_create_new(
-    app: &AppHandle,
-    target_path: &Path,
-) -> Result<(), String> {
-    let pool = wait_for_sqlite_pool(app).await?;
-    let _snapshot = super::BACKUP_SNAPSHOT_LOCK.lock().await;
-    let _maintenance = acquire_sqlite_maintenance().await;
-    write_snapshot_archive_create_new(
-        &pool,
-        &[target_path.to_path_buf()],
-        env!("CARGO_PKG_VERSION"),
-    )
-    .await?;
-    Ok(())
-}
 
 pub(crate) async fn validate_scheduled_snapshot(path: &Path) -> Result<(String, u64), String> {
     let extracted = extract_snapshot_archive(path, false).await?;
@@ -123,11 +105,11 @@ struct SnapshotChecksums {
     files: BTreeMap<String, String>,
 }
 
-pub(super) struct ExtractedSnapshot {
+pub(crate) struct ExtractedSnapshot {
     database_sha256: String,
     work_dir: PathBuf,
-    pub(super) db_path: PathBuf,
-    pub(super) preview: BackupPreview,
+    pub(crate) db_path: PathBuf,
+    pub(crate) preview: BackupPreview,
 }
 
 impl Drop for ExtractedSnapshot {
@@ -597,7 +579,7 @@ fn write_zip_entry<W: Write + std::io::Seek>(
         .map_err(|error| format!("failed to write snapshot archive entry `{name}`: {error}"))
 }
 
-pub(super) async fn write_snapshot_archive(
+pub(crate) async fn write_snapshot_archive(
     pool: &Pool<Sqlite>,
     target: &Path,
     app_version: &str,
@@ -607,7 +589,7 @@ pub(super) async fn write_snapshot_archive(
         .map(|(_, preview)| preview)
 }
 
-pub(super) async fn write_snapshot_archive_create_new(
+pub(crate) async fn write_snapshot_archive_create_new(
     pool: &Pool<Sqlite>,
     targets: &[PathBuf],
     app_version: &str,

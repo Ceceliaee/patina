@@ -17,7 +17,10 @@ use paths::resolve_backup_path;
 pub use paths::{pick_backup_file, pick_backup_save_file};
 use prepared_source::{prepare_snapshot_source, PreparedBackupSource};
 pub use records::RestoreStrategy;
-pub(crate) use snapshot::{export_scheduled_backup_create_new, validate_scheduled_snapshot};
+pub(crate) use snapshot::validate_scheduled_snapshot;
+
+mod scheduled;
+pub(crate) use scheduled::export_scheduled_backup_create_new;
 
 pub(crate) struct PreparedBackupRestore {
     _source: PreparedBackupSource,
@@ -54,7 +57,24 @@ pub(crate) async fn restore_prepared_backup(
     app: &AppHandle,
 ) -> Result<(), String> {
     let _maintenance = acquire_sqlite_maintenance().await;
-    snapshot::restore_snapshot_backup(prepared.snapshot, app, prepared.strategy).await
+    match prepared.strategy {
+        RestoreStrategy::Replace => {
+            crate::data::sqlite_pool::replace_product_db_from_candidate(
+                app,
+                &prepared.snapshot.db_path,
+            )
+            .await
+        }
+        RestoreStrategy::Merge => {
+            let pool = wait_for_sqlite_pool(app).await?;
+            let source = crate::data::sqlite_pool::open_single_connection_sqlite_pool(
+                &prepared.snapshot.db_path,
+                false,
+            )
+            .await?;
+            snapshot::merge_snapshot_backup(source, &pool).await
+        }
+    }
 }
 
 pub async fn preview_backup(path: String) -> Result<BackupPreview, BackupError> {
