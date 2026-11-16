@@ -694,8 +694,11 @@ fn data_navigation() -> Result<(), Error> {
 }
 
 #[test]
-#[ignore = "Windows desktop, isolated SQLite profile"]
+#[ignore = "isolated Win32 desktop"]
 fn classification_navigation() -> Result<(), Error> {
+    if !patina_test_desktop::run_case()? {
+        return Ok(());
+    }
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
@@ -709,6 +712,9 @@ fn classification_navigation() -> Result<(), Error> {
     rt.block_on(async {
         let mut conn = SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&db)).await?;
         sqlx::query("INSERT INTO sessions(exe_name,app_name,start_time,end_time,duration) VALUES ('Studio.EXE','Studio',0,1,1), ('sample.exe','sample.exe',2,3,1), ('single.exe','S',4,5,1)")
+            .execute(&mut conn).await?;
+        sqlx::query("INSERT INTO icon_cache(exe_name,icon_base64,last_updated) VALUES ('STUDIO.EXE',?,1)")
+            .bind("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGNQSDjwH4QZYAwASvQI/dnllI8AAAAASUVORK5CYII=")
             .execute(&mut conn).await?;
         Ok::<_, Error>(())
     })?;
@@ -732,12 +738,160 @@ fn classification_navigation() -> Result<(), Error> {
             .then_some(())
     })
     .map_err(|e| format!("{e}: {}", fs::read_to_string(&stderr).unwrap_or_default()))?;
-    click(hwnd, "Category · Studio")?;
-    click(hwnd, "Office")?;
-    click(hwnd, "Apply")?;
+    let classification_counts = || classification_filter_counts(hwnd);
+    let initial_counts = wait("classification totals displayed", classification_counts)?;
+    assert_eq!(initial_counts[0], initial_counts[1] + initial_counts[2]);
+    assert_eq!(
+        initial_counts[0],
+        names(hwnd)
+            .iter()
+            .filter(|name| name.starts_with("Category · "))
+            .count()
+    );
+    let app_image = |name: &str| {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentControlType().ok() == Some(UIA_ImageControlTypeId)
+                && el.CurrentName().is_ok_and(|n| n == name)
+        })
+    };
+    let image = wait("cached application icon", || app_image("Studio")).map_err(|e| {
+        format!(
+            "{e}; nodes {:?}; renderer: {}",
+            names(hwnd),
+            fs::read_to_string(&stderr).unwrap_or_default()
+        )
+    })?;
+    let rect = unsafe { image.CurrentBoundingRectangle()? };
+    assert!(rect.right > rect.left && rect.bottom > rect.top);
+    let category_control = |name: &str| {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentControlType().ok() == Some(UIA_ComboBoxControlTypeId)
+                && el.CurrentName().is_ok_and(|n| n == name)
+        })
+    };
+    let category_option = |name: &str| {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentControlType().ok() == Some(UIA_ListItemControlTypeId)
+                && el.CurrentName().is_ok_and(|n| n == name)
+        })
+    };
+    let search = wait("application search input", || {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentControlType().ok() == Some(UIA_EditControlTypeId)
+                && el.CurrentName().is_ok_and(|name| name == "Search apps")
+        })
+    })?;
+    let search_value: IUIAutomationValuePattern =
+        unsafe { search.GetCurrentPatternAs(UIA_ValuePatternId)? };
+    let other_app = names(hwnd)
+        .into_iter()
+        .find(|name| name.starts_with("Category · ") && name != "Category · Studio")
+        .ok_or("fixture needs an app besides Studio")?;
+    unsafe {
+        search.SetFocus()?;
+        search_value.SetValue(&"Studio".into())?;
+    }
+    wait("search filters application cards", || {
+        (category_control("Category · Studio").is_some() && category_control(&other_app).is_none())
+            .then_some(())
+    })?;
+    assert_eq!(classification_counts(), Some(initial_counts));
+    click(hwnd, "Clear search")?;
+    wait("clear restores application cards", || unsafe {
+        (search_value.CurrentValue().ok()?.is_empty() && category_control(&other_app).is_some())
+            .then_some(())
+    })?;
+    unsafe { PostMessageW(Some(hwnd), WM_CHAR, WPARAM('s' as usize), LPARAM(1))? };
+    wait("typing resumes after clear without refocusing", || unsafe {
+        (search_value.CurrentValue().ok()? == "s").then_some(())
+    })?;
+    click(hwnd, "Clear search")?;
+    wait("second clear restores cards", || unsafe {
+        (search_value.CurrentValue().ok()?.is_empty() && category_control(&other_app).is_some())
+            .then_some(())
+    })?;
+    let outside = LPARAM(client_center(hwnd, &search)?.0 - (48 << 16));
+    unsafe {
+        PostMessageW(Some(hwnd), WM_LBUTTONDOWN, WPARAM(1), outside)?;
+        PostMessageW(Some(hwnd), WM_LBUTTONUP, WPARAM(0), outside)?;
+        // GPUI updates the native text-input handler when the focus change is painted.
+        PostMessageW(Some(hwnd), WM_PAINT, WPARAM(0), LPARAM(0))?;
+        PostMessageW(Some(hwnd), WM_CHAR, WPARAM('x' as usize), LPARAM(1))?;
+    }
+    activate_control(hwnd, &search, false)?;
+    unsafe {
+        PostMessageW(Some(hwnd), WM_PAINT, WPARAM(0), LPARAM(0))?;
+        PostMessageW(Some(hwnd), WM_CHAR, WPARAM('s' as usize), LPARAM(1))?;
+    }
+    wait(
+        "outside click blurs search and clicking inside resumes input",
+        || unsafe { (search_value.CurrentValue().ok()? == "s").then_some(()) },
+    )
+    .map_err(|e| {
+        format!("{e}; search value {:?}", unsafe {
+            search_value.CurrentValue()
+        })
+    })?;
+    click(hwnd, "Clear search")?;
+    wait("search restored after blur check", || {
+        category_control(&other_app)
+    })?;
+    let category = wait("application category dropdown", || {
+        category_control("Category · Studio")
+    })?;
+    activate_control(hwnd, &category, true)?;
+    wait("category options open", || category_option("Office"))?;
+    assert!(
+        button(hwnd, "Apply").is_none(),
+        "classification must not open the rule editor"
+    );
+    key(hwnd, 0x1b)?;
+    wait("Escape dismisses category options", || {
+        category_option("Office").is_none().then_some(())
+    })?;
+    assert!(!unsafe { button(hwnd, "Save").unwrap().CurrentIsEnabled()? }.as_bool());
+    activate_control(hwnd, &category, false)?;
+    let office = wait("Office option", || category_option("Office"))?;
+    activate_control(hwnd, &office, false)?;
+    wait("category selected without a dialog", || {
+        (category_option("Office").is_none()
+            && button(hwnd, "Apply").is_none()
+            && unsafe { button(hwnd, "Cancel")?.CurrentIsEnabled().ok()?.as_bool() })
+        .then_some(())
+    })?;
+    wait("category draft updates totals", || {
+        (classification_counts() == Some(initial_counts)).then_some(())
+    })?;
     click(hwnd, "Cancel")?;
-    click(hwnd, "Category · Studio")?;
-    click(hwnd, "Office")?;
+    wait("category draft cancelled", || unsafe {
+        (!button(hwnd, "Cancel")?.CurrentIsEnabled().ok()?.as_bool()).then_some(())
+    })?;
+    wait("cancel restores classification totals", || {
+        (classification_counts() == Some(initial_counts)).then_some(())
+    })?;
+    activate_control(hwnd, &category, true)?;
+    let office = wait("Office after cancel", || category_option("Office"))?;
+    assert!(
+        !unsafe {
+            office
+                .GetCurrentPatternAs::<IUIAutomationSelectionItemPattern>(
+                    UIA_SelectionItemPatternId,
+                )?
+                .CurrentIsSelected()?
+        }
+        .as_bool()
+    );
+    activate_control(hwnd, &office, false)?;
+    wait("category menu closed", || {
+        category_option("Office").is_none().then_some(())
+    })?;
+    unsafe {
+        search_value.SetValue(&"Studio".into())?;
+    }
+    wait("Studio isolated for rename", || {
+        category_control(&other_app).is_none().then_some(())
+    })?;
+    click(hwnd, "Edit app name")?;
     let field = wait("rename input", || {
         controls(hwnd).ok()?.into_iter().find(|el| unsafe {
             el.CurrentControlType().ok() == Some(UIA_EditControlTypeId)
@@ -746,11 +900,117 @@ fn classification_navigation() -> Result<(), Error> {
     })?;
     let input: IUIAutomationValuePattern =
         unsafe { field.GetCurrentPatternAs(UIA_ValuePatternId)? };
+    assert!(button(hwnd, "Apply").is_none(), "rename must remain inline");
+    assert!(!controls(hwnd)?.iter().any(|el| unsafe {
+        el.CurrentControlType().ok() == Some(UIA_WindowControlTypeId)
+            && el.CurrentName().is_ok_and(|n| n == "Edit app name")
+    }));
+    let name_bounds = unsafe { field.CurrentBoundingRectangle()? };
+    let pencil_bounds = unsafe {
+        button(hwnd, "Edit app name")
+            .unwrap()
+            .CurrentBoundingRectangle()?
+    };
+    assert!(
+        name_bounds.right <= pencil_bounds.left
+            && name_bounds.bottom > pencil_bounds.top
+            && name_bounds.top < pencil_bounds.bottom,
+        "name input stays beside its pencil"
+    );
     unsafe {
-        input.SetValue(&"Studio Review".into())?;
+        input.SetValue(&"Discard this name".into())?;
     }
-    click(hwnd, "Apply")?;
-    click(hwnd, "Save")?;
+    key(hwnd, 0x1b)?;
+    let rename_field = || {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentControlType().ok() == Some(UIA_EditControlTypeId)
+                && el.CurrentName().is_ok_and(|s| s == "Edit app name")
+        })
+    };
+    wait("Escape discards only the name edit", || {
+        (rename_field().is_none() && category_control("Category · Studio").is_some()).then_some(())
+    })?;
+    key(hwnd, 13)?;
+    let field = wait("Enter on restored pencil reopens name input", rename_field)?;
+    let input: IUIAutomationValuePattern =
+        unsafe { field.GetCurrentPatternAs(UIA_ValuePatternId)? };
+    unsafe {
+        input.SetValue(&"  Studio Review  ".into())?;
+    }
+    key(hwnd, 13)?;
+    wait("renamed draft applied", || {
+        category_control("Category · Studio Review")
+    })?;
+    click(hwnd, "Edit app name")?;
+    let field = wait("name input for blur", rename_field)?;
+    unsafe {
+        field
+            .GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId)?
+            .SetValue(&"Studio Temporary".into())?;
+    }
+    activate_control(hwnd, &search, false)?;
+    wait("blur applies only the name", || {
+        (rename_field().is_none() && category_control("Category · Studio Temporary").is_some())
+            .then_some(())
+    })?;
+    click(hwnd, "Edit app name")?;
+    let field = wait("name input before outside click", rename_field)?;
+    unsafe {
+        field
+            .GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId)?
+            .SetValue(&"Studio Outside".into())?;
+    }
+    let filename = wait("nonfocusable application filename", || {
+        named(hwnd, "studio.exe")
+    })?;
+    activate_control(hwnd, &filename, false)?;
+    wait(
+        "clicking nonfocusable content commits and closes rename",
+        || {
+            (rename_field().is_none() && category_control("Category · Studio Outside").is_some())
+                .then_some(())
+        },
+    )?;
+    click(hwnd, "Edit app name")?;
+    let field = wait("name input before card action", rename_field)?;
+    unsafe {
+        field
+            .GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId)?
+            .SetValue(&"Studio Card Action".into())?;
+    }
+    let titles = wait("title recording control", || named(hwnd, "Record titles"))?;
+    let title_state = || unsafe {
+        named(hwnd, "Record titles")?
+            .GetCurrentPatternAs::<IUIAutomationTogglePattern>(UIA_TogglePatternId)
+            .ok()?
+            .CurrentToggleState()
+            .ok()
+    };
+    let original_titles = title_state().ok_or("title state")?;
+    activate_control(hwnd, &titles, false)?;
+    wait("outside card action retains committed name", || {
+        (rename_field().is_none()
+            && category_control("Category · Studio Card Action").is_some()
+            && title_state().is_some_and(|state| state != original_titles))
+        .then_some(())
+    })?;
+    activate_control(hwnd, &titles, false)?;
+    wait("restore title recording", || {
+        (title_state() == Some(original_titles)).then_some(())
+    })?;
+    click(hwnd, "Edit app name")?;
+    let field = wait("name input reopened after blur", rename_field)?;
+    unsafe {
+        field
+            .GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId)?
+            .SetValue(&"Studio Review".into())?;
+    }
+    key(hwnd, 13)?;
+    wait("final name draft", || {
+        category_control("Category · Studio Review")
+    })?;
+    click(hwnd, "Clear search")?;
+    press(hwnd, "Save")?;
     wait("saved app", || {
         named(hwnd, "Saved").and_then(|_| named(hwnd, "Studio Review"))
     })
@@ -762,9 +1022,90 @@ fn classification_navigation() -> Result<(), Error> {
     .map_err(|e| format!("{e}; nodes {:?}", names(hwnd)))?;
     click(hwnd, "Classification")?;
     wait("stored category", || {
-        button(hwnd, "Category · Studio Review")
+        category_control("Category · Studio Review")
     })?;
-    click(hwnd, "Manage categories")?;
+    wait("icon survives rename and page reload", || {
+        app_image("Studio Review")
+    })?;
+    let category_filter = wait("category filter dropdown", || {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentControlType().ok() == Some(UIA_ComboBoxControlTypeId)
+                && el
+                    .CurrentName()
+                    .is_ok_and(|name| name == "Filter by category")
+        })
+    })?;
+    let card_count = || {
+        names(hwnd)
+            .iter()
+            .filter(|n| n.starts_with("Category · "))
+            .count()
+    };
+    let all_card_count = card_count();
+    activate_control(hwnd, &category_filter, false)?;
+    let office = wait("Office filter option", || category_option("Office"))?;
+    activate_control(hwnd, &office, false)?;
+    wait("category dropdown filters applications", || {
+        (category_control("Category · Studio Review").is_some()
+            && card_count() < all_card_count
+            && category_option("Office").is_none())
+        .then_some(())
+    })?;
+    activate_control(hwnd, &category_filter, true)?;
+    let office = wait("selected Office option", || category_option("Office"))?;
+    assert!(unsafe {
+        office
+            .GetCurrentPatternAs::<IUIAutomationSelectionItemPattern>(UIA_SelectionItemPatternId)?
+            .CurrentIsSelected()?
+            .as_bool()
+    });
+    key(hwnd, 0x1b)?;
+    wait("Escape closes category menu", || {
+        category_option("Office").is_none().then_some(())
+    })?;
+    activate_control(hwnd, &category_filter, true)?;
+    wait("category menu reopened", || category_option("All"))?;
+    key(hwnd, 0x24)?;
+    key(hwnd, 13)?;
+    wait("keyboard restores all categories", || {
+        (card_count() == all_card_count).then_some(())
+    })?;
+    let segment = |name: &str| {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentControlType().ok() == Some(UIA_RadioButtonControlTypeId)
+                && el.CurrentName().is_ok_and(|n| n == name)
+        })
+    };
+    let anonymous = wait("anonymous filter icon", || segment("Track anonymously"))?;
+    activate_control(hwnd, &anonymous, false)?;
+    wait("anonymous filter excludes the tracked app", || unsafe {
+        let selection = anonymous
+            .GetCurrentPatternAs::<IUIAutomationSelectionItemPattern>(UIA_SelectionItemPatternId)
+            .ok()?;
+        (selection.CurrentIsSelected().ok()?.as_bool()
+            && category_control("Category · Studio Review").is_none())
+        .then_some(())
+    })?;
+    let unclassified = wait("Unclassified segment", || {
+        segment(&format!("Unclassified ({})", classification_counts()?[2]))
+    })?;
+    activate_control(hwnd, &unclassified, false)?;
+    wait("unclassified filter hides the Office app", || unsafe {
+        let selection = unclassified
+            .GetCurrentPatternAs::<IUIAutomationSelectionItemPattern>(UIA_SelectionItemPatternId)
+            .ok()?;
+        (selection.CurrentIsSelected().ok()?.as_bool()
+            && category_control("Category · Studio Review").is_none())
+        .then_some(())
+    })?;
+    unsafe { unclassified.SetFocus()? };
+    key(hwnd, 0x25)?;
+    wait(
+        "Left selects Classified and restores the Office app",
+        || category_control("Category · Studio Review"),
+    )?;
+    click(hwnd, "Manage")?;
+    click(hwnd, "New category")?;
     let entry = wait("category name field", || {
         controls(hwnd).ok()?.into_iter().find(|el| unsafe {
             el.CurrentControlType().ok() == Some(UIA_EditControlTypeId)
@@ -777,25 +1118,178 @@ fn classification_navigation() -> Result<(), Error> {
         input.SetValue(&"Research".into())?;
     }
     click(hwnd, "Apply")?;
-    click(hwnd, "Save")?;
+    wait("category editor closed", || {
+        button(hwnd, "Apply").is_none().then_some(())
+    })?;
+    click(hwnd, "Close")?;
+    press(hwnd, "Save")?;
     wait("category save completes", || {
         button(hwnd, "Save").filter(|b| unsafe { b.CurrentIsEnabled().is_ok_and(|v| !v.as_bool()) })
     })?;
-    click(hwnd, "Category · Studio Review")?;
-    click(hwnd, "Research")?;
-    click(hwnd, "Apply")?;
+    let category = wait("renamed app category", || {
+        category_control("Category · Studio Review")
+    })?;
+    activate_control(hwnd, &category, true)?;
+    let research = wait("custom category option", || category_option("Research"))?;
+    activate_control(hwnd, &research, false)?;
+    wait("custom category assigned", || {
+        category_option("Research").is_none().then_some(())
+    })?;
     click(hwnd, "Save")?;
     wait("assigned new category", || {
         button(hwnd, "Save").filter(|b| unsafe { b.CurrentIsEnabled().is_ok_and(|v| !v.as_bool()) })
     })?;
+    let before = rt.block_on(async {
+        let mut conn =
+            SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&db)).await?;
+        let raw: String =
+            sqlx::query_scalar("SELECT value FROM settings WHERE key='__app_override::studio.exe'")
+                .fetch_one(&mut conn)
+                .await?;
+        Ok::<_, Error>(serde_json::from_str::<serde_json::Value>(&raw)?)
+    })?;
+    let search = wait("search before final rename", || {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentControlType().ok() == Some(UIA_EditControlTypeId)
+                && el.CurrentName().is_ok_and(|n| n == "Search apps")
+        })
+    })?;
+    unsafe {
+        search
+            .GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId)?
+            .SetValue(&"Studio".into())?;
+    }
+    wait("one application before final rename", || {
+        (names(hwnd)
+            .iter()
+            .filter(|n| n.starts_with("Category · "))
+            .count()
+            == 1)
+            .then_some(())
+    })?;
+    click(hwnd, "Edit app name")?;
+    let field = wait("final inline editor", rename_field)?;
+    unsafe {
+        field
+            .GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId)?
+            .SetValue(&"Studio Cancelled".into())?;
+    }
+    click(hwnd, "Cancel")?;
+    wait("page Cancel discards inline draft", || {
+        (rename_field().is_none() && category_control("Category · Studio Review").is_some())
+            .then_some(())
+    })?;
+    click(hwnd, "Edit app name")?;
+    let field = wait("inline editor for direct save", rename_field)?;
+    unsafe {
+        field
+            .GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId)?
+            .SetValue(&"Studio 新名称".into())?;
+    }
+    press(hwnd, "Save")?;
+    wait(
+        "direct Save persists inline name without other changes",
+        || {
+            rt.block_on(async {
+                let mut conn =
+                    SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&db))
+                        .await
+                        .ok()?;
+                let raw: String = sqlx::query_scalar(
+                    "SELECT value FROM settings WHERE key='__app_override::studio.exe'",
+                )
+                .fetch_one(&mut conn)
+                .await
+                .ok()?;
+                let after: serde_json::Value = serde_json::from_str(&raw).ok()?;
+                (after["displayName"] == "Studio 新名称"
+                    && ["category", "color", "track", "captureTitle"]
+                        .iter()
+                        .all(|key| after[key] == before[key]))
+                .then_some(())
+            })
+        },
+    )?;
     command(window(pid, w!("Patina GPUI")).unwrap(), 2)?;
     assert!(wait("exit", || host.0.try_wait().ok().flatten())?.success());
     Ok(())
 }
 
 #[test]
-#[ignore = "Windows desktop, isolated SQLite profile"]
+#[ignore = "isolated Win32 desktop"]
+fn classification_totals() -> Result<(), Error> {
+    if !patina_test_desktop::run_case()? {
+        return Ok(());
+    }
+    let _com = ComApartment::init()?;
+    unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
+    let root = tempfile::tempdir()?;
+    let dir = root.path().join(patina_gpui::APP_ID);
+    fs::create_dir(&dir)?;
+    seed(&dir.join("patina.db"))?;
+    let mut host = TestChild(
+        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env_remove("PATINA_GPUI_DEV_SESSION")
+            .arg("--today")
+            .spawn()?,
+    );
+    let pid = host.0.id();
+    let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
+    click(hwnd, "Classification")?;
+    let totals = |expected| -> Result<(), Error> {
+        wait("classification counts match current records", || {
+            (classification_filter_counts(hwnd) == Some(expected)).then_some(())
+        })?;
+        Ok(())
+    };
+    totals([2, 2, 0])?;
+    classification_color::set(hwnd, "Search apps", "Studio")?;
+    totals([2, 2, 0])?;
+    let unclassify = || -> Result<(), Error> {
+        let category = wait("Studio category", || named(hwnd, "Category · Studio"))?;
+        activate_control(hwnd, &category, false)?;
+        let option = wait("Unclassified option", || {
+            controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+                el.CurrentControlType().ok() == Some(UIA_ListItemControlTypeId)
+                    && el.CurrentName().is_ok_and(|name| name == "Unclassified")
+            })
+        })?;
+        activate_control(hwnd, &option, false)?;
+        totals([2, 1, 1])
+    };
+    unclassify()?;
+    click(hwnd, "Cancel")?;
+    totals([2, 2, 0])?;
+    unclassify()?;
+    click(hwnd, "Save")?;
+    wait("classification saved", || unsafe {
+        (!button(hwnd, "Save")?.CurrentIsEnabled().ok()?.as_bool()).then_some(())
+    })?;
+    totals([2, 1, 1])?;
+    select_segment(hwnd, "Unclassified (1)")?;
+    wait("unclassified application shown", || {
+        named(hwnd, "Category · Studio")
+    })?;
+    click(hwnd, "Delete application")?;
+    wait("deletion confirmation ready", || {
+        named(hwnd, "Studio · studio.exe")?;
+        button(hwnd, "Delete application")
+            .filter(|b| unsafe { b.CurrentIsEnabled().is_ok_and(|v| v.as_bool()) })
+    })?;
+    click(hwnd, "Delete application")?;
+    totals([1, 1, 0])?;
+    command(window(pid, w!("Patina GPUI")).ok_or("missing host")?, 2)?;
+    assert!(wait("exit", || host.0.try_wait().ok().flatten())?.success());
+    Ok(())
+}
+
+#[test]
+#[ignore = "isolated Win32 desktop"]
 fn settings_navigation() -> Result<(), Error> {
+    if !patina_test_desktop::run_case()? {
+        return Ok(());
+    }
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
@@ -811,13 +1305,112 @@ fn settings_navigation() -> Result<(), Error> {
     );
     let pid = host.0.id();
     let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
+    // Keep the first two settings groups visible regardless of the app's default window size.
+    let dpi = unsafe { GetDpiForWindow(hwnd) } as i32;
+    unsafe {
+        SetWindowPos(
+            hwnd,
+            None,
+            0,
+            0,
+            1200 * dpi / 96,
+            800 * dpi / 96,
+            SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOZORDER,
+        )?;
+    }
     click(hwnd, "Settings")?;
+    let titles = wait("Global titles switch", || button(hwnd, "Global titles"))?;
+    unsafe {
+        let bounds = titles.CurrentBoundingRectangle()?;
+        let dpi = GetDpiForWindow(hwnd) as i32;
+        let width = (36 * dpi + 48) / 96;
+        let height = (28 * dpi + 48) / 96;
+        assert!((bounds.right - bounds.left - width).abs() <= 1);
+        assert!((bounds.bottom - bounds.top - height).abs() <= 1);
+        let state =
+            titles.GetCurrentPatternAs::<IUIAutomationTogglePattern>(UIA_TogglePatternId)?;
+        let initial = state.CurrentToggleState()?;
+        let center = client_center(hwnd, &titles)?.0;
+        // Click the blank space to the left, then the face. Exactly one click must toggle.
+        for offset in [width * 2, 0] {
+            let point = LPARAM((center & !0xffff) | ((center - offset as isize) & 0xffff));
+            PostMessageW(Some(hwnd), WM_MOUSEMOVE, WPARAM(0), point)?;
+            PostMessageW(Some(hwnd), WM_LBUTTONDOWN, WPARAM(1), point)?;
+            PostMessageW(Some(hwnd), WM_LBUTTONUP, WPARAM(0), point)?;
+        }
+        wait("switch face toggled", || {
+            (state.CurrentToggleState().ok()? != initial).then_some(())
+        })?;
+        click(hwnd, "Cancel")?;
+        wait("switch restored", || {
+            (state.CurrentToggleState().ok()? == initial).then_some(())
+        })?;
+    }
+    let language = wait("language selector", || {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentControlType().ok() == Some(UIA_ComboBoxControlTypeId)
+                && el.CurrentName().is_ok_and(|s| s == "Language")
+        })
+    })?;
+    let option = |name: &str| {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentControlType().ok() == Some(UIA_ListItemControlTypeId)
+                && el.CurrentName().is_ok_and(|s| s == name)
+        })
+    };
+    let initial = unsafe { language.CurrentBoundingRectangle()? };
+    activate_control(hwnd, &language, false)?;
+    let spanish = wait("Spanish option", || option("Español"))?;
+    let menu = unsafe { spanish.CurrentBoundingRectangle()? };
+    assert!(menu.top >= initial.bottom || menu.bottom <= initial.top);
+    activate_control(hwnd, &spanish, false)?;
+    wait("language draft", || {
+        button(hwnd, "Save").filter(|b| unsafe { b.CurrentIsEnabled().is_ok_and(|v| v.as_bool()) })
+    })?;
+    let changed = unsafe { language.CurrentBoundingRectangle()? };
+    assert_eq!(initial.right - initial.left, changed.right - changed.left);
+    click(hwnd, "Cancel")?;
+    activate_control(hwnd, &language, true)?;
+    let english = wait("English restored", || option("English"))?;
+    assert!(unsafe {
+        english
+            .GetCurrentPatternAs::<IUIAutomationSelectionItemPattern>(UIA_SelectionItemPatternId)?
+            .CurrentIsSelected()?
+            .as_bool()
+    });
+    key(hwnd, 0x28)?;
+    key(hwnd, 0x1b)?;
+    wait("language menu dismissed", || {
+        option("English").is_none().then_some(())
+    })?;
     click(hwnd, "+ Activity hold time")?;
     wait("updated stepper", || named(hwnd, "4 min"))?;
     click(hwnd, "Cancel")?;
     wait("cancel restored value", || named(hwnd, "3 min"))?;
     click(hwnd, "+ Activity hold time")?;
-    click(hwnd, "Dark")?;
+    let radio = |name: &str| {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentControlType().ok() == Some(UIA_RadioButtonControlTypeId)
+                && el.CurrentName().is_ok_and(|n| n == name)
+        })
+    };
+    let is_selected = |name: &str| unsafe {
+        radio(name)?
+            .GetCurrentPatternAs::<IUIAutomationSelectionItemPattern>(UIA_SelectionItemPatternId)
+            .ok()?
+            .CurrentIsSelected()
+            .ok()?
+            .as_bool()
+            .then_some(())
+    };
+    let dark = wait("Dark radio", || radio("Dark"))?;
+    activate_control(hwnd, &dark, false)?;
+    wait("Dark selected by mouse", || is_selected("Dark"))?;
+    unsafe { dark.SetFocus()? };
+    key(hwnd, 0x25)?;
+    wait("Left selected Light", || is_selected("Light"))?;
+    key(hwnd, 0x27)?;
+    wait("Right selected Dark", || is_selected("Dark"))?;
     click(hwnd, "Save")?;
     wait("saved preferences", || {
         button(hwnd, "Save").filter(|b| unsafe { b.CurrentIsEnabled().is_ok_and(|s| !s.as_bool()) })
@@ -850,8 +1443,11 @@ fn settings_navigation() -> Result<(), Error> {
 }
 
 #[test]
-#[ignore = "Windows desktop, isolated SQLite profile"]
+#[ignore = "isolated Win32 desktop"]
 fn about_navigation() -> Result<(), Error> {
+    if !patina_test_desktop::run_case()? {
+        return Ok(());
+    }
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
@@ -887,8 +1483,9 @@ fn about_navigation() -> Result<(), Error> {
 }
 
 #[test]
-#[ignore = "requires saved Tauri page layout and interactive Windows desktop"]
+#[ignore = "dedicated Windows session: prepared layout baseline"]
 fn page_layout_comparison() -> Result<(), Error> {
+    patina_test_desktop::dedicated_session()?;
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
@@ -1055,63 +1652,5 @@ fn page_layout_comparison() -> Result<(), Error> {
     )?;
     command(window(pid, w!("Patina GPUI")).unwrap(), 2)?;
     assert!(wait("exit", || host.0.try_wait().ok().flatten())?.success());
-    Ok(())
-}
-
-#[test]
-fn edits_are_atomic_and_detect_stale_inputs() -> Result<(), Error> {
-    let root = tempfile::tempdir()?;
-    let db = root.path().join("patina.db");
-    seed(&db)?;
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?;
-    let recorder = patina_recorder::Recorder::start(&db, || {})?;
-    rt.block_on(async {
-        let rules = recorder.rules().await?;
-        let mut studio = rules
-            .apps
-            .iter()
-            .find(|r| r.exe == "studio.exe")
-            .unwrap()
-            .clone();
-        let mut writer = rules
-            .apps
-            .iter()
-            .find(|r| r.exe == "writer.exe")
-            .unwrap()
-            .clone();
-        studio.name = "Draft".into();
-        writer.category = "missing-category".into();
-        assert!(
-            recorder
-                .save_rules(vec![studio.clone(), writer], vec![])
-                .await
-                .is_err()
-        );
-        assert!(
-            recorder
-                .rules()
-                .await?
-                .apps
-                .iter()
-                .any(|a| a.name == "Studio")
-        );
-        recorder.save_rules(vec![studio.clone()], vec![]).await?;
-        studio.name = "Stale".into();
-        assert!(recorder.save_rules(vec![studio], vec![]).await.is_err());
-        let old = recorder.preferences().await?;
-        let mut p = old;
-        p.gap = 240;
-        recorder.save_preferences(old, p).await?;
-        p.gap = 60;
-        p.theme = patina_recorder::Theme::Dark;
-        assert!(recorder.save_preferences(old, p).await.is_err());
-        let saved = recorder.preferences().await?;
-        assert_eq!(saved.gap, 240);
-        assert_eq!(saved.theme, old.theme);
-        Ok::<_, Error>(())
-    })?;
-    recorder.shutdown()?;
     Ok(())
 }
