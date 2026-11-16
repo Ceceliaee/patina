@@ -1,18 +1,36 @@
 //! Quiet Pro controls shared by Patina's native views.
 use gpui_kit::{Rgba, prelude::*, px};
 
+mod activity_color;
 mod continuous_corner;
 mod controls;
+mod superellipse;
 mod theme;
 
-pub use continuous_corner::continuous_corner_layer;
-pub use controls::icon_control::IconControl;
+pub use activity_color::activity_display_color;
+pub use continuous_corner::{continuous_corner_fill, continuous_corner_layer};
+pub use controls::app_icon::app_icon_frame;
+pub use controls::dialog::{
+    DIALOG_FRAME_INSET, DIALOG_WINDOW_MARGIN, dialog_actions, dialog_backdrop, dialog_surface,
+};
+pub use controls::distribution::distribution_row;
+pub use controls::donut::{DONUT_COMPACT_SIZE, DONUT_SIZE, DonutChart, DonutSlice};
+pub use controls::dropdown::Dropdown;
+pub use controls::icon_control::{ICON_CONTROL_SIZE, IconControl};
+pub use controls::search_input::search_input;
+pub use controls::segmented::segmented;
+pub use controls::slide_switch::{slide_switch, switch_control};
+pub use controls::slider::value_slider;
 pub use controls::text_button::text_button;
-pub use theme::Palette;
+pub use controls::text_input::TextInput;
+pub use controls::trend_chart::{TrendChart, TrendSeries};
+pub use theme::{Palette, ThemePreset};
 
 pub use gpui_kit::assets::IconName as Icon;
 
-gpui_kit::assets::icon_assets!(pub QuietProAssets, [Bell, ToolCase, Tags, ZoomIn, Expand, Settings2, Info, AppWindow, Pencil, Palette, Type, EyeOff, Check, Sparkles, ChartColumn, Clock, Menu, Layers, Maximize2, Minimize2, Minus, Monitor, Pin, SquareArrowOutUpRight, X]);
+pub const FILLED_PIN_ICON: &[u8] = include_bytes!("../assets/icons/pin-filled.svg");
+
+gpui_kit::assets::icon_assets!(pub QuietProAssets, [Globe, Bell, ToolCase, Tags, TagPlus, ZoomIn, Expand, Settings2, Info, AppWindow, Pencil, Palette, Type, EyeOff, ListX, ListPlus, Captions, CaptionsOff, Pipette, Search, Funnel, Check, Sparkles, ChartColumn, Clock, Menu, Layers, Maximize2, Minimize2, Minus, Plus, Monitor, Pin, SquareArrowOutUpRight, X, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, MousePointerClick, Server, Database, Dices, Eye, RefreshCw, FolderOpen, FolderPen, Trash, RotateCcw]);
 
 pub fn glyph(icon: Icon, color: Rgba) -> gpui_kit::Svg {
     gpui_kit::svg()
@@ -28,3 +46,21 @@ pub fn caption(label: impl Into<gpui_kit::SharedString>, colors: Palette) -> gpu
         .text_color(colors.secondary)
         .child(label.into())
 }
+
+mod layout;
+pub use controls::calendar::{
+    CalendarDayState, calendar_arrow_frame, calendar_caption, calendar_controls, calendar_day,
+    calendar_month_header, calendar_range_cell, calendar_surface, calendar_trigger, calendar_week,
+    calendar_weekdays,
+};
+pub use controls::checkbox::{checkbox, field_row};
+pub use controls::choice_card::{choice_card, choice_entry, choice_swatches};
+pub use controls::color_picker::{
+    color_picker_surface, color_plane, color_swatch_button, hue_strip,
+};
+pub use controls::context_menu::{MENU_FRAME_INSET, menu_item, menu_surface, menu_width};
+pub use controls::form::{
+    divider_color, line_above, settings_row, settings_rows_card, settings_title, vertical_divider,
+};
+pub use controls::navigation_item::navigation_item;
+pub use layout::*;

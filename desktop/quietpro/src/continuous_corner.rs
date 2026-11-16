@@ -1,4 +1,4 @@
-use gpui_kit::{PathBuilder, Pixels, canvas, point, prelude::*, px};
+use gpui_kit::{Background, PathBuilder, Pixels, canvas, point, prelude::*, px};
 use std::{f32::consts::FRAC_PI_2, sync::LazyLock};
 
 const CORNER_EXPONENT: f32 = 4.;
@@ -16,6 +16,19 @@ static ARC: LazyLock<[(f32, f32); QUARTER]> = LazyLock::new(|| {
 
 /// Paints a continuous corner layer in the inherited text color. The inset follows the outer contour.
 pub fn continuous_corner_layer(radius: Pixels, inset: Pixels) -> impl IntoElement {
+    layer(radius, inset, None)
+}
+
+/// Paints a solid or gradient fill using the same continuous contour as other controls.
+pub fn continuous_corner_fill(
+    radius: Pixels,
+    inset: Pixels,
+    fill: impl Into<Background>,
+) -> impl IntoElement {
+    layer(radius, inset, Some(fill.into()))
+}
+
+fn layer(radius: Pixels, inset: Pixels, fill: Option<Background>) -> impl IntoElement {
     canvas(
         |_, _, _| (),
         move |bounds, (), window, _| {
@@ -39,7 +52,10 @@ pub fn continuous_corner_layer(radius: Pixels, inset: Pixels) -> impl IntoElemen
             let mut path = PathBuilder::fill();
             path.add_polygon(&points, true);
             if let Ok(path) = path.build() {
-                window.paint_path(path, window.text_style().color);
+                window.paint_path(
+                    path,
+                    fill.unwrap_or_else(|| window.text_style().color.into()),
+                );
             }
         },
     )
