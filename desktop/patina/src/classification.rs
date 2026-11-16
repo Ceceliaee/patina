@@ -1,41 +1,67 @@
+use quietpro::{APP_CARD_GAP, content_card, heading, page, page_actions, page_title_row};
+mod card;
+mod category_manager;
+use card::Card;
+mod color_picker;
+
 use crate::{
-    page_controls::{
-        APP_CARD_GAP, action, content_card, heading, label, page, page_actions, page_title_row,
-        panel, save_status,
-    },
+    page_controls::{label, save_status},
     window_process::Query,
     windows_host::Client,
 };
 use gpui_kit::{
-    base::{
-        Input,
-        input::{InputAccessibility, InputState},
-    },
+    base::input::{InputAccessibility, InputEvent, InputState},
     prelude::*,
     *,
 };
-use patina_recorder::{AppRule, Rules, text};
+use patina_recorder::{Rules, text};
 use quietpro::{Icon, text_button};
-use std::{collections::BTreeMap, rc::Rc};
+use std::{collections::BTreeMap, rc::Rc, sync::Arc};
+#[derive(Clone)]
+struct AppIcon {
+    image: Arc<Image>,
+    color: Option<u32>,
+}
 pub(super) struct Classification {
     focus: FocusHandle,
     client: Rc<Client>,
     rules: Option<Rules>,
-    pending: BTreeMap<String, AppRule>,
+    read: Option<Task<()>>,
+    icons: BTreeMap<String, AppIcon>,
+    icons_loading: bool,
+    pending: BTreeMap<String, Card>,
     search: Entity<InputState>,
-    active: Option<String>,
+    editing_name: Option<String>,
+    rename_focus: BTreeMap<String, FocusHandle>,
     category_edits: BTreeMap<String, patina_recorder::CategoryEdit>,
     category_manager: bool,
+    category_editing: bool,
+    category_confirmation: Option<(String, String)>,
+    category_picker: Option<(String, Entity<color_picker::ColorPicker>)>,
+    category_focus: BTreeMap<String, FocusHandle>,
+    category_title_focus: FocusHandle,
+    category_editor_focus: FocusHandle,
+    category_trigger_focus: FocusHandle,
+    category_cancel_focus: FocusHandle,
     category_id: Option<String>,
     category_name: Entity<InputState>,
     category_filter: Option<String>,
-    filter_menu: bool,
+    color_picker: Option<(String, Entity<color_picker::ColorPicker>)>,
+    color_focus: BTreeMap<String, FocusHandle>,
 
     name: Entity<InputState>,
-    color: Entity<InputState>,
-    filter: u8,
+    web: bool,
+    mode_initialized: bool,
+    mode_focus: [FocusHandle; 2],
+    filter: usize,
+    filter_focus: [FocusHandle; 4],
     busy: bool,
     error: bool,
+    deleting: Option<Card>,
+    delete_failed: bool,
+    delete_impact: Option<patina_recorder::DeletionImpact>,
+    delete_cancel: FocusHandle,
+    delete_focus: BTreeMap<String, FocusHandle>,
 }
 impl Classification {
     pub(super) fn new(client: Rc<Client>, win: &mut Window, cx: &mut Context<Self>) -> Self {
@@ -51,58 +77,231 @@ impl Classification {
         };
         let category_name = field("mapping.renameCategoryPlaceholder", win, cx);
         let search = field("mapping.appSearchPlaceholder", win, cx);
+        search.update(cx, |input, cx| {
+            input.set_placeholder(
+                text(client.locale.get(), "mapping.appSearchPlaceholder"),
+                win,
+                cx,
+            );
+        });
+        cx.observe(&category_name, |_, _, cx| cx.notify()).detach();
+        cx.subscribe_in(&category_name, win, |this, _, event, win, cx| {
+            if matches!(event, InputEvent::PressEnter { .. }) {
+                this.accept_category_name(win, cx);
+            }
+        })
+        .detach();
         let name = field("mapping.editAppName", win, cx);
-        let color = field("mapping.color", win, cx);
+        for input in [&name, &category_name] {
+            cx.subscribe(input, |_, _, event, cx| {
+                if matches!(event, InputEvent::Focus | InputEvent::Blur) {
+                    cx.notify();
+                }
+            })
+            .detach();
+        }
+        name.update(cx, |input, cx| {
+            input.set_validator(|value, _| value.trim().encode_utf16().count() <= 80, cx)
+        });
+        cx.observe(&name, |_, _, cx| cx.notify()).detach();
+        cx.subscribe_in(&name, win, |this, input, event, win, cx| match event {
+            InputEvent::PressEnter { .. } => {
+                if let Some(exe) = this.finish_name(cx) {
+                    this.focus_rename(&exe, win, cx);
+                }
+            }
+            InputEvent::Blur if !input.read(cx).focus_handle(cx).is_focused(win) => {
+                this.finish_name(cx);
+            }
+            _ => {}
+        })
+        .detach();
         cx.observe(&search, |_, _, cx| cx.notify()).detach();
+        cx.subscribe(&search, |_, _, event, cx| {
+            if matches!(
+                event,
+                gpui_kit::base::input::InputEvent::Focus | gpui_kit::base::input::InputEvent::Blur
+            ) {
+                cx.notify();
+            }
+        })
+        .detach();
         let mut this = Self {
             focus: cx.focus_handle(),
             client,
             rules: None,
+            read: None,
+            icons: BTreeMap::new(),
+            icons_loading: true,
             pending: BTreeMap::new(),
             search,
-            active: None,
+            editing_name: None,
+            rename_focus: BTreeMap::new(),
             category_name,
             category_manager: false,
+            category_editing: false,
+            category_confirmation: None,
+            category_picker: None,
+            category_focus: BTreeMap::new(),
+            category_title_focus: cx.focus_handle(),
+            category_editor_focus: cx.focus_handle(),
+            category_trigger_focus: cx.focus_handle(),
+            category_cancel_focus: cx.focus_handle(),
             category_id: None,
             category_edits: BTreeMap::new(),
             category_filter: None,
-            filter_menu: false,
+            color_picker: None,
+            color_focus: BTreeMap::new(),
             name,
-            color,
+            web: false,
+            mode_initialized: false,
+            mode_focus: std::array::from_fn(|_| cx.focus_handle()),
             filter: 0,
+            filter_focus: std::array::from_fn(|_| cx.focus_handle()),
             busy: false,
             error: false,
+            deleting: None,
+            delete_failed: false,
+            delete_impact: None,
+            delete_cancel: cx.focus_handle(),
+            delete_focus: BTreeMap::new(),
         };
         this.reload(cx);
         this
     }
     fn reload(&mut self, cx: &mut Context<Self>) {
+        self.icons_loading = true;
         let read = self.client.request::<Rules>(Query::Rules);
-        cx.spawn(async move |view, cx| {
+        let client = self.client.clone();
+        self.read = Some(cx.spawn(async move |view, cx| {
             let res = read.await;
+            let keys = res
+                .as_ref()
+                .ok()
+                .map(|r| r.apps.iter().map(|a| a.exe.clone()).collect::<Vec<_>>());
             let _ = view.update(cx, |this, cx| {
                 match res {
                     Ok(r) => {
+                        this.icons
+                            .retain(|key, _| r.apps.iter().any(|a| &a.exe == key));
                         this.rules = Some(r);
                         this.error = false;
                     }
-                    Err(_) => this.error = true,
+                    Err(_) => {
+                        this.error = true;
+                        this.icons_loading = false;
+                    }
                 }
                 cx.notify();
             });
-        })
-        .detach();
+            let Some(keys) = keys else { return };
+            match client.icons(keys).await {
+                Ok(images) => {
+                    let Ok(mut cached) = view.update(cx, |this, _| {
+                        this.icons.values().cloned().collect::<Vec<_>>()
+                    }) else {
+                        return;
+                    };
+                    let icons = cx
+                        .background_executor()
+                        .spawn(async move {
+                            let mut resolved = BTreeMap::new();
+                            for (key, bytes) in images {
+                                let icon = if let Some(icon) =
+                                    cached.iter().find(|icon| icon.image.bytes == bytes)
+                                {
+                                    icon.clone()
+                                } else {
+                                    let icon = AppIcon {
+                                        color: patina_recorder::icon_color(&bytes),
+                                        image: Arc::new(Image::from_bytes(ImageFormat::Png, bytes)),
+                                    };
+                                    cached.push(icon.clone());
+                                    icon
+                                };
+                                resolved.insert(key, icon);
+                            }
+                            resolved
+                        })
+                        .await;
+                    let _ = view.update(cx, |this, cx| {
+                        this.icons = icons;
+                        this.icons_loading = false;
+                        cx.notify();
+                    });
+                }
+                Err(error) => {
+                    eprintln!("read classification icons: {error}");
+                    let _ = view.update(cx, |this, cx| {
+                        this.icons_loading = false;
+                        cx.notify();
+                    });
+                }
+            }
+        }));
     }
-    pub(super) fn dirty(&self) -> bool {
-        !self.pending.is_empty() || !self.category_edits.is_empty() || self.busy
+    fn name_rule(&self, key: &str) -> Option<Card> {
+        self.pending.get(key).cloned().or_else(|| {
+            let rules = self.rules.as_ref()?;
+            rules
+                .apps
+                .iter()
+                .cloned()
+                .map(Card::from)
+                .chain(rules.websites.iter().cloned().map(Card::from))
+                .find(|card| card.key == key)
+        })
+    }
+    fn finish_name(&mut self, cx: &mut Context<Self>) -> Option<String> {
+        let exe = self.editing_name.take()?;
+        let name = self.name.read(cx).value().trim().to_owned();
+        if let Some(mut rule) = self.name_rule(&exe)
+            && rule.name != name
+        {
+            rule.name = name;
+            self.pending.insert(exe.clone(), rule);
+        }
+        cx.notify();
+        Some(exe)
+    }
+    fn focus_rename(&self, exe: &str, win: &mut Window, cx: &mut Context<Self>) {
+        let query = self.search.read(cx).value().to_lowercase();
+        if self.name_rule(exe).is_some_and(|a| a.matches_query(&query)) {
+            if let Some(focus) = self.rename_focus.get(exe) {
+                win.focus(focus, cx);
+            }
+        } else {
+            self.search.update(cx, |input, cx| input.focus(win, cx));
+        }
+    }
+    pub(super) fn dirty(&self, cx: &App) -> bool {
+        !self.pending.is_empty()
+            || !self.category_edits.is_empty()
+            || self.busy
+            || self
+                .editing_name
+                .as_ref()
+                .and_then(|exe| self.name_rule(exe))
+                .is_some_and(|rule| self.name.read(cx).value().trim() != rule.name)
     }
     pub(super) fn save(&mut self, cx: &mut Context<Self>) {
         if self.busy {
             return;
         }
+        self.finish_name(cx);
+        self.color_picker = None;
         self.busy = true;
         let write = self.client.request::<()>(Query::SaveRules(
-            self.pending.values().cloned().collect(),
+            self.pending
+                .values()
+                .map(|a| self.effective_rule(a))
+                .filter_map(|a| a.app_rule())
+                .collect(),
+            self.pending
+                .values()
+                .map(|a| self.effective_rule(a))
+                .filter_map(|a| a.web_rule())
+                .collect(),
             self.category_edits.values().cloned().collect(),
         ));
         cx.spawn(async move |view, cx| {
@@ -113,9 +312,67 @@ impl Classification {
                 if res.is_ok() {
                     this.pending.clear();
                     this.category_edits.clear();
-                    this.active = None;
+                    this.editing_name = None;
                     this.reload(cx);
                     cx.emit(crate::main_window::Saved);
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+    fn close_delete(&mut self, win: &mut Window, cx: &mut Context<Self>) {
+        if self.busy {
+            return;
+        }
+        if let Some(rule) = self.deleting.take()
+            && let Some(focus) = self.delete_focus.get(&rule.key)
+        {
+            win.focus(focus, cx);
+        }
+        self.delete_failed = false;
+        self.delete_impact = None;
+        cx.notify();
+    }
+    fn delete_application(&mut self, apply: bool, win: &mut Window, cx: &mut Context<Self>) {
+        if self.busy {
+            return;
+        }
+        let Some(rule) = self.deleting.as_ref() else {
+            return;
+        };
+        if apply && self.delete_impact.is_none() {
+            return;
+        }
+        let confirmed = if apply {
+            self.delete_impact.take()
+        } else {
+            None
+        };
+        let query = match &rule.source {
+            card::Source::App(app) => Query::DeleteApplication(app.exe.clone(), confirmed),
+            card::Source::Web(site) => Query::DeleteWebsite(site.identity.clone(), confirmed),
+        };
+        let request = self
+            .client
+            .request::<patina_recorder::DeletionImpact>(query);
+        self.busy = true;
+        self.delete_failed = false;
+        cx.spawn_in(win, async move |view, cx| {
+            let result = request.await;
+            let _ = view.update_in(cx, |this, win, cx| {
+                this.busy = false;
+                this.delete_failed = result.is_err();
+                if let Ok(impact) = result {
+                    if apply {
+                        this.deleting = None;
+                        this.search.update(cx, |input, cx| input.focus(win, cx));
+                        this.reload(cx);
+                        cx.emit(crate::main_window::Saved);
+                    } else {
+                        this.delete_impact = Some(impact);
+                    }
                 }
                 cx.notify();
             });
