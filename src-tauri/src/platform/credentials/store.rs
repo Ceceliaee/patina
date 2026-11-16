@@ -1,11 +1,7 @@
-use super::{
-    credential_lookup_targets, windows_credentials, WEBDAV_BACKUP_CREDENTIAL_TARGET_PREFIX,
-};
-use crate::platform::app_paths::{app_profile, product_roaming_data_dir};
+use super::windows_credentials;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
-use tauri::{AppHandle, Runtime};
 
 /// The ledger contains ownership and configuration identities, never passwords.
 pub trait CredentialStore {
@@ -45,23 +41,12 @@ impl WebDavCredentialStore {
         store.legacy_targets.push(target);
         store
     }
-    pub fn for_app<R: Runtime>(app: &AppHandle<R>) -> Result<Self, String> {
-        let profile = app_profile(app);
-        let directory = product_roaming_data_dir(app)?.join("webdav-credentials");
-        // Test data roots must not read, overwrite or migrate a real profile's secret.
-        let isolated = cfg!(debug_assertions) && std::env::var("PATINA_E2E").as_deref() == Ok("1");
-        Ok(Self {
+    pub(crate) fn scoped(directory: PathBuf, prefix: String, legacy_targets: Vec<String>) -> Self {
+        Self {
             directory,
-            prefix: format!(
-                "{WEBDAV_BACKUP_CREDENTIAL_TARGET_PREFIX}.{}.v2",
-                profile.key()
-            ),
-            legacy_targets: if isolated {
-                vec![]
-            } else {
-                credential_lookup_targets(profile)
-            },
-        })
+            prefix,
+            legacy_targets,
+        }
     }
 
     fn record_path(&self, id: &str) -> Result<PathBuf, String> {
