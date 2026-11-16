@@ -228,7 +228,9 @@ fn navigation() -> Result<()> {
 }
 
 #[test]
+#[ignore = "dedicated Windows test session with real foreground focus"]
 fn focus() -> Result<()> {
+    patina_test_desktop::dedicated_session().expect("foreground focus test");
     scope(|s| {
         let (focus_event_handler, received_focus_event) = FocusEventHandler::new();
         unsafe {

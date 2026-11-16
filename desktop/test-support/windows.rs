@@ -1,8 +1,5 @@
-use std::{
-    process::Child,
-    thread,
-    time::{Duration, Instant},
-};
+pub use patina_test_desktop::polling::wait_observed;
+use std::process::Child;
 use windows::{
     Win32::{
         Foundation::HWND,
@@ -24,14 +21,7 @@ impl Drop for TestChild {
 }
 
 pub fn wait<T>(label: &str, mut read: impl FnMut() -> Option<T>) -> Result<T, Error> {
-    let start = Instant::now();
-    while start.elapsed() < Duration::from_secs(25) {
-        if let Some(value) = read() {
-            return Ok(value);
-        }
-        thread::sleep(Duration::from_millis(100));
-    }
-    Err(format!("Timed out waiting for {label}").into())
+    wait_observed(label, || read().ok_or_else(|| "condition not ready".into())).map_err(Into::into)
 }
 
 pub fn window(pid: u32, title: PCWSTR) -> Option<HWND> {
