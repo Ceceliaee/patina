@@ -1633,25 +1633,11 @@
   width: min(720px, calc(100vw - 40px));
 }
 
-.qp-theme-dialog-surface {
-  width: min(640px, calc(100vw - 40px));
-}
-
-.qp-theme-dialog-surface > .qp-dialog-body {
-  margin-right: -8px;
-}
-
 .qp-category-dialog-body {
   margin-top: 10px;
   max-height: min(440px, calc(100vh - 220px));
   overflow-y: auto;
   padding-right: 2px;
-}
-
-.qp-theme-dialog-body {
-  max-height: min(360px, calc(100vh - 220px));
-  overflow-y: auto;
-  padding-right: 4px;
 }
 
 .qp-dialog-header {
