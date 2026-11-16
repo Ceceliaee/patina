@@ -24,9 +24,16 @@ pub struct AppUsage {
     pub name: String,
     pub category: String,
     pub color: u32,
+    pub custom_color: Option<u32>,
     pub anonymous: bool,
     pub hours: [i64; 24],
     pub duration: i64,
+}
+
+impl AppUsage {
+    pub fn source_color(&self, icon_color: Option<u32>) -> u32 {
+        super::color::source_color(self.anonymous, self.custom_color, icon_color, self.color)
+    }
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -136,6 +143,7 @@ impl DaySummary {
                         cat.color
                     }
                 }),
+                custom_color: color.and_then(parse_color),
                 key,
                 category: cat.id.clone(),
                 anonymous: record.anonymous,

@@ -12,6 +12,8 @@ use crate::domain::activity_read_model::{
 use crate::platform::clock::{local_day_range_at, unix_timestamp_millis_i64};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+#[path = "history/web.rs"]
+mod web;
 
 #[derive(Serialize, Deserialize)]
 pub struct HistoryRecord {
@@ -21,6 +23,7 @@ pub struct HistoryRecord {
     pub start: i64,
     pub end: i64,
     pub group_duration: i64,
+    pub group_id: usize,
     pub titles: Vec<(i64, i64, String)>,
 }
 #[derive(Serialize, Deserialize)]
@@ -31,9 +34,21 @@ pub struct HistoryDay {
     pub records: Vec<HistoryRecord>,
     pub minimum_seconds: i64,
     pub colors: BTreeMap<String, u32>,
+    pub custom_colors: BTreeMap<String, u32>,
+    pub favicons: BTreeMap<String, String>,
     pub hours: [i64; 24],
     pub category_hours: BTreeMap<String, [i64; 24]>,
     pub categories: Vec<(String, i64)>,
+}
+impl HistoryDay {
+    pub fn app_source_color(&self, key: &str, icon_color: Option<u32>) -> u32 {
+        super::color::source_color(
+            key == ANONYMOUS_ACTIVITY_KEY,
+            self.custom_colors.get(key).copied(),
+            icon_color,
+            self.colors.get(key).copied().unwrap_or(0x8f98a8),
+        )
+    }
 }
 pub(super) async fn load(
     pool: sqlx::SqlitePool,
@@ -42,6 +57,7 @@ pub(super) async fn load(
     titles: bool,
     last_sample: Option<i64>,
     locale: super::Locale,
+    web: bool,
 ) -> Result<HistoryDay, String> {
     let now = unix_timestamp_millis_i64();
     let (start, end) = local_day_range_at(day)?;
@@ -75,6 +91,42 @@ pub(super) async fn load(
     .unwrap_or(180)
     .clamp(60, 300)
         * 1000;
+    if web {
+        let mut snapshot = crate::data::repositories::web_links::recent_snapshot_in_tx(
+            &mut tx, start, cutoff, now,
+        )
+        .await?;
+        for segment in snapshot.segments.iter_mut().flatten() {
+            segment.end_time = segment.end_time.min(cutoff);
+        }
+        for record in snapshot.anonymous_activity.iter_mut().flatten() {
+            record.end_time = Some(record.end_time.unwrap_or(record.observed_until).min(cutoff));
+        }
+        tx.commit().await.map_err(|e| e.to_string())?;
+        let mut day = HistoryDay {
+            start,
+            end,
+            apps: Vec::new(),
+            records: Vec::new(),
+            minimum_seconds,
+            colors: BTreeMap::new(),
+            custom_colors: BTreeMap::new(),
+            favicons: BTreeMap::new(),
+            hours: [0; 24],
+            category_hours: BTreeMap::new(),
+            categories: Vec::new(),
+        };
+        web::populate(
+            &mut day,
+            snapshot,
+            &mapping,
+            app.as_deref(),
+            titles,
+            merge_gap,
+            locale,
+        )?;
+        return Ok(day);
+    }
     let aggregate = load_range_in_tx(&mut tx, start, cutoff, &[], live).await?;
     let rows = load_history_range_in_tx(&mut tx, start, cutoff, live, titles)
         .await
@@ -105,6 +157,7 @@ pub(super) async fn load(
         Some((key, name))
     };
     let mut colors = BTreeMap::new();
+    let mut custom_colors = BTreeMap::new();
     let mut totals = BTreeMap::new();
     let mut hours = [0i64; 24];
     let mut categories = BTreeMap::new();
@@ -132,17 +185,22 @@ pub(super) async fn load(
                 super::today::parse_color(&mapping.resolve_session_category(&r.exe_name).color)
                     .unwrap_or(0x8f98a8)
             };
-            let color = mapping
+            let custom_color = mapping
                 .app_appearance(&key)
                 .1
-                .and_then(super::today::parse_color)
-                .unwrap_or_else(|| {
-                    if !r.anonymous && mapping.resolve_session_category(&r.exe_name).id == "other" {
-                        super::color::app_color(&key)
-                    } else {
-                        resolved
-                    }
-                });
+                .and_then(super::today::parse_color);
+            if !r.anonymous {
+                if let Some(color) = custom_color {
+                    custom_colors.insert(key.clone(), color);
+                }
+            }
+            let color = custom_color.unwrap_or_else(|| {
+                if !r.anonymous && mapping.resolve_session_category(&r.exe_name).id == "other" {
+                    super::color::app_color(&key)
+                } else {
+                    resolved
+                }
+            });
             colors.insert(key.clone(), color);
             colors.insert(category.clone(), resolved);
             *categories.entry(category.clone()).or_insert(0) += (end - a).max(0);
@@ -249,6 +307,7 @@ pub(super) async fn load(
             start: lo,
             end: hi,
             group_duration: 0,
+            group_id: id,
             titles: detail,
         });
     }
@@ -262,6 +321,8 @@ pub(super) async fn load(
         records,
         minimum_seconds,
         colors,
+        custom_colors,
+        favicons: BTreeMap::new(),
         hours,
         category_hours,
         categories: categories.into_iter().collect(),

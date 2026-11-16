@@ -20,9 +20,23 @@ pub struct Series {
     pub key: String,
     pub name: String,
     pub daily: BTreeMap<usize, i64>,
+    pub color: u32,
+    pub custom_color: Option<u32>,
+    pub favicon: Option<String>,
+}
+impl Series {
+    pub fn source_color(&self, icon: Option<u32>) -> u32 {
+        super::color::source_color(
+            self.key == ANONYMOUS_ACTIVITY_KEY,
+            self.custom_color,
+            icon,
+            self.color,
+        )
+    }
 }
 #[derive(Serialize, Deserialize)]
 pub struct Trends {
+    pub earliest: Option<i64>,
     pub days: Vec<i64>,
     pub series: Vec<Series>,
 }
@@ -33,18 +47,17 @@ pub(super) async fn load(
     locale: crate::Locale,
 ) -> Result<Trends, String> {
     let now = unix_timestamp_millis_i64();
+    let earliest = if kind == SeriesKind::Web {
+        sqlx::query_scalar::<_, Option<i64>>("SELECT MIN(t) FROM (SELECT MIN(start_time) t FROM web_activity_segments UNION ALL SELECT MIN(start_time) t FROM anonymous_activity WHERE is_web=1)")
+            .fetch_one(&pool).await.map_err(|e| e.to_string())?
+    } else {
+        earliest_activity_start(&pool)
+            .await
+            .map_err(|e| e.to_string())?
+    };
     let (from, to) = match range {
         Some((a, b)) => (local_day_range_at(a)?.0, local_day_range_at(b)?.1.min(now)),
-        None => {
-            let start = if kind == SeriesKind::Web {
-                sqlx::query_scalar::<_,Option<i64>>("SELECT MIN(t) FROM (SELECT MIN(start_time) t FROM web_activity_segments UNION ALL SELECT MIN(start_time) t FROM anonymous_activity WHERE is_web=1)").fetch_one(&pool).await.map_err(|e|e.to_string())?
-            } else {
-                earliest_activity_start(&pool)
-                    .await
-                    .map_err(|e| e.to_string())?
-            };
-            (local_day_range_at(start.unwrap_or(now))?.0, now)
-        }
+        None => (local_day_range_at(earliest.unwrap_or(now))?.0, now),
     };
     if from < 0 || to < from {
         return Err("invalid trend dates".into());
@@ -58,6 +71,7 @@ pub(super) async fn load(
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
     let mapping = load_classification_snapshot_in_tx(&mut tx).await?;
     let mut values = BTreeMap::<String, Series>::new();
+    let mut appearance = BTreeMap::new();
     let mut add = |key: String, name: String, start: i64, duration: i64| {
         if duration <= 0 || start < from || start >= to {
             return;
@@ -67,46 +81,84 @@ pub(super) async fn load(
             key,
             name,
             daily: BTreeMap::new(),
+            color: 0x8f98a8,
+            custom_color: None,
+            favicon: None,
         });
         *series.daily.entry(index).or_default() += duration;
     };
     if kind == SeriesKind::Web {
+        let snapshot =
+            crate::data::repositories::web_links::recent_snapshot_in_tx(&mut tx, from, to, now)
+                .await?;
         tx.commit().await.map_err(|e| e.to_string())?;
-        for chunk in days.chunks(399) {
-            let first = chunk[0];
-            let last = local_day_range_at(*chunk.last().unwrap())?.1.min(to);
-            let mut bounds = chunk.to_vec();
-            bounds.push(last);
-            let range = crate::data::web_range::load_web_activity_aggregate_range_from_pool(
-                &pool, first, last, &bounds, None, None, now,
-            )
-            .await?;
-            for r in range.records {
-                if !mapping.is_web_domain_enabled(&r.normalized_domain) {
-                    continue;
-                }
-                let key = crate::domain::web_links::resolve_owner(
-                    &r.normalized_domain,
-                    &range.web_links.rules,
-                );
-                let name = range
-                    .web_links
-                    .overrides
-                    .get(&key)
-                    .and_then(|v| v.get("displayName"))
+        let mut names = BTreeMap::new();
+        let mut icons: Vec<_> = snapshot
+            .favicons
+            .iter()
+            .filter(|(domain, _)| mapping.is_web_domain_enabled(domain))
+            .collect();
+        icons.sort_by(|(a, _), (b, _)| {
+            snapshot
+                .totals
+                .get(*b)
+                .cmp(&snapshot.totals.get(*a))
+                .then(a.cmp(b))
+        });
+        for r in snapshot.segments.iter().flatten() {
+            if !mapping.is_web_domain_enabled(&r.normalized_domain) {
+                continue;
+            }
+            let key =
+                crate::domain::web_links::resolve_owner(&r.normalized_domain, &snapshot.rules);
+            let root = crate::domain::web_links::group_domain(&key);
+            let rule = root.as_ref().and_then(|root| snapshot.rules.get(root));
+            let raw = snapshot.overrides.get(&r.normalized_domain);
+            let name = if root.is_some() {
+                rule.and_then(|r| r.display_name.as_deref())
+            } else {
+                raw.and_then(|v| v.get("displayName"))
                     .and_then(|v| v.as_str())
-                    .unwrap_or(&key)
-                    .to_string();
-                add(key, name, r.bucket_start_ms, r.duration_ms);
             }
-            for r in range.anonymous_records {
-                add(
-                    ANONYMOUS_ACTIVITY_KEY.into(),
-                    crate::text(locale, "common.anonymousActivity"),
-                    r.bucket_start_ms,
-                    r.duration_ms,
-                );
+            .filter(|s| !s.trim().is_empty())
+            .map(str::to_owned)
+            .unwrap_or_else(|| root.clone().unwrap_or_else(|| r.normalized_domain.clone()));
+            let custom = if root.is_some() {
+                rule.and_then(|r| r.color.as_deref())
+            } else {
+                raw.and_then(|v| v.get("color")).and_then(|v| v.as_str())
             }
+            .and_then(super::today::parse_color);
+            let category = mapping.resolve_web_category(&r.normalized_domain);
+            let fallback = if category.id == "other" {
+                super::color::web_color(&key)
+            } else {
+                super::today::parse_color(&category.color).unwrap_or(0x8f98a8)
+            };
+            let favicon = icons
+                .iter()
+                .find(|(domain, _)| {
+                    crate::domain::web_links::resolve_owner(domain, &snapshot.rules) == key
+                })
+                .map(|(_, icon)| (*icon).clone());
+            appearance.insert(key.clone(), (fallback, custom, favicon));
+            names.insert(key, name);
+        }
+        let mut bounds = days.clone();
+        bounds.push(to);
+        for record in
+            crate::data::web_range::aggregate_website_snapshot(&snapshot, &mapping, &bounds)
+        {
+            let name = names
+                .get(&record.normalized_domain)
+                .cloned()
+                .unwrap_or_else(|| crate::text(locale, "common.anonymousActivity"));
+            add(
+                record.normalized_domain,
+                name,
+                record.bucket_start_ms,
+                record.duration_ms,
+            );
         }
     } else {
         let records = load_range_in_tx(&mut tx, from, to, &days, now)
@@ -137,10 +189,28 @@ pub(super) async fn load(
                 continue;
             };
             let (key, name) = if kind == SeriesKind::Category {
+                appearance.insert(
+                    cat.id.clone(),
+                    (
+                        super::today::parse_color(&cat.color).unwrap_or(0x8f98a8),
+                        None,
+                        None,
+                    ),
+                );
                 (cat.id, cat.label)
             } else {
                 let key = mapping.app_owner(&r.exe_name);
                 let (custom, _) = mapping.app_appearance(&key);
+                let custom_color = mapping
+                    .app_appearance(&key)
+                    .1
+                    .and_then(super::today::parse_color);
+                let fallback = if cat.id == "other" {
+                    super::color::app_color(&key)
+                } else {
+                    super::today::parse_color(&cat.color).unwrap_or(0x8f98a8)
+                };
+                appearance.insert(key.clone(), (fallback, custom_color, None));
                 let name = custom
                     .unwrap_or_else(|| {
                         if key.eq_ignore_ascii_case(&r.exe_name) && !r.app_name.is_empty() {
@@ -156,6 +226,17 @@ pub(super) async fn load(
         }
     }
     let mut series: Vec<_> = values.into_values().collect();
+    for series in &mut series {
+        if let Some((color, custom, favicon)) = appearance.remove(&series.key) {
+            series.color = color;
+            series.custom_color = custom;
+            series.favicon = favicon;
+        }
+    }
     series.sort_by_key(|s| std::cmp::Reverse(s.daily.values().sum::<i64>()));
-    Ok(Trends { days, series })
+    Ok(Trends {
+        earliest,
+        days,
+        series,
+    })
 }

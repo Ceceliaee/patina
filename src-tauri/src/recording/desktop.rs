@@ -15,7 +15,13 @@ use tracking::{
     watchdog::RuntimeHealthState,
 };
 
+#[path = "services.rs"]
+mod services;
+#[path = "storage.rs"]
+pub(crate) mod storage;
+
 struct State {
+    remote: crate::engine::remote_status_bridge::RemoteStatusBridgeRuntimeState,
     pause: TrackingPauseRuntimeState,
     titles: TitleRecordingRuntimeState,
     projection: TrackingRuntimeSnapshotState,
@@ -36,9 +42,11 @@ impl TrackingHost for Host {
         &self.0.projection
     }
     fn active_window_changed(&self, _: &platform::windows::foreground::WindowInfo) {
+        self.0.remote.notify_snapshot_change();
         (self.0.changed)();
     }
     fn data_changed(&self, _: &str, _: u64) -> Result<(), String> {
+        self.0.remote.notify_snapshot_change();
         (self.0.changed)();
         Ok(())
     }
@@ -55,8 +63,12 @@ pub enum Activity {
 }
 
 pub struct Recorder {
+    storage: Arc<storage::Storage>,
+    services: Arc<services::Services>,
+    pub initial_desktop: super::DesktopBehaviorSettings,
     pub locale: std::rc::Rc<std::cell::Cell<super::Locale>>,
     pub theme: std::rc::Rc<std::cell::Cell<super::Theme>>,
+    pub schemes: std::rc::Rc<std::cell::RefCell<[String; 2]>>,
     runtime: tokio::runtime::Runtime,
     host: Host,
     pool: SqlitePool,
@@ -79,12 +91,24 @@ impl Recorder {
         database: &Path,
         changed: impl Fn() + Send + Sync + 'static,
     ) -> Result<Self, String> {
+        Self::start_in_profile(
+            database,
+            database.parent().ok_or("missing database directory")?,
+            changed,
+        )
+    }
+    pub fn start_in_profile(
+        database: &Path,
+        profile: &Path,
+        changed: impl Fn() + Send + Sync + 'static,
+    ) -> Result<Self, String> {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
             .enable_all()
             .build()
             .map_err(|e| e.to_string())?;
         let host = Host(Arc::new(State {
+            remote: Default::default(),
             pause: Default::default(),
             titles: Default::default(),
             projection: Default::default(),
@@ -106,13 +130,14 @@ impl Recorder {
             tracking::startup::initialize_tracker(&host, data.as_ref())
                 .await
                 .map_err(|e| e.to_string())?;
+            services::ensure_machine_id(&pool).await?;
             let prefs = crate::manage::preferences(pool.clone()).await?;
             Ok::<_, String>((pool, data, prefs))
         })?;
         platform::windows::audio::start_signal_source(runtime.handle(), host.pause().subscribe());
         platform::windows::media::start_signal_source(runtime.handle(), host.pause().subscribe());
         let health = Arc::new(RuntimeHealthState::default());
-        let tasks = vec![
+        let mut tasks = vec![
             runtime.spawn(observe_recorder_task(
                 "tracking",
                 host.clone(),
@@ -124,7 +149,17 @@ impl Recorder {
                 tracking::watchdog::watch(host.clone(), health.clone(), data.clone()),
             )),
         ];
+        let services = Arc::new(services::Services::new(pool.clone(), host.clone()));
+        tasks.push(runtime.spawn(services.clone().expire()));
+        runtime.block_on(async {
+            services.apply(&prefs);
+        });
+        let storage = Arc::new(storage::Storage::new(profile, database, pool.clone()));
+        tasks.push(runtime.spawn(storage.clone().run_jobs()));
         Ok(Self {
+            storage,
+            services,
+            initial_desktop: prefs.desktop,
             runtime,
             host,
             pool,
@@ -133,6 +168,7 @@ impl Recorder {
             tasks: std::cell::Cell::new(tasks),
             locale: std::rc::Rc::new(std::cell::Cell::new(prefs.locale)),
             theme: std::rc::Rc::new(std::cell::Cell::new(prefs.theme)),
+            schemes: std::rc::Rc::new(std::cell::RefCell::new(prefs.schemes.clone())),
         })
     }
 
@@ -231,17 +267,108 @@ impl Recorder {
     pub fn save_rules(
         &self,
         rules: Vec<crate::AppRule>,
+        websites: Vec<crate::WebRule>,
         categories: Vec<crate::CategoryEdit>,
     ) -> impl std::future::Future<Output = Result<(), String>> + 'static {
         let pool = self.pool.clone();
         let host = self.host.clone();
         let task = self.runtime.spawn(async move {
             let _guard = host.projection().transition.lock().await;
-            crate::manage::save_rules(&pool, &rules, &categories).await?;
+            crate::manage::save_rules(&pool, &rules, &websites, &categories).await?;
             host.titles().invalidate_app_overrides();
             host.projection().note_tracking_policy_change();
             (host.0.changed)();
             Ok(())
+        });
+        async move { task.await.map_err(|e| e.to_string())? }
+    }
+    pub fn delete_application(
+        &self,
+        exe: String,
+        confirmed: Option<super::DeletionImpact>,
+    ) -> impl std::future::Future<Output = Result<super::DeletionImpact, String>> + 'static {
+        let pool = self.pool.clone();
+        let host = self.host.clone();
+        let task = self.runtime.spawn(async move {
+            use crate::data::classification_deletion::{run, Target};
+            use crate::domain::tracking::resolve_app_override_executable;
+            let key =
+                resolve_app_override_executable(&exe).ok_or("Invalid application identity")?;
+            if exe == "activity:anonymous" {
+                return Err("Invalid application identity".into());
+            }
+            let apply = confirmed.is_some();
+            let _guard = if apply {
+                Some(host.projection().transition.lock().await)
+            } else {
+                None
+            };
+            let result = run(&pool, &Target::App(key.clone()), confirmed).await?;
+            if apply {
+                if host
+                    .projection()
+                    .snapshot()
+                    .and_then(|s| s.active_session)
+                    .is_some_and(|s| {
+                        resolve_app_override_executable(&s.exe_name).as_deref() == Some(&key)
+                    })
+                {
+                    host.projection().replace_active_session(None);
+                }
+                host.titles().invalidate_app_overrides();
+                host.projection().note_tracking_policy_change();
+                (host.0.changed)();
+            }
+            Ok(result)
+        });
+        async move { task.await.map_err(|e| e.to_string())? }
+    }
+    pub fn remember_classification_mode(
+        &self,
+        web: bool,
+    ) -> impl std::future::Future<Output = Result<(), String>> + 'static {
+        let pool = self.pool.clone();
+        let task = self.runtime.spawn(async move {
+            commit_app_setting_mutations(
+                &pool,
+                &[AppSettingMutation {
+                    key: "classification_object_mode".into(),
+                    value: if web { "web" } else { "app" }.into(),
+                }],
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+            Ok(())
+        });
+        async move { task.await.map_err(|e| e.to_string())? }
+    }
+    pub fn delete_website(
+        &self,
+        identity: String,
+        confirmed: Option<super::DeletionImpact>,
+    ) -> impl std::future::Future<Output = Result<super::DeletionImpact, String>> + 'static {
+        let pool = self.pool.clone();
+        let host = self.host.clone();
+        let task = self.runtime.spawn(async move {
+            use crate::data::classification_deletion::{run, Target};
+            let target = if let Some(root) = crate::domain::web_links::group_domain(&identity) {
+                Target::Group(root)
+            } else {
+                let domain = crate::domain::web_activity::normalize_domain(&identity)
+                    .ok_or("invalid website identity")?;
+                if domain != identity {
+                    return Err("invalid website identity".into());
+                }
+                Target::Web(domain)
+            };
+            let apply = confirmed.is_some();
+            let _guard = host.projection().transition.lock().await;
+            let result = run(&pool, &target, confirmed).await?;
+            if apply {
+                host.projection().note_tracking_policy_change();
+                (host.0.changed)();
+            }
+            Ok(result)
         });
         async move { task.await.map_err(|e| e.to_string())? }
     }
@@ -259,13 +386,26 @@ impl Recorder {
         old: crate::TrackingPreferences,
         p: crate::TrackingPreferences,
     ) -> impl std::future::Future<Output = Result<(), String>> + 'static {
+        let services = self.services.clone();
+        let (next_locale, next_theme) = (p.locale, p.theme);
         let locale = self.locale.clone();
         let theme = self.theme.clone();
+        let schemes = self.schemes.clone();
+        let changed_schemes = std::array::from_fn::<_, 2, _>(|i| {
+            (old.schemes[i] != p.schemes[i]).then(|| p.schemes[i].clone())
+        });
         let host = self.host.clone();
         let pool = self.pool.clone();
         let task = self.runtime.spawn(async move {
             let _guard = host.projection().transition.lock().await;
-            crate::manage::save_preferences(pool.clone(), old, p).await?;
+            crate::manage::save_preferences(pool.clone(), &old, &p).await?;
+            if old.web != p.web {
+                host.titles().clear_browser_title();
+                host.titles().clear_anonymous_web();
+            }
+            if old.web != p.web || old.remote != p.remote {
+                services.apply(&p);
+            }
             let time = crate::platform::clock::unix_timestamp_millis_i64();
             if p.paused != old.paused {
                 host.pause().set_after_write(p.paused, time);
@@ -281,8 +421,13 @@ impl Recorder {
         });
         async move {
             task.await.map_err(|e| e.to_string())??;
-            locale.set(p.locale);
-            theme.set(p.theme);
+            locale.set(next_locale);
+            theme.set(next_theme);
+            for (current, changed) in schemes.borrow_mut().iter_mut().zip(changed_schemes) {
+                if let Some(value) = changed {
+                    *current = value;
+                }
+            }
             Ok(())
         }
     }
@@ -319,6 +464,16 @@ impl Recorder {
         app: Option<String>,
         titles: bool,
     ) -> impl std::future::Future<Output = Result<super::HistoryDay, String>> + 'static {
+        self.history_source(day, app, titles, false)
+    }
+
+    pub fn history_source(
+        &self,
+        day: i64,
+        app: Option<String>,
+        titles: bool,
+        web: bool,
+    ) -> impl std::future::Future<Output = Result<super::HistoryDay, String>> + 'static {
         let read = self.runtime.spawn(super::history::load(
             self.pool.clone(),
             day,
@@ -326,6 +481,7 @@ impl Recorder {
             titles,
             self.health.snapshot().last_successful_sample_ms,
             self.locale.get(),
+            web,
         ));
         async move { read.await.map_err(|e| e.to_string())? }
     }
@@ -411,6 +567,7 @@ impl Recorder {
         let result = self.runtime.block_on(async {
             // Let a transaction reach its boundary before stopping the producer.
             let _guard = self.host.projection().transition.lock().await;
+            self.services.stop();
             for task in tasks {
                 task.abort();
                 let _ = task.await;

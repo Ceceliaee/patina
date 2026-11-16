@@ -8,6 +8,9 @@ use crate::data::repositories::{
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::collections::BTreeMap;
+#[path = "manage/web.rs"]
+mod web;
+pub use web::WebRule;
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AppRule {
     pub exe: String,
@@ -20,12 +23,39 @@ pub struct AppRule {
 }
 #[derive(Serialize, Deserialize)]
 pub struct Rules {
+    pub web_enabled: bool,
+    pub web_mode: bool,
+    pub websites: Vec<WebRule>,
+    pub category_default_colors: BTreeMap<String, String>,
+    pub category_color_overrides: BTreeMap<String, String>,
     pub apps: Vec<AppRule>,
     pub categories: Vec<(String, String)>,
+    pub category_colors: BTreeMap<String, String>,
 }
 pub(super) async fn rules(pool: SqlitePool) -> Result<Rules, String> {
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
     let map = load_classification_snapshot_in_tx(&mut tx).await?;
+    let mut websites = web::read(&mut tx).await?;
+    for site in &mut websites {
+        site.category = map
+            .resolve_category_by_id(&site.category)
+            .map(|category| category.id)
+            .unwrap_or_else(|| "other".into());
+    }
+    let web_enabled: Option<String> =
+        sqlx::query_scalar("SELECT value FROM settings WHERE key='web_activity_enabled'")
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+    let web_enabled = web_enabled
+        .as_deref()
+        .is_some_and(|v| crate::domain::settings::parse_boolean_setting(v, false));
+    let web_mode: Option<String> =
+        sqlx::query_scalar("SELECT value FROM settings WHERE key='classification_object_mode'")
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+    let web_mode = web_mode.as_deref() == Some("web");
     let identities:Vec<(String,String)>=sqlx::query_as("SELECT exe_name,MAX(app_name) FROM (SELECT exe_name,app_name FROM sessions UNION ALL SELECT exe_name,app_name FROM import_exact_sessions UNION ALL SELECT exe_name,app_name FROM import_time_buckets UNION ALL SELECT substr(key,17),'' FROM settings WHERE key GLOB '__app_override::*') GROUP BY exe_name ORDER BY exe_name").fetch_all(&mut *tx).await.map_err(|e|e.to_string())?;
     let overrides: BTreeMap<String, String> = sqlx::query_as::<_, (String, String)>(
         "SELECT substr(key,17),value FROM settings WHERE key GLOB '__app_override::*'",
@@ -62,7 +92,10 @@ pub(super) async fn rules(pool: SqlitePool) -> Result<Rules, String> {
                     &fallback
                 })
                 .to_owned(),
-            category: raw["category"].as_str().unwrap_or(&cat.id).to_owned(),
+            category: crate::domain::classification::normalize_category_id(
+                raw["category"].as_str().unwrap_or(&cat.id),
+            )
+            .to_owned(),
             color: color.unwrap_or("").into(),
             track: map.is_app_enabled(&exe),
             titles: raw["captureTitle"].as_bool().unwrap_or(true),
@@ -70,64 +103,47 @@ pub(super) async fn rules(pool: SqlitePool) -> Result<Rules, String> {
             original,
         });
     }
-    let categories = map
-        .available_categories()
-        .into_iter()
-        .map(|c| (c.id, c.label))
+    let available = map.available_categories();
+    let category_colors = available
+        .iter()
+        .map(|c| (c.id.clone(), c.color.clone()))
         .collect();
-    Ok(Rules { apps, categories })
+    let category_color_overrides = available
+        .iter()
+        .filter_map(|c| {
+            map.category_color_override(&c.id)
+                .map(|color| (c.id.clone(), color.to_owned()))
+        })
+        .collect();
+    let category_default_colors = available
+        .iter()
+        .map(|c| (c.id.clone(), map.default_category_color(&c.id)))
+        .collect();
+    let categories = available.into_iter().map(|c| (c.id, c.label)).collect();
+    Ok(Rules {
+        websites,
+        web_enabled,
+        web_mode,
+        category_color_overrides,
+        category_default_colors,
+        apps,
+        categories,
+        category_colors,
+    })
 }
-#[derive(Clone, Serialize, Deserialize)]
-pub struct CategoryEdit {
-    pub id: String,
-    pub previous: Option<String>,
-    pub label: String,
-}
+pub use crate::data::repositories::category_management::CategoryEdit;
 pub(super) async fn save_rules(
     pool: &SqlitePool,
     apps: &[AppRule],
+    websites: &[WebRule],
     categories: &[CategoryEdit],
 ) -> Result<(), String> {
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
     let map = load_classification_snapshot_in_tx(&mut tx).await?;
-    let mut mutations = Vec::new();
-    let mut labels = map
-        .available_categories()
-        .into_iter()
-        .map(|c| (c.id, c.label))
-        .collect::<BTreeMap<_, _>>();
-    for change in categories {
-        let name = change.label.trim();
-        if name.is_empty()
-            || name.encode_utf16().count() > 80
-            || change.id == "other"
-            || change.id == "system"
-            || change.id == "anonymous"
-            || labels.get(&change.id) != change.previous.as_ref()
-        {
-            return Err("category changed or invalid".into());
-        }
-        if labels
-            .iter()
-            .any(|(id, label)| id != &change.id && label.to_lowercase() == name.to_lowercase())
-        {
-            return Err("duplicate category name".into());
-        }
-        if change.previous.is_none() {
-            if !change.id.starts_with("custom:category_") {
-                return Err("invalid new category".into());
-            }
-            mutations.push(ClassificationSettingMutation {
-                key: format!("__custom_category::{}", change.id),
-                value: Some(crate::platform::clock::unix_timestamp_millis_i64().to_string()),
-            });
-        }
-        mutations.push(ClassificationSettingMutation {
-            key: format!("__category_label_override::{}", change.id),
-            value: Some(name.to_owned()),
-        });
-        labels.insert(change.id.clone(), name.into());
-    }
+    let category_plan = crate::data::repositories::category_management::plan(&map, categories)?;
+    let labels = &category_plan.labels;
+    let mut mutations = category_plan.mutations.clone();
+    mutations.extend(web::changes(&mut tx, websites, labels).await?);
     for a in apps {
         if a.exe.is_empty()
             || a.exe == "activity:anonymous"
@@ -157,14 +173,7 @@ pub(super) async fn save_rules(
             serde_json::from_str(old.as_deref().unwrap_or("{}")).map_err(|e| e.to_string())?;
         for (field, v) in [
             ("displayName", a.name.trim()),
-            (
-                "category",
-                if a.category == "other" {
-                    ""
-                } else {
-                    &a.category
-                },
-            ),
+            ("category", &a.category),
             ("color", &a.color),
         ] {
             if v.is_empty() {
@@ -189,6 +198,9 @@ pub(super) async fn save_rules(
             value: Some(serde_json::Value::Object(raw).to_string()),
         });
     }
+    category_plan
+        .rewrite_assignments(&mut tx, &mut mutations)
+        .await?;
     apply_classification_setting_mutations_in_tx(&mut tx, &mutations)
         .await
         .map_err(|e| e.to_string())?;
@@ -235,8 +247,11 @@ impl Theme {
         }
     }
 }
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct TrackingPreferences {
+    pub web: crate::WebActivityBridgeSettings,
+    pub remote: crate::RemoteStatusBridgeSettings,
+    pub desktop: crate::DesktopBehaviorSettings,
     pub gap: i64,
     pub idle: i64,
     pub minimum: i64,
@@ -245,10 +260,20 @@ pub struct TrackingPreferences {
     pub titles: bool,
     pub locale: crate::Locale,
     pub theme: Theme,
+    pub schemes: [String; 2],
 }
 impl TrackingPreferences {
+    pub fn remote_endpoint_valid(&self) -> bool {
+        url::Url::parse(&self.remote.url).is_ok_and(|u| {
+            matches!(u.scheme(), "ws" | "wss") && u.host().is_some() && u.fragment().is_none()
+        })
+    }
     pub fn valid(&self) -> bool {
-        (60..=300).contains(&self.gap)
+        self.web.port >= crate::domain::settings::WEB_ACTIVITY_PORT_MIN
+            && (!self.web.enabled || !self.web.token.trim().is_empty())
+            && (!self.remote.enabled
+                || (!self.remote.token.trim().is_empty() && self.remote_endpoint_valid()))
+            && (60..=300).contains(&self.gap)
             && self.gap % 60 == 0
             && (300..=1800).contains(&self.idle)
             && self.idle % 60 == 0
@@ -266,11 +291,45 @@ pub(super) async fn preferences(pool: SqlitePool) -> Result<TrackingPreferences,
 async fn preferences_in_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
 ) -> Result<TrackingPreferences, String> {
-    let values:BTreeMap<String,String>=sqlx::query_as::<_,(String,String)>("SELECT key,value FROM settings WHERE key IN ('timeline_merge_gap_secs','idle_timeout_secs','min_session_secs','refresh_interval_secs','tracking_paused','title_recording_enabled','language','theme_mode')").fetch_all(&mut **tx).await.map_err(|e|e.to_string())?.into_iter().collect();
+    let values: BTreeMap<String, String> = sqlx::query_as::<_, (String, String)>(
+        "SELECT key,value FROM settings WHERE key IN (
+         'timeline_merge_gap_secs','idle_timeout_secs','min_session_secs','refresh_interval_secs',
+         'tracking_paused','title_recording_enabled','language','theme_mode','color_scheme_light','color_scheme_dark',
+         'show_tray_icon','close_behavior','launch_at_login','start_minimized','web_activity_enabled','web_activity_port','web_activity_token',
+         'remote_status_bridge_enabled','remote_status_bridge_url','remote_status_bridge_token','remote_status_bridge_machine_id')",
+    )
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(|e| e.to_string())?
+    .into_iter()
+    .collect();
+    let value = |key: &str| values.get(key).map(String::as_str);
+    let mut desktop = crate::DesktopBehaviorSettings::from_storage_values(
+        value("close_behavior"),
+        // The experimental host only registers for login after an explicit opt-in.
+        value("launch_at_login").or(Some("0")),
+        value("start_minimized"),
+    );
+    desktop.show_tray_icon = value("show_tray_icon")
+        .is_none_or(|v| crate::domain::settings::parse_boolean_setting(v, true));
     let n = |k: &str, d| values.get(k).and_then(|s| s.parse().ok()).unwrap_or(d);
     Ok(TrackingPreferences {
+        web: crate::WebActivityBridgeSettings::from_storage_values(
+            value("web_activity_port"),
+            value("web_activity_enabled"),
+            value("web_activity_token"),
+        ),
+        remote: crate::RemoteStatusBridgeSettings::from_storage_values(
+            value("remote_status_bridge_enabled"),
+            value("remote_status_bridge_url"),
+            value("remote_status_bridge_token"),
+            value("remote_status_bridge_machine_id"),
+        ),
+        desktop,
         locale: crate::Locale::from_tag(values.get("language").map(String::as_str)),
         theme: Theme::read(values.get("theme_mode").map_or("light", String::as_str)),
+        schemes: ["color_scheme_light", "color_scheme_dark"]
+            .map(|key| value(key).unwrap_or("default").trim().to_ascii_lowercase()),
         gap: ((n("timeline_merge_gap_secs", 180).clamp(60, 300) + 30) / 60) * 60,
         idle: ((n("idle_timeout_secs", 900).clamp(300, 1800) + 30) / 60) * 60,
         minimum: ((n("min_session_secs", 300).clamp(0, 600) + 30) / 60) * 60,
@@ -288,13 +347,13 @@ async fn preferences_in_tx(
 }
 pub(super) async fn save_preferences(
     pool: SqlitePool,
-    old: TrackingPreferences,
-    p: TrackingPreferences,
+    old: &TrackingPreferences,
+    p: &TrackingPreferences,
 ) -> Result<(), String> {
     if !p.valid() {
-        return Err("invalid time preference".into());
+        return Err("invalid settings".into());
     }
-    let fields = |p: TrackingPreferences| {
+    let fields = |p: &TrackingPreferences| {
         [
             ("timeline_merge_gap_secs", p.gap),
             ("idle_timeout_secs", p.idle),
@@ -302,13 +361,19 @@ pub(super) async fn save_preferences(
             ("refresh_interval_secs", p.refresh),
             ("tracking_paused", i64::from(p.paused)),
             ("title_recording_enabled", i64::from(p.titles)),
+            ("web_activity_enabled", i64::from(p.web.enabled)),
+            ("web_activity_port", i64::from(p.web.port)),
+            ("remote_status_bridge_enabled", i64::from(p.remote.enabled)),
+            ("show_tray_icon", i64::from(p.desktop.show_tray_icon)),
+            ("launch_at_login", i64::from(p.desktop.launch_at_login)),
+            ("start_minimized", i64::from(p.desktop.start_minimized)),
         ]
     };
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
     let actual = preferences_in_tx(&mut tx).await?;
     let mut changes = Vec::new();
     for (((key, value), (_, was)), (_, current)) in
-        fields(p).into_iter().zip(fields(old)).zip(fields(actual))
+        fields(p).into_iter().zip(fields(old)).zip(fields(&actual))
     {
         if value == was {
             continue;
@@ -321,7 +386,42 @@ pub(super) async fn save_preferences(
             value: value.to_string(),
         });
     }
+    let close = |p: &TrackingPreferences| match p.desktop.close_behavior {
+        crate::CloseBehavior::Tray => "tray",
+        crate::CloseBehavior::Exit => "exit",
+    };
     for (key, from, to, current) in [
+        (
+            "web_activity_token",
+            old.web.token.as_str(),
+            p.web.token.as_str(),
+            actual.web.token.as_str(),
+        ),
+        (
+            "remote_status_bridge_url",
+            old.remote.url.as_str(),
+            p.remote.url.as_str(),
+            actual.remote.url.as_str(),
+        ),
+        (
+            "remote_status_bridge_token",
+            old.remote.token.as_str(),
+            p.remote.token.as_str(),
+            actual.remote.token.as_str(),
+        ),
+        ("close_behavior", close(old), close(p), close(&actual)),
+        (
+            "color_scheme_light",
+            old.schemes[0].as_str(),
+            p.schemes[0].as_str(),
+            actual.schemes[0].as_str(),
+        ),
+        (
+            "color_scheme_dark",
+            old.schemes[1].as_str(),
+            p.schemes[1].as_str(),
+            actual.schemes[1].as_str(),
+        ),
         (
             "language",
             old.locale.tag(),
@@ -349,13 +449,18 @@ pub(super) async fn save_preferences(
         .await
         .map_err(|e| e.to_string())?;
     let now = crate::platform::clock::unix_timestamp_millis_i64();
-    if old.titles != p.titles {
-        if !p.titles {
+    if old.titles != p.titles || old.web != p.web {
+        if old.titles != p.titles && !p.titles {
             crate::data::repositories::sessions::disable_active_title_tx(&mut tx, now)
                 .await
                 .map_err(|e| e.to_string())?;
         }
         crate::data::repositories::web_activity::end_active_segment_tx(&mut tx, now)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    if old.web != p.web {
+        crate::data::repositories::anonymous_activity::seal_web_tx(&mut tx, now)
             .await
             .map_err(|e| e.to_string())?;
     }
