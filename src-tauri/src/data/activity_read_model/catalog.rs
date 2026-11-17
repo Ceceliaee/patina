@@ -640,7 +640,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "performance fixture; run with pnpm run perf:classification-app-catalog"]
+    #[ignore = "performance fixture; run the ignored activity catalog benchmark explicitly"]
     async fn catalog_capacity_report() {
         use serde_json::json;
         use std::time::Instant;

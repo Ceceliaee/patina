@@ -1,8 +1,8 @@
 use crate::data::repositories::{
-    app_settings::{commit_app_setting_mutations_in_tx, AppSettingMutation},
+    app_settings::{AppSettingMutation, commit_app_setting_mutations_in_tx},
     classification_settings::{
-        apply_classification_setting_mutations_in_tx, load_classification_snapshot_in_tx,
-        ClassificationSettingMutation,
+        ClassificationSettingMutation, apply_classification_setting_mutations_in_tx,
+        load_classification_snapshot_in_tx,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -10,7 +10,9 @@ use sqlx::SqlitePool;
 use std::collections::BTreeMap;
 #[path = "manage/web.rs"]
 mod web;
-pub use web::WebRule;
+#[path = "manage/draft.rs"]
+mod draft;
+pub use draft::{WebDraft, WebRule};
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AppRule {
     pub exe: String,
@@ -21,27 +23,37 @@ pub struct AppRule {
     pub titles: bool,
     pub original: Option<String>,
 }
+#[derive(Clone, Serialize, Deserialize)]
+pub struct AppLinkEdit {
+    pub member: String,
+    pub parent: Option<String>,
+    pub original: Option<String>,
+}
 #[derive(Serialize, Deserialize)]
 pub struct Rules {
     pub web_enabled: bool,
     pub web_mode: bool,
-    pub websites: Vec<WebRule>,
+    pub websites: WebDraft,
+    pub titles_enabled: bool,
     pub category_default_colors: BTreeMap<String, String>,
     pub category_color_overrides: BTreeMap<String, String>,
     pub apps: Vec<AppRule>,
+    pub app_links: BTreeMap<String, String>,
     pub categories: Vec<(String, String)>,
     pub category_colors: BTreeMap<String, String>,
 }
 pub(super) async fn rules(pool: SqlitePool) -> Result<Rules, String> {
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
     let map = load_classification_snapshot_in_tx(&mut tx).await?;
-    let mut websites = web::read(&mut tx).await?;
-    for site in &mut websites {
-        site.category = map
-            .resolve_category_by_id(&site.category)
-            .map(|category| category.id)
-            .unwrap_or_else(|| "other".into());
-    }
+    let websites = web::read(&mut tx).await?;
+    let titles_enabled: Option<String> =
+        sqlx::query_scalar("SELECT value FROM settings WHERE key='title_recording_enabled'")
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+    let titles_enabled = titles_enabled
+        .as_deref()
+        .is_none_or(|v| crate::domain::settings::parse_boolean_setting(v, true));
     let web_enabled: Option<String> =
         sqlx::query_scalar("SELECT value FROM settings WHERE key='web_activity_enabled'")
             .fetch_optional(&mut *tx)
@@ -65,6 +77,14 @@ pub(super) async fn rules(pool: SqlitePool) -> Result<Rules, String> {
     .map_err(|e| e.to_string())?
     .into_iter()
     .collect();
+    let app_links: BTreeMap<String, String> = sqlx::query_as::<_, (String, String)>(
+        "SELECT substr(key,13),value FROM settings WHERE key GLOB '__app_link::*'",
+    )
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?
+    .into_iter()
+    .collect();
     tx.commit().await.map_err(|e| e.to_string())?;
     let mut names_by_exe = BTreeMap::<String, String>::new();
     for (exe, name) in identities {
@@ -76,6 +96,9 @@ pub(super) async fn rules(pool: SqlitePool) -> Result<Rules, String> {
         if name > *fallback {
             *fallback = name;
         }
+    }
+    for identity in app_links.keys().chain(app_links.values()) {
+        names_by_exe.entry(identity.clone()).or_default();
     }
     let mut apps = Vec::with_capacity(names_by_exe.len());
     for (exe, fallback) in names_by_exe {
@@ -93,7 +116,13 @@ pub(super) async fn rules(pool: SqlitePool) -> Result<Rules, String> {
                 })
                 .to_owned(),
             category: crate::domain::classification::normalize_category_id(
-                raw["category"].as_str().unwrap_or(&cat.id),
+                raw["category"]
+                    .as_str()
+                    .unwrap_or(if app_links.contains_key(&exe) {
+                        "other"
+                    } else {
+                        &cat.id
+                    }),
             )
             .to_owned(),
             color: color.unwrap_or("").into(),
@@ -122,11 +151,13 @@ pub(super) async fn rules(pool: SqlitePool) -> Result<Rules, String> {
     let categories = available.into_iter().map(|c| (c.id, c.label)).collect();
     Ok(Rules {
         websites,
+        titles_enabled,
         web_enabled,
         web_mode,
         category_color_overrides,
         category_default_colors,
         apps,
+        app_links,
         categories,
         category_colors,
     })
@@ -135,7 +166,8 @@ pub use crate::data::repositories::category_management::CategoryEdit;
 pub(super) async fn save_rules(
     pool: &SqlitePool,
     apps: &[AppRule],
-    websites: &[WebRule],
+    websites: Option<&WebDraft>,
+    links: &[AppLinkEdit],
     categories: &[CategoryEdit],
 ) -> Result<(), String> {
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
@@ -143,11 +175,18 @@ pub(super) async fn save_rules(
     let category_plan = crate::data::repositories::category_management::plan(&map, categories)?;
     let labels = &category_plan.labels;
     let mut mutations = category_plan.mutations.clone();
-    mutations.extend(web::changes(&mut tx, websites, labels).await?);
+    mutations.extend(web::changes(&mut tx, websites, labels, categories).await?);
+    for link in links {
+        mutations.push(ClassificationSettingMutation {
+            key: format!("__app_link::{}", link.member),
+            value: Some(
+                serde_json::json!({"parent":link.parent,"previous":link.original}).to_string(),
+            ),
+        });
+    }
     for a in apps {
         if a.exe.is_empty()
             || a.exe == "activity:anonymous"
-            || map.app_owner(&a.exe) != a.exe
             || a.name.trim().encode_utf16().count() > 80
             || !labels.contains_key(&a.category)
         {

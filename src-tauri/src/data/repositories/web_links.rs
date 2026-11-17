@@ -642,7 +642,7 @@ pub struct WebActivityDetailSegment {
     pub(crate) browser_exe_name: String,
     pub(crate) domain: String,
     pub(crate) normalized_domain: String,
-    url: Option<String>,
+    pub(crate) url: Option<String>,
     pub(crate) title: Option<String>,
     favicon_url: Option<String>,
     pub(crate) start_time: i64,

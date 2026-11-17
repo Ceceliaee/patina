@@ -313,10 +313,12 @@ mod tests {
             let rule = serde_json::from_str(json).unwrap();
             assert!(validate_rule("example.com", &rule).is_err());
         }
-        assert!(serde_json::from_str::<WebLinkRule>(
-            r#"{"version":2,"exceptions":["example.com","example.com"]}"#
-        )
-        .is_err());
+        assert!(
+            serde_json::from_str::<WebLinkRule>(
+                r#"{"version":2,"exceptions":["example.com","example.com"]}"#
+            )
+            .is_err()
+        );
         assert_eq!(
             registrable_domain("www.食狮.com.cn"),
             registrable_domain("www.xn--85x722f.com.cn")

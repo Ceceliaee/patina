@@ -1,193 +1,134 @@
 use super::*;
-use crate::domain::web_links::{group_domain, resolve_owner, SETTING_PREFIX};
+use crate::domain::web_links::{registrable_domain, SETTING_PREFIX};
 use sqlx::{Sqlite, Transaction};
-use std::collections::BTreeSet;
 
-#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct WebRule {
-    pub identity: String,
-    pub domain: String,
-    pub name: String,
-    pub category: String,
-    pub color: String,
-    pub track: bool,
-    pub titles: bool,
-    pub members: Vec<String>,
-    pub original: BTreeMap<String, Option<String>>,
-}
-
-pub(super) async fn read(tx: &mut Transaction<'_, Sqlite>) -> Result<Vec<WebRule>, String> {
+pub(super) async fn read(tx: &mut Transaction<'_, Sqlite>) -> Result<WebDraft, String> {
     let snapshot = crate::data::repositories::web_links::snapshot_in_tx(tx).await?;
-    let stored: BTreeMap<String, String> = sqlx::query_as::<_, (String, String)>(
+    let stored: Vec<(String, String)> = sqlx::query_as(
         "SELECT key,value FROM settings WHERE key GLOB '__web_domain_override::*' OR key GLOB '__web_site::*'",
-    ).fetch_all(&mut **tx).await.map_err(|e| e.to_string())?.into_iter().collect();
-    let mut groups = BTreeMap::<String, BTreeSet<String>>::new();
-    for domain in snapshot.domains.iter().chain(snapshot.overrides.keys()) {
-        groups
-            .entry(resolve_owner(domain, &snapshot.rules))
-            .or_default()
-            .insert(domain.clone());
-    }
-    let mut result = Vec::new();
-    for (identity, members) in groups {
-        let root = group_domain(&identity);
-        let domain = root.clone().unwrap_or_else(|| identity.clone());
-        let appearance_key = if root.is_some() {
-            format!("{SETTING_PREFIX}{domain}")
-        } else {
-            format!("__web_domain_override::{domain}")
-        };
-        let raw: serde_json::Value = serde_json::from_str(
-            stored
-                .get(&appearance_key)
-                .map(String::as_str)
-                .unwrap_or("{}"),
-        )
-        .map_err(|e| e.to_string())?;
-        let original_value = stored.get(&appearance_key).cloned();
-        let mut original = BTreeMap::from([(appearance_key, original_value)]);
-        for member in &members {
-            let key = format!("__web_domain_override::{member}");
-            original.insert(key.clone(), stored.get(&key).cloned());
+    ).fetch_all(&mut **tx).await.map_err(|e| e.to_string())?;
+    let mut draft = WebDraft {
+        original: stored.into_iter().map(|(k, v)| (k, Some(v))).collect(),
+        domains: snapshot
+            .domains
+            .iter()
+            .chain(snapshot.overrides.keys())
+            .cloned()
+            .collect(),
+        totals: snapshot.totals,
+        favicons: snapshot.favicons,
+        ..WebDraft::default()
+    };
+    for domain in &draft.domains {
+        draft
+            .original
+            .entry(format!("__web_domain_override::{domain}"))
+            .or_default();
+        if let Some(root) = registrable_domain(domain) {
+            draft
+                .original
+                .entry(format!("{SETTING_PREFIX}{root}"))
+                .or_default();
         }
-        let enabled = |member: &String, key: &str| {
-            snapshot
-                .overrides
-                .get(member)
-                .and_then(|v| v[key].as_bool())
-                .unwrap_or(true)
-        };
-        result.push(WebRule {
-            identity,
-            domain: domain.clone(),
-            name: raw["displayName"]
-                .as_str()
-                .filter(|s| !s.trim().is_empty())
-                .unwrap_or(&domain)
-                .into(),
-            category: raw["category"].as_str().unwrap_or("other").into(),
-            color: raw["color"].as_str().unwrap_or("").into(),
-            track: members.iter().any(|m| enabled(m, "enabled")),
-            titles: members.iter().all(|m| enabled(m, "captureTitle")),
-            members: members.into_iter().collect(),
-            original,
-        });
     }
-    Ok(result)
+    Ok(draft)
 }
 
 pub(super) async fn changes(
     tx: &mut Transaction<'_, Sqlite>,
-    edits: &[WebRule],
+    draft: Option<&WebDraft>,
     labels: &BTreeMap<String, String>,
+    categories: &[CategoryEdit],
 ) -> Result<Vec<ClassificationSettingMutation>, String> {
-    if edits.is_empty() {
+    let Some(draft) = draft.filter(|d| d.dirty()) else {
         return Ok(vec![]);
-    }
+    };
     let current = read(tx).await?;
     let mut mutations = Vec::new();
-    let mut identities = BTreeSet::new();
-    for edit in edits {
-        let old = current
-            .iter()
-            .find(|r| r.identity == edit.identity)
-            .ok_or("website no longer exists")?;
-        if !identities.insert(&edit.identity)
-            || old.original != edit.original
-            || old.members != edit.members
-            || old.domain != edit.domain
+    for (key, value) in draft.changed() {
+        let mut value = value.clone();
+        if let Some(target) = value
+            .get("category")
+            .and_then(serde_json::Value::as_str)
+            .and_then(|id| categories.iter().find(|c| c.id == id))
+            .and_then(|c| c.replacement.as_ref())
+        {
+            value.insert("category".into(), target.clone().into());
+        }
+        if !current.original.contains_key(key)
+            || current.original.get(key) != draft.original.get(key)
         {
             return Err("website changed since loading".into());
         }
-        if edit.name.trim().encode_utf16().count() > 80
-            || !labels.contains_key(&edit.category)
-            || (!edit.color.is_empty()
-                && !(edit.color.len() == 7
-                    && edit.color.starts_with('#')
-                    && edit.color[1..].bytes().all(|b| b.is_ascii_hexdigit())))
+        // A newly observed member must not silently escape a group-wide policy edit.
+        let domain = key
+            .strip_prefix(SETTING_PREFIX)
+            .or_else(|| key.strip_prefix("__web_domain_override::"))
+            .ok_or("invalid website setting")?;
+        let root = registrable_domain(domain);
+        if let Some(root) = &root {
+            let group_key = format!("{SETTING_PREFIX}{root}");
+            if current.original.get(&group_key) != draft.original.get(&group_key) {
+                return Err("website grouping changed since loading".into());
+            }
+        }
+        let same_group = |candidate: &&String| {
+            root.as_ref().map_or(*candidate == domain, |r| {
+                registrable_domain(candidate).as_ref() == Some(r)
+            })
+        };
+        if current
+            .domains
+            .iter()
+            .filter(same_group)
+            .ne(draft.domains.iter().filter(same_group))
+        {
+            return Err("website members changed since loading".into());
+        }
+        if value
+            .get("category")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|c| !labels.contains_key(c))
+            || value
+                .get("displayName")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|n| n.encode_utf16().count() > 80)
         {
             return Err("invalid website change".into());
         }
-        let grouped = group_domain(&edit.identity).is_some();
-        let appearance_key = if grouped {
-            format!("{SETTING_PREFIX}{}", edit.domain)
-        } else {
-            format!("__web_domain_override::{}", edit.domain)
-        };
-        let mut writes = BTreeMap::<String, serde_json::Map<String, serde_json::Value>>::new();
-        let mut appearance: serde_json::Map<String, serde_json::Value> = serde_json::from_str(
-            old.original
-                .get(&appearance_key)
+        let next = serde_json::Value::Object(value.clone());
+        let stored = if key.starts_with(SETTING_PREFIX) {
+            let previous: serde_json::Value = current
+                .original
+                .get(key)
                 .and_then(|v| v.as_deref())
-                .unwrap_or("{}"),
-        )
-        .map_err(|e| e.to_string())?;
-        for (key, value) in [
-            ("displayName", edit.name.trim()),
-            ("category", &edit.category),
-            ("color", &edit.color),
-        ] {
-            if value.is_empty() {
-                appearance.remove(key);
-            } else {
-                appearance.insert(key.into(), value.into());
-            }
-        }
-        if grouped {
-            appearance.insert("version".into(), 2.into());
-        }
-        writes.insert(appearance_key, appearance);
-        for member in &edit.members {
-            if edit.track == old.track && edit.titles == old.titles {
-                continue;
-            }
-            let key = format!("__web_domain_override::{member}");
-            let raw = writes.entry(key.clone()).or_insert(
-                serde_json::from_str(
-                    old.original
-                        .get(&key)
-                        .and_then(|v| v.as_deref())
-                        .unwrap_or("{}"),
-                )
-                .map_err(|e| e.to_string())?,
-            );
-            if edit.track != old.track {
-                raw.insert("enabled".into(), edit.track.into());
-            }
-            if edit.titles != old.titles {
-                raw.insert("captureTitle".into(), edit.titles.into());
-            }
-        }
-        for (key, value) in writes {
-            let value = if key.starts_with(SETTING_PREFIX) {
-                let previous: serde_json::Value = old
-                    .original
-                    .get(&key)
-                    .and_then(|v| v.as_deref())
-                    .map(serde_json::from_str)
-                    .transpose()
-                    .map_err(|e| e.to_string())?
-                    .unwrap_or(serde_json::Value::Null);
-                serde_json::json!({"previous": previous, "next": value})
-            } else {
-                serde_json::Value::Object(value)
-            };
-            mutations.push(ClassificationSettingMutation {
-                key,
-                value: Some(value.to_string()),
-            });
-        }
-        let now = crate::platform::clock::unix_timestamp_millis_i64();
-        for member in &edit.members {
-            if !edit.track {
+                .map(serde_json::from_str)
+                .transpose()
+                .map_err(|e| e.to_string())?
+                .unwrap_or(serde_json::Value::Null);
+            serde_json::json!({"previous": previous, "next": next})
+        } else {
+            next
+        };
+        mutations.push(ClassificationSettingMutation {
+            key: key.clone(),
+            value: Some(stored.to_string()),
+        });
+        if key.starts_with("__web_domain_override::") {
+            let now = crate::platform::clock::unix_timestamp_millis_i64();
+            if value.get("enabled").and_then(serde_json::Value::as_bool) == Some(false) {
                 sqlx::query("UPDATE web_activity_segments SET end_time=MAX(start_time,MIN(?,updated_at+?)), duration=MAX(0,MIN(?,updated_at+?)-start_time) WHERE normalized_domain=? AND end_time IS NULL")
                     .bind(now).bind(crate::domain::web_activity::WEB_ACTIVITY_OBSERVATION_TTL_MS)
-                    .bind(now).bind(crate::domain::web_activity::WEB_ACTIVITY_OBSERVATION_TTL_MS).bind(member)
+                    .bind(now).bind(crate::domain::web_activity::WEB_ACTIVITY_OBSERVATION_TTL_MS).bind(domain)
                     .execute(&mut **tx).await.map_err(|e| e.to_string())?;
             }
-            if !edit.titles {
+            if value
+                .get("captureTitle")
+                .and_then(serde_json::Value::as_bool)
+                == Some(false)
+            {
                 sqlx::query("UPDATE web_activity_segments SET title=NULL WHERE normalized_domain=? AND end_time IS NULL")
-                    .bind(member).execute(&mut **tx).await.map_err(|e| e.to_string())?;
+                    .bind(domain).execute(&mut **tx).await.map_err(|e| e.to_string())?;
             }
         }
     }
