@@ -19,12 +19,7 @@ function createLoaders(
   };
 
   return {
-    history: buildLoader("history"),
-    settings: buildLoader("settings"),
-    mapping: buildLoader("mapping"),
-    data: buildLoader("data"),
     tools: buildLoader("tools"),
-    about: buildLoader("about"),
   };
 }
 
@@ -48,10 +43,10 @@ await runTest("preload cache reuses an already loaded chunk", async () => {
   const calls: PreloadableView[] = [];
   const loaders = createLoaders(calls);
 
-  await preloadLazyViewChunk("history", { loaders });
-  await preloadLazyViewChunk("history", { loaders });
+  await preloadLazyViewChunk("tools", { loaders });
+  await preloadLazyViewChunk("tools", { loaders });
 
-  assert.deepEqual(calls, ["history"]);
+  assert.deepEqual(calls, ["tools"]);
 });
 
 await runTest("preloaded components can be read synchronously", async () => {
@@ -59,16 +54,16 @@ await runTest("preloaded components can be read synchronously", async () => {
   const calls: PreloadableView[] = [];
   const loaders = {
     ...createLoaders(calls),
-    data: async () => {
-      calls.push("data");
+    tools: async () => {
+      calls.push("tools");
       return { default: TestView };
     },
   };
 
-  await preloadLazyViewChunk("data", { loaders });
+  await preloadLazyViewChunk("tools", { loaders });
 
-  assert.equal(readPreloadedViewComponent("data"), TestView);
-  assert.deepEqual(calls, ["data"]);
+  assert.equal(readPreloadedViewComponent("tools"), TestView);
+  assert.deepEqual(calls, ["tools"]);
 });
 
 await runTest("pending preloads reuse the same chunk promise", async () => {
@@ -77,23 +72,23 @@ await runTest("pending preloads reuse the same chunk promise", async () => {
   const deferred = createDeferred<typeof loadedModule>();
   const loaders = {
     ...createLoaders(calls),
-    mapping: async () => {
-      calls.push("mapping");
+    tools: async () => {
+      calls.push("tools");
       return deferred.promise;
     },
   };
 
-  const first = preloadLazyViewChunk("mapping", { loaders });
-  const second = preloadLazyViewChunk("mapping", { loaders });
+  const first = preloadLazyViewChunk("tools", { loaders });
+  const second = preloadLazyViewChunk("tools", { loaders });
 
   assert.equal(first, second);
-  assert.equal(getPreloadableViewChunkStatus("mapping"), "pending");
+  assert.equal(getPreloadableViewChunkStatus("tools"), "pending");
 
   deferred.resolve(loadedModule);
   await first;
 
-  assert.equal(getPreloadableViewChunkStatus("mapping"), "resolved");
-  assert.deepEqual(calls, ["mapping"]);
+  assert.equal(getPreloadableViewChunkStatus("tools"), "resolved");
+  assert.deepEqual(calls, ["tools"]);
 });
 
 await runTest("failed preloads expose rejected status and can retry", async () => {
@@ -102,8 +97,8 @@ await runTest("failed preloads expose rejected status and can retry", async () =
   let shouldFail = true;
   const loaders = {
     ...createLoaders(calls),
-    about: async () => {
-      calls.push("about");
+    tools: async () => {
+      calls.push("tools");
       if (shouldFail) {
         throw new Error("about failed");
       }
@@ -111,15 +106,15 @@ await runTest("failed preloads expose rejected status and can retry", async () =
     },
   };
 
-  await assert.rejects(preloadLazyViewChunk("about", { loaders }), /about failed/);
-  assert.equal(getPreloadableViewChunkStatus("about"), "rejected");
+  await assert.rejects(preloadLazyViewChunk("tools", { loaders }), /about failed/);
+  assert.equal(getPreloadableViewChunkStatus("tools"), "rejected");
 
   shouldFail = false;
-  await preloadLazyViewChunk("about", { loaders });
+  await preloadLazyViewChunk("tools", { loaders });
 
-  assert.equal(getPreloadableViewChunkStatus("about"), "resolved");
-  assert.equal(readPreloadedViewComponent("about"), TestView);
-  assert.deepEqual(calls, ["about", "about"]);
+  assert.equal(getPreloadableViewChunkStatus("tools"), "resolved");
+  assert.equal(readPreloadedViewComponent("tools"), TestView);
+  assert.deepEqual(calls, ["tools", "tools"]);
 });
 
 console.log(`Passed ${passed} view chunk preload tests`);
