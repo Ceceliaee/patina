@@ -11,8 +11,7 @@ pub(super) fn page_width(viewport_width: Pixels) -> Pixels {
     viewport_width - px(2. * SHELL_PADDING + SIDEBAR_WIDTH + quietpro::CARD_GAP)
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(debug_assertions, derive(serde::Deserialize, serde::Serialize))]
+#[derive(Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub(super) enum Section {
     Tools,
     About,
@@ -155,9 +154,25 @@ impl MainWindow {
                 )
             })),
             Section::Today => Page::Today(cx.new(|cx| Today::new(win, self.client.clone(), cx))),
-            Section::Data => Page::Data(
-                cx.new(|cx| crate::data_page::DataPage::new(self.client.clone(), win, cx)),
-            ),
+            Section::Data => {
+                let view =
+                    cx.new(|cx| crate::data_page::DataPage::new(self.client.clone(), win, cx));
+                cx.subscribe_in(
+                    &view,
+                    win,
+                    |this, _, event: &crate::data_page::OpenHistoryDay, win, cx| {
+                        this.page =
+                            Page::History(cx.new(|cx| {
+                                History::new(this.client.clone(), event.0, None, win, cx)
+                            }));
+                        #[cfg(debug_assertions)]
+                        crate::dev_preview::remember(Section::History);
+                        cx.notify();
+                    },
+                )
+                .detach();
+                Page::Data(view)
+            }
         };
         #[cfg(debug_assertions)]
         crate::dev_preview::remember(section);
@@ -167,7 +182,7 @@ impl MainWindow {
         match &self.page {
             Page::Today(v) => v.update(cx, |v, cx| v.refresh(true, cx)),
             Page::History(v) => v.update(cx, |v, cx| v.refresh(cx)),
-            Page::Data(_) => (),
+            Page::Data(v) => v.update(cx, |v, cx| v.refresh(cx)),
             Page::About(_) => (),
             Page::Tools(_) => (),
             Page::Settings(_) => (),
@@ -209,6 +224,16 @@ impl MainWindow {
                 labels: false,
                 client,
             });
+            let resume = view.read(cx).client.request::<Option<String>>(crate::window_process::Query::Storage(
+                patina_recorder::StorageRequest::ResumeAfterUpdate(None),
+            ));
+            let weak = view.downgrade();
+            window.spawn(cx, async move |cx| {
+                if let Ok(Some(page)) = resume.await
+                    && let Ok(section) = serde_json::from_value(serde_json::Value::String(page)) {
+                    let _ = weak.update_in(cx, |main, window, cx| main.switch(section, window, cx));
+                }
+            }).detach();
             #[cfg(debug_assertions)]
             if let Some(section) = crate::dev_preview::page().filter(|s| *s != Section::Today) {
                 view.update(cx, |main, cx| main.switch(section, window, cx));

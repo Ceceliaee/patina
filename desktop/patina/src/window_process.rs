@@ -34,16 +34,21 @@ pub(super) enum Target {
 pub(super) enum Query {
     Update(patina_updater::Request),
     InstallUpdate,
+    OpenExternal(String),
     Storage(patina_recorder::StorageRequest),
     Tools(crate::tool_service::ToolRequest),
     HistoryMinimum(bool, i64),
+    DetailZoom(Option<f32>),
+    HistoryZoom(Option<f32>),
+    HistoryModes(Option<[u8; 3]>),
     Rules,
     ClassificationMode(bool),
     DeleteApplication(String, Option<patina_recorder::DeletionImpact>),
     DeleteWebsite(String, Option<patina_recorder::DeletionImpact>),
     SaveRules(
         Vec<patina_recorder::AppRule>,
-        Vec<patina_recorder::WebRule>,
+        Option<patina_recorder::WebDraft>,
+        Vec<patina_recorder::AppLinkEdit>,
         Vec<patina_recorder::CategoryEdit>,
     ),
     Preferences,
@@ -256,8 +261,21 @@ async fn answer(
     query: Query,
 ) -> Result<Value, String> {
     let encoded = match query {
+        Query::OpenExternal(url) => {
+            if !url.starts_with("https://") || url.contains('\0') {
+                return Err("Invalid external link".into());
+            }
+            use windows::{core::{PCWSTR, w}, Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL}};
+            let wide: Vec<u16> = url.encode_utf16().chain(Some(0)).collect();
+            let result = unsafe { ShellExecuteW(None, w!("open"), PCWSTR(wide.as_ptr()), None, None, SW_SHOWNORMAL) };
+            if result.0 as isize <= 32 { return Err("Could not open external link".into()); }
+            Ok(Value::Null)
+        }
         Query::Storage(request) => return recorder.storage(request).await,
         Query::Tools(request) => return tools.request(request, recorder.locale.get().tag()).await,
+        Query::DetailZoom(hours) => serde_json::to_value(recorder.detail_zoom(hours).await?),
+        Query::HistoryModes(modes) => serde_json::to_value(recorder.history_modes(modes).await?),
+        Query::HistoryZoom(hours) => serde_json::to_value(recorder.history_zoom(hours).await?),
         Query::HistoryMinimum(d, v) => {
             serde_json::to_value(recorder.set_history_minimum(d, v).await?)
         }
@@ -273,7 +291,9 @@ async fn answer(
             }
             serde_json::to_value(impact)
         }
-        Query::SaveRules(r, w, c) => serde_json::to_value(recorder.save_rules(r, w, c).await?),
+        Query::SaveRules(r, w, l, c) => {
+            serde_json::to_value(recorder.save_rules(r, w, l, c).await?)
+        }
         Query::DeleteWebsite(identity, confirmed) => {
             let apply = confirmed.is_some();
             let impact = recorder.delete_website(identity, confirmed).await?;
@@ -517,6 +537,14 @@ pub(super) fn serve(
                                     crate::RESTART_AFTER_STORAGE.store(true, Ordering::Release);
                                     break;
                                 }
+                                continue;
+                            }
+                            if matches!(
+                                query.as_ref(),
+                                Query::DetailZoom(_) | Query::HistoryZoom(_) | Query::HistoryModes(_)
+                            ) {
+                                let result = answer(&recorder, &tools, *query).await;
+                                let _ = tx.send(ToWindow::Answer(request, result));
                                 continue;
                             }
                             if let Query::SavePreferences(old, next) = *query {
