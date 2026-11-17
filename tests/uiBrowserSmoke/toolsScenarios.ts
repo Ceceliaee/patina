@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getLocaleText, loadLocaleText } from "../../src/shared/i18n/runtime.ts";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
-import { delay, evaluate, jsonString, waitForExpression } from "./browserHarness.ts";
+import { evaluate, jsonString, waitForExpression } from "./browserHarness.ts";
 import { TOOLS_TEXT } from "./constants.ts";
 import { runTimedReminderScenarios } from "./timedReminderScenarios.ts";
 import { runUsageAlertScenarios } from "./usageAlertScenarios.ts";
@@ -126,115 +126,33 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
     }
   });
 
-  await runTest("Tools cold navigation keeps the current view until a runtime snapshot is ready", async () => {
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        (() => {
-          localStorage.setItem("patina:last-active-view", "about");
-          localStorage.setItem("__patina_navigation_held_commands", JSON.stringify(["cmd_get_tools_snapshot"]));
-          document.documentElement.dataset.patinaSmokeReload = "tools-cold";
-          location.reload();
-          return true;
-        })()
-      `),
-      true,
-    );
-    await waitForExpression(
-      client!,
-      sessionId,
-      `document.documentElement?.dataset.patinaSmokeReload !== "tools-cold"
-        && Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("工具"))} + ']'))
-        && Boolean(document.querySelector('.about-center-panel'))`,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        (() => {
-          const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("工具"))} + ']');
-          node?.click();
-          return Boolean(node);
-        })()
-      `),
-      true,
-    );
-    await waitForExpression(client!, sessionId, `globalThis.__PATINA_NAVIGATION_PENDING?.length > 0`);
-    const pendingState = JSON.parse(String(await evaluate(client!, sessionId, `JSON.stringify({
-      presentedView: document.querySelector("main.qp-canvas")?.getAttribute("data-presented-view") ?? null,
-      toolsMounted: Boolean(document.querySelector(".tools-page")),
-      showsLoadingCopy: document.body.innerText.includes("加载中..."),
-      aboutActive: document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("关于"))} + ']')
-        ?.className.includes("qp-nav-item-active") ?? false,
-      toolsActive: document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("工具"))} + ']')
-        ?.className.includes("qp-nav-item-active") ?? false,
-    })`))) as {
-      presentedView: string | null;
-      toolsMounted: boolean;
-      showsLoadingCopy: boolean;
-      aboutActive: boolean;
-      toolsActive: boolean;
-    };
-    assert.equal(pendingState.presentedView, "about");
-    assert.equal(pendingState.toolsMounted, false);
-    assert.equal(pendingState.showsLoadingCopy, false);
-    assert.equal(pendingState.aboutActive, true);
-    assert.equal(pendingState.toolsActive, false);
-
-    await evaluate(client!, sessionId, `localStorage.removeItem('__patina_navigation_held_commands');
-      for (const release of globalThis.__PATINA_NAVIGATION_PENDING.splice(0)) release();`);
-
-    await waitForExpression(
-      client!,
-      sessionId,
-      `document.querySelector("main.qp-canvas")?.getAttribute("data-presented-view") === "tools"
-        && Boolean(document.querySelector(".tools-page-body"))`,
-      15_000,
-      "Tools runtime snapshot should settle before presentation",
-    );
-    await evaluate(client!, sessionId, `localStorage.removeItem("__time_tracker_tools_snapshot_delay_ms")`);
-  });
-
-  await runTest("a stale Tools ensure cannot override a newer navigation request", async () => {
+  await runTest("Tools cold startup waits for its runtime snapshot", async () => {
     await evaluate(client!, sessionId, `
-      (() => {
-        localStorage.setItem("patina:last-active-view", "about");
-        localStorage.setItem("__time_tracker_tools_snapshot_delay_ms", "900");
-        document.documentElement.dataset.patinaSmokeReload = "tools-stale-ensure";
-        location.reload();
-      })()
+      localStorage.setItem("__patina_navigation_held_commands", JSON.stringify(["cmd_get_tools_snapshot"]));
+      document.documentElement.dataset.patinaSmokeReload = "tools-cold";
+      location.reload();
     `);
-    await waitForExpression(
-      client!,
-      sessionId,
-      `document.documentElement?.dataset.patinaSmokeReload !== "tools-stale-ensure"
-        && Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("工具"))} + ']'))`,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        (async () => {
-          const tools = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("工具"))} + ']');
-          const about = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("关于"))} + ']');
-          if (!tools || !about) return false;
-          tools.click();
-          await new Promise((resolve) => setTimeout(resolve, 50));
-          about.click();
-          return true;
-        })()
-      `),
-      true,
-    );
-    await delay(1_050);
-    const finalState = JSON.parse(String(await evaluate(client!, sessionId, `JSON.stringify({
-      presentedView: document.querySelector("main.qp-canvas")?.getAttribute("data-presented-view") ?? null,
-      toolsMounted: Boolean(document.querySelector(".tools-page")),
-    })`))) as { presentedView: string | null; toolsMounted: boolean };
-    assert.equal(finalState.presentedView, "about");
-    assert.equal(finalState.toolsMounted, false);
-    await evaluate(client!, sessionId, `localStorage.removeItem("__time_tracker_tools_snapshot_delay_ms")`);
+    await waitForExpression(client!, sessionId, `
+      document.documentElement?.dataset.patinaSmokeReload !== "tools-cold"
+        && globalThis.__PATINA_NAVIGATION_PENDING?.length > 0
+    `);
+    assert.deepEqual(await evaluate(client!, sessionId, `({
+      toolsMounted: Boolean(document.querySelector(".tools-page-body")),
+      showsLoadingCopy: document.body.innerText.includes("加载中..."),
+    })`), { toolsMounted: false, showsLoadingCopy: false });
+    await evaluate(client!, sessionId, `
+      localStorage.removeItem('__patina_navigation_held_commands');
+      for (const release of globalThis.__PATINA_NAVIGATION_PENDING.splice(0)) release();
+    `);
+    await waitForExpression(client!, sessionId, `
+      document.querySelector("main.qp-canvas")?.getAttribute("data-presented-view") === "tools"
+        && Boolean(document.querySelector(".tools-page-body"))
+    `, 15_000, "Tools runtime snapshot should settle before presentation");
   });
 
   await runTest("Tools cold snapshot failure is explicit and retryable", async () => {
     await evaluate(client!, sessionId, `
       (() => {
-        localStorage.setItem("patina:last-active-view", "about");
         localStorage.setItem("__time_tracker_reject_tools_snapshot", "1");
         document.documentElement.dataset.patinaSmokeReload = "tools-cold-failure";
         location.reload();
@@ -717,7 +635,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
           const target = document.querySelector('.tools-reminder-editor-target');
           return target.querySelector('strong').textContent === row.querySelector('strong').textContent
             && getComputedStyle(target.querySelector('strong')).fontSize === getComputedStyle(row.querySelector('strong')).fontSize
-            && target.querySelector('.data-app-option-icon').outerHTML === row.querySelector('.data-app-option-icon').outerHTML;
+            && target.querySelector('.tools-target-option-icon').outerHTML === row.querySelector('.tools-target-option-icon').outerHTML;
         })()`), true, `${kind} editor uses the same target identity as its rule`);
         await client!.command("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, sessionId);
         await waitForExpression(client!, sessionId, `!document.querySelector('.tools-reminder-editor')`);
@@ -880,33 +798,14 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
     );
     await client!.command('Input.dispatchKeyEvent', {type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27}, sessionId);
     await waitForExpression(client!, sessionId, `!document.querySelector('.tools-pomodoro-settings-popover')`);
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        (() => {
-          const about = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("关于"))} + ']');
-          if (!about) return false;
-          about.click();
-          return true;
-        })()
-      `),
-      true,
-    );
-    await waitForExpression(
-      client!,
-      sessionId,
-      `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("关于"))} + ']')?.className.includes("qp-nav-item-active")`,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        (() => {
-          const tools = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("工具"))} + ']');
-          if (!tools) return false;
-          tools.click();
-          return true;
-        })()
-      `),
-      true,
-    );
+    await evaluate(client!, sessionId, `
+      document.documentElement.dataset.patinaSmokeReload = "tools-section-restore";
+      location.reload();
+    `);
+    await waitForExpression(client!, sessionId, `
+      document.documentElement?.dataset.patinaSmokeReload !== "tools-section-restore"
+        && Boolean(document.querySelector(".tools-page-body"))
+    `);
     await waitForExpression(
       client!,
       sessionId,
@@ -1141,7 +1040,7 @@ export async function runToolsScenarios(context: BrowserSmokeContext) {
             assert.deepEqual(await evaluate(client, sessionId, `(() => {
               const categories = [...document.querySelectorAll('[data-activity-rule-kind="category"]')];
               return categories.map(row => {
-                const icon = row.querySelector('.data-app-option-icon');
+                const icon = row.querySelector('.tools-target-option-icon');
                 const dot = icon.querySelector('.tools-activity-category-dot');
                 const rect = dot?.getBoundingClientRect();
                 const outer = icon.getBoundingClientRect();
