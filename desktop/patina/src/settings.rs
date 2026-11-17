@@ -66,6 +66,11 @@ impl Settings {
         });
         let services = ServiceFields::new(win, cx);
         cx.on_release(|s, cx| {
+            if let Some(saved) = &s.saved {
+                s.client.locale.set(saved.locale);
+                s.client.theme.set(saved.theme);
+                cx.refresh_windows();
+            }
             if s.picker.is_some() {
                 s.client.scheme_preview.set(None);
                 cx.refresh_windows();
@@ -110,6 +115,9 @@ impl Settings {
     fn reset(&mut self, win: &mut Window, cx: &mut Context<Self>) {
         self.draft = self.saved.clone();
         if let Some(p) = &self.saved {
+            self.client.locale.set(p.locale);
+            self.client.theme.set(p.theme);
+            cx.refresh_windows();
             self.services.reset(p, win, cx);
             for (s, v) in self.sliders.iter().zip([p.gap, p.idle]) {
                 s.update(cx, |s, cx| s.set_value((v / 60) as f32, win, cx));
@@ -269,7 +277,19 @@ impl Render for Settings {
             toggle_row("settings.trackingPausedLabel", p.paused, |p, v| {
                 p.paused = v
             }),
-            toggle_row("settings.globalTitleLabel", p.titles, |p, v| p.titles = v),
+            div()
+                .flex_1()
+                .flex()
+                .flex_col()
+                .gap(px(4.))
+                .child(toggle_row("settings.globalTitleLabel", p.titles, |p, v| {
+                    p.titles = v
+                }))
+                .child(
+                    label(tr("settings.globalTitleHint"))
+                        .text_size(px(12.))
+                        .text_color(c.secondary),
+                ),
         );
         let behavior = p.desktop;
         let windows = pair(
@@ -374,7 +394,8 @@ impl Render for Settings {
                     let _ = view.update(cx, |t, cx| {
                         if let Some(p) = &mut t.draft {
                             p.theme = theme;
-                            cx.notify();
+                            t.client.theme.set(theme);
+                            cx.refresh_windows();
                         }
                     });
                 },
@@ -402,7 +423,9 @@ impl Render for Settings {
                         if let Some(p) = &mut t.draft {
                             p.locale = locale;
                         }
-                        cx.notify();
+                        t.client.locale.set(locale);
+                        t.services.set_locale(locale, cx);
+                        cx.refresh_windows();
                     });
                 },
             )

@@ -9,6 +9,21 @@ use patina_recorder::{
 };
 use serde_json::{Value, json};
 use std::path::PathBuf;
+mod export;
+mod presentation;
+
+struct ParentView {
+    view: View,
+    result: Value,
+    values: [String; 7],
+}
+struct Confirmation {
+    request: Request,
+    next: View,
+    title: String,
+    detail: String,
+    focus: Option<FocusHandle>,
+}
 
 const FIELD_GROUPS: [(&str, &[&str]); 6] = [
     (
@@ -65,6 +80,7 @@ enum View {
     Home,
     Export,
     Fields,
+    Range,
     Import,
     PreviewCsv,
     Batches,
@@ -112,6 +128,18 @@ pub(super) struct StorageCard {
     remote: bool,
     revealed: bool,
     saved_password_preview: bool,
+    parents: Vec<ParentView>,
+    confirmation: Option<Confirmation>,
+    export_preferences: Value,
+    range_mode: String,
+    calendar_month: NaiveDate,
+    calendar_start: Option<NaiveDate>,
+    calendar_end: Option<NaiveDate>,
+    calendar_active: NaiveDate,
+    calendar_focus: FocusHandle,
+    calendar_mode: &'static str,
+    schedule_poll: Option<Task<()>>,
+    schedule_target: Option<bool>,
 }
 impl StorageCard {
     pub(super) fn new(client: Rc<Client>, win: &mut Window, cx: &mut Context<Self>) -> Self {
@@ -165,6 +193,18 @@ impl StorageCard {
             remote: false,
             revealed: false,
             saved_password_preview: false,
+            parents: Vec::new(),
+            confirmation: None,
+            export_preferences: json!({}),
+            range_mode: "month".into(),
+            calendar_month: Local::now().date_naive().with_day(1).unwrap(),
+            calendar_start: None,
+            calendar_end: None,
+            calendar_active: Local::now().date_naive(),
+            calendar_focus: cx.focus_handle(),
+            calendar_mode: "custom",
+            schedule_poll: None,
+            schedule_target: None,
         };
         card.fetch(Request::Info, View::Home, win, cx);
         card
@@ -172,6 +212,7 @@ impl StorageCard {
     fn tr(&self, key: &str) -> String {
         text(self.client.locale.get(), key)
     }
+
     fn set(&self, i: usize, key: &str, value: &str, win: &mut Window, cx: &mut Context<Self>) {
         self.fields[i].update(cx, |f, cx| {
             f.set_accessibility(
@@ -196,12 +237,39 @@ impl StorageCard {
         {
             win.focus(&focus, cx);
         }
+        if !matches!(view, View::Schedule(_)) {
+            self.schedule_poll = None;
+        }
+        if view == View::Home {
+            self.parents.clear();
+        }
         self.view = view;
     }
     fn close(&mut self, win: &mut Window, cx: &mut Context<Self>) {
+        if self.busy {
+            return;
+        }
+        if let Some(confirm) = self.confirmation.take() {
+            if let Some(focus) = confirm.focus {
+                win.focus(&focus, cx);
+            }
+            cx.notify();
+            return;
+        }
         if !self.busy {
             if self.view == View::Fields {
                 self.finish_fields(false, win, cx);
+            } else if let Some(parent) = self.parents.pop() {
+                self.set_view(parent.view, win, cx);
+                self.result = parent.result;
+                for (i, value) in parent.values.iter().enumerate() {
+                    if i != 3 {
+                        self.fields[i].update(cx, |f, cx| f.set_value(value.clone(), win, cx));
+                    }
+                }
+                win.focus(&self.dialog_content_focus, cx);
+                self.message.clear();
+                cx.notify();
             } else {
                 self.go(View::Home, win, cx);
             }
@@ -218,18 +286,27 @@ impl StorageCard {
                     .map(|key| (*key).to_owned())
                     .collect();
             }
+            if apply {
+                self.remember_export(cx);
+            }
             self.view = View::Export;
             win.focus(focus.as_ref().unwrap_or(&self.dialog_content_focus), cx);
             cx.notify();
         }
     }
     fn go(&mut self, view: View, win: &mut Window, cx: &mut Context<Self>) {
+        if view != View::Home && self.view != View::Home && view != self.view {
+            self.remember_parent(win, cx);
+        }
         self.message.clear();
         if self.view == View::Dav {
             self.hide_password(win, cx);
             self.set(3, "settings.webDavPassword", "", win, cx);
         }
         self.set_view(view, win, cx);
+        if view == View::Range {
+            win.focus(&self.calendar_focus, cx);
+        }
         match view {
             View::Home => self.fetch(Request::Info, view, win, cx),
             View::Batches => self.fetch(Request::Batches, view, win, cx),
@@ -237,11 +314,7 @@ impl StorageCard {
             View::Upload => self.fetch(Request::DavInfo, view, win, cx),
             View::Remote => self.fetch(Request::DavList, view, win, cx),
             View::Schedule(backup) => self.fetch(Request::Schedule { backup }, view, win, cx),
-            View::Export => {
-                let today = Local::now().date_naive().to_string();
-                self.set(4, "native.export.field.start_time", &today, win, cx);
-                self.set(5, "native.export.field.end_time", &today, win, cx);
-            }
+            View::Export => self.fetch(Request::ExportPreferences(None), view, win, cx),
             _ => (),
         }
         cx.notify();
@@ -333,28 +406,36 @@ impl StorageCard {
             self.message.clear();
         }
         cx.notify();
+        let outcome = req.clone();
+        let client = self.client.clone();
         let request = self.client.request::<Value>(Query::Storage(req));
         cx.spawn_in(win, async move |v, cx| {
             let response = request.await;
+            let batches = if response.is_ok() && matches!(outcome, Request::DeleteBatch(_)) {
+                Some(
+                    client
+                        .request::<Value>(Query::Storage(Request::Batches))
+                        .await,
+                )
+            } else {
+                None
+            };
             let _ = v.update_in(cx, |s, win, cx| {
                 s.busy = false;
                 match response {
                     Err(e) => {
-                        s.message = match e.as_str() {
-                            "remote_name_conflict" => s.tr("settings.webDavNameConflict"),
-                            "webdav_invalid_file_name" => s.tr("settings.webDavInvalidFileName"),
-                            "webdav_config_changed" => s.tr("settings.webDavTargetChanged"),
-                            _ => e,
-                        };
+                        s.message = s.failed(&outcome, &e);
                     }
                     Ok(data) => {
                         if testing {
-                            s.message = s.tr("settings.webDavTestConnection") + " ✓";
+                            s.message = s.tr("toast.webDavTestSuccess");
                             cx.notify();
                             return;
                         }
-                        if converted && let Some(path) = data["outputPath"].as_str() {
-                            s.fetch(Request::PreviewCsv(path.into()), View::PreviewCsv, win, cx);
+                        if converted {
+                            s.message = s.completed(&outcome, &data);
+                            s.result = data;
+                            cx.notify();
                             return;
                         }
                         if s.view == View::Dav {
@@ -424,37 +505,51 @@ impl StorageCard {
                                 win,
                                 cx,
                             );
-                            if !b {
-                                s.format = match cfg["format"].as_str() {
-                                    Some("markdown") => "markdown",
-                                    Some("sqlite") => "sqlite",
-                                    Some("parquet") => "parquet",
-                                    _ => "csv",
-                                };
-                                s.columns = cfg["selectedFields"]
-                                    .as_array()
-                                    .into_iter()
-                                    .flatten()
-                                    .filter_map(Value::as_str)
-                                    .map(str::to_owned)
-                                    .collect();
+                            if b && let Some(remote) = s.schedule_target.take() {
+                                s.remote = remote;
                             }
+                            s.poll_schedule(b, cx);
+                        }
+                        if next == View::Export {
+                            s.export_preferences = if data.is_object() {
+                                data.clone()
+                            } else {
+                                json!({})
+                            };
+                            s.range_mode = s.export_preferences["mode"]
+                                .as_str()
+                                .unwrap_or("month")
+                                .to_owned();
+                            s.format = export::format_name(
+                                s.export_preferences["format"].as_str().unwrap_or("csv"),
+                            );
+                            s.columns = s.saved_columns(s.format);
+                            s.set_period(Local::now().date_naive(), win, cx);
                         }
                         s.message = if upload && data["indexUpdated"] == false {
-                            data["indexMessage"]
-                                .as_str()
-                                .unwrap_or("WebDAV index update failed")
-                                .into()
+                            let file = match &outcome {
+                                Request::DavUpload { file, .. } => file.clone(),
+                                _ => String::new(),
+                            };
+                            s.formatted("toast.webDavUploadIndexWarning", &[("fileName", file)])
                         } else if moved {
                             s.tr("settings.storageMovePending")
                         } else if finished {
-                            s.tr("common.saved")
+                            s.completed(&outcome, &data)
                         } else if info {
                             s.message.clone()
                         } else {
                             String::new()
                         };
                         s.result = data;
+                        if let Some(batches) = batches {
+                            match batches {
+                                Ok(batches) => s.result = batches,
+                                Err(_) => s
+                                    .message
+                                    .push_str(&format!("\n{}", s.tr("settings.loadFailed"))),
+                            }
+                        }
                         if next == View::Home && !info {
                             let msg = s.message.clone();
                             s.fetch(Request::Info, View::Home, win, cx);
@@ -539,16 +634,17 @@ impl StorageCard {
                         return;
                     }
                 };
+                let path = if matches!(pick, Pick::Export) {
+                    path.with_extension(export::extension(s.format))
+                } else {
+                    path
+                };
                 let p = path.to_string_lossy().into_owned();
+                if matches!(pick, Pick::Csv | Pick::Restore) {
+                    s.remember_parent(win, cx);
+                }
                 match pick {
-                    Pick::Move => s.confirm(
-                        Request::Move(Some(path)),
-                        View::Home,
-                        "settings.storage.storageDataMigrationConfirmTitle",
-                        p,
-                        win,
-                        cx,
-                    ),
+                    Pick::Move => s.prepare_move(Some(path), win, cx),
                     Pick::ScheduleDirectory => {
                         s.set(6, "settings.storage.dataDirectoryLabel", &p, win, cx)
                     }
@@ -587,29 +683,15 @@ impl StorageCard {
         win: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let answer = win.prompt(
-            PromptLevel::Warning,
-            &self.tr(key),
-            Some(&detail),
-            &[
-                self.tr("common.cancel").as_str(),
-                self.tr("common.confirm").as_str(),
-            ],
-            cx,
-        );
-        self.busy = true;
+        self.confirmation = Some(Confirmation {
+            request: req,
+            next,
+            title: self.tr(key),
+            detail,
+            focus: win.focused(cx),
+        });
+        win.focus(&self.dialog_content_focus, cx);
         cx.notify();
-        cx.spawn_in(win, async move |v, cx| {
-            let ok = answer.await == Ok(1);
-            let _ = v.update_in(cx, |s, w, c| {
-                s.busy = false;
-                if ok {
-                    s.fetch(req, next, w, c)
-                }
-                c.notify()
-            });
-        })
-        .detach();
     }
     fn btn(
         &self,
@@ -629,12 +711,11 @@ impl StorageCard {
             .min_w_0()
             .flex_none()
             .child(label(self.tr(key)).text_size(px(14.)))
-            .child(
-                div().flex().h(px(32.)).child(
-                    quietpro::TextInput::new(("storage-input", i), &self.fields[i], c)
-                        .disabled(self.busy),
+            .child(div().flex().h(px(32.)).child(
+                quietpro::TextInput::new(("storage-input", i), &self.fields[i], c).disabled(
+                    self.busy || (matches!(self.view, View::Schedule(_)) && !self.enabled),
                 ),
-            )
+            ))
     }
     fn schedule_save(&mut self, b: bool, w: &mut Window, cx: &mut Context<Self>) {
         let time = chrono::NaiveTime::parse_from_str(&self.val(4, cx), "%H:%M");
@@ -833,7 +914,7 @@ impl StorageCard {
                 .child(heading(self.tr(view.title())).id("dialog-title").flex_1())
         };
         let mut header_icons = Vec::new();
-        if view == Export || view == Import || view == Backup {
+        if view == Export || view == Import {
             let (key, next, icon) = match view {
                 Export => ("export.scheduledTitle", Schedule(false), Icon::Clock),
                 Import => ("settings.dataImport.batchesTitle", Batches, Icon::Trash),
@@ -1050,8 +1131,12 @@ impl StorageCard {
                         .min_w_0()
                         .gap(px(4.))
                         .child(label(name.clone()));
-                    if id == "data"
-                        && let Some(bytes) = self.paths["bytes"].as_u64()
+                    if let Some(bytes) = self.paths[if id == "data" {
+                        "bytes"
+                    } else {
+                        "installBytes"
+                    }]
+                    .as_u64()
                     {
                         dir = dir.child(quietpro::caption(
                             format!("{:.1} MiB", bytes as f64 / 1048576.),
@@ -1105,19 +1190,7 @@ impl StorageCard {
                                     Icon::RotateCcw,
                                 )
                                 .disabled(self.busy)
-                                .action(
-                                    c,
-                                    cx.listener(|s, _, w, cx| {
-                                        s.confirm(
-                                            Request::Move(None),
-                                            Home,
-                                            "settings.storage.restoreDefaultPathAction",
-                                            s.paths["default"].as_str().unwrap_or_default().into(),
-                                            w,
-                                            cx,
-                                        )
-                                    }),
-                                ),
+                                .action(c, cx.listener(|s, _, w, cx| s.prepare_move(None, w, cx))),
                             );
                         }
                     }
@@ -1148,63 +1221,7 @@ impl StorageCard {
                 }
             }
             Export => {
-                let mut ranges = row();
-                for (idx, key) in [
-                    "export.timeRangeModeDay",
-                    "export.timeRangeModeWeek",
-                    "export.timeRangeModeMonth",
-                    "export.timeRangeModeYear",
-                ]
-                .into_iter()
-                .enumerate()
-                {
-                    ranges = ranges.child(self.btn(key, c, cx, move |s, w, cx| {
-                        let end = Local::now().date_naive();
-                        let start = match idx {
-                            0 => end,
-                            1 => {
-                                end - Duration::days(i64::from(
-                                    end.weekday().num_days_from_monday(),
-                                ))
-                            }
-                            2 => end.with_day(1).unwrap(),
-                            _ => end.with_ordinal(1).unwrap(),
-                        };
-                        s.set(
-                            4,
-                            "native.export.field.start_time",
-                            &start.to_string(),
-                            w,
-                            cx,
-                        );
-                        s.set(5, "native.export.field.end_time", &end.to_string(), w, cx);
-                        cx.notify();
-                    }));
-                }
-                let mut range = content_card(c.border, c.panel)
-                    .gap(px(12.))
-                    .flex_none()
-                    .id("export-time-range")
-                    .child(
-                        div()
-                            .flex()
-                            .flex_wrap()
-                            .items_center()
-                            .justify_between()
-                            .gap(px(8.))
-                            .child(heading(self.tr("export.timeRangeLabel")).text_size(px(14.)))
-                            .child(ranges),
-                    );
-                range = range.child(
-                    div()
-                        .grid()
-                        .grid_cols(2)
-                        .gap(px(12.))
-                        .child(self.input(4, "native.export.field.start_time", c))
-                        .child(self.input(5, "native.export.field.end_time", c)),
-                );
-                body = body.child(range);
-
+                body = body.child(self.export_range(c, cx));
                 let options = [
                     ("csv", "CSV"),
                     ("markdown", "Markdown"),
@@ -1212,10 +1229,10 @@ impl StorageCard {
                     ("sqlite", "SQLite"),
                 ];
                 let weak = cx.weak_entity();
-                let formats = quietpro::segmented::<_, 4>(
+                let formats = quietpro::segmented(
                     "export-format",
                     self.tr("export.formatLabel"),
-                    std::array::from_fn(|i| {
+                    std::array::from_fn::<_, 4, _>(|i| {
                         (
                             options[i].0,
                             options[i].1.to_owned(),
@@ -1228,7 +1245,7 @@ impl StorageCard {
                     c,
                     move |format, _, cx| {
                         let _ = weak.update(cx, |s, cx| {
-                            s.format = format;
+                            s.change_format(format, cx);
                             cx.notify();
                         });
                     },
@@ -1285,6 +1302,12 @@ impl StorageCard {
                     );
                 actions.push(picker("settings.dataExportAction", Pick::Export).into_any_element());
             }
+            Range => {
+                body = body.child(self.calendar(c, cx));
+                actions.push(
+                    button("data.applyRange", |s, w, cx| s.apply_range(w, cx)).into_any_element(),
+                );
+            }
             Fields => {
                 body = body.child(FieldGroups(cx.weak_entity()));
                 actions.push(
@@ -1309,6 +1332,7 @@ impl StorageCard {
                     ));
             }
             PreviewCsv => {
+                body = body.child(self.preview_details(c));
                 body = body.child(label(
                     self.result["fileName"].as_str().unwrap_or_default().into(),
                 ));
@@ -1361,9 +1385,47 @@ impl StorageCard {
                         row()
                             .when(i > 0, |r| line_above(r, c, 0.))
                             .child(
-                                label(name.clone())
-                                    .id(SharedString::from(format!("label-{id}")))
-                                    .flex_1(),
+                                div()
+                                    .flex_1()
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(4.))
+                                    .child(
+                                        label(name.clone())
+                                            .id(SharedString::from(format!("label-{id}"))),
+                                    )
+                                    .child(
+                                        label(if remote {
+                                            self.backup_summary(item, true)
+                                        } else {
+                                            format!(
+                                                "{} · {} · {}",
+                                                self.formatted(
+                                                    "settings.dataImport.batchTitle",
+                                                    &[("number", (i + 1).to_string())]
+                                                ),
+                                                crate::page_controls::stamp(
+                                                    item["importedAt"].as_i64().unwrap_or(0),
+                                                    "%Y-%m-%d %H:%M"
+                                                ),
+                                                self.formatted(
+                                                    "settings.importRecordCount",
+                                                    &[(
+                                                        "count",
+                                                        (item["exactSessions"]
+                                                            .as_u64()
+                                                            .unwrap_or(0)
+                                                            + item["hourBuckets"]
+                                                                .as_u64()
+                                                                .unwrap_or(0))
+                                                        .to_string()
+                                                    )]
+                                                )
+                                            )
+                                        })
+                                        .text_size(px(12.))
+                                        .text_color(c.secondary),
+                                    ),
                             )
                             .child(
                                 text_button(
@@ -1375,6 +1437,7 @@ impl StorageCard {
                                 .on_click(cx.listener(
                                     move |s, _, w, c| {
                                         if remote {
+                                            s.remember_parent(w, c);
                                             s.fetch(
                                                 Request::DavDownload(id.clone()),
                                                 PreviewBackup,
@@ -1384,7 +1447,7 @@ impl StorageCard {
                                         } else {
                                             s.confirm(
                                                 Request::DeleteBatch(id.clone()),
-                                                Home,
+                                                Batches,
                                                 "settings.dataImport.batchesTitle",
                                                 name.clone(),
                                                 w,
@@ -1405,13 +1468,82 @@ impl StorageCard {
                 }
             }
             Backup => {
-                body = body
-                    .child(choice("settings.backupTargetLocalTitle", |s, w, cx| {
-                        s.choose(Pick::Backup, w, cx)
-                    }))
-                    .child(choice("settings.backupTargetRemoteTitle", |s, w, cx| {
-                        s.go(Upload, w, cx)
-                    }));
+                for remote in [false, true] {
+                    body = body.child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(4.))
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(8.))
+                                    .child(
+                                        quietpro::choice_entry(
+                                            if remote {
+                                                "backup-webdav"
+                                            } else {
+                                                "backup-local"
+                                            },
+                                            self.tr(if remote {
+                                                "settings.backupTargetRemoteTitle"
+                                            } else {
+                                                "settings.backupTargetLocalTitle"
+                                            }),
+                                            !self.busy,
+                                            c,
+                                        )
+                                        .flex_1()
+                                        .on_click(
+                                            cx.listener(move |s, _, w, cx| {
+                                                if remote {
+                                                    s.go(Upload, w, cx)
+                                                } else {
+                                                    s.choose(Pick::Backup, w, cx)
+                                                }
+                                            }),
+                                        ),
+                                    )
+                                    .child(
+                                        IconControl::new(
+                                            if remote {
+                                                "schedule-webdav"
+                                            } else {
+                                                "schedule-local"
+                                            },
+                                            format!(
+                                                "{} · {}",
+                                                self.tr("settings.storageScheduledBackup"),
+                                                self.tr(if remote {
+                                                    "settings.backupTargetRemoteTitle"
+                                                } else {
+                                                    "settings.backupTargetLocalTitle"
+                                                })
+                                            ),
+                                            Icon::Clock,
+                                        )
+                                        .disabled(self.busy)
+                                        .action(
+                                            c,
+                                            cx.listener(move |s, _, w, cx| {
+                                                s.schedule_target = Some(remote);
+                                                s.go(Schedule(true), w, cx);
+                                            }),
+                                        ),
+                                    ),
+                            )
+                            .child(
+                                label(self.tr(if remote {
+                                    "settings.backupTargetRemoteHint"
+                                } else {
+                                    "settings.backupTargetLocalHint"
+                                }))
+                                .text_size(px(12.))
+                                .text_color(c.secondary),
+                            ),
+                    );
+                }
             }
             Upload => {
                 if self.result["hasSecret"] == true {
@@ -1453,22 +1585,23 @@ impl StorageCard {
                     .child(choice("settings.restoreSourceLocalTitle", |s, w, cx| {
                         s.choose(Pick::Restore, w, cx)
                     }))
+                    .child(
+                        label(self.tr("settings.restoreSourceLocalHint"))
+                            .text_size(px(12.))
+                            .text_color(c.secondary),
+                    )
                     .child(choice("settings.restoreSourceRemoteTitle", |s, w, cx| {
                         s.go(Remote, w, cx)
-                    }));
+                    }))
+                    .child(
+                        label(self.tr("settings.restoreSourceRemoteHint"))
+                            .text_size(px(12.))
+                            .text_color(c.secondary),
+                    );
             }
             PreviewBackup => {
                 let preview = &self.result;
-                body = body.child(label(format!(
-                    "{} · {} · {} {}",
-                    preview["app_version"].as_str().unwrap_or_default(),
-                    crate::page_controls::stamp(
-                        preview["exported_at_ms"].as_i64().unwrap_or(0),
-                        "%Y-%m-%d %H:%M"
-                    ),
-                    self.tr("settings.dataImport.exactLabel"),
-                    preview["session_count"]
-                )));
+                body = body.child(label(self.backup_summary(preview, false)));
                 if preview["restore_supported"] == true {
                     let mut strategies = row();
                     for (key, replace) in [
@@ -1483,11 +1616,16 @@ impl StorageCard {
                                 },
                                 Home,
                                 key,
-                                s.tr(if replace {
-                                    "settings.restoreStrategyOptionHints.replace"
-                                } else {
-                                    "settings.restoreStrategyOptionHints.merge"
-                                }),
+                                format!(
+                                    "{}\n{}\n{}",
+                                    s.result["filePath"].as_str().unwrap_or_default(),
+                                    s.backup_summary(&s.result, false),
+                                    s.tr(if replace {
+                                        "settings.restoreStrategyOptionHints.replace"
+                                    } else {
+                                        "settings.restoreStrategyOptionHints.merge"
+                                    })
+                                ),
                                 w,
                                 c,
                             )
@@ -1697,7 +1835,7 @@ impl StorageCard {
                             });
                         },
                     )
-                    .disabled(self.busy),
+                    .disabled(self.busy || !self.enabled),
                 );
             let mut controls = div()
                 .grid()
@@ -1705,16 +1843,43 @@ impl StorageCard {
                 .gap(px(12.))
                 .child(cadence);
             if self.weekly {
-                controls = controls.child(self.input(5, "settings.storageWeekday", c));
+                let weak = cx.weak_entity();
+                let days =
+                    patina_recorder::localized_data(self.client.locale.get(), "date.weekdaysShort")
+                        .unwrap();
+                controls = controls.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(8.))
+                        .child(label(self.tr("export.fields.weekday.label")))
+                        .child(
+                            quietpro::Dropdown::new(
+                                "schedule-weekday",
+                                self.tr("export.fields.weekday.label"),
+                                (1u8..=7).map(|i| {
+                                    (i, days[(i - 1) as usize].as_str().unwrap().to_owned())
+                                }),
+                                self.val(5, cx).parse::<u8>().unwrap_or(1),
+                                c,
+                                move |day, w, cx| {
+                                    let _ = weak.update(cx, |s, cx| {
+                                        s.set(5, "settings.storageWeekday", &day.to_string(), w, cx)
+                                    });
+                                },
+                            )
+                            .disabled(self.busy || !self.enabled),
+                        ),
+                );
             }
-            body = body.child(controls.child(self.input(4, "settings.storageTime", c)));
+            body = body.child(controls.child(self.schedule_time(c, cx)));
             if backup {
                 let v = cx.weak_entity();
                 body = body.child(quietpro::slide_switch(
                     "schedule-remote",
                     self.tr("settings.backupTargetRemoteTitle"),
                     self.remote,
-                    !self.busy,
+                    !self.busy && self.enabled,
                     c,
                     move |remote, _, _, cx| {
                         let _ = v.update(cx, |s, cx| {
@@ -1734,12 +1899,13 @@ impl StorageCard {
                             self.input(6, "settings.storage.dataDirectoryLabel", c)
                                 .flex_1(),
                         )
-                        .child(picker(
-                            "settings.storage.changePathAction",
-                            Pick::ScheduleDirectory,
-                        )),
+                        .child(
+                            picker("settings.storage.changePathAction", Pick::ScheduleDirectory)
+                                .disabled(self.busy || !self.enabled),
+                        ),
                 );
             }
+            body = body.child(self.schedule_status(backup, c));
             actions.push(
                 self.btn("common.save", c, cx, move |s, w, c| {
                     s.schedule_save(backup, w, c)
@@ -1821,6 +1987,7 @@ impl View {
     fn title(self) -> &'static str {
         match self {
             Self::Home => "settings.dataSafetyTitle",
+            Self::Range => "data.rangePickerTitle",
             Self::Export => "export.title",
             Self::Fields => "export.configFieldsTitle",
             Self::Import => "settings.dataImport.dialogTitle",
@@ -1842,6 +2009,9 @@ impl View {
 impl Render for StorageCard {
     fn render(&mut self, win: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let home = self.content(View::Home, win, cx).id("storage-card");
+        if self.confirmation.is_some() {
+            return home.child(self.confirmation_dialog(win, cx));
+        }
         if self.view == View::Home {
             return home;
         }
@@ -1859,6 +2029,12 @@ impl Render for StorageCard {
             .role(Role::Group)
             .accessibility_id("storage-dialog-surface")
             .track_focus(&self.dialog_content_focus)
+            .on_key_down(cx.listener(|s, event: &KeyDownEvent, w, cx| {
+                if event.keystroke.key == "escape" {
+                    s.close(w, cx);
+                    cx.stop_propagation();
+                }
+            }))
             .max_w(form_width)
             .when(
                 matches!(
@@ -1871,13 +2047,7 @@ impl Render for StorageCard {
                         | View::Remote
                 ),
                 |d| d.w(form_width),
-            )
-            .on_key_down(cx.listener(|s, e: &KeyDownEvent, w, cx| {
-                if e.keystroke.key == "escape" {
-                    s.close(w, cx);
-                    cx.stop_propagation();
-                }
-            }));
+            );
         let view = cx.weak_entity();
         home.child(
             Dialog::new(cx)

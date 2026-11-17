@@ -49,24 +49,15 @@ fn store_badges(c: quietpro::Palette) -> Div {
         [
             (
                 ImageFormat::Png,
-                include_bytes!(
-                    "../../../../src/features/settings/assets/store-badges/chrome-web-store.png"
-                )
-                .as_slice(),
+                include_bytes!("../../assets/store-badges/chrome-web-store.png").as_slice(),
             ),
             (
                 ImageFormat::Svg,
-                include_bytes!(
-                    "../../../../src/features/settings/assets/store-badges/firefox-add-ons.svg"
-                )
-                .as_slice(),
+                include_bytes!("../../assets/store-badges/firefox-add-ons.svg").as_slice(),
             ),
             (
                 ImageFormat::Png,
-                include_bytes!(
-                    "../../../../src/features/settings/assets/store-badges/edge-add-ons.png"
-                )
-                .as_slice(),
+                include_bytes!("../../assets/store-badges/edge-add-ons.png").as_slice(),
             ),
         ]
         .map(|(format, bytes)| Arc::new(Image::from_bytes(format, bytes.to_vec())))
@@ -106,6 +97,7 @@ pub(super) struct ServiceFields {
     guide_title_focus: FocusHandle,
     guide_trigger: FocusHandle,
     guide_copied: Option<Field>,
+    copy_reset: Option<Task<()>>,
 }
 
 impl ServiceFields {
@@ -157,6 +149,7 @@ impl ServiceFields {
             guide_title_focus: cx.focus_handle(),
             guide_trigger: cx.focus_handle(),
             guide_copied: None,
+            copy_reset: None,
         }
     }
     pub(super) fn reset(
@@ -539,6 +532,18 @@ impl Settings {
                                 .on_click(cx.listener(move |s, _, _, cx| {
                                     cx.write_to_clipboard(ClipboardItem::new_string(value.clone()));
                                     s.services.guide_copied = Some(field);
+                                    s.services.copy_reset =
+                                        Some(cx.spawn(async move |view, cx| {
+                                            cx.background_executor()
+                                                .timer(std::time::Duration::from_millis(1400))
+                                                .await;
+                                            let _ = view.update(cx, |s, cx| {
+                                                if s.services.guide_copied == Some(field) {
+                                                    s.services.guide_copied = None;
+                                                    cx.notify();
+                                                }
+                                            });
+                                        }));
                                     cx.notify();
                                 })),
                         );
