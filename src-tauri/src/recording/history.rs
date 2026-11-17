@@ -6,8 +6,8 @@ use crate::data::{
     },
 };
 use crate::domain::activity_read_model::{
-    resolve_activity_precedence, should_track_activity_fact, ActivityOrigin, OwnedActivityRange,
-    ANONYMOUS_ACTIVITY_KEY,
+    ANONYMOUS_ACTIVITY_KEY, ActivityOrigin, OwnedActivityRange, resolve_activity_precedence,
+    should_track_activity_fact,
 };
 use crate::platform::clock::{local_day_range_at, unix_timestamp_millis_i64};
 use serde::{Deserialize, Serialize};
@@ -15,7 +15,7 @@ use std::collections::BTreeMap;
 #[path = "history/web.rs"]
 mod web;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct HistoryRecord {
     pub key: String,
     pub name: String,
@@ -24,7 +24,9 @@ pub struct HistoryRecord {
     pub end: i64,
     pub group_duration: i64,
     pub group_id: usize,
-    pub titles: Vec<(i64, i64, String)>,
+    #[serde(default)]
+    pub current: bool,
+    pub titles: Vec<(i64, i64, String, Option<String>)>,
 }
 #[derive(Serialize, Deserialize)]
 pub struct HistoryDay {
@@ -33,6 +35,8 @@ pub struct HistoryDay {
     pub apps: Vec<(String, String, i64)>,
     pub records: Vec<HistoryRecord>,
     pub minimum_seconds: i64,
+    #[serde(default)]
+    pub timeline_merge_gap_ms: i64,
     pub colors: BTreeMap<String, u32>,
     pub custom_colors: BTreeMap<String, u32>,
     pub favicons: BTreeMap<String, String>,
@@ -109,6 +113,7 @@ pub(super) async fn load(
             apps: Vec::new(),
             records: Vec::new(),
             minimum_seconds,
+            timeline_merge_gap_ms: merge_gap,
             colors: BTreeMap::new(),
             custom_colors: BTreeMap::new(),
             favicons: BTreeMap::new(),
@@ -271,13 +276,13 @@ pub(super) async fn load(
                         let a = t.start_time.max(lo);
                         let b = t.end_time.unwrap_or(hi).min(hi);
                         if b > a && !t.title.trim().is_empty() {
-                            detail.push((a, b, t.title.clone()));
+                            detail.push((a, b, t.title.clone(), None));
                         }
                     }
                 }
             }
             if detail.is_empty() && !r.window_title.trim().is_empty() {
-                detail.push((lo, hi, r.window_title.clone()));
+                detail.push((lo, hi, r.window_title.clone(), None));
             }
         }
         let continuity = r.continuity_group_start_time.unwrap_or(r.start_time);
@@ -308,6 +313,7 @@ pub(super) async fn load(
             end: hi,
             group_duration: 0,
             group_id: id,
+            current: r.origin == "native" && r.end_time.is_none() && hi == live && end > now,
             titles: detail,
         });
     }
@@ -320,6 +326,7 @@ pub(super) async fn load(
         apps,
         records,
         minimum_seconds,
+        timeline_merge_gap_ms: merge_gap,
         colors,
         custom_colors,
         favicons: BTreeMap::new(),

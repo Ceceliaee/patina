@@ -204,12 +204,12 @@ mod platform {
 }
 pub use data::classification_deletion::Impact as DeletionImpact;
 pub use domain::classification::default_category_color;
-pub use domain::localization::{format_text, text, Locale};
+pub use domain::localization::{Locale, format_text, text};
 #[path = "domain/localization/generated_data.rs"]
 mod localization_data;
 
 pub use domain::mini_window::{
-    bounds as mini_bounds, Interaction, Placement, Rect as MiniRect, LEAVE_DELAY,
+    Interaction, LEAVE_DELAY, Placement, Rect as MiniRect, bounds as mini_bounds,
 };
 pub use domain::mini_window::{PANEL_HEIGHT, PANEL_WIDTH};
 pub use domain::settings::{
@@ -233,8 +233,8 @@ pub fn run_probe_if_requested() -> Option<i32> {
 mod desktop;
 pub use data::export::common::{ALL_EXPORT_FIELDS, DEFAULT_EXPORT_FIELDS};
 pub use data::export::write::ExportDataRequest;
-pub use desktop::storage::{database_for_profile, StorageRequest};
-pub use desktop::{open_database, Activity, Recorder};
+pub use desktop::storage::{StorageRequest, database_for_profile};
+pub use desktop::{Activity, Recorder, open_database};
 #[path = "recording/tools.rs"]
 mod tools;
 pub use domain::tool_notifications::{
@@ -268,4 +268,6 @@ pub use analysis::{Series, SeriesKind, Trends};
 
 #[path = "recording/manage.rs"]
 mod manage;
-pub use manage::{AppRule, CategoryEdit, Rules, Theme, TrackingPreferences, WebRule};
+pub use manage::{
+    AppLinkEdit, AppRule, CategoryEdit, Rules, Theme, TrackingPreferences, WebDraft, WebRule,
+};

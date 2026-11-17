@@ -1,12 +1,12 @@
 use super::{data, engine::tracking, platform};
-use data::repositories::app_settings::{commit_app_setting_mutations, AppSettingMutation};
+use data::repositories::app_settings::{AppSettingMutation, commit_app_setting_mutations};
 use futures_util::FutureExt;
 use sqlx::SqlitePool;
 use std::{
     path::Path,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     },
 };
 use tracking::{
@@ -267,14 +267,16 @@ impl Recorder {
     pub fn save_rules(
         &self,
         rules: Vec<crate::AppRule>,
-        websites: Vec<crate::WebRule>,
+        websites: Option<crate::WebDraft>,
+        links: Vec<crate::AppLinkEdit>,
         categories: Vec<crate::CategoryEdit>,
     ) -> impl std::future::Future<Output = Result<(), String>> + 'static {
         let pool = self.pool.clone();
         let host = self.host.clone();
         let task = self.runtime.spawn(async move {
             let _guard = host.projection().transition.lock().await;
-            crate::manage::save_rules(&pool, &rules, &websites, &categories).await?;
+            crate::manage::save_rules(&pool, &rules, websites.as_ref(), &links, &categories)
+                .await?;
             host.titles().invalidate_app_overrides();
             host.projection().note_tracking_policy_change();
             (host.0.changed)();
@@ -290,7 +292,7 @@ impl Recorder {
         let pool = self.pool.clone();
         let host = self.host.clone();
         let task = self.runtime.spawn(async move {
-            use crate::data::classification_deletion::{run, Target};
+            use crate::data::classification_deletion::{Target, run};
             use crate::domain::tracking::resolve_app_override_executable;
             let key =
                 resolve_app_override_executable(&exe).ok_or("Invalid application identity")?;
@@ -350,7 +352,7 @@ impl Recorder {
         let pool = self.pool.clone();
         let host = self.host.clone();
         let task = self.runtime.spawn(async move {
-            use crate::data::classification_deletion::{run, Target};
+            use crate::data::classification_deletion::{Target, run};
             let target = if let Some(root) = crate::domain::web_links::group_domain(&identity) {
                 Target::Group(root)
             } else {
@@ -444,6 +446,65 @@ impl Recorder {
         ));
         async move { read.await.map_err(|e| e.to_string())? }
     }
+    pub fn detail_zoom(
+        &self,
+        hours: Option<f32>,
+    ) -> impl std::future::Future<Output = Result<f32, String>> + 'static {
+        self.zoom_preference("__gpui_detail_zoom_hours", 24., hours)
+    }
+
+    pub fn history_modes(
+        &self,
+        modes: Option<[u8; 3]>,
+    ) -> impl std::future::Future<Output = Result<([u8; 3], bool), String>> + 'static {
+        let pool = self.pool.clone();
+        let task = self.runtime.spawn(async move {
+            if let Some(modes) = modes {
+                if modes[0] > 2 || modes[1] > 2 || modes[2] > 1 { return Err("invalid history modes".into()); }
+                sqlx::query("INSERT INTO settings(key,value) VALUES('__gpui_history_modes',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+                    .bind(serde_json::to_string(&modes).map_err(|e| e.to_string())?).execute(&pool).await.map_err(|e| e.to_string())?;
+            }
+            let modes = sqlx::query_scalar::<_, String>("SELECT value FROM settings WHERE key='__gpui_history_modes'").fetch_optional(&pool).await.map_err(|e|e.to_string())?
+                .and_then(|v| serde_json::from_str::<[u8;3]>(&v).ok()).filter(|v| v[0]<=2 && v[1]<=2 && v[2]<=1).unwrap_or_default();
+            let enabled = super::manage::preferences(pool).await?.web.enabled;
+            Ok((modes, enabled))
+        });
+        async move { task.await.map_err(|e| e.to_string())? }
+    }
+
+    pub fn history_zoom(
+        &self,
+        hours: Option<f32>,
+    ) -> impl std::future::Future<Output = Result<f32, String>> + 'static {
+        self.zoom_preference("__gpui_history_zoom_hours", 4., hours)
+    }
+
+    fn zoom_preference(
+        &self,
+        key: &'static str,
+        default: f32,
+        hours: Option<f32>,
+    ) -> impl std::future::Future<Output = Result<f32, String>> + 'static {
+        let pool = self.pool.clone();
+        let task = self.runtime.spawn(async move {
+            if let Some(hours) = hours {
+                if !hours.is_finite() || !(1.0..=24.0).contains(&hours) {
+                    return Err("invalid detail zoom".to_owned());
+                }
+                sqlx::query("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+                    .bind(key).bind(hours.to_string()).execute(&pool).await.map_err(|e| e.to_string())?;
+                Ok(hours)
+            } else {
+                Ok(sqlx::query_scalar::<_, String>("SELECT value FROM settings WHERE key=?").bind(key)
+                    .fetch_optional(&pool).await.map_err(|e| e.to_string())?
+                    .and_then(|value| value.parse::<f32>().ok())
+                    .filter(|value| value.is_finite() && (1.0..=24.0).contains(value))
+                    .unwrap_or(default))
+            }
+        });
+        async move { task.await.map_err(|e| e.to_string())? }
+    }
+
     pub fn set_history_minimum(
         &self,
         detail: bool,

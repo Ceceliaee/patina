@@ -1,4 +1,4 @@
-use super::{HistoryDay, HistoryRecord, ANONYMOUS_ACTIVITY_KEY};
+use super::{ANONYMOUS_ACTIVITY_KEY, HistoryDay, HistoryRecord};
 use crate::data::repositories::web_links::WebLinksSnapshot;
 use crate::domain::{
     classification::ClassificationSnapshot,
@@ -96,8 +96,12 @@ pub(super) fn populate(
                 .and_then(|v| v.as_bool())
                 != Some(false)
         {
-            if let Some(title) = segment.title.filter(|t| !t.trim().is_empty()) {
-                detail.push((lo, hi, title));
+            if let Some(title) = segment
+                .title
+                .filter(|t| !t.trim().is_empty())
+                .or_else(|| segment.url.clone())
+            {
+                detail.push((lo, hi, title, segment.url.clone()));
             }
         }
         let previous = groups
@@ -118,6 +122,7 @@ pub(super) fn populate(
             end: hi,
             group_duration: 0,
             group_id: group,
+            current: false,
             titles: detail,
         });
     }
@@ -144,6 +149,7 @@ pub(super) fn populate(
             end: hi,
             group_duration: hi - lo,
             group_id: durations.len() + day.records.len(),
+            current: false,
             titles: Vec::new(),
         });
     }
