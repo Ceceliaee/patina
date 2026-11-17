@@ -34,7 +34,7 @@ fn click(hwnd: HWND, name: &str) -> Result<(), Error> {
 fn press(hwnd: HWND, name: &str) -> Result<(), Error> {
     super::press(hwnd, name).map_err(|e| format!("press {name}: {e}").into())
 }
-fn format(hwnd: HWND, name: &str) -> Result<(), Error> {
+pub(super) fn format(hwnd: HWND, name: &str) -> Result<(), Error> {
     let radio = wait(name, || {
         controls(hwnd).ok()?.into_iter().find(|e| unsafe {
             e.CurrentControlType().ok() == Some(UIA_RadioButtonControlTypeId)
@@ -223,6 +223,11 @@ fn classification_color_editor() -> Result<(), Error> {
     })?;
     set(hwnd, "Hex color value", "#35A69E")?;
     format(hwnd, "RGB")?;
+    key(hwnd, 0x1b)?;
+    click(hwnd, "Color")?;
+    wait("reopening remembers RGB format", || {
+        field(hwnd, "Red channel")
+    })?;
     wait("RGB channels", || {
         (value(hwnd, "Red channel").as_deref() == Some("53")
             && value(hwnd, "Green channel").as_deref() == Some("166"))

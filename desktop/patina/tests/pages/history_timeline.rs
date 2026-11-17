@@ -67,6 +67,13 @@ pub(super) fn check_records(hwnd: HWND) -> Result<(), Error> {
         (records_panel(hwnd).is_some() && !names(hwnd).iter().any(|s| s == "Design fixture"))
             .then_some(())
     })?;
+    press(hwnd, "Title details · Studio")?;
+    wait("title popover reopens", || named(hwnd, "Design fixture"))?;
+    press(hwnd, "Close")?;
+    wait("title close button keeps records open", || {
+        (records_panel(hwnd).is_some() && !names(hwnd).iter().any(|s| s == "Design fixture"))
+            .then_some(())
+    })?;
     record_mode(hwnd, "Web")?;
     wait("empty web list", || {
         named(
@@ -79,10 +86,8 @@ pub(super) fn check_records(hwnd: HWND) -> Result<(), Error> {
             .ok_or("records dialog disappeared")?
             .CurrentBoundingRectangle()?
     };
-    assert_eq!(
-        (before.right - before.left, before.bottom - before.top),
-        (after.right - after.left, after.bottom - after.top)
-    );
+    assert_eq!(before.right - before.left, after.right - after.left);
+    assert!(after.bottom - after.top < before.bottom - before.top);
     record_mode(hwnd, "Apps")?;
     wait("app records restored", || named(hwnd, "Studio · 45m"))?;
     click(hwnd, "Previous day")?;
@@ -171,13 +176,14 @@ fn website_history_navigation() -> Result<(), Error> {
         records_panel(hwnd).is_none().then_some(())
     })?;
     open_icon_details(hwnd, "example.com")?;
-    click(hwnd, "Title details")?;
+    press(hwnd, "Title details · example.com")?;
     wait("website detail title", || {
         names(hwnd)
             .iter()
             .any(|n| n.contains("Web fixture"))
             .then_some(())
     })?;
+    key(hwnd, 27)?;
     key(hwnd, 27)?;
     click(hwnd, "Previous day")?;
     wait("empty website day", || {
@@ -271,5 +277,69 @@ pub(super) fn check_zoom(hwnd: HWND) -> Result<(), Error> {
     wait("close button dismisses zoom", || {
         named(hwnd, "App lanes").is_none().then_some(())
     })?;
+    Ok(())
+}
+
+pub(super) fn check_app_detail(hwnd: HWND) -> Result<(), Error> {
+    wait("default full-day detail", || named(hwnd, "24.0 h"))?;
+    assert!(button(hwnd, "Title details").is_none());
+    let slider = wait("detail slider", || named(hwnd, "Time window in hours"))?;
+    unsafe {
+        slider.SetFocus()?;
+    }
+    key(hwnd, 36)?;
+    wait("detail minimum zoom", || named(hwnd, "1.0 h"))?;
+    let track = wait("detail timeline", || {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentAutomationId()
+                .is_ok_and(|id| id == "detail-timeline-track")
+        })
+    })?;
+    unsafe {
+        track.SetFocus()?;
+    }
+    key(hwnd, 35)?;
+    wait("detail pans to day end", || named(hwnd, "23:00 – 24:00"))?;
+    wait("records follow viewport", || {
+        named(hwnd, "No activity for this item in the current time window")
+    })?;
+    assert!(button(hwnd, "Title details · Studio").is_none());
+    key(hwnd, 36)?;
+    wait("detail pans to day start", || named(hwnd, "00:00 – 01:00"))?;
+    wait("records restored", || named(hwnd, "Studio · 45m"))?;
+    let rect = unsafe { track.CurrentBoundingRectangle()? };
+    let mut point = windows::Win32::Foundation::POINT {
+        x: rect.left + (rect.right - rect.left) / 4,
+        y: (rect.top + rect.bottom) / 2,
+    };
+    unsafe {
+        windows::Win32::Graphics::Gdi::ScreenToClient(hwnd, &mut point).ok()?;
+        PostMessageW(
+            Some(hwnd),
+            WM_MOUSEMOVE,
+            WPARAM(0),
+            LPARAM(((point.y as isize) << 16) | point.x as isize),
+        )?;
+    }
+    wait("detail segment hover", || {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentControlType().ok() == Some(UIA_ToolTipControlTypeId)
+                && el
+                    .CurrentName()
+                    .is_ok_and(|name| name.to_string().contains("Studio"))
+        })
+    })?;
+    unsafe {
+        slider.SetFocus()?;
+    }
+    key(hwnd, 35)?;
+    wait("full-day restored", || named(hwnd, "24.0 h"))?;
+    click(hwnd, "Decrease by one hour")?;
+    wait("detail zoom saved", || named(hwnd, "23.0 h"))?;
+    unsafe {
+        track.SetFocus()?;
+    }
+    key(hwnd, 36)?;
+    wait("saved zoom at day start", || named(hwnd, "00:00 – 23:00"))?;
     Ok(())
 }

@@ -4,6 +4,8 @@ mod children;
 mod desktop;
 #[path = "today/handles.rs"]
 mod handles;
+#[path = "today/presentation.rs"]
+mod presentation;
 mod support;
 use support::*;
 
@@ -901,6 +903,7 @@ fn ranked_app_actions() -> Result<(), Error> {
     let hwnd = wait("Today", || {
         children::find(child.0.id(), |p| window(p, w!("Patina")))
     })?;
+    presentation::check(hwnd, &profile.join("patina.db"))?;
     let toggle = wait("chart toggle", || named(hwnd, "Show by category"))?;
     let panels = [
         "today-focus-panel",

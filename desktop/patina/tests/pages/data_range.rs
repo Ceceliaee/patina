@@ -180,6 +180,7 @@ fn range_draft_apply_and_dismiss() -> Result<(), Error> {
     wait("expanded range data", || named(hwnd, "Total · 1h 40m"))?;
     press(hwnd, "Shorten trend range")?;
     wait("shortened range data", || named(hwnd, "Total · 1h 40m"))?;
+    select_segment(hwnd, "Detailed analysis")?;
     // Destination range commits affect only the selected object's metrics and curve.
     let destination = wait("destination range", || {
         range_button(hwnd, "Select app trend range", "Select range")
@@ -199,10 +200,13 @@ fn range_draft_apply_and_dismiss() -> Result<(), Error> {
     press(hwnd, "Apply")?;
     close()?;
     wait("single-day app total", || named(hwnd, "Total · 45m"))?;
+    select_segment(hwnd, "Overview")?;
     assert!(
         named(hwnd, "Total · 1h 40m").is_some(),
         "overview range must remain seven days"
     );
+    select_segment(hwnd, "Detailed analysis")?;
+    assert!(named(hwnd, "Total · 45m").is_some());
     activate_control(
         hwnd,
         &range_button(hwnd, "Select app trend range", "Select range").ok_or("range trigger")?,
@@ -222,10 +226,155 @@ fn range_draft_apply_and_dismiss() -> Result<(), Error> {
         true,
     )?;
     wait("app range restored", || named(hwnd, "Total · 1h 15m"))?;
+    activate_control(
+        hwnd,
+        &range_button(hwnd, "Select app trend range", "Select range").ok_or("range trigger")?,
+        true,
+    )?;
+    wait("pending date picker", || popup(hwnd))?;
+    activate_control(
+        hwnd,
+        &segment(hwnd, "Overview").ok_or("overview tab")?,
+        true,
+    )?;
+    close()?;
     assert!(named(hwnd, "Total · 1h 40m").is_some());
+    select_segment(hwnd, "Detailed analysis")?;
+    assert!(popup(hwnd).is_none());
+    assert!(named(hwnd, "Total · 1h 15m").is_some());
     let tray = window(host.0.id(), w!("Patina GPUI")).ok_or("tray")?;
     command(tray, 2)?;
     assert!(wait("exit", || host.0.try_wait().ok().flatten())?.success());
+    Ok(())
+}
+
+fn chart_heat_geometry(hwnd: HWND, detailed: bool) -> Result<[(i32, i32); 2], Error> {
+    let ids = [
+        format!(
+            "{}-{}",
+            if detailed {
+                "selection-trend"
+            } else {
+                "overview-trend"
+            },
+            Local::now().date_naive()
+        ),
+        if detailed {
+            "destination-heatmap"
+        } else {
+            "overview-heatmap"
+        }
+        .to_string(),
+    ];
+    let elements = controls(hwnd)?;
+    let mut geometry = [(0, 0); 2];
+    for (i, id) in ids.iter().enumerate() {
+        let element = elements
+            .iter()
+            .find(|el| unsafe {
+                el.CurrentAutomationId()
+                    .is_ok_and(|value| value == id.as_str())
+            })
+            .ok_or_else(|| format!("missing {id}"))?;
+        let bounds = unsafe { element.CurrentBoundingRectangle()? };
+        geometry[i] = (bounds.top, bounds.bottom - bounds.top);
+    }
+    assert!(geometry[0].1 > 100 && geometry[1].1 > 100);
+    Ok(geometry)
+}
+
+fn stable_heat_geometry(
+    hwnd: HWND,
+    detailed: bool,
+    expected: [(i32, i32); 2],
+) -> Result<(), Error> {
+    let until = std::time::Instant::now() + std::time::Duration::from_millis(500);
+    loop {
+        assert_eq!(
+            chart_heat_geometry(hwnd, detailed)?,
+            expected,
+            "chart or heatmap moved during a switch"
+        );
+        if std::time::Instant::now() >= until {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    Ok(())
+}
+
+fn full_year_cells(hwnd: HWND, detailed: bool, year: i32) -> Result<(), Error> {
+    let prefix = if detailed { "trend-heat-" } else { "heat-" };
+    let first = chrono::NaiveDate::from_ymd_opt(year, 1, 1).unwrap();
+    let last = chrono::NaiveDate::from_ymd_opt(year, 12, 31).unwrap();
+    wait("year cells ready", || {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentAutomationId()
+                .is_ok_and(|id| id == format!("{prefix}{first}"))
+                && el.CurrentIsEnabled().is_ok_and(|enabled| enabled.as_bool())
+        })
+    })?;
+    let mut dates = std::collections::BTreeSet::new();
+    for element in controls(hwnd)? {
+        let id = unsafe { element.CurrentAutomationId()? }.to_string();
+        let Some(date) = id
+            .strip_prefix(prefix)
+            .and_then(|date| chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").ok())
+        else {
+            continue;
+        };
+        assert_eq!(date.year(), year, "outside-year padding must stay blank");
+        assert!(dates.insert(date), "duplicate date cell");
+        assert_eq!(
+            unsafe { element.CurrentIsEnabled()? }.as_bool(),
+            date <= Local::now().date_naive()
+        );
+        let bounds = unsafe { element.CurrentBoundingRectangle()? };
+        assert!(
+            bounds.right > bounds.left && bounds.bottom > bounds.top,
+            "date cell must occupy space"
+        );
+    }
+    assert_eq!(dates.len() as i64, (last - first).num_days() + 1);
+    assert!(dates.contains(&first) && dates.contains(&last));
+    Ok(())
+}
+
+fn overview_heat_layout(hwnd: HWND) -> Result<(), Error> {
+    let date = Local::now().date_naive();
+    wait("overview heatmap ready", || {
+        super::button(hwnd, &format!("{date} · 1h 10m"))
+    })?;
+    let geometry = chart_heat_geometry(hwnd, false)?;
+    super::trend_chart::heatmap_geometry(hwnd)?;
+    for mode in ["Weekly", "Daily"] {
+        activate_control(hwnd, &segment(hwnd, mode).ok_or("heat granularity")?, true)?;
+        wait("overview granularity changed", || {
+            super::selected_segment(hwnd, mode)
+        })?;
+        stable_heat_geometry(hwnd, false, geometry)?;
+        super::trend_chart::heatmap_geometry(hwnd)?;
+    }
+    for direction in [
+        "Previous month",
+        "Next month",
+        "Previous month",
+        "Next month",
+    ] {
+        super::press(hwnd, direction)?;
+        stable_heat_geometry(hwnd, false, geometry)?;
+        wait("overview heatmap reloaded", || {
+            super::button(hwnd, &format!("{date} · 1h 10m"))
+        })?;
+        assert_eq!(chart_heat_geometry(hwnd, false)?, geometry);
+        if direction == "Previous month" {
+            full_year_cells(hwnd, false, date.year())?;
+        }
+    }
+    select_segment(hwnd, "Detailed analysis")?;
+    wait("detail loaded", || named(hwnd, "Total · 1h 15m"))?;
+    select_segment(hwnd, "Overview")?;
+    stable_heat_geometry(hwnd, false, geometry)?;
     Ok(())
 }
 
@@ -274,6 +423,8 @@ fn destination_heatmap_year_range() -> Result<(), Error> {
     })?;
     click(hwnd, "Data")?;
     wait("overview loaded", || named(hwnd, "Total · 1h 40m"))?;
+    overview_heat_layout(hwnd)?;
+    select_segment(hwnd, "Detailed analysis")?;
     let heat_button = |name: &str| range_button(hwnd, "Select heatmap range", name);
     let enabled = |name: &str| {
         heat_button(name).filter(|el| unsafe { el.CurrentIsEnabled().is_ok_and(|v| v.as_bool()) })
@@ -283,9 +434,12 @@ fn destination_heatmap_year_range() -> Result<(), Error> {
     };
     let older = wait("heatmap ready", || enabled("Switch to earlier range"))?;
     assert!(disabled("Switch to newer range").is_some());
+    let geometry = chart_heat_geometry(hwnd, true)?;
     activate_control(hwnd, &older, true)?;
+    stable_heat_geometry(hwnd, true, geometry)?;
     wait("current year", || named(hwnd, &today.year().to_string()))
         .map_err(|e| format!("{e}; {:?}", names(hwnd)))?;
+    full_year_cells(hwnd, true, today.year())?;
     activate_control(
         hwnd,
         &wait("older year available", || {
@@ -293,12 +447,14 @@ fn destination_heatmap_year_range() -> Result<(), Error> {
         })?,
         true,
     )?;
+    stable_heat_geometry(hwnd, true, geometry)?;
     wait("previous year", || {
         named(hwnd, &(today.year() - 1).to_string())
     })?;
     wait("earliest year boundary", || {
         disabled("Switch to earlier range")
     })?;
+    full_year_cells(hwnd, true, today.year() - 1)?;
     let historic_cell = wait("historic date loaded", || {
         super::button(hwnd, &old_date.to_string())
     })?;
@@ -331,7 +487,24 @@ fn destination_heatmap_year_range() -> Result<(), Error> {
                     .is_ok_and(|id| id == "destination-heatmap")
             })
             .ok_or("heatmap panel")?;
-        Ok(unsafe { panel.CurrentBoundingRectangle()? })
+        let bounds = unsafe { panel.CurrentBoundingRectangle()? };
+        let mut cells = 0;
+        for el in controls(hwnd)? {
+            if unsafe { el.CurrentAutomationId()? }
+                .to_string()
+                .starts_with("trend-heat-")
+            {
+                let cell = unsafe { el.CurrentBoundingRectangle()? };
+                assert!(
+                    cell.left >= bounds.left && cell.right <= bounds.right,
+                    "detail heatmap cell extends outside the panel"
+                );
+                assert!(cell.right > cell.left, "detail heatmap cell is clipped");
+                cells += 1;
+            }
+        }
+        assert!(cells >= 350, "the full year must remain visible");
+        Ok(bounds)
     };
     let daily_bounds = heat_bounds()?;
     activate_control(hwnd, &heat_segment("Weekly").ok_or("weekly mode")?, true)?;
@@ -344,10 +517,7 @@ fn destination_heatmap_year_range() -> Result<(), Error> {
         description.contains(&(old_date + Days::new(6)).to_string()),
         "{description}"
     );
-    assert!(
-        super::selected_segment(hwnd, "Daily").is_some(),
-        "overview granularity must remain daily"
-    );
+
     let weekly_bounds = heat_bounds()?;
     assert_eq!(
         daily_bounds.bottom - daily_bounds.top,
@@ -367,7 +537,15 @@ fn destination_heatmap_year_range() -> Result<(), Error> {
     );
     activate_control(hwnd, &heat_segment("Weekly").ok_or("weekly mode")?, true)?;
     wait("weekly restored", || heat_selected("Weekly"))?;
+    select_segment(hwnd, "Overview")?;
     assert!(named(hwnd, "Total · 1h 40m").is_some());
+    assert!(
+        super::selected_segment(hwnd, "Daily").is_some(),
+        "overview granularity must remain daily"
+    );
+    select_segment(hwnd, "Detailed analysis")?;
+    assert!(heat_selected("Weekly").is_some());
+    assert!(named(hwnd, &(today.year() - 1).to_string()).is_some());
     assert!(named(hwnd, "Total · 1h 15m").is_some());
     activate_control(
         hwnd,

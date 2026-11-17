@@ -336,8 +336,9 @@ fn navigate_in_locale(tag: &str) -> Result<(), Error> {
             })
         })?;
         activate_control(hwnd, &option, false)?;
-        press(hwnd, &patina_recorder::text(locale, "common.save"))?;
         let next_locale = patina_recorder::Locale::from_tag(Some(next_tag));
+        wait("language immediately previewed", || named(hwnd, &patina_recorder::text(next_locale, "settings.title")))?;
+        press(hwnd, &patina_recorder::text(next_locale, "common.save"))?;
         wait("saved language applied", || {
             named(hwnd, &patina_recorder::text(next_locale, "settings.title"))
         })?;
@@ -527,10 +528,12 @@ fn history_navigation() -> Result<(), Error> {
     })?;
     key(hwnd, 27)?;
     history_timeline::open_icon_details(hwnd, "Studio")?;
-    click(hwnd, "Title details")?;
+    history_timeline::check_app_detail(hwnd)?;
+    press(hwnd, "Title details · Studio")?;
     wait("recorded title", || {
         includes("Design fixture").then_some(())
     })?;
+    key(hwnd, 27)?;
     click(hwnd, "Previous day")?;
     wait("detail yesterday", || named(hwnd, &previous))?;
     assert!(!includes("Design fixture"));
@@ -551,10 +554,12 @@ fn history_navigation() -> Result<(), Error> {
     unsafe {
         open.Invoke()?;
     }
-    click(hwnd, "Title details")?;
+    wait("detail remembers zoom", || named(hwnd, "23.0 h"))?;
+    press(hwnd, "Title details · Studio")?;
     wait("same detail from Today", || {
         includes("Design fixture").then_some(())
     })?;
+    key(hwnd, 27)?;
     key(hwnd, 27)?;
     wait("return to Today", || {
         button(hwnd, "Close").is_none().then_some(())
@@ -598,7 +603,17 @@ fn data_navigation() -> Result<(), Error> {
     wait("seven day cross-midnight total", || {
         named(hwnd, "Total · 1h 40m")
     })?;
+    assert!(selected_segment(hwnd, "Overview").is_some());
+    assert!(
+        button(hwnd, "Studio").is_none(),
+        "details must not be exposed in Overview"
+    );
     trend_chart::check(hwnd)?;
+    select_segment(hwnd, "Detailed analysis")?;
+    assert!(
+        named(hwnd, "Total · 1h 40m").is_none(),
+        "overview must be hidden"
+    );
     press(hwnd, "Studio")?;
     wait("selected app total", || named(hwnd, "Total · 1h 15m"))
         .map_err(|e| format!("{e}; {:?}", names(hwnd)))?;
@@ -614,7 +629,7 @@ fn data_navigation() -> Result<(), Error> {
     };
     let chart =
         unsafe { wait("trend plot", || by_id("selection-trend"))?.CurrentBoundingRectangle()? };
-    assert!(list.right < chart.left && list.right - list.left < chart.right - chart.left);
+    assert!(chart.right < list.left && list.right - list.left < chart.right - chart.left);
     press(hwnd, "Writer")?;
     wait("single selection replaces Studio", || {
         named(hwnd, "Total · 20m")
@@ -628,10 +643,19 @@ fn data_navigation() -> Result<(), Error> {
     }
     wait("no matching apps", || named(hwnd, "No matching apps"))?;
     assert!(named(hwnd, "Total · 1h 15m").is_some());
+    select_segment(hwnd, "Overview")?;
+    assert!(named(hwnd, "Search apps").is_none());
+    select_segment(hwnd, "Detailed analysis")?;
+    wait("retained search", || named(hwnd, "No matching apps"))?;
+    assert!(named(hwnd, "Total · 1h 15m").is_some());
+    let search = wait("retained search input", || named(hwnd, "Search apps"))?;
+    let edit: IUIAutomationValuePattern =
+        unsafe { search.GetCurrentPatternAs(UIA_ValuePatternId)? };
     unsafe {
         edit.SetValue(&windows::core::BSTR::from(""))?;
     }
     wait("cleared search", || button(hwnd, "Studio"))?;
+    select_segment(hwnd, "Overview")?;
     activate_control(
         hwnd,
         &data_range::range_button(hwnd, "Select trend range", "Expand trend range")
@@ -644,6 +668,7 @@ fn data_navigation() -> Result<(), Error> {
             &format!("{} · 0m", Local::now().date_naive() - chrono::Days::new(29)),
         )
     })?;
+    select_segment(hwnd, "Detailed analysis")?;
     wait("changed range preserves app", || {
         named(hwnd, "Total · 1h 15m")
     })?;
@@ -654,8 +679,7 @@ fn data_navigation() -> Result<(), Error> {
     wait("empty websites", || named(hwnd, "Total · 0m"))?;
     select_segment(hwnd, "Apps")?;
     press(hwnd, "Studio")?;
-    let date = Local::now().date_naive().to_string();
-    press(hwnd, &date)?;
+    history_timeline::open_icon_details(hwnd, "Studio")?;
     press(hwnd, "Previous day")?;
     wait("app detail yesterday", || {
         named(
@@ -668,6 +692,7 @@ fn data_navigation() -> Result<(), Error> {
         button(hwnd, "Close").is_none().then_some(())
     })?;
     wait("restored selection", || named(hwnd, "Total · 1h 15m"))?;
+    select_segment(hwnd, "Overview")?;
     activate_control(
         hwnd,
         &segment(hwnd, "Weekly").ok_or("weekly segment")?,
@@ -687,6 +712,21 @@ fn data_navigation() -> Result<(), Error> {
     })?;
     press(hwnd, "Previous month")?;
     press(hwnd, "Next month")?;
+    select_segment(hwnd, "Detailed analysis")?;
+    let yesterday = Local::now().date_naive() - chrono::Days::new(1);
+    let heat = wait("detailed heatmap date", || {
+        button(hwnd, &yesterday.to_string())
+    })?;
+    trend_chart::double_click_day(hwnd, &heat, yesterday)?;
+    press(hwnd, "Data")?;
+    select_segment(hwnd, "Detailed analysis")?;
+    let column = wait("selected app trend date", || {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentAutomationId()
+                .is_ok_and(|id| id == format!("selection-trend-{yesterday}"))
+        })
+    })?;
+    trend_chart::double_click_day(hwnd, &column, yesterday)?;
     let tray = window(pid, w!("Patina GPUI")).unwrap();
     command(tray, 2)?;
     assert!(wait("exit", || host.0.try_wait().ok().flatten())?.success());
@@ -960,17 +1000,16 @@ fn classification_navigation() -> Result<(), Error> {
             .GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId)?
             .SetValue(&"Studio Outside".into())?;
     }
-    let filename = wait("nonfocusable application filename", || {
-        named(hwnd, "studio.exe")
-    })?;
+    let filename = wait("application identity trigger", || named(hwnd, "studio.exe"))?;
     activate_control(hwnd, &filename, false)?;
-    wait(
-        "clicking nonfocusable content commits and closes rename",
-        || {
-            (rename_field().is_none() && category_control("Category · Studio Outside").is_some())
-                .then_some(())
-        },
-    )?;
+    wait("clicking identity commits and closes rename", || {
+        (rename_field().is_none() && category_control("Category · Studio Outside").is_some())
+            .then_some(())
+    })?;
+    wait("identity opens application links", || {
+        button(hwnd, "Add application")
+    })?;
+    key(hwnd, 0x1b)?;
     click(hwnd, "Edit app name")?;
     let field = wait("name input before card action", rename_field)?;
     unsafe {
@@ -1365,11 +1404,12 @@ fn settings_navigation() -> Result<(), Error> {
     assert!(menu.top >= initial.bottom || menu.bottom <= initial.top);
     activate_control(hwnd, &spanish, false)?;
     wait("language draft", || {
-        button(hwnd, "Save").filter(|b| unsafe { b.CurrentIsEnabled().is_ok_and(|v| v.as_bool()) })
+        button(hwnd, &patina_recorder::text(patina_recorder::Locale::Es, "common.save")).filter(|b| unsafe { b.CurrentIsEnabled().is_ok_and(|v| v.as_bool()) })
     })?;
     let changed = unsafe { language.CurrentBoundingRectangle()? };
     assert_eq!(initial.right - initial.left, changed.right - changed.left);
-    click(hwnd, "Cancel")?;
+    click(hwnd, &patina_recorder::text(patina_recorder::Locale::Es, "common.cancel"))?;
+    wait("language preview cancelled", || named(hwnd, "Language"))?;
     activate_control(hwnd, &language, true)?;
     let english = wait("English restored", || option("English"))?;
     assert!(unsafe {
@@ -1464,7 +1504,7 @@ fn about_navigation() -> Result<(), Error> {
     let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
     click(hwnd, "About")?;
     wait("binary version", || {
-        named(hwnd, concat!("GPUI v", env!("CARGO_PKG_VERSION")))
+        named(hwnd, concat!("v", env!("CARGO_PKG_VERSION")))
     })?;
     for (open, qr, action) in [
         ("Feedback", "QQ Channel", "GitHub Issues"),

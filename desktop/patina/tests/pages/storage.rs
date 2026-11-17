@@ -1,4 +1,5 @@
 use super::*;
+use chrono::Datelike;
 
 #[test]
 #[ignore = "isolated Win32 desktop"]
@@ -108,23 +109,73 @@ fn settings_storage_card() -> Result<(), Error> {
     }
     for (entry, nested) in [
         ("Export", "Scheduled export"),
-        ("Back up", "Scheduled backup"),
+        ("Back up", "Scheduled backup · Local backup"),
         ("Import", "Delete external imported data"),
     ] {
         press(hwnd, entry)?;
         press(hwnd, nested)?;
-        wait(nested, || dialog(nested))?;
+        wait(nested, || {
+            dialog(if entry == "Back up" {
+                "Scheduled backup"
+            } else {
+                nested
+            })
+        })?;
         wait("nested view loaded", || {
             button(hwnd, if entry == "Import" { "Close" } else { "Cancel" })
                 .filter(|b| unsafe { b.CurrentIsEnabled().is_ok_and(|v| v.as_bool()) })
         })?;
         key(hwnd, 0x1b)?;
         wait("nested dialog dismissed", || {
-            dialog(nested).is_none().then_some(())
+            dialog(if entry == "Back up" {
+                "Scheduled backup"
+            } else {
+                nested
+            })
+            .is_none()
+            .then_some(())
+        })?;
+        let parent = match entry {
+            "Export" => "Data Export",
+            "Back up" => "Choose backup location",
+            _ => "Choose import method",
+        };
+        wait("returned to parent", || dialog(parent))?;
+        key(hwnd, 0x1b)?;
+        wait("parent dismissed", || {
+            dialog(parent).is_none().then_some(())
         })?;
     }
     press(hwnd, "Export")?;
     wait("export dialog", || dialog("Data Export"))?;
+    press(hwnd, "Open range picker")?;
+    wait("export calendar", || dialog("Select range"))?;
+    press(hwnd, "Previous month")?;
+    let previous_month = (Local::now().date_naive().with_day(1).unwrap()
+        - chrono::Duration::days(1))
+    .with_day(1)
+    .unwrap();
+    let first = previous_month.to_string();
+    let last = previous_month.succ_opt().unwrap().to_string();
+    for day in [&first, &last] {
+        let cell = wait(day, || {
+            controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+                el.CurrentControlType().ok() != Some(UIA_ButtonControlTypeId)
+                    && el.CurrentName().is_ok_and(|name| name == day.as_str())
+            })
+        })?;
+        activate_control(hwnd, &cell, false)?;
+    }
+    press(hwnd, "Apply")?;
+    wait("calendar returns to export", || dialog("Data Export"))?;
+    press(hwnd, "Open range picker")?;
+    wait("selected date range retained", || {
+        named(hwnd, &format!("{first} – {last}"))
+    })?;
+    key(hwnd, 27)?;
+    wait("calendar cancel returns to export", || {
+        dialog("Data Export")
+    })?;
     let format_option = |name: &str| {
         controls(hwnd).ok()?.into_iter().find(|el| unsafe {
             el.CurrentControlType().ok() == Some(UIA_RadioButtonControlTypeId)

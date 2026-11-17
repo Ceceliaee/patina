@@ -89,7 +89,7 @@ fn native_update_download_confirmation_and_navigation() -> Result<(), Error> {
     fs::write(
         fixture.join("manifest.json"),
         serde_json::to_vec(
-            &json!({"schema":1,"application":"patina-gpui","version":"0.2.0","platforms":{platform:{"url":"https://fixture.invalid/setup.exe","size":payload.len(),"signature":signature}}}),
+            &json!({"schema":1,"application":"patina-gpui","version":"0.2.0","notes":"Migration fixture release notes","platforms":{platform:{"url":"https://fixture.invalid/setup.exe","size":payload.len(),"signature":signature}}}),
         )?,
     )?;
     let mut child = TestChild(
@@ -105,7 +105,12 @@ fn native_update_download_confirmation_and_navigation() -> Result<(), Error> {
     click(hwnd, "About")?;
     click(hwnd, "Check updates")?;
     wait("available update", || button(hwnd, "Download now"))?;
+    wait("version comparison", || named(hwnd, "v0.1.0 → v0.2.0"))?;
+    wait("release notes preview", || {
+        named(hwnd, "Migration fixture release notes")
+    })?;
     click(hwnd, "Download now")?;
+    click(hwnd, "Later")?;
     click(hwnd, "Settings")?;
     click(hwnd, "About")?;
     wait("verified update", || button(hwnd, "Restart to install"))?;

@@ -12,8 +12,8 @@ mod services;
 mod storage;
 
 use chrono::Local;
-use fixture::{seed, Error};
-use sqlx::{sqlite::SqliteConnectOptions, Connection, SqliteConnection};
+use fixture::{Error, seed};
+use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
 use std::fs;
 
 #[test]
@@ -55,6 +55,56 @@ fn history_exact_and_bucket_data() -> Result<(), Error> {
 }
 
 #[test]
+fn detail_preferences_and_current_activity() -> Result<(), Error> {
+    let root = tempfile::tempdir()?;
+    let db = root.path().join("patina.db");
+    seed(&db)?;
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    let recorder = patina_recorder::Recorder::start(&db, || {})?;
+    rt.block_on(async {
+        assert_eq!(recorder.detail_zoom(None).await?, 24.0);
+        assert_eq!(recorder.history_zoom(None).await?, 4.0);
+        assert_eq!(recorder.history_modes(None).await?.0, [0,0,0]);
+        recorder.history_modes(Some([2,1,1])).await?;
+        assert_eq!(recorder.history_modes(None).await?.0, [2,1,1]);
+        assert!(recorder.history_modes(Some([0,3,0])).await.is_err());
+        assert_eq!(recorder.history_modes(None).await?.0, [2,1,1]);
+        recorder.history_zoom(Some(8.)).await?;
+        recorder.detail_zoom(Some(8.2)).await?;
+        assert_eq!(recorder.detail_zoom(None).await?, 8.2);
+        assert_eq!(recorder.history_zoom(None).await?, 8.0);
+        for value in [0.0, 25.0, f32::NAN] {
+            assert!(recorder.detail_zoom(Some(value)).await.is_err());
+        }
+        assert_eq!(recorder.detail_zoom(None).await?, 8.2);
+        recorder.set_history_minimum(true, 120).await?;
+        let now = Local::now().timestamp_millis();
+        let mut c = SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&db)).await?;
+        sqlx::query("INSERT INTO sessions(exe_name,app_name,start_time,end_time,duration) VALUES('live-fixture.exe','Live fixture',?,NULL,0)")
+            .bind(now - 120_000).execute(&mut c).await?;
+        let day = recorder.history(now, Some("live-fixture.exe".into()), true).await?;
+        assert_eq!(day.minimum_seconds, 120);
+        assert!(day.records.iter().any(|r| r.current));
+        assert!(day.records.iter().all(|r| r.end <= Local::now().timestamp_millis()));
+        sqlx::query("UPDATE sessions SET end_time=?,duration=120000 WHERE exe_name='live-fixture.exe'")
+            .bind(now).execute(&mut c).await?;
+        let closed = recorder.history(now, Some("live-fixture.exe".into()), true).await?;
+        assert!(!closed.records.is_empty());
+        assert!(closed.records.iter().all(|r| !r.current));
+        Ok::<_, Error>(())
+    })?;
+    recorder.shutdown()?;
+    let reopened = patina_recorder::Recorder::start(&db, || {})?;
+    assert_eq!(rt.block_on(reopened.detail_zoom(None))?, 8.2);
+    assert_eq!(rt.block_on(reopened.history_zoom(None))?, 8.0);
+    assert_eq!(rt.block_on(reopened.history_modes(None))?.0, [2, 1, 1]);
+    reopened.shutdown()?;
+    Ok(())
+}
+
+#[test]
 fn edits_are_atomic_and_detect_stale_inputs() -> Result<(), Error> {
     let root = tempfile::tempdir()?;
     let db = root.path().join("patina.db");
@@ -79,19 +129,23 @@ fn edits_are_atomic_and_detect_stale_inputs() -> Result<(), Error> {
             .clone();
         studio.name = "Draft".into();
         writer.category = "missing-category".into();
-        assert!(recorder
-            .save_rules(vec![studio.clone(), writer], vec![], vec![])
-            .await
-            .is_err());
-        assert!(recorder
-            .rules()
-            .await?
-            .apps
-            .iter()
-            .any(|a| a.name == "Studio"));
+        assert!(
+            recorder
+                .save_rules(vec![studio.clone(), writer], None, vec![], vec![])
+                .await
+                .is_err()
+        );
+        assert!(
+            recorder
+                .rules()
+                .await?
+                .apps
+                .iter()
+                .any(|a| a.name == "Studio")
+        );
         studio.category = "other".into();
         recorder
-            .save_rules(vec![studio.clone()], vec![], vec![])
+            .save_rules(vec![studio.clone()], None, vec![], vec![])
             .await?;
         let saved = recorder.rules().await?;
         let saved = saved
@@ -103,10 +157,12 @@ fn edits_are_atomic_and_detect_stale_inputs() -> Result<(), Error> {
         let raw: serde_json::Value = serde_json::from_str(saved.original.as_deref().unwrap())?;
         assert_eq!(raw["category"], "other");
         studio.name = "Stale".into();
-        assert!(recorder
-            .save_rules(vec![studio], vec![], vec![])
-            .await
-            .is_err());
+        assert!(
+            recorder
+                .save_rules(vec![studio], None, vec![], vec![])
+                .await
+                .is_err()
+        );
         let old = recorder.preferences().await?;
         let mut p = old.clone();
         p.gap = 240;
@@ -187,12 +243,13 @@ fn totals_and_classification() -> Result<(), Error> {
         "studio.exe".into(),
         patina_recorder::AppEdit::Category("office".into()),
     ))?;
-    assert!(rt
-        .block_on(recorder.edit_app(
+    assert!(
+        rt.block_on(recorder.edit_app(
             "activity:anonymous".into(),
             patina_recorder::AppEdit::Category("office".into())
         ))
-        .is_err());
+        .is_err()
+    );
     let data = rt.block_on(read())?;
     assert_eq!(data.categories[0].duration, 65 * minute);
     assert_eq!(data.apps[0].name, "Studio");

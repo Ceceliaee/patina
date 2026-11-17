@@ -1,6 +1,42 @@
 use super::*;
 use windows::core::{BSTR, Interface};
 
+fn tool_selector(hwnd: HWND) -> Option<IUIAutomationElement> {
+    controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+        el.CurrentControlType().ok() == Some(UIA_ComboBoxControlTypeId)
+            && el.CurrentName().is_ok_and(|name| name == "Tools")
+            && el.CurrentIsEnabled().is_ok_and(|enabled| enabled.as_bool())
+    })
+}
+
+fn tool_option(hwnd: HWND, name: &str) -> Option<IUIAutomationElement> {
+    controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+        el.CurrentControlType().ok() == Some(UIA_ListItemControlTypeId)
+            && el.CurrentName().is_ok_and(|value| value == name)
+    })
+}
+
+fn selected_tool(hwnd: HWND, name: &str) -> Option<()> {
+    let el = tool_selector(hwnd)?;
+    unsafe {
+        (el.GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId)
+            .ok()?
+            .CurrentValue()
+            .ok()?
+            == name)
+            .then_some(())
+    }
+}
+
+fn select_tool(hwnd: HWND, name: &str) -> Result<(), Error> {
+    let selector = wait("tool selector", || tool_selector(hwnd))?;
+    activate_control(hwnd, &selector, false)?;
+    let option = wait(name, || tool_option(hwnd, name))?;
+    activate_control(hwnd, &option, false)?;
+    wait("tool selected", || selected_tool(hwnd, name))?;
+    Ok(())
+}
+
 fn picker(owner: HWND) -> Option<HWND> {
     let mut pid = 0;
     unsafe { GetWindowThreadProcessId(owner, Some(&mut pid)) };
@@ -36,6 +72,47 @@ fn preference_segments_persist_and_support_keyboard() -> Result<(), Error> {
     let pid = app.0.id();
     let hwnd = wait("main", || children::find(pid, |p| window(p, w!("Patina"))))?;
     click(hwnd, "Tools")?;
+    let selector = wait("tool selector", || tool_selector(hwnd))?;
+    let manager = wait("tool manager", || button(hwnd, "Manage tools"))?;
+    let selector_bounds = unsafe { selector.CurrentBoundingRectangle()? };
+    let manager_bounds = unsafe { manager.CurrentBoundingRectangle()? };
+    assert!(selector_bounds.right <= manager_bounds.left);
+    assert!((selector_bounds.top - manager_bounds.top).abs() <= 4);
+    assert!(button(hwnd, "Focus").is_none());
+    assert!(button(hwnd, "Reminder").is_none());
+    let title = wait("tools title", || {
+        controls(hwnd)
+            .ok()?
+            .into_iter()
+            .find(|el| unsafe { el.CurrentAutomationId().is_ok_and(|id| id == "page-title") })
+    })?;
+    let title_bounds = unsafe { title.CurrentBoundingRectangle()? };
+    let focus = wait("focus title", || {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentName().is_ok_and(|name| name == "Focus")
+                && el
+                    .CurrentBoundingRectangle()
+                    .is_ok_and(|rect| rect.top > title_bounds.bottom)
+        })
+    })?;
+    assert!(unsafe { focus.CurrentBoundingRectangle()?.left <= title_bounds.left });
+    activate_control(hwnd, &selector, true)?;
+    wait("tool menu opened", || tool_option(hwnd, "Reminder"))?;
+    key(hwnd, 27)?;
+    wait("tool menu dismissed", || {
+        tool_option(hwnd, "Reminder").is_none().then_some(())
+    })?;
+    assert!(selected_tool(hwnd, "Focus").is_some());
+    activate_control(hwnd, &selector, true)?;
+    wait("tool menu reopened", || tool_option(hwnd, "Reminder"))?;
+    key(hwnd, 35)?;
+    key(hwnd, 13)?;
+    wait("keyboard selects reminder", || {
+        selected_tool(hwnd, "Reminder")
+    })?;
+    wait("reminder content", || button(hwnd, "New reminder"))?;
+    select_tool(hwnd, "Focus")?;
+    wait("focus content", || button(hwnd, "New focus session"))?;
     click(hwnd, "Tools settings")?;
     select_segment(hwnd, "Reminder dialog")?;
     select_segment(hwnd, "Soft bell")?;
@@ -266,9 +343,7 @@ fn navigation_and_consent_keyboard() -> Result<(), Error> {
         press(hwnd, &remove)?;
         press(hwnd, &tr("common.confirm"))?;
         wait("focus tool removed", || {
-            button(hwnd, &tr("tools.pomodoroTitle"))
-                .is_none()
-                .then_some(())
+            button(hwnd, &remove).is_none().then_some(())
         })?;
         wait("focus after uninstall", || {
             button(hwnd, &tr("tools.manager"))
@@ -357,20 +432,24 @@ fn bundled_tools_can_be_removed_independently() -> Result<(), Error> {
     let remove = |hwnd, name: &str| -> Result<(), Error> {
         click(hwnd, &format!("Uninstall tool {name}"))?;
         click(hwnd, "Confirm")?;
-        wait("uninstalled", || button(hwnd, name).is_none().then_some(()))?;
+        wait("uninstalled", || {
+            button(hwnd, &format!("Uninstall tool {name}"))
+                .is_none()
+                .then_some(())
+        })?;
         Ok(())
     };
     let (app, hwnd, pid) = launch()?;
-    click(hwnd, "Focus")?;
+    select_tool(hwnd, "Focus")?;
     press(hwnd, "New focus session")?;
     click(hwnd, "Start")?;
     wait("running focus", || button(hwnd, "Pause"))?;
-    click(hwnd, "Reminder")?;
+    select_tool(hwnd, "Reminder")?;
     press(hwnd, "New reminder")?;
     wait("scheduled", || button(hwnd, "Pause"))?;
     click(hwnd, "Manage tools")?;
     remove(hwnd, "Reminder")?;
-    click(hwnd, "Focus")?;
+    select_tool(hwnd, "Focus")?;
     wait("focus still running", || button(hwnd, "Pause"))?;
     click(hwnd, "Manage tools")?;
     remove(hwnd, "Focus")?;
@@ -595,19 +674,25 @@ fn tool_tray_resources() -> Result<(), Error> {
     for name in ["Focus", "Reminder"] {
         click(hwnd, &format!("Uninstall tool {name}"))?;
         click(hwnd, "Confirm")?;
-        wait("removed", || button(hwnd, name).is_none().then_some(()))?;
+        wait("removed", || {
+            button(hwnd, &format!("Uninstall tool {name}"))
+                .is_none()
+                .then_some(())
+        })?;
     }
     close(hwnd)?;
     measure("empty")?;
     let hwnd = open()?;
     for _ in 0..5 {
         click(hwnd, "Reinstall · Reminder")?;
-        wait("restored tool", || button(hwnd, "Reminder"))?;
+        wait("restored tool", || selected_tool(hwnd, "Reminder"))?;
         click(hwnd, "Manage tools")?;
         click(hwnd, "Uninstall tool Reminder")?;
         click(hwnd, "Confirm")?;
         wait("removed", || {
-            button(hwnd, "Reminder").is_none().then_some(())
+            button(hwnd, "Uninstall tool Reminder")
+                .is_none()
+                .then_some(())
         })?;
     }
     close(hwnd)?;
@@ -643,7 +728,7 @@ fn focus_completes_in_tray_and_starts_break_from_notice() -> Result<(), Error> {
     let main = || children::find(pid, |p| window(p, w!("Patina")));
     let hwnd = wait("main", main)?;
     click(hwnd, "Tools")?;
-    click(hwnd, "Focus")?;
+    select_tool(hwnd, "Focus")?;
     wait("focus duration set to one minute", || {
         let field = controls(hwnd).ok()?.into_iter().find_map(|e| unsafe {
             if e.CurrentControlType().ok()? != UIA_EditControlTypeId
@@ -688,7 +773,7 @@ fn focus_completes_in_tray_and_starts_break_from_notice() -> Result<(), Error> {
     command(tray, 4)?;
     let hwnd = wait("main rebuilt", main)?;
     click(hwnd, "Tools")?;
-    click(hwnd, "Focus")?;
+    select_tool(hwnd, "Focus")?;
     wait("break running", || button(hwnd, "Pause"))?;
     let state: (String, String, i64) = rt.block_on(
         sqlx::query_as("SELECT status,phase,completed_focus_count FROM tool_pomodoro_runs")
@@ -737,7 +822,7 @@ fn install_update_uninstall_counter() -> Result<(), Error> {
         pick_file(hwnd, path)?;
         click(hwnd, "Confirm")
     };
-    wait("tool registry", || button(hwnd, "Focus"))?;
+    wait("tool registry", || tool_selector(hwnd))?;
     click(hwnd, "Manage tools")?;
     install(&file("PATINA_COUNTER_PACKAGE")?)?;
     click(hwnd, "Add one")?;
@@ -746,7 +831,7 @@ fn install_update_uninstall_counter() -> Result<(), Error> {
     wait("counter after keyboard", || named(hwnd, "2"))?;
     click(hwnd, "Today")?;
     click(hwnd, "Tools")?;
-    click(hwnd, "Counter")?;
+    select_tool(hwnd, "Counter")?;
     wait("saved counter", || named(hwnd, "2"))?;
     click(hwnd, "Manage tools")?;
     install(&file("PATINA_COUNTER_UPDATE")?)?;
@@ -756,7 +841,9 @@ fn install_update_uninstall_counter() -> Result<(), Error> {
     click(hwnd, "Uninstall tool Counter")?;
     click(hwnd, "Confirm")?;
     wait("counter removed", || {
-        button(hwnd, "Counter").is_none().then_some(())
+        button(hwnd, "Uninstall tool Counter")
+            .is_none()
+            .then_some(())
     })?;
     command(window(pid, w!("Patina GPUI")).ok_or("missing tray")?, 2)?;
     assert!(wait("exit", || host.0.try_wait().ok().flatten())?.success());
