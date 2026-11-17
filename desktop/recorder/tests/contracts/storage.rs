@@ -15,6 +15,14 @@ fn storage_round_trip_and_migration() -> Result<(), Error> {
         .enable_all()
         .build()?;
     let request = |r| rt.block_on(recorder.storage(r));
+    let preferences = json!({"format":"parquet","mode":"week","fields":{"csv":["app_name"],"parquet":["start_time","end_time"]}});
+    request(R::ExportPreferences(Some(preferences.clone())))?;
+    assert_eq!(request(R::ExportPreferences(None))?, preferences);
+    request(R::ResumeAfterUpdate(Some("About".into())))?;
+    assert_eq!(request(R::ResumeAfterUpdate(None))?, "About");
+    assert!(request(R::ResumeAfterUpdate(None))?.is_null());
+    assert!(request(R::ResumeAfterUpdate(Some("unexpected".into()))).is_err());
+    assert!(request(R::Info)?["installBytes"].is_number());
     let csv = root.path().join("input.csv");
     fs::write(
         &csv,
@@ -110,6 +118,16 @@ fn storage_round_trip_and_migration() -> Result<(), Error> {
     }
     let next = root.path().join("moved");
     fs::create_dir(&next)?;
+    let target = next.join("Patina");
+    fs::create_dir(&target)?;
+    fs::create_dir_all(profile.join("backups"))?;
+    fs::write(profile.join("backups/sample.zip"), b"saved-backup")?;
+    let preview_move = request(R::PreviewMove(Some(next.clone())))?;
+    assert_eq!(
+        preview_move["to"],
+        target.canonicalize()?.to_string_lossy().as_ref()
+    );
+    let next = target;
     let occupied = next.join("patina.db");
     fs::write(&occupied, b"keep")?;
     assert!(request(R::Move(Some(next.clone()))).is_err());
@@ -138,6 +156,8 @@ fn storage_round_trip_and_migration() -> Result<(), Error> {
     let moved = patina_recorder::database_for_profile(&profile)
         .map_err(|e| format!("apply directory move: {e}"))?;
     assert_eq!(moved.canonicalize()?, occupied.canonicalize()?);
+    assert_eq!(fs::read(next.join("backups/sample.zip"))?, b"saved-backup");
+    assert!(!profile.join("backups/sample.zip").exists());
     let moved_recorder = Recorder::start_in_profile(&moved, &profile, || {})?;
     let settings = rt.block_on(moved_recorder.storage(R::Schedule { backup: true }))?;
     assert_eq!(settings["config"]["weekday"], 2);
@@ -147,6 +167,10 @@ fn storage_round_trip_and_migration() -> Result<(), Error> {
     assert_eq!(
         patina_recorder::database_for_profile(&profile)?.canonicalize()?,
         db.canonicalize()?
+    );
+    assert_eq!(
+        fs::read(profile.join("backups/sample.zip"))?,
+        b"saved-backup"
     );
     Ok(())
 }
