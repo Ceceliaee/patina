@@ -1,6 +1,9 @@
 use chrono::{Local, TimeZone};
 use gpui_kit::{prelude::*, *};
 
+pub(super) mod anonymous;
+pub(super) mod quick_edit;
+
 pub(super) fn stamp(ms: i64, format: &str) -> String {
     Local
         .timestamp_millis_opt(ms)
@@ -47,7 +50,6 @@ pub(super) fn detail_dialog(
         .id("app-detail-popup")
         .relative()
         .w((window.viewport_size().width - px(48.)).min(px(800.)))
-        .h((window.viewport_size().height - px(48.)).min(px(560.)))
         .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
         .child(content)
         .child(
