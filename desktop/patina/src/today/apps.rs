@@ -141,13 +141,16 @@ impl Today {
         let keyboard_focus = trigger.clone();
         let keyboard_bounds = bounds.clone();
         let share = (100. * app.duration as f64 / total as f64).round();
-        let face =
-            quietpro::app_icon_frame(rgb(source_color), colors).child(match self.icons.get(&key) {
+        let face = quietpro::app_icon_frame(rgb(source_color), colors).child(if app.anonymous {
+            super::anonymous::icon(rgb(source_color), app.name.clone(), 24.).into_any_element()
+        } else {
+            match self.icons.get(&key) {
                 Some(icon) => img(icon.image.clone()).size(px(24.)).into_any_element(),
                 None => glyph(Icon::AppWindow, rgb(source_color))
                     .size(px(24.))
                     .into_any_element(),
-            });
+            }
+        });
         let icon = if app.anonymous {
             face.into_any_element()
         } else {
@@ -211,8 +214,12 @@ impl Today {
                     .flex()
                     .items_center()
                     .gap(px(4.))
-                    .child(value(app.name.clone()).truncate())
-                    .when(app.category == "other", |s| {
+                    .when_else(
+                        app.anonymous,
+                        |s| s.child(super::anonymous::name(colors.text)),
+                        |s| s.child(value(app.name.clone()).truncate()),
+                    )
+                    .when(!app.anonymous && app.category == "other", |s| {
                         s.child(caption(self.label("mapping.quickUnclassified"), colors))
                     }),
             )
@@ -231,10 +238,15 @@ impl Today {
                             .rounded_full()
                             .child(
                                 div()
+                                    .relative()
+                                    .overflow_hidden()
                                     .h_full()
                                     .w(relative(share as f32 / 100.))
                                     .rounded_full()
-                                    .bg(bar_color),
+                                    .bg(bar_color)
+                                    .when(app.anonymous, |s| {
+                                        s.child(quietpro::dot_pattern(colors.secondary))
+                                    }),
                             ),
                     ),
             )

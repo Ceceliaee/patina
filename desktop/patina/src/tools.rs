@@ -273,32 +273,44 @@ impl Render for Tools {
                         );
                     }
                 }));
-        let top = page_title_row(tr("tools.title"), quietpro::Icon::ToolCase, colors)
-            .child(page_actions().child(manager).child(preferences));
-        let mut rail = content_card(colors.border, colors.panel)
-            .w(px(165.))
-            .gap(px(8.));
-        for tool in &self.tools {
-            let tool = tool.clone();
-            let title = tool_name(&tool.manifest.id, &tool.manifest.name, locale);
-            rail = rail.child({
-                let accessible_name = title.clone();
-                quietpro::text_button(
-                    SharedString::from(tool.manifest.id.clone()),
-                    title,
-                    colors,
-                    ready,
+        let selected = self.selected.as_ref().and_then(|selected| {
+            self.tools
+                .iter()
+                .position(|tool| tool.manifest.id == selected.manifest.id)
+        });
+        let view = cx.weak_entity();
+        let tools = self.tools.clone();
+        let selector = quietpro::Dropdown::new(
+            "tool-select",
+            tr("tools.title"),
+            self.tools.iter().enumerate().map(|(index, tool)| {
+                (
+                    index,
+                    tool_name(&tool.manifest.id, &tool.manifest.name, locale),
                 )
-                .accessibility_label(accessible_name)
-                .on_click(cx.listener(move |this, _, _, cx| {
+            }),
+            selected.unwrap_or(0),
+            colors,
+            move |index, _, cx| {
+                let _ = view.update(cx, |this, cx| {
+                    if this.busy || this.pending.is_some() {
+                        return;
+                    }
                     this.manager = false;
                     this.preferences = None;
-                    this.selected = Some(tool.clone());
+                    this.selected = Some(tools[index].clone());
                     this.controls.clear();
                     this.load(None, cx);
-                }))
-            });
-        }
+                });
+            },
+        )
+        .disabled(!ready);
+        let top = page_title_row(tr("tools.title"), quietpro::Icon::ToolCase, colors).child(
+            page_actions()
+                .when(!self.tools.is_empty(), |actions| actions.child(selector))
+                .child(manager)
+                .child(preferences),
+        );
         if let Some(p) = &self.preferences {
             use patina_recorder::{
                 NoticeDelivery as D, NoticePreferencesPatch as Patch, NoticeSound as S,
@@ -619,19 +631,11 @@ impl Render for Tools {
         }
         let shell = page(colors).child(top).child(
             div()
-                .flex()
+                .id("tool-panel")
                 .flex_1()
-                .gap(px(quietpro::CARD_GAP))
                 .min_h_0()
-                .child(rail)
-                .child(
-                    div()
-                        .id("tool-panel")
-                        .flex_1()
-                        .min_h_0()
-                        .overflow_y_scroll()
-                        .child(content),
-                ),
+                .overflow_y_scroll()
+                .child(content),
         );
         if let Some(confirm) = &self.pending {
             let mut content = div()

@@ -1,3 +1,4 @@
+use crate::page_controls::anonymous;
 use quietpro::{CARD_TITLE_GAP, CONTENT_INSET, content_card, content_card as panel};
 mod apps;
 mod charts;
@@ -32,6 +33,8 @@ pub(super) struct Today {
     popup: Option<Popup>,
     hour_focus: [FocusHandle; 24],
     active_hour: Option<usize>,
+    hour_scroll: ScrollHandle,
+    hour_hide: Option<Task<()>>,
     icons: HashMap<String, AppIcon>,
 }
 
@@ -81,6 +84,8 @@ impl Today {
             popup: None,
             hour_focus,
             active_hour: None,
+            hour_scroll: ScrollHandle::new(),
+            hour_hide: None,
             icons: Default::default(),
         };
         cx.observe_window_activation(window, |this: &mut Self, window, cx| {

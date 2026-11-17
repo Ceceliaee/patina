@@ -31,6 +31,7 @@ pub(super) fn focus(
                 c.label.clone(),
                 c.duration,
                 activity_display_color(c.color, colors.panel, dark),
+                c.id == "anonymous",
             )
         })
         .collect();
@@ -40,17 +41,29 @@ pub(super) fn focus(
             text(locale, "hourlyActivityChart.remainingCategories"),
             rest,
             activity_display_color(u32::from(colors.secondary) >> 8, colors.panel, dark),
+            false,
         ));
     }
     let mut legend = div().min_w_0().flex_1().flex().flex_col().gap(px(4.));
-    for (label, ms, color) in &slices {
+    for (label, ms, color, dotted) in &slices {
         legend = legend.child(
             div()
                 .flex()
                 .min_h(px(24.))
                 .items_center()
                 .gap(px(8.))
-                .child(div().flex_none().size(px(8.)).rounded_full().bg(*color))
+                .child(
+                    div()
+                        .relative()
+                        .overflow_hidden()
+                        .flex_none()
+                        .size(px(8.))
+                        .rounded_full()
+                        .bg(*color)
+                        .when(*dotted, |s| {
+                            s.child(quietpro::dot_pattern(colors.secondary))
+                        }),
+                )
                 .child(value(label.clone()).min_w_0().flex_1().truncate())
                 .child(div().flex_none().whitespace_nowrap().child(duration(*ms))),
         );
@@ -65,7 +78,7 @@ pub(super) fn focus(
         colors,
         slices: slices
             .iter()
-            .map(|(label, ms, color)| {
+            .map(|(label, ms, color, dotted)| {
                 let percent = if total > 0 {
                     *ms as f64 / total as f64 * 100.
                 } else {
@@ -75,6 +88,7 @@ pub(super) fn focus(
                     value: *ms as f64,
                     color: *color,
                     description: format!("{label} · {} · {percent:.0}%", duration(*ms)).into(),
+                    dotted: *dotted,
                 }
             })
             .collect(),
@@ -130,22 +144,51 @@ pub(super) fn focus(
         )
         .child(
             div()
+                .id("today-comparison")
+                .role(Role::Group)
+                .accessibility_id(format!("today-comparison-{direction}"))
                 .flex_none()
                 .flex()
+                .items_center()
+                .gap(px(4.))
                 .pt(px(CARD_TITLE_GAP))
                 .justify_end()
+                .child(
+                    quietpro::glyph(
+                        match delta.cmp(&0) {
+                            std::cmp::Ordering::Greater => quietpro::Icon::TrendingUp,
+                            std::cmp::Ordering::Less => quietpro::Icon::TrendingDown,
+                            _ => quietpro::Icon::Minus,
+                        },
+                        colors.secondary,
+                    )
+                    .size(px(12.)),
+                )
                 .child(value(label).text_color(colors.secondary).text_size(px(12.))),
         )
 }
 
 impl Today {
     pub(super) fn show_hour(&mut self, hour: usize, visible: bool, cx: &mut Context<Self>) {
-        if visible || self.active_hour == Some(hour) {
-            let next = visible.then_some(hour);
-            if self.active_hour != next {
-                self.active_hour = next;
+        self.hour_hide = None;
+        if visible {
+            if self.active_hour != Some(hour) {
+                self.hour_scroll.set_offset(point(px(0.), px(0.)));
+                self.active_hour = Some(hour);
                 cx.notify();
             }
+        } else if self.active_hour == Some(hour) {
+            self.hour_hide = Some(cx.spawn(async move |view, cx| {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(150))
+                    .await;
+                let _ = view.update(cx, |this, cx| {
+                    if this.active_hour == Some(hour) {
+                        this.active_hour = None;
+                        cx.notify();
+                    }
+                });
+            }));
         }
     }
 
@@ -184,8 +227,8 @@ impl Today {
         for hour in 0..24 {
             let mut segments: Vec<_> = category_colors
                 .iter()
-                .map(|(c, color)| (c.hours[hour], c.label.clone(), *color))
-                .filter(|(ms, _, _)| *ms > 0)
+                .map(|(c, color)| (c.hours[hour], c.label.clone(), *color, c.id == "anonymous"))
+                .filter(|(ms, _, _, _)| *ms > 0)
                 .collect();
             segments.sort_by_key(|s| s.0);
             let ms: i64 = segments.iter().map(|s| s.0).sum();
@@ -196,7 +239,7 @@ impl Today {
             };
             let mut remaining = minutes;
             let count = segments.len();
-            for (index, (ms, _, _)) in segments.iter_mut().enumerate() {
+            for (index, (ms, _, _, _)) in segments.iter_mut().enumerate() {
                 *ms = if index + 1 == count {
                     remaining
                 } else {
@@ -214,6 +257,7 @@ impl Today {
                         rest,
                         text(locale, "hourlyActivityChart.remainingCategories"),
                         remaining_color,
+                        false,
                     ),
                 );
             }
@@ -222,10 +266,11 @@ impl Today {
                 text(locale, "hourlyActivityChart.activeMinutes")
             );
             if grouped {
-                for (m, label, _) in segments.iter().rev() {
+                for (m, label, _, _) in segments.iter().rev() {
                     tip.push_str(&format!("\n{label} {m}m"));
                 }
             }
+            let tip_segments = segments.clone();
             let mut bar = div()
                 .h(relative(minutes.min(60) as f32 / 60.))
                 .w(px(HOURLY_BAR_WIDTH))
@@ -235,15 +280,18 @@ impl Today {
                 .rounded_t(px(HOURLY_BAR_TOP_RADIUS));
             if grouped {
                 let top_segment = segments.len().saturating_sub(1);
-                for (index, (m, _, color)) in segments.into_iter().enumerate() {
+                for (index, (m, _, color, dotted)) in segments.into_iter().enumerate() {
                     bar = bar.child(
                         div()
+                            .relative()
+                            .overflow_hidden()
                             .w_full()
                             .h(relative(m as f32 / minutes as f32))
                             .when(index == top_segment, |s| {
                                 s.rounded_t(px(HOURLY_BAR_TOP_RADIUS))
                             })
-                            .bg(color),
+                            .bg(color)
+                            .when(dotted, |s| s.child(quietpro::dot_pattern(colors.secondary))),
                     );
                 }
             } else {
@@ -253,6 +301,9 @@ impl Today {
                 tooltip = Some(
                     panel(colors.border, colors.panel)
                         .id("hour-tooltip")
+                        .on_hover(
+                            cx.listener(move |this, over, _, cx| this.show_hour(hour, *over, cx)),
+                        )
                         .role(Role::Tooltip)
                         .aria_label(tip.clone())
                         .absolute()
@@ -261,7 +312,26 @@ impl Today {
                         .p(px(8.))
                         .text_size(px(12.))
                         .text_color(colors.text)
-                        .child(tip.clone()),
+                        .w(px(220.))
+                        .max_h(px(180.))
+                        .overflow_y_scroll()
+                        .track_scroll(&self.hour_scroll)
+                        .child(format!(
+                            "{hour:02}:00 · {} {minutes}m",
+                            text(locale, "hourlyActivityChart.activeMinutes")
+                        ))
+                        .children(tip_segments.iter().rev().filter(|_| grouped).map(
+                            |(m, name, color, _)| {
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(6.))
+                                    .mt(px(4.))
+                                    .child(div().size(px(6.)).rounded_full().bg(*color))
+                                    .child(div().flex_1().min_w_0().child(name.clone()))
+                                    .child(format!("{m}m"))
+                            },
+                        )),
                 );
             }
             bars = bars.child(
@@ -284,6 +354,14 @@ impl Today {
                                 }),
                             )
                             .on_key_down(cx.listener(|this, e: &KeyDownEvent, _, cx| {
+                                if matches!(e.keystroke.key.as_str(), "up" | "down") {
+                                    let offset = this.hour_scroll.offset();
+                                    let delta = if e.keystroke.key == "up" { 32. } else { -32. };
+                                    this.hour_scroll
+                                        .set_offset(point(offset.x, offset.y + px(delta)));
+                                    cx.notify();
+                                    cx.stop_propagation();
+                                }
                                 if e.keystroke.key == "escape" && this.active_hour.take().is_some()
                                 {
                                     cx.notify();
