@@ -176,7 +176,6 @@ export async function verifyMiniContentRuntime(client: CdpConnection, miniClient
     `window.__TAURI_INTERNALS__.invoke("cmd_delete_sessions_before", {
       cutoffTime: 0,
     })`,
-    `window.__TAURI_INTERNALS__.invoke("cmd_install_update")`,
   ]) {
     const denied = await evaluate(
       miniClient,

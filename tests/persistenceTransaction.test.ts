@@ -74,14 +74,12 @@ await runTest("settings raw patch persists theme mode with snake case key", () =
     themeMode: "system",
     language: "en-US",
     hourlyActivityChartMode: "category",
-    dynamicEffects: false,
     colorSchemeLight: "rose-pine",
     colorSchemeDark: "gruvbox",
   }), {
     theme_mode: "system",
     language: "en-US",
     hourly_activity_chart_mode: "category",
-    dynamic_effects: false,
     color_scheme_light: "rose-pine",
     color_scheme_dark: "gruvbox",
   });
@@ -94,14 +92,12 @@ await runTest("app setting mutations serialize values for backend transaction co
     themeMode: "system",
     language: "en-US",
     hourlyActivityChartMode: "category",
-    dynamicEffects: false,
   })), [
     { key: "tracking_paused", value: "1" },
     { key: "timeline_merge_gap_secs", value: "180" },
     { key: "theme_mode", value: "system" },
     { key: "language", value: "en-US" },
     { key: "hourly_activity_chart_mode", value: "category" },
-    { key: "dynamic_effects", value: "0" },
   ]);
 });
 

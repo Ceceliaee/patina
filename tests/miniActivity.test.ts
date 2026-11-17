@@ -4,7 +4,6 @@ import { buildMiniActivityViewModel, miniActivityIcons } from "../src/app/mini/m
 import { applyMiniBootstrapSnapshot } from "../src/app/mini/miniBootstrapService.ts";
 import { getLocaleText } from "../src/shared/i18n/runtime.ts";
 import { ANONYMOUS_ACTIVITY_KEY } from "../src/shared/classification/anonymousActivity.ts";
-import { startHistoryTimelinePreference } from "../src/features/history/services/historyTimelinePreferenceService.ts";
 import type { ActivityTimelineMode } from "../src/shared/settings/activityDisplaySettings.ts";
 import { combinedMiniActivityFixture, miniActivityFixture } from "./uiBrowserSmoke/miniActivityFixture.ts";
 import { CategoryColorRegistry } from "../src/shared/classification/categoryColorRegistry.ts";
@@ -33,7 +32,7 @@ const health = { status: "healthy" as const, lastHeartbeatMs: 1, checkedAtMs: 1,
 const bootstrap = {
   settings: { tracking_paused: "0", theme_mode: "light", language: "zh-CN", color_scheme_light: null,
     color_scheme_dark: null, hourly_activity_chart_mode: "category", history_timeline_mode: "app",
-    refresh_interval_secs: "5", timeline_merge_gap_secs: "0", dynamic_effects: "1", web_activity_available: false },
+    refresh_interval_secs: "5", timeline_merge_gap_secs: "0", web_activity_available: false },
   app_overrides: ["development", "utility", "communication", "other"].map((category, index) => ({
     key: `__app_override::${["editor", "browser", "chat", "other"][index]}.exe`, value: JSON.stringify({ category }),
   })), app_links: [], category_settings: [],
@@ -128,31 +127,3 @@ assert.equal(webView.leaders[0].label, "Grouped site");
 assert.equal(webView.leaders[0].duration, webView.total);
 assert.throws(() => parseMiniActivitySnapshot({ ...webRaw, sessions: raw.sessions }));
 console.log("PASS Mini website ranking follows grouping without mixing browser application time");
-
-let saved: ActivityTimelineMode = "app";
-const accepted: ActivityTimelineMode[] = [];
-const failures: unknown[] = [];
-let listener: () => void | Promise<void> = () => {};
-let unlisteners = 0;
-const runtime = startHistoryTimelinePreference({ webEnabled: true, accept: mode => accepted.push(mode), failed: error => failures.push(error) }, {
-  load: async () => saved, migrate: async () => saved,
-  save: async mode => { saved = mode; void listener(); },
-  subscribe: async handler => { listener = () => handler({}); return () => { unlisteners++; }; },
-});
-await runtime.ready;
-await Promise.all([runtime.toggle(), runtime.toggle(), runtime.toggle(), runtime.toggle()]);
-await listener();
-assert.equal(saved, "category");
-assert.equal(accepted.at(-1), "category");
-assert.deepEqual(failures, []);
-runtime.dispose();
-assert.equal(unlisteners, 1);
-await runtime.toggle();
-assert.equal(saved, "category");
-const disabled = startHistoryTimelinePreference({ webEnabled: false, accept: mode => accepted.push(mode), failed: error => failures.push(error) }, {
-  load: async () => "web", migrate: async () => "web", save: async mode => { saved = mode; }, subscribe: async () => () => {},
-});
-await disabled.ready;
-assert.equal(saved, "app");
-disabled.dispose();
-console.log("PASS serialized History preferences preserve rapid toggles, event order, disposal and website fallback");

@@ -10,10 +10,6 @@ import { resolveTrackerHealth } from "../src/shared/types/tracking.ts";
 import {
   buildImportedClassificationDraft,
 } from "../src/features/classification/services/importedClassification.ts";
-import {
-  commitImportWithClassification,
-  deleteImportBatchWithRefresh,
-} from "../src/features/settings/services/settingsImportService.ts";
 import type { ClassificationDraftState } from "../src/features/classification/services/classificationDraftState.ts";
 
 function emptyClassificationState(): ClassificationDraftState {
@@ -145,88 +141,6 @@ test("import classification resolves executable aliases before preserving a manu
   assert.equal(result.draft.overrides["code.exe"]?.category, "office");
   assert.equal(result.draft.overrides["CODE.EXE"], undefined);
   assert.equal(result.preservedManualApps, 1);
-});
-
-test("classification mutations commit atomically with the import and runtime state updates afterward", async () => {
-  const events: string[] = [];
-  const expectedMutations = [{ key: "__app_override::code.exe", value: "{}" }];
-  const report = await commitImportWithClassification(importPreview(), {
-    prepareClassification: async () => ({
-      mutations: expectedMutations,
-      applyRuntime: () => events.push("runtime"),
-    }),
-    commitImport: async (_preview, mutations) => {
-      assert.deepEqual(mutations, expectedMutations);
-      events.push("commit");
-      return { batchId: "batch-1", importedRecords: 3 };
-    },
-  });
-
-  assert.equal(report.batchId, "batch-1");
-  assert.deepEqual(events, ["commit", "runtime"]);
-});
-
-test("failed atomic import never applies prepared classification to runtime", async () => {
-  let runtimeApplied = false;
-  await assert.rejects(
-    commitImportWithClassification(importPreview(), {
-      prepareClassification: async () => ({
-        mutations: [],
-        applyRuntime: () => { runtimeApplied = true; },
-      }),
-      commitImport: async () => { throw new Error("atomic commit failed"); },
-    }),
-    /atomic commit failed/,
-  );
-  assert.equal(runtimeApplied, false);
-});
-
-test("a duplicate-only commit never applies prepared classification to runtime", async () => {
-  let runtimeApplied = false;
-  const report = await commitImportWithClassification(importPreview(), {
-    prepareClassification: async () => ({
-      mutations: [{ key: "__app_override::code.exe", value: "{}" }],
-      applyRuntime: () => { runtimeApplied = true; },
-    }),
-    commitImport: async () => ({ batchId: null, importedRecords: 0 }),
-  });
-
-  assert.equal(report.batchId, null);
-  assert.equal(runtimeApplied, false);
-});
-
-test("deleting an import batch invalidates read models after the delete and before list refresh", async () => {
-  const events: string[] = [];
-  const result = await deleteImportBatchWithRefresh("batch-1", {
-    deleteImportBatch: async () => {
-      events.push("delete");
-      return { deletedExactSessions: 2, deletedHourBuckets: 3 };
-    },
-    onImportedDataChanged: async () => {
-      await Promise.resolve();
-      events.push("invalidate");
-    },
-    refreshBatches: async () => {
-      events.push("refresh");
-      return [];
-    },
-  });
-
-  assert.deepEqual(events, ["delete", "invalidate", "refresh"]);
-  assert.equal(result.report.deletedExactSessions, 2);
-  assert.deepEqual(result.batches, []);
-});
-
-test("failed import batch deletion does not invalidate read models", async () => {
-  let invalidations = 0;
-  await assert.rejects(deleteImportBatchWithRefresh("batch-1", {
-    deleteImportBatch: async () => {
-      throw new Error("delete failed");
-    },
-    onImportedDataChanged: () => { invalidations += 1; },
-    refreshBatches: async () => [],
-  }), /delete failed/);
-  assert.equal(invalidations, 0);
 });
 
 test("import gateway rejects malformed backend payloads", () => {

@@ -14,7 +14,7 @@ for (const args of [["--typo"], ["--group"], ["--group", "missing"], ["--startup
   assert.throws(() => parseBrowserGroup(args));
 }
 assert.throws(() => assertBrowserSelection(null, 0, 0), /zero tests/);
-assert.throws(() => assertBrowserSelection("history", 9, 9), /zero selected/);
+assert.throws(() => assertBrowserSelection("tools", 9, 9), /zero selected/);
 assert.throws(() => assertBrowserSelection("free-focus", 9, 9), /zero selected/);
 assertBrowserSelection("startup", 9, 9);
 

@@ -6,7 +6,6 @@ import {
   clearDashboardSnapshotCache,
   setDashboardSnapshotCache,
 } from "../src/features/dashboard/services/dashboardSnapshotCache.ts";
-import { getHistoryRuntimeSeedSnapshot } from "../src/app/services/readModelRuntimeService.ts";
 
 const selectedDate = new Date(2026, 6, 1, 12);
 const dayStart = new Date(2026, 6, 1).getTime();
@@ -87,10 +86,6 @@ assert.equal(emptySnapshot.hasActiveSession, false);
 
 setDashboardSnapshotCache(snapshot, selectedDate);
 try {
-  const historySeed = getHistoryRuntimeSeedSnapshot(selectedDate);
-  assert.deepEqual(historySeed?.daySessions, []);
-  assert.deepEqual(historySeed?.dayAggregateSessions, todayRecords);
-  assert.deepEqual(historySeed?.dayAggregateSessions, todayRecords);
 } finally {
   clearDashboardSnapshotCache();
 }

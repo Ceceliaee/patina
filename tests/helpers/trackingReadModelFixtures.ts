@@ -1,6 +1,5 @@
 import { aggregateFixtureRecords } from "./aggregateFixtures.ts";
 import { buildDashboardReadModel } from "../../src/features/dashboard/services/dashboardReadModel.ts";
-import { buildHistoryReadModel } from "../../src/features/history/services/historyReadModel.ts";
 import { resolveTrackerHealth } from "../../src/shared/types/tracking.ts";
 import type { HistorySession } from "../../src/shared/types/sessions.ts";
 import { makeSession } from "./trackingTestHarness.ts";
@@ -26,37 +25,6 @@ export function makeShortTimelineSessions(): HistorySession[] {
     makeSession({ id: 1, exeName: "QQ.exe", startTime: 0, endTime: 20_000, duration: 20_000 }),
     makeSession({ id: 2, exeName: "Chrome.exe", appName: "Chrome", startTime: 25_000, endTime: 45_000, duration: 20_000 }),
   ];
-}
-
-export function buildHistoryView(params: {
-  daySessions: HistorySession[];
-  weeklySessions?: HistorySession[];
-  trackerHealth?: ReturnType<typeof resolveTrackerHealth>;
-  selectedDate?: Date;
-  nowMs?: number;
-  minSessionSecs?: number;
-  mergeThresholdSecs?: number;
-}) {
-  const {
-    daySessions,
-    weeklySessions = [],
-    trackerHealth = makeHealthyTrackerHealth(),
-    selectedDate = new Date(0),
-    nowMs = 200_000,
-    minSessionSecs = 0,
-    mergeThresholdSecs = 180,
-  } = params;
-
-  return buildHistoryReadModel({
-    daySessions,
-    selectedDate,
-    trackerHealth,
-    nowMs,
-    minSessionSecs,
-    mergeThresholdSecs,
-    dayAggregateSessions: aggregateFixtureRecords(daySessions, trackerHealth, nowMs),
-    weeklyAggregateSessions: aggregateFixtureRecords(weeklySessions, trackerHealth, nowMs)
-  });
 }
 
 export function buildDashboardView(

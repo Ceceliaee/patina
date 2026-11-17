@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { initializeProcessMapperRuntime, refreshProcessMapperRuntime } from "../src/app/services/processMapperRuntimeService.ts";
 import { ensureProcessMapperRuntimeReady } from "../src/app/services/processMapperRuntimeGate.ts";
 import { loadDashboardRuntimeSnapshotWithDeps } from "../src/app/services/readModelRuntimeService.ts";
-import { ClassificationService } from "../src/features/classification/services/classificationService.ts";
+import { commitDraftChangesWithDeps, createClassificationCommitDeps } from "../src/features/classification/services/classificationService.ts";
 import { buildDashboardReadModel } from "../src/features/dashboard/services/dashboardReadModel.ts";
 import { AppClassification } from "../src/shared/classification/appClassification.ts";
 import { ProcessMapper } from "../src/shared/classification/processMapper.ts";
@@ -66,7 +66,7 @@ export async function verifyProcessMapperRuntime() {
     expectRows(["weixin.exe", "wechatappex.exe"]);
     const emptyDraft = { overrides: {}, webDomainOverrides: {}, categoryColorOverrides: {}, categoryLabelOverrides: {}, persistedCategoryIds: [], deletedCategories: [], appLinks: {} };
     const linkedDraft = { ...emptyDraft, appLinks: { "wechatappex.exe": "weixin.exe" } };
-    await ClassificationService.commitDraftChanges(emptyDraft, linkedDraft);
+    await commitDraftChangesWithDeps(emptyDraft, linkedDraft, createClassificationCommitDeps());
     expectRows(["weixin.exe"]);
     await refreshProcessMapperRuntime();
     expectRows(["weixin.exe"]);
@@ -103,7 +103,7 @@ export async function verifyProcessMapperRuntime() {
     const pending = refreshProcessMapperRuntime();
     await readEntered;
     try {
-      await ClassificationService.commitDraftChanges(emptyDraft, linkedDraft);
+      await commitDraftChangesWithDeps(emptyDraft, linkedDraft, createClassificationCommitDeps());
       expectRows(["weixin.exe"]);
     } finally { release(); }
     await pending;

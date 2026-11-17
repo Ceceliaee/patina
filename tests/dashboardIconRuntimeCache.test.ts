@@ -12,11 +12,6 @@ import {
   getAppIconRuntimeCacheStats,
   getAppIconRuntimeCacheSnapshot,
 } from "../src/platform/persistence/appIconRuntimeCache.ts";
-import {
-  getCachedClassificationIconsForExecutables,
-  loadClassificationIconsForExecutables,
-  resetClassificationIconPresentationCacheForTests,
-} from "../src/features/classification/services/classificationIconService.ts";
 
 let passed = 0;
 
@@ -54,10 +49,8 @@ await (async () => {
 
 async function runTest(name: string, fn: () => Promise<void> | void) {
   resetAppIconRuntimeCacheForTests();
-  resetClassificationIconPresentationCacheForTests();
   await fn();
   resetAppIconRuntimeCacheForTests();
-  resetClassificationIconPresentationCacheForTests();
   passed += 1;
   console.log(`PASS ${name}`);
 }
@@ -157,40 +150,9 @@ await runTest("app icon runtime cache keeps bounded icon and retry entries", asy
   assert.equal(getAppIconRuntimeCacheStats().missingRetryEntries, 256);
 });
 
-await runTest("classification keeps its complete presentation snapshot beyond the shared LRU", async () => {
-  const exeNames = Array.from({ length: 300 }, (_, index) => `Catalog${index}.exe`);
-  const loaded = await loadClassificationIconsForExecutables(exeNames, {
-    nowMs: () => 1_000,
-    loadIcons: async (requested) => Object.fromEntries(
-      requested.map((exeName) => [exeName.toLowerCase(), `icon:${exeName}`]),
-    ),
-  });
 
-  assert.equal(exeNames.every((exeName) => Boolean(loaded[exeName])), true);
-  assert.equal(getAppIconRuntimeCacheStats().entries, 256);
 
-  const remounted = getCachedClassificationIconsForExecutables(exeNames);
-  assert.equal(exeNames.every((exeName) => Boolean(remounted[exeName])), true);
-});
 
-await runTest("classification retains original member icons while saved links remain active", async () => {
-  AppClassification.setAppLinks({ "child.exe": "parent.exe" });
-  try {
-    const modes: string[] = [];
-    const icons = await loadClassificationIconsForExecutables(["parent.exe", "child.exe"], {
-      loadIcons: async (_requested, identity = "statistical") => {
-        modes.push(identity);
-        return identity === "executable" ? { "child.exe": "CHILD" } : { "parent.exe": "PARENT" };
-      },
-    });
-    assert.deepEqual(modes, ["statistical", "executable"]);
-    assert.equal(icons["parent.exe"], "PARENT");
-    assert.equal(icons["child.exe"], "CHILD");
-    assert.equal(getCachedClassificationIconsForExecutables(["child.exe"])["child.exe"], "CHILD");
-  } finally {
-    AppClassification.setAppLinks({});
-  }
-});
 
 
 
@@ -221,13 +183,7 @@ await runTest("invalidation during a pending read rejects obsolete results and r
   assert.equal(calls, 2);
 });
 
-await runTest("classification does not retain stale presentation icons after a change", async () => {
-  await loadClassificationIconsForExecutables(["editor.exe"], { loadIcons: async () => ({ "editor.exe": "old" }) });
-  invalidateAppIcons("editor.exe");
-  publishAppIconChange("editor.exe");
-  const result = await loadClassificationIconsForExecutables(["editor.exe"], { loadIcons: async () => ({ "editor.exe": "new" }) });
-  assert.equal(result["editor.exe"], "new");
-});
+
 
 await runTest("native icon subscription validates payloads and cleans up late registration", async () => {
   const originals = ["window", "document"].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const);

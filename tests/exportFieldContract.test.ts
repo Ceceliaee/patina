@@ -4,7 +4,6 @@ import {
   DATA_EXPORT_PROTOCOL_FIELDS,
   DEFAULT_DATA_EXPORT_PROTOCOL_FIELDS,
 } from "../src/platform/persistence/dataExportGateway.ts";
-import { SETTINGS_DATA_EXPORT_FIELD_GROUPS } from "../src/features/settings/services/settingsDataExportFields.ts";
 
 let passed = 0;
 
@@ -30,12 +29,5 @@ runTest("frontend export protocol fields match Rust allowed fields", () => {
   assert.deepEqual([...DATA_EXPORT_PROTOCOL_FIELDS], readRustFieldArray("ALL_EXPORT_FIELDS"));
 });
 
-runTest("six export field groups cover all 32 fields exactly once", () => {
-  assert.equal(SETTINGS_DATA_EXPORT_FIELD_GROUPS.length, 6);
-  const grouped = SETTINGS_DATA_EXPORT_FIELD_GROUPS.flatMap((group) => group.fields);
-  assert.equal(grouped.length, 32);
-  assert.equal(new Set(grouped).size, 32);
-  assert.deepEqual(new Set(grouped), new Set(DATA_EXPORT_PROTOCOL_FIELDS));
-});
 
 console.log(`Passed ${passed} export field contract tests`);

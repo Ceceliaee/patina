@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { WebLinksReadError } from "../src/platform/persistence/webLinksGateway.ts";
-import { collectCandidateCategories } from "../src/features/classification/services/classificationCandidateFiltering.ts";
 import {
   buildLegacyExtendedCategoryId,
   createCategoryId,
@@ -8,14 +7,6 @@ import {
   USER_ASSIGNABLE_CATEGORIES,
   type UserAssignableAppCategory,
 } from "../src/shared/classification/categoryTokens.ts";
-import {
-  buildAppMappingCategoryOverride,
-  buildAppMappingOverride,
-  createCategoryInDraftState,
-  createAppMappingDraftState,
-  mergeCategoryIntoDraftState,
-  updateCategoryLabelInDraftState,
-} from "../src/features/classification/hooks/appMappingStateHelpers.ts";
 import {
   loadAppOverrides,
   buildAppOverrideTransition,
@@ -30,7 +21,6 @@ import {
 } from "../src/features/classification/services/legacyAutoClassificationMigration.ts";
 import {
   ClassificationService,
-  filterAndSortCandidates as filterAndSortCandidatesRaw,
   type ClassificationBootstrapData,
   type ClassificationBootstrapDeps,
   type ClassificationCommitDeps,
@@ -38,7 +28,6 @@ import {
   applySavedWebDomainOverrideToBootstrap,
   commitDraftChangesWithDeps,
   createClassificationCommitDeps,
-  prewarmClassificationPresentationAssets,
 } from "../src/features/classification/services/classificationService.ts";
 import { ProcessMapper } from "../src/shared/classification/processMapper.ts";
 import {
@@ -54,32 +43,12 @@ import {
   getClassificationBootstrapCache,
   setClassificationBootstrapCache,
 } from "../src/features/classification/services/classificationBootstrapCache.ts";
-import {
-  buildQuickClassificationCategoryOptions as buildQuickCategoryOptionsRaw,
-  buildQuickClassificationOverride,
-  buildQuickAppOverride,
-  buildQuickWebDomainOverride,
-  isQuickClassificationUnclassified,
-  resolveQuickClassificationOverride,
-} from "../src/features/classification/services/quickClassification.ts";
-import {
-  createQuickAppClassificationTarget,
-  createQuickWebClassificationTarget,
-  getQuickClassificationTargetKey,
-  resolveQuickClassificationElementAnchor,
-} from "../src/features/classification/types.ts";
 import { getLocaleText } from "../src/shared/i18n/runtime.ts";
 
 const ZH_TEXT = getLocaleText("zh-CN");
 const resolveExtendedCategoryLabel = (
   category: Parameters<typeof resolveExtendedCategoryLabelRaw>[0],
 ) => resolveExtendedCategoryLabelRaw(category, ZH_TEXT);
-const buildQuickCategoryOptions = (
-  bootstrap: Parameters<typeof buildQuickCategoryOptionsRaw>[0],
-) => buildQuickCategoryOptionsRaw(bootstrap, ZH_TEXT, "zh-CN");
-const filterAndSortCandidates = (
-  input: Omit<Parameters<typeof filterAndSortCandidatesRaw>[0], "locale">,
-) => filterAndSortCandidatesRaw({ ...input, locale: "zh-CN" });
 
 function buildDraftState(overrides: Partial<ClassificationDraftState> = {}): ClassificationDraftState {
   return {
@@ -115,191 +84,7 @@ async function runTest(name: string, fn: () => Promise<void> | void) {
   console.log(`PASS ${name}`);
 }
 
-await runTest("category shortcuts use ordinary text search and complete candidate membership", () => {
-  const candidates = [buildCandidate("a.exe", "Alpha"), buildCandidate("b.exe", "Office helper"),
-    buildCandidate("c.exe", "Gamma"), buildCandidate("d.exe", "Delta")];
-  const categories: UserAssignableAppCategory[] = ["office", "development", "office", "other"];
-  const resolveMappedCategory = (candidate: ObservedAppCandidate) => categories[candidates.indexOf(candidate)];
-  const common = { candidates, resolveMappedCategory,
-    resolveTrackingEnabled: (candidate: ObservedAppCandidate) => candidate.exeName !== "c.exe",
-    resolveEffectiveDisplayName: (candidate: ObservedAppCandidate) => candidate.appName,
-    resolveCategoryLabel: (category: UserAssignableAppCategory) => category === "office" ? "Office" : category };
-  assert.deepEqual(filterAndSortCandidates({ ...common, filter: "all", searchQuery: "Office" }), [candidates[0], candidates[1]]);
-  assert.deepEqual(filterAndSortCandidates({ ...common, filter: "excluded", searchQuery: "Office" }), [candidates[2]]);
-  assert.deepEqual(filterAndSortCandidates({ ...common, filter: "all", searchQuery: "" }), [candidates[0], candidates[3], candidates[1]]);
-  assert.deepEqual([...collectCandidateCategories(candidates, resolveMappedCategory)], ["office", "development"]);
-  categories[0] = "development";
-  assert.deepEqual(filterAndSortCandidates({ ...common, filter: "all", searchQuery: "Office" }), [candidates[1]]);
-  assert.equal(collectCandidateCategories([], resolveMappedCategory).size, 0);
-});
 
-await runTest("quick app targets keep business identity separate from menu placement", () => {
-  assert.deepEqual(createQuickAppClassificationTarget({
-    exeName: "  code.exe  ",
-    displayName: "  ",
-    category: "development",
-  }), {
-    kind: "app",
-    exeName: "code.exe",
-    displayName: "code.exe",
-    category: "development",
-  });
-  assert.throws(() => createQuickAppClassificationTarget({
-    exeName: "   ",
-    displayName: "Editor",
-    category: "development",
-  }), /non-empty executable name/);
-
-  assert.deepEqual(resolveQuickClassificationElementAnchor({
-    getBoundingClientRect: () => ({ left: 20, top: 30, width: 40, height: 18 }),
-  } as HTMLElement), {
-    clientX: 40,
-    clientY: 39,
-  });
-});
-
-await runTest("quick web targets normalize domains and keep target keys kind-safe", () => {
-  const app = createQuickAppClassificationTarget({
-    exeName: "github.com",
-    displayName: "GitHub App",
-    category: "development",
-  });
-  const web = createQuickWebClassificationTarget({
-    normalizedDomain: "  GitHub.COM. ",
-    displayName: "  ",
-    category: "other",
-  });
-
-  assert.deepEqual(web, {
-    kind: "web",
-    normalizedDomain: "github.com",
-    displayName: "github.com",
-    category: "other",
-  });
-  assert.equal(getQuickClassificationTargetKey(app), "app:github.com");
-  assert.equal(getQuickClassificationTargetKey(web), "web:github.com");
-  assert.throws(() => createQuickWebClassificationTarget({
-    normalizedDomain: "   ",
-    displayName: "Website",
-    category: "other",
-  }), /non-empty normalized domain/);
-});
-
-await runTest("quick app classification preserves unrelated override fields", () => {
-  const next = buildQuickAppOverride({
-    displayName: "Editor",
-    color: "#123456",
-    track: false,
-    captureTitle: false,
-    enabled: true,
-    updatedAt: 1,
-  }, { category: "development" }, 2);
-
-  assert.deepEqual(next, {
-    category: "development",
-    displayName: "Editor",
-    color: "#123456",
-    track: false,
-    captureTitle: false,
-    enabled: true,
-    updatedAt: 2,
-  });
-});
-
-await runTest("quick app classification resolves persisted overrides by canonical executable identity", () => {
-  const override = {
-    category: "office" as const,
-    displayName: "Microsoft PowerPoint",
-    enabled: true,
-  };
-
-  assert.equal(resolveQuickClassificationOverride({
-    loadedOverrides: { "powerpnt.exe": override },
-    loadedWebDomainOverrides: {},
-  }, createQuickAppClassificationTarget({
-    exeName: "POWERPNT.EXE",
-    displayName: "Microsoft PowerPoint",
-    category: "office",
-  })), override);
-});
-
-await runTest("quick app name restore clears only the display name", () => {
-  const next = buildQuickAppOverride({
-    category: "development",
-    displayName: "Editor",
-    enabled: true,
-  }, { displayName: "   " }, 3);
-
-  assert.deepEqual(next, {
-    category: "development",
-    enabled: true,
-    updatedAt: 3,
-  });
-});
-
-await runTest("quick web classification preserves web-only controls", () => {
-  const target = createQuickWebClassificationTarget({
-    normalizedDomain: "example.com",
-    displayName: "Example",
-    category: "other",
-  });
-  const current = {
-    displayName: "Example",
-    color: "#123456",
-    enabled: false,
-    captureTitle: false,
-    updatedAt: 1,
-  };
-  const next = buildQuickWebDomainOverride(current, { category: "development" }, 2);
-
-  assert.deepEqual(next, {
-    category: "development",
-    displayName: "Example",
-    color: "#123456",
-    enabled: false,
-    captureTitle: false,
-    updatedAt: 2,
-  });
-  assert.deepEqual(buildQuickClassificationOverride(
-    target,
-    next,
-    { displayName: "  " },
-    3,
-  ), {
-    category: "development",
-    color: "#123456",
-    enabled: false,
-    captureTitle: false,
-    updatedAt: 3,
-  });
-});
-
-await runTest("quick app unclassified state follows effective active category", () => {
-  assert.equal(isQuickClassificationUnclassified(null), true);
-  assert.equal(isQuickClassificationUnclassified(undefined), true);
-  assert.equal(isQuickClassificationUnclassified("other"), true);
-  assert.equal(isQuickClassificationUnclassified("development"), false);
-  assert.equal(isQuickClassificationUnclassified("development", ["development"]), true);
-});
-
-await runTest("quick app category options include active custom categories and keep other last", () => {
-  const custom = "custom:category_focus" as const;
-  const options = buildQuickCategoryOptions({
-    loadedOverrides: { "editor.exe": { category: custom } },
-    loadedWebDomainOverrides: {},
-    loadedCategoryColorOverrides: {},
-    loadedCategoryLabelOverrides: { [custom]: "专注" },
-    loadedPersistedCategoryIds: [custom],
-    loadedDeletedCategories: ["game"],
-  });
-
-  assert.equal(options.some((option) => option.value === "game"), false);
-  assert.deepEqual(options.find((option) => option.value === custom), {
-    value: custom,
-    label: "专注",
-  });
-  assert.equal(options.at(-1)?.value, "other");
-});
 
 await runTest("web override normalization keeps title capture exclusions", () => {
   assert.deepEqual(normalizeWebDomainOverride({
@@ -338,49 +123,7 @@ await runTest("web override setting mutations preserve controls and normalize do
   assert.deepEqual(buildSaveWebDomainOverrideMutations("   ", { displayName: "ignored" }), []);
 });
 
-await runTest("classification presentation warmup covers the complete committed catalog atomically", async () => {
-  const events: string[] = [];
-  const requestedExecutables: string[][] = [];
-  const warmedIconMaps: Array<Record<string, string>> = [];
-  const candidates = ["dashboard.exe", "classification-only.exe", "import-only.exe"].map(
-    (exeName, index) => ({
-      exeName,
-      appName: `App ${index}`,
-      totalDuration: 0,
-      lastSeenMs: 100 - index,
-      hasNativeRecords: index === 0,
-    }),
-  );
 
-  await prewarmClassificationPresentationAssets({
-    candidates,
-    sourceRevision: 4,
-    completedAtMs: 1_000,
-  }, {
-    loadIcons: async (exeNames) => {
-      events.push("icons");
-      requestedExecutables.push(exeNames);
-      return Object.fromEntries(exeNames.map((exeName) => [exeName, `icon:${exeName}`]));
-    },
-    prewarmThemeColors: async (icons) => {
-      events.push("colors");
-      warmedIconMaps.push(icons);
-      return Object.fromEntries(Object.keys(icons).map((exeName) => [exeName, "#123456"]));
-    },
-  });
-
-  assert.deepEqual(events, ["icons", "colors"]);
-  assert.deepEqual(requestedExecutables, [[
-    "dashboard.exe",
-    "classification-only.exe",
-    "import-only.exe",
-  ]]);
-  assert.deepEqual(Object.keys(warmedIconMaps[0]), [
-    "dashboard.exe",
-    "classification-only.exe",
-    "import-only.exe",
-  ]);
-});
 
 await runTest("normalizeClassificationOverride trims values and drops empty overrides", () => {
   assert.equal(normalizeClassificationOverride(null), null);
@@ -498,32 +241,7 @@ await runTest("historical other category overrides remain safely readable as unc
   ProcessMapper.clearUserOverrides();
 });
 
-await runTest("choosing unclassified clears only the manual category", () => {
-  assert.deepEqual(
-    buildAppMappingCategoryOverride({
-      category: "development",
-      displayName: "Work Browser",
-      color: "#112233",
-      track: false,
-      captureTitle: false,
-      enabled: true,
-      updatedAt: 123,
-    }, "other"),
-    {
-      displayName: "Work Browser",
-      color: "#112233",
-      track: false,
-      captureTitle: false,
-      enabled: true,
-      updatedAt: 123,
-    },
-  );
-  assert.equal(buildAppMappingCategoryOverride({ category: "office" }, "other"), null);
-  const assigned = buildAppMappingCategoryOverride(null, "development");
-  assert.equal(assigned?.category, "development");
-  assert.equal(assigned?.enabled, true);
-  assert.equal(typeof assigned?.updatedAt, "number");
-});
+
 
 await runTest("legacy auto-classification migration preserves historical categories without restoring runtime inference", () => {
   const migratedAt = 456;
@@ -723,13 +441,7 @@ await runTest("modern stable extended category ids round-trip through app overri
   assert.equal(ProcessMapper.fromOverrideStorageValue(stored)?.category, category);
 });
 
-await runTest("createCategoryInDraftState stores stable category label", () => {
-  const category = "custom:category_focus" as const;
-  const state = createCategoryInDraftState(buildDraftState(), category, "  Focus  ");
 
-  assert.deepEqual(state.persistedCategoryIds, [category]);
-  assert.equal(state.categoryLabelOverrides[category], "Focus");
-});
 
 await runTest("process mapper applies extended category display label overrides", () => {
   const category = "custom:category_focus" as const;
@@ -743,58 +455,11 @@ await runTest("process mapper applies extended category display label overrides"
   ProcessMapper.clearCategoryLabelOverrides();
 });
 
-await runTest("mergeCategoryIntoDraftState rewrites category references", () => {
-  const focus = buildLegacyExtendedCategoryId("Focus");
-  const deepWork = buildLegacyExtendedCategoryId("Deep Work");
-  const merged = mergeCategoryIntoDraftState(buildDraftState({
-    overrides: {
-      "code.exe": {
-        enabled: true,
-        category: focus,
-      },
-    },
-    webDomainOverrides: {
-      "docs.example": {
-        category: focus,
-      },
-    },
-    categoryColorOverrides: {
-      [focus]: "#112233",
-    },
-    persistedCategoryIds: [focus],
-    deletedCategories: [focus],
-  }), focus, deepWork, "#445566");
 
-  assert.equal(merged.overrides["code.exe"]?.category, deepWork);
-  assert.equal(merged.webDomainOverrides["docs.example"]?.category, deepWork);
-  assert.deepEqual(merged.persistedCategoryIds, [deepWork]);
-  assert.deepEqual(merged.deletedCategories, []);
-  assert.equal(merged.categoryColorOverrides[focus], undefined);
-  assert.equal(merged.categoryColorOverrides[deepWork], "#112233");
-});
 
-await runTest("merging a category includes its legacy app and web assignments", () => {
-  const merged = mergeCategoryIntoDraftState(buildDraftState({
-    overrides: { "assistant.exe": { category: "ai", displayName: "Assistant" } },
-    webDomainOverrides: { "example.com": { category: "ai", captureTitle: false } },
-  }), "office", "learning", "#AA8752");
-  assert.equal(merged.overrides["assistant.exe"]?.category, "learning");
-  assert.equal(merged.overrides["assistant.exe"]?.displayName, "Assistant");
-  assert.equal(merged.webDomainOverrides["example.com"]?.category, "learning");
-  assert.equal(merged.webDomainOverrides["example.com"]?.captureTitle, false);
-});
 
-await runTest("updateCategoryLabelInDraftState stores and clears display label overrides", () => {
-  const renamed = updateCategoryLabelInDraftState(buildDraftState(), "development", "  Dev Tools  ");
-  assert.equal(renamed.categoryLabelOverrides.development, "Dev Tools");
 
-  const cleared = updateCategoryLabelInDraftState(renamed, "development", "");
-  assert.equal(cleared.categoryLabelOverrides.development, undefined);
 
-  const extendedCategory = "custom:category_focus" as const;
-  const extendedRenamed = updateCategoryLabelInDraftState(buildDraftState(), extendedCategory, "Deep Work");
-  assert.equal(extendedRenamed.categoryLabelOverrides[extendedCategory], "Deep Work");
-});
 
 await runTest("encoded extended category app override transitions back to canonical storage", () => {
   const category = buildLegacyExtendedCategoryId("中文");
@@ -1041,193 +706,19 @@ await runTest("buildClassificationDraftChangePlan captures state diffs", () => {
   });
 });
 
-await runTest("createAppMappingDraftState clones bootstrap snapshots", () => {
-  const categoryId = buildLegacyExtendedCategoryId("Deep Work");
-  const snapshot = {
-    loadedOverrides: {
-      "chrome.exe": {
-        enabled: true,
-        displayName: "Chrome",
-      },
-    },
-    loadedWebDomainOverrides: {},
-    loadedCategoryColorOverrides: {
-      development: "#111111",
-    },
-    loadedCategoryLabelOverrides: {
-      development: "Dev Tools",
-    },
-    loadedPersistedCategoryIds: [categoryId],
-    loadedDeletedCategories: ["music" as const],
-  };
 
-  const state = createAppMappingDraftState(snapshot);
-  const cloned = cloneClassificationDraftState(state);
-  state.overrides["chrome.exe"]!.displayName = "Changed";
-  state.categoryColorOverrides.development = "#222222";
-  state.categoryLabelOverrides.development = "Engineering";
-  state.persistedCategoryIds.push(buildLegacyExtendedCategoryId("Focus"));
-  state.deletedCategories.push("video");
 
-  assert.equal(snapshot.loadedOverrides["chrome.exe"]?.displayName, "Chrome");
-  assert.equal(snapshot.loadedCategoryColorOverrides.development, "#111111");
-  assert.equal(snapshot.loadedCategoryLabelOverrides.development, "Dev Tools");
-  assert.deepEqual(snapshot.loadedPersistedCategoryIds, [categoryId]);
-  assert.deepEqual(snapshot.loadedDeletedCategories, ["music"]);
-  assert.deepEqual(cloned, {
-    appLinks: {},
-    overrides: {
-      "chrome.exe": {
-        enabled: true,
-        displayName: "Chrome",
-      },
-    },
-    webDomainOverrides: {},
-    categoryColorOverrides: {
-      development: "#111111",
-    },
-    categoryLabelOverrides: {
-      development: "Dev Tools",
-    },
-    persistedCategoryIds: [categoryId],
-    deletedCategories: ["music"],
-  });
-});
 
-await runTest("buildAppMappingOverride normalizes colors and omits no-op values", () => {
-  assert.equal(buildAppMappingOverride({ track: true, captureTitle: true }), null);
 
-  assert.deepEqual(
-    buildAppMappingOverride({
-      category: "communication",
-      color: "abc123",
-      displayName: "  Slack  ",
-      track: false,
-      captureTitle: false,
-      updatedAt: 12,
-    }),
-    {
-      enabled: true,
-      category: "communication",
-      color: "#ABC123",
-      displayName: "Slack",
-      track: false,
-      captureTitle: false,
-      updatedAt: 12,
-    },
-  );
-});
 
-await runTest("filterAndSortCandidates filters by category and sorts by resolved label", () => {
-  const candidates = [
-    buildCandidate("zeta.exe", "Same Name"),
-    buildCandidate("alpha.exe", "Same Name"),
-    buildCandidate("notes.exe", "Notes"),
-    buildCandidate("other.exe", "Other"),
-  ];
-  const categories: Record<string, UserAssignableAppCategory> = {
-    "zeta.exe": "development",
-    "alpha.exe": "development",
-    "notes.exe": "communication",
-    "other.exe": "other",
-  };
 
-  const filtered = filterAndSortCandidates({
-    candidates,
-    filter: "classified",
-    resolveMappedCategory: (candidate) => categories[candidate.exeName] ?? "other",
-    resolveEffectiveDisplayName: (candidate) => candidate.appName,
-  });
 
-  assert.deepEqual(
-    filtered.map((candidate) => candidate.exeName),
-    ["notes.exe", "alpha.exe", "zeta.exe"],
-  );
-});
 
-await runTest("filterAndSortCandidates filters excluded apps by tracking state", () => {
-  const candidates = [
-    buildCandidate("active.exe", "Active"),
-    buildCandidate("blocked.exe", "Blocked"),
-  ];
 
-  const filtered = filterAndSortCandidates({
-    candidates,
-    filter: "excluded",
-    resolveMappedCategory: () => "utility",
-    resolveTrackingEnabled: (candidate) => candidate.exeName !== "blocked.exe",
-    resolveEffectiveDisplayName: (candidate) => candidate.appName,
-  });
 
-  assert.deepEqual(filtered.map((candidate) => candidate.exeName), ["blocked.exe"]);
-});
 
-await runTest("filterAndSortCandidates omits excluded apps from normal filters", () => {
-  const candidates = [
-    buildCandidate("active.exe", "Active"),
-    buildCandidate("blocked.exe", "Blocked"),
-  ];
 
-  const filtered = filterAndSortCandidates({
-    candidates,
-    filter: "all",
-    resolveMappedCategory: () => "utility",
-    resolveTrackingEnabled: (candidate) => candidate.exeName !== "blocked.exe",
-    resolveEffectiveDisplayName: (candidate) => candidate.appName,
-  });
 
-  assert.deepEqual(filtered.map((candidate) => candidate.exeName), ["active.exe"]);
-});
-
-await runTest("filterAndSortCandidates searches display names and executable names", () => {
-  const candidates = [
-    buildCandidate("alpha.exe", "Alpha"),
-    buildCandidate("chrome.exe", "Google Chrome"),
-    buildCandidate("notes.exe", "Notes"),
-  ];
-
-  const byDisplayName = filterAndSortCandidates({
-    candidates,
-    filter: "all",
-    searchQuery: "goo",
-    resolveMappedCategory: () => "development",
-    resolveEffectiveDisplayName: (candidate) => candidate.appName,
-  });
-  const byExecutable = filterAndSortCandidates({
-    candidates,
-    filter: "all",
-    searchQuery: "note",
-    resolveMappedCategory: () => "development",
-    resolveEffectiveDisplayName: (candidate) => candidate.appName,
-  });
-
-  assert.deepEqual(byDisplayName.map((candidate) => candidate.exeName), ["chrome.exe"]);
-  assert.deepEqual(byExecutable.map((candidate) => candidate.exeName), ["notes.exe"]);
-});
-
-await runTest("filterAndSortCandidates searches category labels", () => {
-  const candidates = [
-    buildCandidate("code.exe", "Code"),
-    buildCandidate("vlc.exe", "VLC"),
-    buildCandidate("notes.exe", "Notes"),
-  ];
-  const categories: Record<string, UserAssignableAppCategory> = {
-    "code.exe": "development",
-    "vlc.exe": "video",
-    "notes.exe": "office",
-  };
-
-  const filtered = filterAndSortCandidates({
-    candidates,
-    filter: "all",
-    searchQuery: "media",
-    resolveMappedCategory: (candidate) => categories[candidate.exeName] ?? "other",
-    resolveEffectiveDisplayName: (candidate) => candidate.appName,
-    resolveCategoryLabel: (category) => (category === "video" ? "Media" : category),
-  });
-
-  assert.deepEqual(filtered.map((candidate) => candidate.exeName), ["vlc.exe"]);
-});
 
 await runTest("commitDraftChangesWithDeps persists before syncing process mapper state", async () => {
   const events: string[] = [];

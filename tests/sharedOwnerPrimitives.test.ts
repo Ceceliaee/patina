@@ -9,14 +9,6 @@ import {
   maxLocalDate,
   minLocalDate,
 } from "../src/shared/lib/localDate.ts";
-import { touchBoundedDataCacheEntry } from "../src/features/data/services/dataLruCache.ts";
-import { formatDestinationTime } from "../src/features/destination/services/destinationTimeFormatting.ts";
-import {
-  formatScheduledDateTime,
-  formatScheduledSize,
-  scheduledMinutesToTime,
-  scheduledTimeToMinutes,
-} from "../src/features/settings/services/scheduledTaskPresentation.ts";
 import {
   getBrowserLocalStorage,
   readBrowserStorage,
@@ -77,30 +69,6 @@ test("executable fallback display names share one punctuation and casing policy"
   assert.equal(formatExecutableFallbackName("already readable"), "Already Readable");
 });
 
-test("scheduled task presentation keeps backup and export boundary formatting", () => {
-  assert.equal(scheduledMinutesToTime(-1), "00:00");
-  assert.equal(scheduledMinutesToTime(1_500), "23:59");
-  assert.equal(scheduledTimeToMinutes("02:30"), 150);
-  assert.equal(scheduledTimeToMinutes("bad"), 120);
-  assert.equal(formatScheduledDateTime(null), "");
-  assert.ok(formatScheduledDateTime(0).length > 0);
-  assert.equal(formatScheduledSize(null), "");
-  assert.equal(formatScheduledSize(1_048_576), "1.00 MB");
-  assert.equal(formatScheduledSize(10 * 1_048_576), "10.0 MB");
-});
-
-test("destination time formatting preserves the explicit end-of-day label", () => {
-  const dayEndMs = new Date(2026, 0, 2).getTime();
-  assert.equal(formatDestinationTime(dayEndMs, dayEndMs, "en-US"), "24:00");
-  assert.match(formatDestinationTime(dayEndMs - 60_000, dayEndMs, "en-US"), /23:59|24:59/);
-});
-
-test("data LRU touch refreshes recency and evicts the oldest entry", () => {
-  const cache = new Map<string, number>([["a", 1], ["b", 2]]);
-  touchBoundedDataCacheEntry(cache, "a", 3, 2);
-  touchBoundedDataCacheEntry(cache, "c", 4, 2);
-  assert.deepEqual([...cache], [["a", 3], ["c", 4]]);
-});
 
 test("runtime guards keep array-tolerant and plain-record semantics explicit", () => {
   assert.equal(isObjectRecord([]), true);
