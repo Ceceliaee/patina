@@ -18,7 +18,6 @@ import {
   resolveLiveCutoffMs,
 } from "../../src/shared/lib/readModelCore.ts";
 import { buildDashboardReadModel } from "../../src/features/dashboard/services/dashboardReadModel.ts";
-import { buildHistoryReadModel } from "../../src/features/history/services/historyReadModel.ts";
 import type { HistorySession } from "../../src/shared/types/sessions.ts";
 import {
   resolveTrackerHealth,
@@ -38,16 +37,10 @@ import {
 } from "../../src/app/services/readModelRefreshState.ts";
 import {
   loadDashboardRuntimeSnapshotWithDeps,
-  loadHistoryRuntimeSnapshotWithDeps,
 } from "../../src/app/services/readModelRuntimeService.ts";
 import {
   shouldInvalidateDataCaches,
 } from "../../src/app/hooks/trackingDataChangedPolicy.ts";
-import {
-  clearSessionsByRangeWithDeps,
-  resolveSessionStartCleanupCutoffTime,
-  shouldDeleteSessionByStartTime,
-} from "../../src/features/settings/services/sessionCleanupPolicy.ts";
 import {
   createTestHarness,
   makeSession,
@@ -59,11 +52,9 @@ export {
   buildDailySummaries,
   buildNormalizedAppStats,
   buildReadModelDiagnostics,
-  clearSessionsByRangeWithDeps,
   buildTimelineSessions,
   compileSessions,
   buildDashboardReadModel,
-  buildHistoryReadModel,
   INITIAL_READ_MODEL_REFRESH_STATE,
   isTrackableWindow,
   isRawCurrentTrackingSnapshot,
@@ -74,16 +65,13 @@ export {
   makeWindow,
   applyMappingOverridesReadModelRefresh,
   loadDashboardRuntimeSnapshotWithDeps,
-  loadHistoryRuntimeSnapshotWithDeps,
   planWindowTransition,
   ProcessMapper,
   resolveLiveCutoffMs,
   resolveReadModelRefreshSignal,
-  resolveSessionStartCleanupCutoffTime,
   resolveStartupSealTime,
   resolveTrackerHealth,
   shouldInvalidateDataCaches,
-  shouldDeleteSessionByStartTime,
   getDayRange,
   getRollingDayRanges,
 };

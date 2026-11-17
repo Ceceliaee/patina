@@ -19,23 +19,9 @@ function collectCopyKeyPaths(value: unknown, prefix = ""): string[] {
   });
 }
 
-test("motion preference keeps reduced motion above enhanced motion", () => {
-  assert.equal(resolveQuietMotionMode({
-    enhancedMotionEnabled: true,
-    prefersReducedMotion: true,
-  }), "reduced");
-  assert.equal(resolveQuietMotionMode({
-    enhancedMotionEnabled: false,
-    prefersReducedMotion: true,
-  }), "reduced");
-  assert.equal(resolveQuietMotionMode({
-    enhancedMotionEnabled: false,
-    prefersReducedMotion: false,
-  }), "baseline");
-  assert.equal(resolveQuietMotionMode({
-    enhancedMotionEnabled: true,
-    prefersReducedMotion: false,
-  }), "enhanced");
+test("motion follows the system reduced-motion preference", () => {
+  assert.equal(resolveQuietMotionMode({ prefersReducedMotion: true }), "reduced");
+  assert.equal(resolveQuietMotionMode({ prefersReducedMotion: false }), "baseline");
 });
 
 test("production locale copy packages keep the same key structure", () => {

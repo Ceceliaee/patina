@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 
 export const browserGroups = [
-  "startup", "anonymous", "typography", "locale", "content", "read-failure",
-  "settings", "theme", "category-filter", "classification", "scroll-region", "mini",
-  "data", "data-loading-layout", "history-web-timeline", "about", "tools", "free-focus",
-  "navigation", "history", "data-full",
+  "startup", "typography", "locale", "content", "read-failure",
+  "scroll-region", "mini",
+  "tools", "free-focus",
+  "navigation",
 ] as const;
 export type BrowserGroup = typeof browserGroups[number];
 

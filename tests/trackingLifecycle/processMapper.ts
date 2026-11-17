@@ -4,7 +4,6 @@ import {
   buildNormalizedAppStats,
   buildDashboardReadModel,
   compileSessions,
-  buildHistoryReadModel,
   makeSession,
   ProcessMapper,
   resolveCanonicalExecutable,
@@ -315,39 +314,7 @@ export function runProcessMapperTests() {
     });
 
     const trackerHealth = resolveTrackerHealth(120_000, 120_000, 8_000);
-    const historyView = buildHistoryReadModel({
-    daySessions: [
-        makeSession({
-          id: 1,
-          exeName: "vscodium.exe",
-          appName: "VSCodium",
-          startTime: 0,
-          endTime: 60_000,
-          duration: 60_000,
-        }),
-      ],
-    selectedDate: new Date(0),
-    trackerHealth,
-    nowMs: 120_000,
-    minSessionSecs: 0,
-    mergeThresholdSecs: 180,
-    dayAggregateSessions: aggregateFixtureRecords([
-        makeSession({
-          id: 1,
-          exeName: "vscodium.exe",
-          appName: "VSCodium",
-          startTime: 0,
-          endTime: 60_000,
-          duration: 60_000,
-        }),
-      ], trackerHealth, 120_000),
-    weeklyAggregateSessions: []
-  });
 
-    assert.equal(historyView.appSummary.length, 1);
-    assert.equal(historyView.appSummary[0].appName, "CodeLab");
-    assert.equal(historyView.timelineSessions.length, 1);
-    assert.equal(historyView.timelineSessions[0].displayName, "CodeLab");
     ProcessMapper.clearUserOverrides();
   });
 
@@ -360,55 +327,7 @@ export function runProcessMapperTests() {
     });
 
     const trackerHealth = resolveTrackerHealth(120_000, 120_000, 8_000);
-    const historyView = buildHistoryReadModel({
-    daySessions: [
-        makeSession({
-          id: 1,
-          exeName: "QQ.exe",
-          appName: "QQ",
-          startTime: 0,
-          endTime: 60_000,
-          duration: 60_000,
-        }),
-        makeSession({
-          id: 2,
-          exeName: "chrome.exe",
-          appName: "Google Chrome",
-          startTime: 65_000,
-          endTime: 125_000,
-          duration: 60_000,
-        }),
-      ],
-    selectedDate: new Date(0),
-    trackerHealth,
-    nowMs: 120_000,
-    minSessionSecs: 0,
-    mergeThresholdSecs: 180,
-    dayAggregateSessions: aggregateFixtureRecords([
-        makeSession({
-          id: 1,
-          exeName: "QQ.exe",
-          appName: "QQ",
-          startTime: 0,
-          endTime: 60_000,
-          duration: 60_000,
-        }),
-        makeSession({
-          id: 2,
-          exeName: "chrome.exe",
-          appName: "Google Chrome",
-          startTime: 65_000,
-          endTime: 125_000,
-          duration: 60_000,
-        }),
-      ], trackerHealth, 120_000),
-    weeklyAggregateSessions: []
-  });
 
-    assert.equal(historyView.appSummary.length, 1);
-    assert.equal(historyView.appSummary[0].exeName.toLowerCase(), "chrome.exe");
-    assert.equal(historyView.timelineSessions.length, 1);
-    assert.equal(historyView.timelineSessions[0].exeName.toLowerCase(), "chrome.exe");
     ProcessMapper.clearUserOverrides();
   });
 

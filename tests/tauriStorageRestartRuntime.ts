@@ -4,7 +4,7 @@ import { existsSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileS
 import { basename, join, sep } from "node:path";
 import type { StorageSnapshot } from "../src/platform/storage/storageRuntimeGateway.ts";
 import { readRuntimeDatabaseRows } from "./runtimeDatabase.ts";
-import { installLinkedRankingClock, seedLinkedApplicationRanking, verifyLinkedApplicationDetailAndTrend, verifyLinkedApplicationRanking, verifyLinkedApplicationsRuntime } from "./tauriLinkedApplicationsRuntime.ts";
+import { verifyLinkedApplicationsRuntime } from "./tauriLinkedApplicationsRuntime.ts";
 import { deleteWebHistoryRuntime, verifyWebLinksRuntime } from "./tauriWebLinksRuntime.ts";
 import {
   CdpConnection,
@@ -17,7 +17,7 @@ import { RuntimeSession, evaluate, findMainTarget } from "./tauriRuntimeHarness.
 
 const WEBVIEW_STARTUP_TIMEOUT_MS = 30_000;
 export async function run(session: RuntimeSession) {
-  const { root, logs, devtoolsPort, frontendDistDir } = session;
+  const { root, logs, devtoolsPort } = session;
   let client = session.client!;
   try {
     await session.show();
@@ -26,10 +26,7 @@ export async function run(session: RuntimeSession) {
     await verifyWebLinksRuntime(expression => evaluate(client, expression));
     seedWebActivitySegment(runtimeDatabasePath);
     await deleteWebHistoryRuntime(expression => evaluate(client, expression));
-    await evaluate(client, installLinkedRankingClock(frontendDistDir));
-    await seedLinkedApplicationRanking((expression) => evaluate(client!, expression), runtimeDatabasePath);
     await client.command("Page.reload");
-    await verifyLinkedApplicationRanking((expression) => evaluate(client!, expression), true);
 
     await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", { mutations: [
     { key: "theme_mode", value: "dark" },
@@ -64,8 +61,6 @@ export async function run(session: RuntimeSession) {
     console.log("PATINA_THEME_COLD_RESTART_REPORT", JSON.stringify({ processRestart: true, presetContrast: 60, savedScheme: "catppuccin" }));
 
     console.log("PASS real Tauri runtime command/event/SQLite/capability smoke");
-    await verifyLinkedApplicationRanking((expression) => evaluate(client!, expression), true);
-    await verifyLinkedApplicationDetailAndTrend((expression) => evaluate(client!, expression));
     await verifyLinkedApplicationsRuntime((expression) => evaluate(client!, expression), true);
     await verifyWebLinksRuntime((expression) => evaluate(client!, expression), true);
     assert.equal(await evaluate(client!, `localStorage.getItem("patina-storage-migration-proof")`), null);
@@ -145,7 +140,6 @@ export async function run(session: RuntimeSession) {
     };
     const selectedData = join(root, "relocated-data");
     let selected = await storageRestart("cmd_restart_and_apply_storage_migration", { targetDataRoot: selectedData });
-    await verifyLinkedApplicationRanking((expression) => evaluate(client!, expression), false);
     assert.equal(selected.paths.isCustomDataRoot, true);
     assert.ok(selected.paths.databasePath.toLowerCase().startsWith(selectedData.toLowerCase()));
     selected = await storageRestart("cmd_restart_and_apply_webview_cache_migration", { targetWebviewRoot: join(root, "relocated-cache") });

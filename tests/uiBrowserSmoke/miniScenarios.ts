@@ -20,7 +20,7 @@ export async function runMiniScenarios(context: BrowserSmokeContext) {
   await runTest("mini titlebar entry uses AppWindow immediately before minimize", async () => {
     assert.equal(await read(`Boolean(document.querySelector('[data-titlebar-mini-entry] .lucide-app-window'))`), true);
     assert.equal(await read(`Boolean(document.querySelector('.app-titlebar-controls > button .lucide-minus'))`), true);
-    await read(`{ const key='__time_tracker_smoke_settings';const value=JSON.parse(localStorage.getItem(key)||'{}');value.language='zh-CN';value.dynamic_effects='0';localStorage.setItem(key,JSON.stringify(value)); }`);
+    await read(`{ const key='__time_tracker_smoke_settings';const value=JSON.parse(localStorage.getItem(key)||'{}');value.language='zh-CN';localStorage.setItem(key,JSON.stringify(value)); }`);
   });
   await runTest("mini titlebar matches neighboring hit areas without hover or focus tooltips", async () => {
     const bounds = await read(`(() => {

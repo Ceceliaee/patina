@@ -3,7 +3,6 @@ import type { BrowserSmokeContext } from "./scenarioTypes.ts";
 import {
   evaluate,
   jsonString,
-  titleDetailsButtonExpression,
   waitForAnimationFrames,
   waitForExpression,
 } from "./browserHarness.ts";
@@ -25,7 +24,7 @@ export async function runLocaleScenarios(context: BrowserSmokeContext) {
   await waitForExpression(
     client!,
     sessionId,
-    `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("History"))} + ']'))`,
+    `Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("Tools"))} + ']'))`,
     45_000,
     "English navigation is ready regardless of the persisted active view",
   );
@@ -73,7 +72,6 @@ export async function runLocaleScenarios(context: BrowserSmokeContext) {
             nav: nav && { x: nav.x, width: nav.width, height: nav.height },
             main: main && { x: main.x, width: main.width, height: main.height },
           },
-          classification: labels.find((node) => node.textContent === "Classification")?.textContent,
           pressed: document.querySelector('[aria-label="Navigation labels"]')?.getAttribute("aria-pressed"),
           visuallyPressed: document.querySelector('[aria-label="Navigation labels"]')?.classList.contains("qp-icon-action-pressed") ?? false,
           overflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -84,18 +82,16 @@ export async function runLocaleScenarios(context: BrowserSmokeContext) {
       fit: boolean;
       singleLine: boolean;
       geometry: unknown;
-      classification: string | undefined;
       pressed: string | null;
       visuallyPressed: boolean;
       overflowX: number;
     };
     assert.deepEqual(
       englishState.labels,
-      ["History", "Data", "Classification", "Tools", "Settings", "About"],
+      ["Tools"],
     );
     assert.equal(englishState.fit, true);
     assert.equal(englishState.singleLine, true);
-    assert.equal(englishState.classification, "Classification");
     assert.equal(englishState.pressed, "true");
     assert.equal(englishState.visuallyPressed, false);
     assert.deepEqual(englishState.geometry, before);
@@ -152,11 +148,11 @@ export async function runLocaleScenarios(context: BrowserSmokeContext) {
       },
       JSON.stringify(await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('[data-tools-section-label]')).map(n=>({text:n.textContent,width:n.clientWidth,scroll:n.scrollWidth,font:getComputedStyle(n).fontSize,weight:getComputedStyle(n).fontWeight}))`)),
     );
-    await evaluate(client!, sessionId, `document.querySelector('[aria-label="History"]')?.click()`);
+    await evaluate(client!, sessionId, `document.querySelector('[aria-label="Tools"]')?.click()`);
     await waitForExpression(
       client!,
       sessionId,
-      `document.querySelector('[aria-label="History"]')?.getAttribute("aria-current") === "page"`,
+      `document.querySelector('[aria-label="Tools"]')?.getAttribute("aria-current") === "page"`,
     );
 
     await evaluate(client!, sessionId, `
@@ -181,7 +177,7 @@ export async function runLocaleScenarios(context: BrowserSmokeContext) {
       `(() => {
         const labels = Array.from(document.querySelectorAll("[data-sidebar-nav-label]"));
         const menu = document.querySelector('[aria-label="Navigation labels"]');
-        return labels.length === 6
+        return labels.length === 1
           && labels.every((node) => node.scrollWidth <= node.clientWidth + 1)
           && menu?.getAttribute("aria-pressed") === "true"
           && document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1;
@@ -203,146 +199,30 @@ export async function runLocaleScenarios(context: BrowserSmokeContext) {
       sessionId,
       `document.documentElement.dataset.theme === "light"
         && document.querySelector("[data-sidebar-navigation-mode]")?.getAttribute("data-sidebar-navigation-mode") === "labeled"
-        && Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("History"))} + ']'))`,
+        && Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("Tools"))} + ']'))`,
       undefined,
       "English labeled sidebar should restore in light mode",
     );
   });
 
-  await runTest("English history title chips do not crowd the duration column", async () => {
-    await client!.command("Emulation.setDeviceMetricsOverride", {
-      width: 900,
-      height: 760,
-      deviceScaleFactor: 1,
-      mobile: false,
-    }, sessionId);
-    const clicked = await evaluate(client!, sessionId, `
-      (() => {
-        const node = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("History"))} + ']');
-        if (!node) return false;
-        node.click();
-        return true;
-      })()
-    `);
-    assert.equal(clicked, true);
-    await waitForExpression(
-      client!,
-      sessionId,
-      `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("History"))} + ']')?.className.includes("qp-nav-item-active")`,
-    );
-    await waitForExpression(
-      client!,
-      sessionId,
-      `Boolean(document.querySelector(".history-timeline-open"))`,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        (() => {
-          const button = document.querySelector(".history-timeline-open");
-          if (!button) return false;
-          button.click();
-          return true;
-        })()
-      `),
-      true,
-    );
-    await waitForExpression(
-      client!,
-      sessionId,
-      `Boolean(document.querySelector(".history-timeline-dialog-surface"))`,
-    );
-    await waitForExpression(
-      client!,
-      sessionId,
-      titleDetailsButtonExpression("title details", ".history-timeline-dialog-surface"),
-      45_000,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1
-      `),
-      true,
-    );
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        (() => {
-          const closeButton = document.querySelector(".history-timeline-dialog-surface .history-timeline-dialog-close");
-          if (!closeButton) return false;
-          closeButton.click();
-          return true;
-        })()
-      `),
-      true,
-    );
-    await waitForExpression(
-      client!,
-      sessionId,
-      `!document.querySelector(".history-timeline-dialog-surface")`,
-    );
-  });
-
-  await runTest("English data export localizes its range and keeps four format buttons", async () => {
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        (() => {
-          const settings = document.querySelector('[aria-label=' + ${jsonString(JSON.stringify("Settings"))} + ']');
-          settings?.click();
-          return Boolean(settings);
-        })()
-      `),
-      true,
-    );
-    await waitForExpression(client!, sessionId, `document.body.innerText.includes(${jsonString("Export and import")})`);
-    assert.equal(
-      await evaluate(client!, sessionId, `
-        (() => {
-          const trigger = Array.from(document.querySelectorAll("button"))
-            .find((node) => node.textContent?.trim() === "Export");
-          trigger?.click();
-          return Boolean(trigger);
-        })()
-      `),
-      true,
-    );
-    await waitForExpression(client!, sessionId, "Boolean(document.querySelector('.settings-data-export-formats'))");
-    assert.equal(
-      await evaluate(client!, sessionId, `document.querySelector('.settings-data-export-range-label')?.textContent?.trim()`),
-      "This month",
-    );
-    assert.deepEqual(
-      await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.settings-data-export-formats button')).map((node) => node.textContent?.trim())`),
-      ["CSV", "Markdown", "Parquet", "SQLite"],
-    );
-    await evaluate(client!, sessionId, `document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
-    await waitForExpression(client!, sessionId, "!document.querySelector('[role=\"dialog\"]')");
-  });
-
   for (const localeCase of [
-    { locale: "es", labels: ["Historial", "Datos", "Clasificación", "Herramientas", "Configuración", "Acerca de"], exportTitle: "Exportación e importación", exportAction: "Exportar", month: "Este mes" },
-    { locale: "ru-RU", labels: ["История", "Данные", "Категории", "Инструменты", "Настройки", "О программе"], exportTitle: "Экспорт и импорт", exportAction: "Экспорт", month: "Этот месяц" },
-  ]) await runTest(`${localeCase.locale} pages and export remain usable in the minimum window`, async () => {
+    { locale: "es", labels: ["Herramientas"] },
+    { locale: "ru-RU", labels: ["Инструменты"] },
+  ]) await runTest(`${localeCase.locale} Tools remains usable in the minimum window`, async () => {
     const { locale, labels } = localeCase;
     const script = await client.command("Page.addScriptToEvaluateOnNewDocument", {
       source: `globalThis.__TIME_TRACKER_SMOKE_LANGUAGE = ${jsonString(locale)};`,
     }, sessionId) as { identifier: string };
     try {
       await client.command("Page.navigate", { url: appUrl }, sessionId);
-      await waitForExpression(client, sessionId, `document.documentElement.lang === ${jsonString(locale)} && Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(labels[1]))} + ']'))`, 45000);
-      for (const [index, view] of ["history", "data", "mapping", "tools", "settings", "about"].entries()) {
+      await waitForExpression(client, sessionId, `document.documentElement.lang === ${jsonString(locale)} && Boolean(document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(labels[0]))} + ']'))`, 45000);
+      for (const [index, view] of ["tools"].entries()) {
         const label = labels[index];
         await evaluate(client, sessionId, `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(label))} + ']')?.click()`);
         await waitForExpression(client, sessionId, `document.querySelector('main.qp-canvas')?.dataset.presentedView === ${jsonString(view)} && document.querySelector('main.qp-canvas')?.dataset.viewTransitionState === 'settled'`);
         assert.equal(await evaluate(client, sessionId, "document.documentElement.lang"), locale);
         assert.ok(await evaluate(client, sessionId, "document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1"), `${label} must not overflow horizontally`);
       }
-      await evaluate(client, sessionId, `document.querySelector('[aria-label=' + ${jsonString(JSON.stringify(labels[4]))} + ']')?.click()`);
-      await waitForExpression(client, sessionId, `document.body.innerText.includes(${jsonString(localeCase.exportTitle)})`);
-      await evaluate(client, sessionId, `Array.from(document.querySelectorAll('button')).find(n => n.textContent?.trim() === ${jsonString(localeCase.exportAction)})?.click()`);
-      await waitForExpression(client, sessionId, "Boolean(document.querySelector('.settings-data-export-formats'))");
-      assert.equal(await evaluate(client, sessionId, "document.querySelector('.settings-data-export-range-label')?.textContent?.trim()"), localeCase.month);
-      assert.deepEqual(await evaluate(client, sessionId, `Array.from(document.querySelectorAll('.settings-data-export-formats button')).map(n => n.textContent.trim())`), ['CSV', 'Markdown', 'Parquet', 'SQLite']);
-      await evaluate(client, sessionId, "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))");
-      await waitForExpression(client, sessionId, "!document.querySelector('[role=\"dialog\"]')");
     } finally {
       await client.command("Page.removeScriptToEvaluateOnNewDocument", { identifier: script.identifier }, sessionId);
     }

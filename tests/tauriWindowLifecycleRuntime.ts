@@ -238,7 +238,7 @@ export async function run(session: RuntimeSession) {
 
     await evaluate(
       client,
-      `localStorage.setItem("patina:last-active-view", "data")`,
+      `localStorage.setItem("patina:last-active-view", "tools")`,
     );
     const logsBeforeReload = logs.join("");
     await client.command("Page.reload", { ignoreCache: true });
@@ -281,7 +281,7 @@ export async function run(session: RuntimeSession) {
       transitionState: string | null;
     };
     assert.equal(reloadAppearance.frameConnected, true);
-    assert.equal(reloadAppearance.presentedView, "data");
+    assert.equal(reloadAppearance.presentedView, "tools");
     assert.equal(reloadAppearance.transitionState, "settled");
     for(const background of [
       reloadAppearance.htmlBackground,

@@ -3,7 +3,6 @@ import {
   assert,
   INITIAL_READ_MODEL_REFRESH_STATE,
   loadDashboardRuntimeSnapshotWithDeps,
-  loadHistoryRuntimeSnapshotWithDeps,
   resolveReadModelRefreshSignal,
   runTest,
 } from "./shared.ts";
@@ -15,45 +14,6 @@ import {
 import type { DashboardSnapshot } from "../../src/features/dashboard/services/dashboardReadModel.ts";
 
 export function runReadModelRuntimeTests() {
-  runTest("history runtime forwards cache options only after mapper readiness and stops on failure", async () => {
-    const date = new Date(2026, 4, 20);
-    const options = { includeWebActivity: false, includeTitleDetails: false };
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => { release = resolve; });
-    let loads = 0;
-    const snapshot = {
-    hasActiveSession: false,
-    fetchedAtMs: 1,
-    daySessions: [],
-    dayWebSegments: [],
-    icons: {},
-    webDomainFavicons: {},
-    webDomainOverrides: {},
-    dayAggregateSessions: [],
-    weeklyAggregateSessions: []
-  };
-    const loadHistorySnapshotWithCache = async (
-      receivedDate?: Date, days?: number, deps?: unknown, receivedOptions?: unknown,
-    ) => {
-      loads += 1;
-      assert.equal(receivedDate, date);
-      assert.equal(days, 14);
-      assert.equal(deps, undefined);
-      assert.equal(receivedOptions, options);
-      return snapshot;
-    };
-    const pending = loadHistoryRuntimeSnapshotWithDeps(date, 14, {
-      ensureProcessMapperRuntimeReady: () => gate, loadHistorySnapshotWithCache,
-    }, options);
-    assert.equal(loads, 0);
-    release();
-    assert.equal(await pending, snapshot);
-    await assert.rejects(loadHistoryRuntimeSnapshotWithDeps(date, 14, {
-      ensureProcessMapperRuntimeReady: async () => { throw new Error("mapper unavailable"); },
-      loadHistorySnapshotWithCache,
-    }, options), /mapper unavailable/);
-    assert.equal(loads, 1);
-  });
   runTest("dashboard cache rejects superseded and invalidated loads without rejecting their callers", async () => {
     clearDashboardSnapshotCache();
     const date = new Date("2026-04-18T09:30:00.000Z");
@@ -148,38 +108,6 @@ export function runReadModelRuntimeTests() {
       "ensure",
       `load:${date.toISOString()}`,
       `cache:${date.toISOString()}`,
-    ]);
-  });
-
-  runTest("history runtime snapshot waits for mapper and forwards rolling range to the cache owner", async () => {
-    const events: string[] = [];
-    const date = new Date("2026-04-18T09:30:00.000Z");
-    const snapshot = {
-    hasActiveSession: false,
-    fetchedAtMs: 456,
-    daySessions: [],
-    dayWebSegments: [],
-    icons: {},
-    webDomainFavicons: {},
-    webDomainOverrides: {},
-    dayAggregateSessions: [],
-    weeklyAggregateSessions: []
-  };
-
-    const result = await loadHistoryRuntimeSnapshotWithDeps(date, 14, {
-      ensureProcessMapperRuntimeReady: async () => {
-        events.push("ensure");
-      },
-      loadHistorySnapshotWithCache: async (receivedDate, receivedRollingDayCount) => {
-        events.push(`load:${receivedDate.toISOString()}:${receivedRollingDayCount}`);
-        return snapshot;
-      },
-    });
-
-    assert.equal(result, snapshot);
-    assert.deepEqual(events, [
-      "ensure",
-      `load:${date.toISOString()}:14`,
     ]);
   });
 

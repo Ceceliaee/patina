@@ -19,7 +19,7 @@ export async function runMiniPagedScenarios({ client, sessionId, appUrl, runTest
     await client.command("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape" }, sessionId);
   };
   try {
-    await patch({ language: "zh-CN", dynamic_effects: "0", hourly_activity_chart_mode: "category", history_timeline_mode: "app",
+    await patch({ language: "zh-CN", hourly_activity_chart_mode: "category", history_timeline_mode: "app",
       refresh_interval_secs: "1", timeline_merge_gap_secs: "0",
       "__app_override::editor.exe": JSON.stringify({ category: "development" }),
       "__app_override::browser.exe": JSON.stringify({ category: "utility" }),

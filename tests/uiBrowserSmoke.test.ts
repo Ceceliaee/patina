@@ -16,17 +16,10 @@ import {
 } from "./uiBrowserSmoke/browserHarness.ts";
 import { tauriBrowserSmokeStubPlugin } from "./uiBrowserSmoke/tauriStubs.ts";
 import { runStartupScenarios } from "./uiBrowserSmoke/startupScenarios.ts";
-import { runAboutScenarios } from "./uiBrowserSmoke/aboutScenarios.ts";
 import { runToolsScenarios } from "./uiBrowserSmoke/toolsScenarios.ts";
 import { runFreeFocusScenarios } from "./uiBrowserSmoke/freeFocusScenarios.ts";
 import { runNavigationScenarios } from "./uiBrowserSmoke/navigationScenarios.ts";
-import { runRemoteBackupRecoveryScenarios, runSettingsScenarios } from "./uiBrowserSmoke/settingsScenarios.ts";
-import { runClassificationScenarios } from "./uiBrowserSmoke/classificationScenarios.ts";
 import { runRequestedIconScenarios } from "./uiBrowserSmoke/requestedIconScenarios.ts";
-import { runAnonymousActivityScenarios } from "./uiBrowserSmoke/anonymousActivityScenarios.ts";
-import { runHistoryReadFailureScenarios, runHistoryScenarios } from "./uiBrowserSmoke/historyScenarios.ts";
-import { runDataReadFailureScenarios, runDataScenarios } from "./uiBrowserSmoke/dataScenarios.ts";
-import { runDataLoadingLayoutScenario } from "./uiBrowserSmoke/dataLoadingLayoutScenario.ts";
 import { runLocaleScenarios } from "./uiBrowserSmoke/localeScenarios.ts";
 import { runMiniScenarios } from "./uiBrowserSmoke/miniScenarios.ts";
 import { runScrollRegionScenarios } from "./uiBrowserSmoke/scrollRegionScenarios.ts";
@@ -54,15 +47,6 @@ const consoleErrors: string[] = [];
 const networkErrors: string[] = [];
 let primaryError: unknown = null;
 const cleanupErrors: unknown[] = [];
-const historyWebTimelineOnly = group === "history-web-timeline";
-const historyWebTimelineTests = new Set([
-  "history title details stay readable at narrow and default widths",
-  "anonymous timeline dots fill the visible bar instead of the hit area",
-  "history excludes hidden domains from rows and favicon requests, then restores retained history",
-  "history timeline cycles app category and web while zoom stays synchronized",
-  "history timeline removes web mode when Web Sync is disabled",
-  "history web timeline keeps an explicit empty state without inferred browser time",
-]);
 const viteCacheDir = mkdtempSync(join(tmpdir(), "patina-vite-smoke-"));
 let server: ViteDevServer | null = null;
 
@@ -153,11 +137,7 @@ try {
     appUrl,
     client: client!,
     sessionId,
-    runTest: historyWebTimelineOnly
-      ? async (name: string, fn: () => Promise<void> | void) => {
-        if (historyWebTimelineTests.has(name)) await runTest(name, fn);
-      }
-      : runTest,
+    runTest,
   };
 
   await runStartupScenarios(smokeContext);
@@ -165,88 +145,45 @@ try {
 
   if (group === "startup") {
     // Startup scenarios above include the real hook subscription lifecycle.
-  } else if (group === "anonymous") {
-    await runAnonymousActivityScenarios(smokeContext);
   } else if (group === "typography") {
     await runTypographyScenarios(smokeContext);
   } else if (group === "locale") {
     await runLocaleScenarios(smokeContext);
   } else if (group === "content") {
-    await runClassificationScenarios(smokeContext);
-    await runAnonymousActivityScenarios(smokeContext);
-    await runHistoryScenarios(smokeContext);
-    await runDataScenarios(smokeContext);
+
   } else if (group === "read-failure") {
-    await runRemoteBackupRecoveryScenarios(smokeContext);
+
     await runRequestedIconScenarios(smokeContext);
-    await runDataReadFailureScenarios(smokeContext);
-    await runHistoryReadFailureScenarios(smokeContext);
-  } else if (group === "settings") {
-    await runSettingsScenarios(smokeContext);
-  } else if (group === "theme") {
-    const { runThemeContrastScenarios } = await import("./uiBrowserSmoke/themeContrastScenarios.ts");
-    await evaluate(client!, sessionId, `document.querySelector('[aria-label="设置"]')?.click()`);
-    await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.settings-button-preview'))`);
-    await runThemeContrastScenarios(smokeContext);
-  } else if (group === "category-filter") {
-    const { runClassificationCategoryFilterScenarios } = await import("./uiBrowserSmoke/classificationCategoryFilterScenarios.ts");
-    await runClassificationCategoryFilterScenarios(smokeContext);
-  } else if (group === "classification") {
-    await runClassificationScenarios(smokeContext);
+
+
   } else if (group === "scroll-region") {
     await runScrollRegionScenarios(smokeContext);
   } else if (group === "mini") {
     await runMiniScenarios(smokeContext);
 
-  } else if (group === "data") {
-    await runDataScenarios(smokeContext, { continuityOnly: true });
-  } else if (group === "data-loading-layout") {
-    await runDataLoadingLayoutScenario(smokeContext);
-  } else if (historyWebTimelineOnly) {
-    await waitForExpression(
-      client!,
-      sessionId,
-      `Boolean(document.querySelector('[aria-label="历史"]'))`,
-      15_000,
-      "History web timeline focused smoke app readiness",
-    );
-    await runHistoryScenarios(smokeContext);
-  } else if (group === "about") {
-    await runAboutScenarios(smokeContext);
+
   } else if (group === "tools") {
     await runToolsScenarios(smokeContext);
   } else if (group === "free-focus") {
     await runFreeFocusScenarios(smokeContext);
   } else if (group === "navigation") {
     await runNavigationScenarios(smokeContext);
-  } else if (group === "history") {
-    await runHistoryScenarios(smokeContext);
-  } else if (group === "data-full") {
-    await runDataScenarios(smokeContext);
   } else {
     await runTypographyScenarios(smokeContext);
     await runScrollRegionScenarios(smokeContext);
 
-    await runAboutScenarios(smokeContext);
 
     await runToolsScenarios(smokeContext);
 
     await runNavigationScenarios(smokeContext);
 
-    await runSettingsScenarios(smokeContext);
-    await runRemoteBackupRecoveryScenarios(smokeContext);
 
-    await runClassificationScenarios(smokeContext);
 
-    await runAnonymousActivityScenarios(smokeContext);
 
-    await runHistoryScenarios(smokeContext);
-
-    await runDataScenarios(smokeContext);
 
     await runRequestedIconScenarios(smokeContext);
-    await runDataReadFailureScenarios(smokeContext);
-    await runHistoryReadFailureScenarios(smokeContext);
+
+
 
     await runLocaleScenarios(smokeContext);
 

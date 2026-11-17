@@ -1,6 +1,5 @@
 import {
   assert,
-  clearSessionsByRangeWithDeps,
   buildReadModelDiagnostics,
   compileSessions,
   isRawCurrentTrackingSnapshot,
@@ -9,14 +8,11 @@ import {
   makeSession,
   materializeLiveSessions,
   resolveLiveCutoffMs,
-  resolveSessionStartCleanupCutoffTime,
   resolveTrackerHealth,
   shouldInvalidateDataCaches,
   runTest,
-  shouldDeleteSessionByStartTime,
 } from "./shared.ts";
 import {
-  buildHistoryView,
   buildDashboardView,
   makeStaleTrackerHealth,
 } from "../helpers/trackingReadModelFixtures.ts";
@@ -215,60 +211,6 @@ export function runRuntimeEffectsTests() {
     assert.equal(shouldInvalidateDataCaches("tracking-status-changed"), false);
   });
 
-  runTest("cleanup uses session start time cutoff and deletes active sessions started before cutoff", () => {
-    const nowMs = new Date(2026, 3, 17, 12, 0, 0, 0).getTime();
-    const cutoffTime = resolveSessionStartCleanupCutoffTime(7, nowMs);
-    const activeBeforeCutoff = makeSession({
-      id: 1001,
-      exeName: "QQ.exe",
-      startTime: cutoffTime - 1,
-      endTime: null,
-      duration: null,
-    });
-    const activeAtCutoff = makeSession({
-      id: 1002,
-      exeName: "Chrome.exe",
-      appName: "Chrome",
-      startTime: cutoffTime,
-      endTime: null,
-      duration: null,
-    });
-
-    assert.equal(shouldDeleteSessionByStartTime(activeBeforeCutoff.startTime, cutoffTime), true);
-    assert.equal(shouldDeleteSessionByStartTime(activeAtCutoff.startTime, cutoffTime), false);
-  });
-
-  runTest("cleanup uses calendar days across month and year boundaries and propagates failure", async () => {
-    for (const [now, days, expected] of [
-      [new Date(2026, 0, 3, 12), 7, new Date(2025, 11, 27, 12)],
-      [new Date(2024, 2, 2, 12), 7, new Date(2024, 1, 24, 12)],
-    ] as const) {
-      let calls = 0;
-      await assert.rejects(clearSessionsByRangeWithDeps(days, now.getTime(), {
-        clearSessionsBefore: async (cutoff) => {
-          calls += 1;
-          assert.equal(cutoff, expected.getTime());
-          throw new Error("cleanup failed");
-        },
-      }), /cleanup failed/);
-      assert.equal(calls, 1);
-    }
-  });
-
-  runTest("cleanup execution uses the local calendar cutoff", async () => {
-    const nowMs = new Date(2026, 3, 17, 12, 0, 0, 0).getTime();
-    const expectedCutoff = new Date(2026, 2, 18, 12).getTime();
-    let deletedCutoffTime: number | null = null;
-
-    await clearSessionsByRangeWithDeps(30, nowMs, {
-      clearSessionsBefore: async (cutoffTime) => {
-        deletedCutoffTime = cutoffTime;
-      },
-    });
-
-    assert.equal(deletedCutoffTime, expectedCutoff);
-  });
-
   runTest("cleanup deletion removes old active sessions from live read model", () => {
     const nowMs = 100_000;
     const trackerHealth = resolveTrackerHealth(nowMs, nowMs, 8_000);
@@ -293,7 +235,7 @@ export function runRuntimeEffectsTests() {
     ];
 
     const afterCleanup = sessions.filter((session) => (
-      !shouldDeleteSessionByStartTime(session.startTime, cutoffTime)
+      session.startTime >= cutoffTime
     ));
     const dashboard = buildDashboardView(afterCleanup, trackerHealth, nowMs);
 
@@ -330,20 +272,10 @@ export function runRuntimeEffectsTests() {
       }),
     ];
     const afterCleanup = sessions.filter((session) => (
-      !shouldDeleteSessionByStartTime(session.startTime, cutoffTime)
+      session.startTime >= cutoffTime
     ));
-    const history = buildHistoryView({
-      daySessions: afterCleanup,
-      weeklySessions: afterCleanup,
-      trackerHealth,
-      nowMs,
-      minSessionSecs: 0,
-      mergeThresholdSecs: 180,
-    });
     const dashboard = buildDashboardView(afterCleanup, trackerHealth, nowMs);
 
-    assert.equal(history.timelineSessions.length, 0);
-    assert.equal(history.diagnostics.suspiciousSessionCount, 0);
     assert.equal(dashboard.compiledSessions.length, 0);
     assert.equal(dashboard.diagnostics.suspiciousSessionCount, 0);
   });

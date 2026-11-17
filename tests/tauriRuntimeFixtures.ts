@@ -107,39 +107,15 @@ export async function verifyBackupReplaceRuntime(client: CdpConnection, root: st
   await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_app_settings", {
     mutations: [{ key: "refresh_interval_secs", value: "88" }],
   })`);
-  assert.equal(await evaluate(client, `(() => {
-    const nav = document.querySelector('[data-sidebar-nav-item="history"]');
-    if (!nav) return false; nav.click(); return true;
-  })()`), true);
-  await waitFor("History date navigation before restore", async () => evaluate(client,
-    `Boolean(document.querySelector('.history-date-label'))`), 10_000);
-  assert.equal(await evaluate(client, `(() => {
-    const previous = document.querySelector('.history-date-label')?.parentElement?.parentElement?.querySelector(':scope > button');
-    if (!previous) return false; previous.click(); return true;
-  })()`), true);
-  const historyContent = `(() => {
-    const page = document.querySelector('[data-history-content-state]');
-    return { state: page?.getAttribute('data-history-content-state'), text: page?.textContent ?? '' };
-  })()`;
-  await waitFor("History warms the post-backup fixture", async () => {
-    const view = await evaluate(client, historyContent) as { state: string; text: string };
-    return view.state === "ready" && view.text.includes("Runtime Restore Original")
-      && view.text.includes("Runtime Restore Added");
-  }, 10_000);
-
   // Observe command names through CDP without replacing Tauri's IPC or replies.
   await verifyAppIconRuntime((expression) => evaluate(client, expression), dbPath);
-  const cacheClearCommands = new Set<string>();
   const mutationCommands = new Set<string>();
   const stopObserving = client.onMessage((message) => {
     if(message.method !== "Network.requestWillBeSent") return;
     const request = (message.params as { request?: { url?: string } } | undefined)?.request;
     if(!request?.url) return;
     const command = new URL(request.url).pathname.slice(1);
-    if(["cmd_clear_history_bootstrap_snapshot_payload", "cmd_clear_data_bootstrap_snapshot_payload"].includes(command)) {
-      cacheClearCommands.add(command);
-    }
-    if(["cmd_commit_classification_settings", "cmd_classification_object_deletion"].includes(command)) {
+    if(["cmd_commit_classification_settings", "cmd_delete_sessions_by_exe_names"].includes(command)) {
       mutationCommands.add(command);
     }
   });
@@ -175,22 +151,13 @@ export async function verifyBackupReplaceRuntime(client: CdpConnection, root: st
         records: Array<{ exeName: string; startTime: number; endTime: number }>;
       }>;
     const resetMutationObservation = async () => {
-      cacheClearCommands.clear();
       mutationCommands.clear();
       await evaluate(client, `window.__patinaRestoreReasons = []; window.__patinaE2eEvents = []`);
     };
     const waitForMutationRefresh = async (reason?: string) => {
-      await waitFor(`mutation cache invalidation${reason ? `: ${reason}` : ""}`, async () => (
-        cacheClearCommands.size === 2 && (!reason || await evaluate(client,
-          `window.__patinaRestoreReasons.includes(${JSON.stringify(reason)})`))
-      ), 10_000);
-    };
-    const waitForHistoryFixture = async (present: string[], absent: string[] = []) => {
-      await waitFor(`History fixture: ${JSON.stringify({ present, absent })}`, async () => {
-        const view = await evaluate(client, historyContent) as { state: string; text: string };
-        return view.state === "ready" && present.every(name => view.text.includes(name))
-          && absent.every(name => !view.text.includes(name));
-      }, 10_000);
+      if (!reason) return;
+      await waitFor(`mutation event: ${reason}`, async () => evaluate(client,
+        `window.__patinaRestoreReasons.includes(${JSON.stringify(reason)})`), 10_000);
     };
 
     const csvPath = join(root, "runtime-import.csv");
@@ -219,7 +186,7 @@ export async function verifyBackupReplaceRuntime(client: CdpConnection, root: st
     assert.equal(imported.exactSessions, 1);
     assert.equal(imported.hourBuckets, 1);
     await waitForMutationRefresh("external-data-imported");
-    await waitForHistoryFixture(["Runtime Import Exact", "Runtime Restore Original"]);
+
     const afterImport = await readSettledStatus();
     assert.ok(afterImport.sourceRevision > beforeImport.sourceRevision);
     const importedAggregate = await readFixtureAggregate();
@@ -238,7 +205,7 @@ export async function verifyBackupReplaceRuntime(client: CdpConnection, root: st
       batchId: ${JSON.stringify(imported.batchId)},
     })`), { deletedExactSessions: 1, deletedHourBuckets: 1 });
     await waitForMutationRefresh("external-import-deleted");
-    await waitForHistoryFixture(["Runtime Restore Original"], ["Runtime Import Exact", "Runtime Import Bucket"]);
+
     const afterImportDeletion = await readSettledStatus();
     assert.ok(afterImportDeletion.sourceRevision > afterImport.sourceRevision);
     const deletedImportAggregate = await readFixtureAggregate();
@@ -247,34 +214,12 @@ export async function verifyBackupReplaceRuntime(client: CdpConnection, root: st
     assert.equal((await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_list_import_batches")`) as Array<{ id: string }>)
       .some(batch => batch.id === imported.batchId), false);
 
-    // These owners invalidate frontend caches through UI callbacks, not a
-    // synthetic tracking-data-changed event. Observe their real IPC requests.
-    const openOriginalClassificationMenu = async () => {
-      assert.equal(await evaluate(client, `(() => {
-        const trigger = Array.from(document.querySelectorAll('.history-day-distribution-detail-trigger'))
-          .find(button => button.getAttribute('aria-label')?.includes('Runtime Restore Original'));
-        if (!trigger) return false;
-        const bounds = trigger.getBoundingClientRect();
-        trigger.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true,
-          clientX: bounds.left + bounds.width / 2, clientY: bounds.top + bounds.height / 2 }));
-        return true;
-      })()`), true);
-      await waitFor("classification category trigger", async () => evaluate(client,
-        `Boolean(document.querySelector('.quick-classification-menu [role="menuitem"][aria-haspopup="menu"]:not(:disabled)'))`), 10_000);
-      await evaluate(client, `document.querySelector('.quick-classification-menu [role="menuitem"][aria-haspopup="menu"]').click()`);
-      await waitFor("classification categories loaded", async () => evaluate(client,
-        `Boolean(document.querySelector('.quick-classification-category-menu [role="menuitemradio"]:not(:disabled)'))`), 10_000);
-    };
     await resetMutationObservation();
-    await openOriginalClassificationMenu();
-    const selectedCategoryLabel = await evaluate(client, `(() => {
-      const option = document.querySelector('.quick-classification-category-menu [role="menuitemradio"]');
-      const label = option.textContent.trim(); option.click(); return label;
-    })()`) as string;
-    assert.ok(selectedCategoryLabel);
-    await waitForMutationRefresh();
+    await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_commit_classification_settings", {
+      mutations: [{key: "__app_override::runtime-restore-original.exe", value: JSON.stringify({displayName: "Runtime Restore Original", category: "ai"})}],
+    })`);
     assert.equal(mutationCommands.has("cmd_commit_classification_settings"), true);
-    await waitForHistoryFixture(["Runtime Restore Original"]);
+
     const overrideRows = await readRuntimeDatabaseRows(expression => evaluate(client, expression), "SELECT value FROM settings WHERE key = ?", ["__app_override::runtime-restore-original.exe"]) as Array<{ value: string }>;
     assert.equal(overrideRows.length, 1);
     assert.equal(JSON.parse(overrideRows[0].value).category, "ai");
@@ -282,59 +227,18 @@ export async function verifyBackupReplaceRuntime(client: CdpConnection, root: st
     assert.equal(afterClassification.sourceRevision, afterImportDeletion.sourceRevision,
       "classification-only changes must not dirty activity facts");
     assert.deepEqual(await readFixtureAggregate(), deletedImportAggregate);
-    await openOriginalClassificationMenu();
-    assert.equal(await evaluate(client, `(() => {
-      const selected = document.querySelector('.quick-classification-category-menu [aria-checked="true"]');
-      return selected?.textContent.trim();
-    })()`), selectedCategoryLabel);
-    await evaluate(client, `window.dispatchEvent(new Event('blur'))`);
-
     await resetMutationObservation();
-    assert.equal(await evaluate(client, `(() => {
-      const nav = document.querySelector('[data-sidebar-nav-item="mapping"]');
-      if (!nav) return false; nav.click(); return true;
-    })()`), true);
-    try {
-      await waitFor("classification fixture delete control", async () => evaluate(client,
-        `Boolean(document.querySelector('[data-classification-app="runtime-restore-original.exe"] .qp-app-mapping-delete:not(:disabled)'))`), 10_000);
-    } catch(error) {
-      console.error("PATINA_CLASSIFICATION_FAILURE", await evaluate(client, `(() => {
-        const page = document.querySelector('[data-classification-content-state]');
-        return {
-          view: document.querySelector('main.qp-canvas')?.getAttribute('data-presented-view'),
-          state: page?.getAttribute('data-classification-content-state'),
-          text: page?.textContent?.slice(0, 4000),
-          apps: Array.from(document.querySelectorAll('[data-classification-app]')).map(row => row.getAttribute('data-classification-app')),
-          search: page?.querySelector('input')?.value,
-          mode: localStorage.getItem('patina:classification-object-mode'),
-          dialogs: Array.from(document.querySelectorAll('[role="dialog"]')).map(dialog => dialog.textContent?.slice(0, 200)),
-        };
-      })()`));
-      throw error;
-    }
-    await evaluate(client, `document.querySelector('[data-classification-app="runtime-restore-original.exe"] .qp-app-mapping-delete').click()`);
-    await waitFor("isolated fixture deletion confirmation", async () => evaluate(client,
-      `Boolean(Array.from(document.querySelectorAll('[role="dialog"]')).find(dialog =>
-        dialog.textContent.includes('Runtime Restore Original'))?.querySelector('.qp-button-danger:not(:disabled)'))`), 10_000);
-    await evaluate(client, `Array.from(document.querySelectorAll('[role="dialog"]')).find(dialog =>
-      dialog.textContent.includes('Runtime Restore Original')).querySelector('.qp-button-danger').click()`);
+    await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_delete_sessions_by_exe_names", {
+      exeNames: ["runtime-restore-original.exe"],
+    })`);
     await waitForMutationRefresh();
-    assert.equal(mutationCommands.has("cmd_classification_object_deletion"), true);
-    await waitFor("classification catalog removes deleted fixture", async () => evaluate(client,
-      `document.querySelector('[data-classification-content-state]')?.getAttribute('data-classification-content-state') === 'ready'
-        && !document.querySelector('[data-classification-app="runtime-restore-original.exe"]')`), 10_000);
+    assert.equal(mutationCommands.has("cmd_delete_sessions_by_exe_names"), true);
     assert.deepEqual(await readRuntimeDatabaseRows(expression => evaluate(client, expression), "SELECT value FROM settings WHERE key = ?", ["__app_override::runtime-restore-original.exe"]), []);
     const afterCleanup = await readSettledStatus();
     assert.ok(afterCleanup.sourceRevision > afterClassification.sourceRevision);
     const cleanedAggregate = await readFixtureAggregate();
     assert.equal(cleanedAggregate.sourceRevision, afterCleanup.sourceRevision);
     assert.deepEqual(cleanedAggregate.records.filter(row => row.exeName === "runtime-restore-original.exe"), []);
-    await evaluate(client, `document.querySelector('[data-sidebar-nav-item="history"]').click()`);
-    await waitFor("History date navigation after cleanup", async () => evaluate(client,
-      `Boolean(document.querySelector('.history-date-label'))`), 10_000);
-    await evaluate(client, `document.querySelector('.history-date-label').parentElement.parentElement.querySelector(':scope > button').click()`);
-    await waitForHistoryFixture(["Runtime Restore Added"], ["Runtime Restore Original"]);
-
     await resetMutationObservation();
     await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_restore_backup", {
       backupPath: ${JSON.stringify(backupPath)}, hash: ${JSON.stringify(preview.hash)}, restoreStrategy: "merge",
@@ -342,7 +246,7 @@ export async function verifyBackupReplaceRuntime(client: CdpConnection, root: st
     await waitForMutationRefresh("backup-restored");
     await waitFor("merge settings refresh event", async () => evaluate(client,
       `window.__patinaE2eEvents.includes('app-settings-changed')`), 10_000);
-    await waitForHistoryFixture(["Runtime Restore Original", "Runtime Restore Added"]);
+
     const afterMerge = await readSettledStatus();
     assert.ok(afterMerge.sourceRevision > afterCleanup.sourceRevision);
     const mergedAggregate = await readFixtureAggregate();
@@ -354,8 +258,8 @@ export async function verifyBackupReplaceRuntime(client: CdpConnection, root: st
       environment: "isolated debug Tauri/WebView2 with real SQLite", importRecords: 2,
       importedDurationsMs: [360_000, 600_000], deletedImportBatch: true,
       classificationCategory: "ai", classificationKeptActivityRevision: true,
-      cleanupViaClassificationUi: true, mergeRestoredNativeDurationMs: 120_000,
-      mergePreservedCurrentSetting: "88", historyRefreshedAfterEachMutation: true,
+      cleanupViaExecutableCommand: true, mergeRestoredNativeDurationMs: 120_000,
+      mergePreservedCurrentSetting: "88",
       revisions: [beforeImport, afterImport, afterImportDeletion, afterClassification, afterCleanup, afterMerge]
         .map(state => state.sourceRevision),
     }));
@@ -374,15 +278,10 @@ export async function verifyBackupReplaceRuntime(client: CdpConnection, root: st
     assert.deepEqual(await readRuntimeDatabaseRows(expression => evaluate(client, expression), "SELECT value FROM settings WHERE key = ?", ["__app_override::runtime-restore-original.exe"]), []);
     assert.deepEqual(await readRuntimeDatabaseRows(expression => evaluate(client, expression), "SELECT value FROM settings WHERE key = ?", ["refresh_interval_secs"]), [{ value: "77" }]);
     assert.deepEqual(await readRuntimeDatabaseRows(expression => evaluate(client, expression), "SELECT value FROM settings WHERE key = ?", ["tracking_paused"]), [{ value: "1" }]);
-    await waitFor("restore events and frontend cache invalidation", async () => {
+    await waitFor("restore settings and recording events", async () => {
       const events = await evaluate(client, `window.__patinaRestoreReasons.includes('backup-restored')
         && window.__patinaE2eEvents.includes('app-settings-changed')`);
-      return events && cacheClearCommands.size === 2;
-    }, 10_000);
-    await waitFor("History replaces its warmed post-backup snapshot", async () => {
-      const view = await evaluate(client, historyContent) as { state: string; text: string };
-      return view.state === "ready" && view.text.includes("Runtime Restore Original")
-        && !view.text.includes("Runtime Restore Added");
+      return events;
     }, 10_000);
     await waitFor("restored activity projections rebuild", async () => {
       const state = await evaluate(client, `window.__TAURI_INTERNALS__.invoke("cmd_get_activity_read_model_status")`) as {
@@ -421,7 +320,6 @@ export async function verifyBackupReplaceRuntime(client: CdpConnection, root: st
       environment: "isolated debug Tauri/WebView2 with real SQLite",
       format: preview.format_kind, strategy: "replace", previewHashVerified: true,
       typedReadAfterReplace: true, originalDurationMs: 120_000, postBackupFactRemoved: true,
-      frontendCacheClearCommands: [...cacheClearCommands].sort(), historyWarmSnapshotRefreshed: true,
       projectionRebuilt: true, recoveryFilesCleaned: true,
       restoredPauseSettingReplacedDifferentLiveValue: true,
       pausedTrackerPersistedAfterReplace: true, resumedTrackerPersistedAgain: true,
