@@ -1,10 +1,3 @@
-:root {
-  --qp-motion-enhanced-overlay-duration: 100ms;
-  --qp-motion-enhanced-nav-bg-duration: 260ms;
-  --qp-motion-enhanced-nav-indicator-duration: 320ms;
-  --qp-motion-enhanced-pane-duration: 150ms;
-  --qp-motion-enhanced-nav-bounce-ease: cubic-bezier(0.2, 1.28, 0.34, 1);
-}
 
 .qp-motion-overlay-enter,
 .qp-motion-popover-enter,
@@ -12,48 +5,13 @@
   animation: none;
 }
 
-[data-qp-motion="enhanced"] .qp-motion-overlay-enter,
-[data-qp-motion="enhanced"] .qp-motion-popover-enter,
-[data-qp-motion="enhanced"] .qp-toast-entry {
-  animation: qp-motion-fade-in var(--qp-motion-enhanced-overlay-duration) var(--qp-motion-ease) both;
-}
 
-[data-qp-motion="enhanced"] .tools-section-pane,
-[data-qp-motion="enhanced"] .tools-mode-content-pane,
-[data-qp-motion="enhanced"] .qp-classification-object-pane {
-  animation: qp-horizontal-pane-enter var(--qp-motion-enhanced-pane-duration) var(--qp-motion-ease) both;
-}
 
-[data-qp-motion="enhanced"] .data-heatmap-loading-state .data-heatmap-cell {
-  background: var(--qp-bg-elevated);
-  animation: qp-skeleton-pulse 1.4s ease-in-out infinite;
-}
 
-[data-qp-motion="enhanced"] .data-heatmap-loading-state .data-heatmap-cell-future,
-[data-qp-motion="enhanced"] .data-heatmap-loading-state .data-heatmap-cell-outside {
-  border-color: transparent;
-  background: transparent;
-}
 
-[data-qp-motion="enhanced"] .data-heatmap-loading-state .data-heatmap-months,
-[data-qp-motion="enhanced"] .data-heatmap-loading-state .data-heatmap-weekdays {
-  opacity: 0.58;
-}
 
-[data-qp-motion="enhanced"] .qp-nav-active-bg {
-  transform: translate3d(0, calc(var(--qp-active-nav-index) * 3.125rem), 0);
-  transition: transform var(--qp-motion-enhanced-nav-bg-duration) var(--qp-motion-enhanced-nav-bounce-ease);
-}
 
-[data-qp-motion="enhanced"] .qp-nav-active-indicator {
-  transform: translate3d(0, calc(var(--qp-active-nav-index) * 3.125rem), 0);
-  transition: transform var(--qp-motion-enhanced-nav-indicator-duration) var(--qp-motion-enhanced-nav-bounce-ease);
-}
 
-[data-qp-motion="enhanced"] .tools-section-active-bg {
-  transform: translate3d(0, calc(var(--tools-active-section-index) * 48px), 0);
-  transition: transform var(--qp-motion-enhanced-nav-indicator-duration) var(--qp-motion-enhanced-nav-bounce-ease);
-}
 
 :root[data-qp-motion="reduced"] .qp-motion-overlay-enter,
 :root[data-qp-motion="reduced"] .qp-motion-popover-enter,
@@ -69,36 +27,4 @@
 :root[data-qp-motion="reduced"] .qp-nav-active-indicator,
 :root[data-qp-motion="reduced"] .tools-section-active-bg {
   transition: none !important;
-}
-
-@keyframes qp-motion-fade-in {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes qp-horizontal-pane-enter {
-  from {
-    opacity: 0;
-    transform: translate3d(4px, 0, 0);
-  }
-
-  to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
-}
-
-@keyframes qp-skeleton-pulse {
-  0%, 100% {
-    opacity: 0.68;
-  }
-
-  50% {
-    opacity: 1;
-  }
 }

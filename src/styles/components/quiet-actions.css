@@ -91,23 +91,19 @@
   background: color-mix(in srgb, var(--qp-danger) 10%, transparent);
 }
 
-.hourly-chart-mode-toggle.qp-icon-action-pressed,
-.history-timeline-mode-toggle.qp-icon-action-pressed {
+.hourly-chart-mode-toggle.qp-icon-action-pressed {
   border-color: transparent;
   background: transparent;
   color: var(--qp-text-tertiary);
 }
 
-.hourly-chart-mode-toggle,
-.history-timeline-mode-toggle {
+.hourly-chart-mode-toggle {
   flex: 0 0 auto;
   margin-right: -6px;
 }
 
 .hourly-chart-mode-toggle.qp-icon-action-neutral:hover:not(:disabled),
-.hourly-chart-mode-toggle.qp-icon-action-pressed:hover:not(:disabled),
-.history-timeline-mode-toggle.qp-icon-action-neutral:hover:not(:disabled),
-.history-timeline-mode-toggle.qp-icon-action-pressed:hover:not(:disabled) {
+.hourly-chart-mode-toggle.qp-icon-action-pressed:hover:not(:disabled) {
   border-color: transparent;
   background: transparent;
   color: var(--qp-accent-default);
