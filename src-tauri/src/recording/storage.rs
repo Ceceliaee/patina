@@ -15,8 +15,13 @@ use std::{
 };
 use tokio::sync::Mutex;
 
-#[derive(Serialize, Deserialize)]
+#[path = "storage/migration.rs"]
+mod migration;
+
+#[derive(Clone, Serialize, Deserialize)]
 pub enum StorageRequest {
+    ExportPreferences(Option<Value>),
+    ResumeAfterUpdate(Option<String>),
     Info,
     Export(export::write::ExportDataRequest),
     Convert(String),
@@ -35,6 +40,7 @@ pub enum StorageRequest {
     },
     Cleanup(u16),
     Move(Option<PathBuf>),
+    PreviewMove(Option<PathBuf>),
     DavInfo,
     DavReveal(usize),
     DavSave {
@@ -72,6 +78,10 @@ struct Location {
     pending: Option<PathBuf>,
     #[serde(default)]
     staged: Option<PathBuf>,
+    #[serde(default)]
+    backups: Option<PathBuf>,
+    #[serde(default)]
+    staged_backups: Option<PathBuf>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     move_error: Option<String>,
 }
@@ -85,6 +95,8 @@ fn location(profile: &Path) -> Result<Location, String> {
             active: profile.to_owned(),
             pending: None,
             staged: None,
+            backups: None,
+            staged_backups: None,
             move_error: None,
         }),
         Err(e) => Err(e.to_string()),
@@ -108,6 +120,7 @@ fn check_destination(root: &Path) -> Result<(), String> {
         "patina.db-wal",
         "patina.db-shm",
         "patina.db-journal",
+        "backups",
     ] {
         if fs::symlink_metadata(root.join(name)).is_ok() {
             return Err("The destination already contains a Patina database".into());
@@ -189,6 +202,7 @@ fn publish_candidate(
         temp.keep().map_err(|e| e.to_string())?;
         stage
     };
+    migration::publish_backups(profile, state, next)?;
     if destination.exists() {
         if !same_file::is_same_file(&stage, destination).map_err(|e| e.to_string())? {
             return Err("Destination changed during migration".into());
@@ -210,6 +224,7 @@ pub fn database_for_profile(profile: &Path) -> Result<PathBuf, String> {
             Ok(stage) => stage,
             Err(error) => {
                 state.pending = None;
+                migration::rollback_backups(&mut state, &next);
                 let stage = state.staged.take();
                 state.move_error = Some(error);
                 publish(profile, &state)?;
@@ -222,12 +237,23 @@ pub fn database_for_profile(profile: &Path) -> Result<PathBuf, String> {
         state.pending = None;
         state.staged = None;
         state.move_error = None;
+        let previous_backups = state
+            .backups
+            .clone()
+            .unwrap_or_else(|| profile.join("backups"));
+        state.backups = Some(next.join("backups"));
+        let backup_stage = state.staged_backups.take();
         state.active = next;
         publish(profile, &state)?;
         // Only remove the previous DB after the location pointer is durable.
         // Leave a closed source in place if Windows refuses to delete it.
         let _ = fs::remove_file(stage);
         let _ = fs::remove_file(&old);
+        migration::finish_backups(
+            &previous_backups,
+            state.backups.as_ref().unwrap(),
+            backup_stage.as_deref(),
+        );
         return Ok(destination);
     }
     Ok(old)
@@ -251,8 +277,14 @@ impl Storage {
             profile: profile.into(),
             legacy: profile.into(),
             database: database.into(),
-            backups: profile.join("backups"),
-            temp: profile.join("remote-backup-temp"),
+            backups: location(profile)
+                .ok()
+                .and_then(|s| s.backups)
+                .unwrap_or_else(|| profile.join("backups")),
+            temp: database
+                .parent()
+                .unwrap_or(profile)
+                .join("remote-backup-temp"),
             target: Box::new(move || {
                 let dav = Dav::new(&root);
                 let db = remote_pool.clone();
@@ -357,6 +389,51 @@ impl Storage {
         let s = self;
         use StorageRequest::*;
         let value = match request {
+            ExportPreferences(value) => {
+                if let Some(value) = value {
+                    sqlx::query("INSERT INTO settings(key,value) VALUES('__export_preferences',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+                        .bind(value.to_string()).execute(pool).await.map_err(|e| e.to_string())?;
+                    Value::Null
+                } else {
+                    sqlx::query_scalar::<_, String>(
+                        "SELECT value FROM settings WHERE key='__export_preferences'",
+                    )
+                    .fetch_optional(pool)
+                    .await
+                    .map_err(|e| e.to_string())?
+                    .and_then(|v| serde_json::from_str(&v).ok())
+                    .unwrap_or(Value::Null)
+                }
+            }
+            ResumeAfterUpdate(page) => {
+                if let Some(page) = page {
+                    if ![
+                        "Today",
+                        "History",
+                        "Data",
+                        "Classification",
+                        "Tools",
+                        "Settings",
+                        "About",
+                        "",
+                    ]
+                    .contains(&page.as_str())
+                    {
+                        return Err("Invalid resume page".into());
+                    }
+                    sqlx::query("INSERT INTO settings(key,value) VALUES('__update_resume_page',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+                        .bind(page).execute(pool).await.map_err(|e| e.to_string())?;
+                    Value::Null
+                } else {
+                    let page = sqlx::query_scalar::<_, String>(
+                        "DELETE FROM settings WHERE key='__update_resume_page' RETURNING value",
+                    )
+                    .fetch_optional(pool)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                    json!(page)
+                }
+            }
             Info => {
                 let install = std::env::current_exe()
                     .map_err(|e| e.to_string())?
@@ -375,13 +452,20 @@ impl Storage {
                 let location = location(&s.profile)?;
                 let dav = crate::data::repositories::remote_backup_settings::load_config(pool).await?
                     .map(|config| json!({"url":config.url,"username":config.username,"remoteDir":config.remote_dir}));
-                json!({"install":install,"data":s.database.parent(),"default":s.profile,"bytes":bytes,"pending":location.pending,"moveError":location.move_error,"dav":dav})
+                let install_bytes = migration::directory_size(
+                    &install,
+                    &[s.database.parent().unwrap_or(&s.profile), &s.profile],
+                );
+                json!({"install":install,"installBytes":install_bytes,"data":s.database.parent(),"default":s.profile,"bytes":bytes,"pending":location.pending,"moveError":location.move_error,"dav":dav})
+            }
+            PreviewMove(directory) => {
+                let target = migration::destination(&s.profile, directory.as_deref())?;
+                json!({"from": s.database.parent(), "to": target})
             }
             Move(directory) => {
-                let dest = directory
-                    .unwrap_or_else(|| s.profile.clone())
-                    .canonicalize()
-                    .map_err(|e| e.to_string())?;
+                let dest = migration::destination(&s.profile, directory.as_deref())?;
+                fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
+                let dest = dest.canonicalize().map_err(|e| e.to_string())?;
                 let mut state = location(&s.profile)?;
                 if state.active != dest {
                     check_destination(&dest)?;
@@ -438,8 +522,10 @@ impl Storage {
             }
             PreviewRestore(path) => {
                 let p = backup::preview(&path).await?;
+                let mut value = json!(p);
+                value["filePath"] = json!(path);
                 *s.prepared.lock().await = Some((p.hash.clone(), path.into(), None));
-                json!(p)
+                value
             }
             Restore { hash, replace } => {
                 let mut selected = s.prepared.lock().await;
@@ -546,8 +632,10 @@ impl Storage {
             DavDownload(id) => {
                 let tmp = tempfile::tempdir().map_err(|e| e.to_string())?;
                 let (path, p) = s.dav.download(pool, &id, tmp.path()).await?;
+                let mut value = json!(p);
+                value["filePath"] = json!(path);
                 *s.prepared.lock().await = Some((p.hash.clone(), path, Some(tmp)));
-                json!(p)
+                value
             }
             Schedule { backup: true } => {
                 json!(crate::data::scheduled_backup::get_snapshot(&s.jobs).await?)
