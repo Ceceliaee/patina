@@ -1,11 +1,6 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 import { ClassificationService } from "../../features/classification/services/classificationService.ts";
 import { clearDashboardSnapshotCache } from "../../features/dashboard/services/dashboardSnapshotCache.ts";
-import {
-  clearDataBootstrapCache,
-  clearDataHeavyCaches,
-} from "../../features/data/services/dataCacheLifecycle.ts";
-import { clearHistoryCachesAfterDataChange } from "../../features/history/services/historyCacheLifecycle.ts";
 import { clearToolsPageCaches } from "../../features/tools/services/toolsCacheLifecycle.ts";
 import {
   applyMappingOverridesReadModelRefresh,
@@ -17,24 +12,17 @@ export function useImportClassificationCoordinator(
 ) {
   const onMappingOverridesChanged = useCallback(() => {
     clearDashboardSnapshotCache();
-    void clearHistoryCachesAfterDataChange();
     clearToolsPageCaches();
-    clearDataHeavyCaches();
-    void clearDataBootstrapCache();
     setReadModelRefreshState(applyMappingOverridesReadModelRefresh);
   }, [setReadModelRefreshState]);
   const onImportedDataChanged = useCallback(() => {
     ClassificationService.invalidateBootstrapCache();
-    ClassificationService.invalidateAppCatalog();
     clearDashboardSnapshotCache();
     clearToolsPageCaches();
     void Promise.all([
-      clearHistoryCachesAfterDataChange(),
-      clearDataBootstrapCache(),
     ]).then(async () => {
       const bootstrap = await ClassificationService.loadClassificationBootstrap();
       ClassificationService.applyBootstrapToProcessMapper(bootstrap);
-      await ClassificationService.refreshAppCatalog().catch(() => undefined);
     }).catch(() => {
       ClassificationService.invalidateBootstrapCache();
     });

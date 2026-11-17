@@ -63,13 +63,6 @@ export default function AppViewOutlet({
 
     if (!contentReady || displayedView !== renderedView) return undefined;
 
-    // Cached chart content is already committed; present it before paint and
-    // let its feature refresh the data without delaying navigation.
-    if (displayedView === "history" || displayedView === "data") {
-      finishTransition();
-      return undefined;
-    }
-
     const animationFrameId = window.requestAnimationFrame(finishTransition);
     const fallbackTimerId = window.setTimeout(finishTransition, 50);
     return () => {

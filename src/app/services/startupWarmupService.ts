@@ -5,39 +5,21 @@ import {
   getDashboardSnapshotCache,
 } from "../../features/dashboard/services/dashboardSnapshotCache.ts";
 import {
-  getHistorySnapshotCache,
-} from "../../features/history/services/historySnapshotCache.ts";
-import {
-  loadPersistedHistoryBootstrapSnapshot,
-} from "../../features/history/services/historyBootstrapSnapshot.ts";
-import {
-  prewarmSettingsBootstrapCache,
-} from "../../features/settings/services/settingsBootstrapService.ts";
-import {
   prewarmToolsRuntimeSnapshot,
 } from "../../features/tools/services/toolsRuntimeSnapshotStore.ts";
 import {
   loadDashboardRuntimeSnapshot,
-  loadDataTrendRuntimeSnapshot,
-  loadHistoryRuntimeSnapshot,
 } from "./readModelRuntimeService.ts";
 import {
   preloadLazyViewChunk,
   type PreloadableView,
 } from "./viewChunkPreloadService.ts";
-import { getLocaleText } from "../../shared/i18n/runtime.ts";
-import type { UiText } from "../../shared/i18n/index.ts";
 
 export type StartupWarmupTaskId =
   | "view-chunks"
-  | "settings-bootstrap"
   | "mapping-bootstrap"
-  | "data-bootstrap-snapshot-cache"
-  | "history-bootstrap-snapshot-cache"
   | "dashboard-snapshot"
-  | "history-today-snapshot"
   | "tools-runtime-snapshot"
-  | "about-bootstrap";
 
 type StartupWarmupTaskStatus =
   | "idle"
@@ -87,19 +69,9 @@ type StartupWarmupScheduler = (
 
 interface StartupWarmupDeps {
   getDashboardSnapshotCache: (date?: Date) => unknown | null;
-  getHistorySnapshotCache: (date?: Date, rollingDayCount?: number) => unknown | null;
   loadDashboardRuntimeSnapshot: (date?: Date) => Promise<unknown>;
-  loadDataTrendRuntimeSnapshot: (
-    selection: Parameters<typeof loadDataTrendRuntimeSnapshot>[0],
-    nowMs: number,
-    uiText: UiText,
-  ) => Promise<unknown>;
-  loadHistoryRuntimeSnapshot: (date: Date, rollingDayCount?: number) => Promise<unknown>;
-  loadPersistedDataBootstrapSnapshot: () => Promise<unknown>;
-  loadPersistedHistoryBootstrapSnapshot: typeof loadPersistedHistoryBootstrapSnapshot;
   preloadLazyViewChunk: (view: PreloadableView) => Promise<unknown>;
   prewarmClassificationBootstrapCache: () => Promise<unknown>;
-  prewarmSettingsBootstrapCache: () => Promise<unknown>;
   prewarmToolsRuntimeSnapshot: () => Promise<unknown>;
   scheduler: StartupWarmupScheduler;
   nowMs: () => number;
@@ -107,63 +79,32 @@ interface StartupWarmupDeps {
 }
 
 interface StartupWarmupTaskPolicy {
-  aboutBootstrap: boolean;
   dashboardSnapshot: boolean;
-  dataBootstrapSnapshotCache: boolean;
-  historyTodaySnapshot: boolean;
-  historyBootstrapSnapshotCache: boolean;
   mappingBootstrap: boolean;
-  settingsBootstrap: boolean;
   toolsRuntimeSnapshot: boolean;
   viewChunks: boolean;
 }
 
-interface StartupWarmupRefreshOptions {
-  includeData?: boolean;
-  includeHistory?: boolean;
-}
 
 const STARTUP_WARMUP_TASKS: StartupWarmupTaskId[] = [
   "view-chunks",
-  "settings-bootstrap",
   "mapping-bootstrap",
-  "data-bootstrap-snapshot-cache",
-  "history-bootstrap-snapshot-cache",
   "dashboard-snapshot",
-  "history-today-snapshot",
   "tools-runtime-snapshot",
-  "about-bootstrap",
 ];
 
 const DEFAULT_STARTUP_WARMUP_VIEWS: PreloadableView[] = [
-  "history",
-  "data",
   "tools",
-  "mapping",
-  "settings",
-  "about",
 ];
 
 const DEFAULT_INITIAL_DELAY_MS = 1_000;
 const DEFAULT_TASK_GAP_MS = 250;
-const DEFAULT_REFRESH_DEBOUNCE_MS = 45_000;
 
 const defaultStartupWarmupDeps: StartupWarmupDeps = {
   getDashboardSnapshotCache,
-  getHistorySnapshotCache,
   loadDashboardRuntimeSnapshot,
-  loadDataTrendRuntimeSnapshot,
-  loadHistoryRuntimeSnapshot,
-  loadPersistedDataBootstrapSnapshot: async () => {
-    const { loadPersistedDataBootstrapSnapshot } = await import(
-      "../../features/data/services/dataBootstrapSnapshot.ts"
-    );
-    return loadPersistedDataBootstrapSnapshot();
-  },
-  loadPersistedHistoryBootstrapSnapshot,
   preloadLazyViewChunk,
   prewarmClassificationBootstrapCache,
-  prewarmSettingsBootstrapCache,
   prewarmToolsRuntimeSnapshot,
   scheduler: (callback, delayMs) => {
     const handle = globalThis.setTimeout(callback, delayMs);
@@ -174,31 +115,20 @@ const defaultStartupWarmupDeps: StartupWarmupDeps = {
 };
 
 let activeStartupWarmup: StartupWarmupController | null = null;
-let cancelScheduledRefresh: (() => void) | null = null;
 
 function resolveStartupWarmupTaskPolicy(mode: StartupWarmupMode): StartupWarmupTaskPolicy {
   if (mode === "hidden-start") {
     return {
-      aboutBootstrap: false,
       dashboardSnapshot: false,
-      dataBootstrapSnapshotCache: false,
-      historyTodaySnapshot: false,
-      historyBootstrapSnapshotCache: true,
       mappingBootstrap: false,
-      settingsBootstrap: false,
       toolsRuntimeSnapshot: false,
       viewChunks: false,
     };
   }
 
   return {
-    aboutBootstrap: true,
     dashboardSnapshot: true,
-    dataBootstrapSnapshotCache: true,
-    historyTodaySnapshot: false,
-    historyBootstrapSnapshotCache: true,
     mappingBootstrap: true,
-    settingsBootstrap: true,
     toolsRuntimeSnapshot: true,
     viewChunks: true,
   };
@@ -328,20 +258,8 @@ export function startStartupWarmup(
     tasks: createInitialTaskSnapshot(),
   };
   const delay = createDelay(resolvedDeps.scheduler, () => cancelled);
-  const eagerHistoryBootstrapSnapshot = taskPolicy.historyBootstrapSnapshotCache
-    ? resolvedDeps.loadPersistedHistoryBootstrapSnapshot().then(
-      (value) => ({ error: null, value }),
-      (error: unknown) => ({ error, value: null }),
-    )
-    : Promise.resolve({ error: null, value: null });
   const eagerClassificationBootstrap = taskPolicy.mappingBootstrap
     ? resolvedDeps.prewarmClassificationBootstrapCache().then(
-      (value) => ({ error: null, value }),
-      (error: unknown) => ({ error, value: null }),
-    )
-    : Promise.resolve({ error: null, value: null });
-  const eagerSettingsBootstrap = taskPolicy.settingsBootstrap
-    ? resolvedDeps.prewarmSettingsBootstrapCache().then(
       (value) => ({ error: null, value }),
       (error: unknown) => ({ error, value: null }),
     )
@@ -375,15 +293,6 @@ export function startStartupWarmup(
       }
     });
 
-    await runTask("settings-bootstrap", async () => {
-      if (!taskPolicy.settingsBootstrap) {
-        return "skipped";
-      }
-
-      const result = await eagerSettingsBootstrap;
-      if (result.error) throw result.error;
-    });
-
     await runTask("mapping-bootstrap", async () => {
       if (!taskPolicy.mappingBootstrap) {
         return "skipped";
@@ -393,28 +302,10 @@ export function startStartupWarmup(
       if (result.error) throw result.error;
     });
 
-    await runTask("data-bootstrap-snapshot-cache", async () => {
-      if (!taskPolicy.dataBootstrapSnapshotCache) {
-        return "skipped";
-      }
 
-      const snapshot = await resolvedDeps.loadPersistedDataBootstrapSnapshot();
-      return snapshot ? "fulfilled" : "skipped";
-    });
-
-    await runTask("history-bootstrap-snapshot-cache", async () => {
-      if (!taskPolicy.historyBootstrapSnapshotCache) {
-        return "skipped";
-      }
-
-      const result = await eagerHistoryBootstrapSnapshot;
-      if (result.error) throw result.error;
-      return result.value ? "fulfilled" : "skipped";
-    });
 
     if (
       taskPolicy.dashboardSnapshot
-      || taskPolicy.historyTodaySnapshot
       || taskPolicy.toolsRuntimeSnapshot
     ) {
       await waitForRuntimeReady(options.runtimeReady, () => cancelled);
@@ -433,18 +324,6 @@ export function startStartupWarmup(
       await resolvedDeps.loadDashboardRuntimeSnapshot(date);
     });
 
-    await runTask("history-today-snapshot", async () => {
-      if (!taskPolicy.historyTodaySnapshot) {
-        return "skipped";
-      }
-
-      const date = new Date();
-      if (resolvedDeps.getHistorySnapshotCache(date, 7)) {
-        return "skipped";
-      }
-
-      await resolvedDeps.loadHistoryRuntimeSnapshot(date, 7);
-    });
 
     await runTask("tools-runtime-snapshot", async () => {
       if (!taskPolicy.toolsRuntimeSnapshot) {
@@ -454,13 +333,6 @@ export function startStartupWarmup(
       await resolvedDeps.prewarmToolsRuntimeSnapshot();
     });
 
-    await runTask("about-bootstrap", async () => {
-      if (!taskPolicy.aboutBootstrap) {
-        return "skipped";
-      }
-
-      await resolvedDeps.prewarmSettingsBootstrapCache();
-    });
   })()
     .catch((error) => {
       if (!cancelled) {
@@ -494,64 +366,7 @@ export function startStartupWarmup(
   return controller;
 }
 
-export function scheduleStartupWarmupRefresh(
-  debounceMs: number = DEFAULT_REFRESH_DEBOUNCE_MS,
-  options: StartupWarmupRefreshOptions = {},
-  deps: Pick<
-    StartupWarmupDeps,
-    | "loadDataTrendRuntimeSnapshot"
-    | "loadHistoryRuntimeSnapshot"
-    | "scheduler"
-    | "nowMs"
-    | "warn"
-  > = defaultStartupWarmupDeps,
-): () => void {
-  cancelScheduledRefresh?.();
-
-  let cancelled = false;
-  cancelScheduledRefresh = deps.scheduler(() => {
-    cancelScheduledRefresh = null;
-    if (cancelled) {
-      return;
-    }
-
-    const tasks: Array<Promise<unknown>> = [];
-
-    if (options.includeHistory ?? true) {
-      tasks.push(deps.loadHistoryRuntimeSnapshot(new Date(), 7));
-    }
-
-    if (options.includeData) {
-      tasks.push(deps.loadDataTrendRuntimeSnapshot(
-        { kind: "rolling", days: 7 },
-        deps.nowMs(),
-        getLocaleText("zh-CN"),
-      ));
-    }
-
-    if (tasks.length === 0) {
-      return;
-    }
-
-    void Promise.allSettled(tasks).then((results) => {
-      for (const result of results) {
-        if (result.status === "rejected") {
-          deps.warn("Startup warm-up refresh failed", result.reason);
-        }
-      }
-    });
-  }, debounceMs);
-
-  return () => {
-    cancelled = true;
-    cancelScheduledRefresh?.();
-    cancelScheduledRefresh = null;
-  };
-}
-
 export function resetStartupWarmupForTests(): void {
   activeStartupWarmup?.cancel();
   activeStartupWarmup = null;
-  cancelScheduledRefresh?.();
-  cancelScheduledRefresh = null;
 }

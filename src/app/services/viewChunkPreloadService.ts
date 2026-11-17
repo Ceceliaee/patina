@@ -1,17 +1,12 @@
 import { createElement, type ComponentType } from "react";
 
-export type PreloadableView = "history" | "settings" | "mapping" | "data" | "tools" | "about";
+export type PreloadableView = "tools";
 
 type ViewChunkLoader = () => Promise<unknown>;
 type ViewChunkLoaders = Record<PreloadableView, ViewChunkLoader>;
 type ViewChunkStatus = "idle" | "pending" | "resolved" | "rejected";
 const DEFAULT_VIEW_CHUNK_LOADERS: ViewChunkLoaders = {
-  history: () => import("../../features/history/components/History"),
-  settings: () => import("../../features/settings/components/Settings"),
-  mapping: () => import("../../features/classification/components/AppMapping"),
-  data: () => import("../../features/data/components/Data"),
   tools: () => import("../../features/tools/components/Tools"),
-  about: () => import("../../features/about/components/About"),
 };
 
 interface ViewChunkRecord {

@@ -23,12 +23,6 @@ import {
   subscribeAppSettingsChanged,
 } from "../services/appSettingsRuntimeService.ts";
 import { clearDashboardSnapshotCache } from "../../features/dashboard/services/dashboardSnapshotCache.ts";
-import {
-  clearDataBootstrapCache,
-  clearDataHeavyCaches,
-} from "../../features/data/services/dataCacheLifecycle.ts";
-import { clearHistoryCachesAfterDataChange } from "../../features/history/services/historyCacheLifecycle.ts";
-import { ClassificationService } from "../../features/classification/services/classificationService.ts";
 import { startTrackerHealthPolling } from "../services/trackerHealthPollingService";
 import { shouldInvalidateDataCaches } from "./trackingDataChangedPolicy.ts";
 import { createLatestSnapshotRefresh } from "../services/latestSnapshotRefresh.ts";
@@ -87,14 +81,8 @@ export function useWindowTracking(options: UseWindowTrackingOptions = {}) {
     const refreshAfterDataChange = async (payload: { reason: string }) => {
       if (cancelled) return;
       const invalidateCaches = shouldInvalidateDataCaches(payload.reason);
-      if (invalidateCaches || payload.reason === "session-transition" || payload.reason === "session-recovered") {
-        ClassificationService.invalidateAppCatalog();
-      }
       if (invalidateCaches) {
         clearDashboardSnapshotCache();
-        void clearHistoryCachesAfterDataChange();
-        clearDataHeavyCaches();
-        void clearDataBootstrapCache();
       }
       // Data invalidation is an event fact, independent of whether snapshot reading
       // succeeds. An older response can neither accept state nor undo this tick.

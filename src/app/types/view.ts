@@ -1,1 +1,1 @@
-export type View = "history" | "data" | "mapping" | "tools" | "settings" | "about";
+export type View = "tools";
