@@ -25,6 +25,7 @@ const DYNAMIC_INVOKE_ALLOWLIST = new Map([
 
 // Commands intentionally invoked by Rust runtime, auxiliary windows, or tests rather than src/platform.
 const RUNTIME_ONLY_COMMANDS = new Map<string, string>([
+  ["cmd_get_web_activity_aggregate_range", "native data-recovery and anonymous-activity runtime tests verify web aggregate consistency"],
   ["cmd_delete_sessions_before", "native runtime verifies anonymous cleanup and Mini refresh after time-based deletion"],
   ["cmd_delete_sessions_by_exe_names", "native data-recovery exercises executable-scoped cleanup"],
   ["cmd_delete_sessions_by_exe_names_between", "native data-recovery exercises time-bounded executable cleanup"],
