@@ -23,7 +23,7 @@ pub(super) const DIRECTORIES: &[(&str, bool)] = &[
     ("desktop/vendor", true),
     ("src-tauri/src", true),
     ("src-tauri/icons", true),
-    ("src/features/about/assets", true),
+    ("desktop/patina/assets", true),
     ("src/shared/theme", false),
 ];
 

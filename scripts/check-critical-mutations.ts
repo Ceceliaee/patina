@@ -8,18 +8,14 @@ const TEMP_ROOT = resolve(".tmp/critical-mutations");
 const SQLITE_SOURCE = "src/platform/persistence/sqliteTransactions.ts";
 const ERROR_SOURCE = "src/platform/persistence/commandError.ts";
 const SNAPSHOT_SOURCE = "src/app/services/latestSnapshotRefresh.ts";
-const WEB_AGGREGATE_SOURCE = "src/platform/persistence/webActivityAnalysisGateway.ts";
 const WINDOW_PERMISSIONS_SOURCE = "src-tauri/permissions/window-commands.toml";
 const MINI_CAPABILITY_SOURCE = "src-tauri/capabilities/mini.json";
 const WINDOW_GUARD_SOURCE = "src-tauri/src/commands/window_guard.rs";
-const WEB_HEATMAP_RUNTIME_SOURCE = "src/features/data/hooks/useDataWebActivityRuntime.ts";
 const WEB_BRIDGE_SOURCE = "src-tauri/src/platform/web_activity_bridge.rs";
 const STORAGE_PATH_SAFETY_SOURCE = "src-tauri/src/data/storage_path_safety.rs";
 const WEBDAV_SOURCE = "src-tauri/src/platform/webdav.rs";
 const CREDENTIALS_SOURCE = "src-tauri/src/platform/credentials.rs";
 const STARTUP_WARMUP_SOURCE = "src/app/services/startupWarmupService.ts";
-const DATA_NAVIGATION_READINESS_SOURCE = "src/features/data/hooks/useDataNavigationReadiness.ts";
-const DATA_HEATMAP_SOURCE = "src/features/data/hooks/useDataHeatmapSnapshot.ts";
 const STORAGE_MIGRATION_SOURCE = "src-tauri/src/data/storage_migration.rs";
 const STORAGE_MIGRATION_CLEANUP_SOURCE = "src-tauri/src/data/storage_migration_cleanup.rs";
 
@@ -176,20 +172,6 @@ const SOURCE_CONTRACT_MUTANTS: SourceContractMutant[] = [
     verify: verifyStartupWarmupIdentityContract,
   },
   {
-    name: "data heatmap rejection loses explicit settled error handling",
-    source: DATA_HEATMAP_SOURCE,
-    search: 'setState((current) => ({ ...current, status: "error" }));',
-    replacement: 'setState((current) => ({ ...current, status: "ready" }));',
-    verify: verifyDataHeatmapFailureContract,
-  },
-  {
-    name: "data cold heatmap failures never settle the page completion state",
-    source: DATA_NAVIGATION_READINESS_SOURCE,
-    search: "&& isDataHeatmapSelectionSettled(yearSessionsView, selectedHeatmapView, heatmapColdError)",
-    replacement: "&& yearSessionsView === selectedHeatmapView",
-    verify: verifyDataHeatmapCompletionContract,
-  },
-  {
     name: "main-only command is reclassified as mini-shared",
     source: WINDOW_PERMISSIONS_SOURCE,
     search: '  "cmd_get_mini_presentation_snapshot",\n  "cmd_show_main_window",\n]',
@@ -209,13 +191,6 @@ const SOURCE_CONTRACT_MUTANTS: SourceContractMutant[] = [
     search: "if label == crate::app::tray::MAIN_WINDOW_LABEL {",
     replacement: "if label != crate::app::tray::MAIN_WINDOW_LABEL {",
     verify: verifyMainWindowGuardContract,
-  },
-  {
-    name: "web heatmap retry dependency is removed",
-    source: WEB_HEATMAP_RUNTIME_SOURCE,
-    search: "    retryKey,\n    selectedDomains,",
-    replacement: "    selectedDomains,",
-    verify: verifyWebHeatmapRetryContract,
   },
   {
     name: "bridge stops instead of retrying after backoff",
@@ -253,7 +228,6 @@ function verifyWindowPermissionContract(source: string) {
     "cmd_clear_remote_backup_settings",
     "cmd_reveal_webdav_backup_secret",
     "cmd_delete_sessions_before",
-    "cmd_install_update",
   ]) {
     assert.ok(!miniCommands.has(sensitive), `mini permission exposed main-only command ${sensitive}`);
   }
@@ -283,14 +257,6 @@ function verifyMainWindowGuardContract(source: string) {
   assert.match(guard, /return Ok\(\(\)\);/);
   assert.match(guard, /Err\(CommandErrorDto::new\(/);
   assert.doesNotMatch(guard, /if label != crate::app::tray::MAIN_WINDOW_LABEL/);
-}
-
-function verifyWebHeatmapRetryContract(source: string) {
-  const heatmapEffect = source.match(
-    /void loadDataWebHeatmapSnapshot\([\s\S]*?\}, \[(?<dependencies>[\s\S]*?)\]\);/,
-  );
-  assert.ok(heatmapEffect?.groups?.dependencies, "web heatmap effect dependencies must be parseable");
-  assert.match(heatmapEffect.groups.dependencies, /\bretryKey\b/);
 }
 
 function verifyWebBridgeRetryContract(source: string) {
@@ -388,19 +354,6 @@ function verifyStartupWarmupIdentityContract(source: string) {
   assert.doesNotMatch(source, /if \(true\) \{\n\s*activeStartupWarmup = null/);
 }
 
-function verifyDataHeatmapFailureContract(source: string) {
-  assert.match(source, /catch \(error\) \{\s*if \(cancelled\) return;[\s\S]*?setState\(\(current\) => \(\{ \.\.\.current, status: "error" \}\)\)/);
-  assert.match(source, /loading: !matchesQuery \|\| state\.status === "loading"/);
-  assert.match(source, /error: matchesQuery && state\.status === "error"/);
-}
-
-function verifyDataHeatmapCompletionContract(source: string) {
-  assert.match(
-    source,
-    /&& isDataHeatmapSelectionSettled\(yearSessionsView, selectedHeatmapView, heatmapColdError\)/,
-  );
-}
-
 function transpile(sourcePath: string, mutation?: Mutant) {
   let source = readSource(sourcePath);
   if (sourcePath === ERROR_SOURCE) {
@@ -423,88 +376,6 @@ async function importMutant(sourcePath: string, mutation?: Mutant) {
   const outputPath = resolve(TEMP_ROOT, `${sourcePath === SNAPSHOT_SOURCE ? "snapshot" : sourcePath.includes("sqlite") ? "sqlite" : "error"}-${suffix}.mjs`);
   writeFileSync(outputPath, transpile(sourcePath, mutation), "utf8");
   return import(`${pathToFileURL(outputPath).href}?run=${Date.now()}`);
-}
-
-const WEB_AGGREGATE_REVISION_MUTANT = {
-  name: "web aggregate silently merges different source revisions",
-  search: "if (sourceRevision !== null && chunk.sourceRevision !== sourceRevision) {",
-  replacement: "if (false) {",
-};
-
-async function importWebAggregateMutation(mutated: boolean) {
-  let source = readSource(WEB_AGGREGATE_SOURCE).replace(
-    'import { invokeWithCommandError } from "./commandError.ts";',
-    "const invokeWithCommandError = async () => { throw new Error('unconfigured invoke'); };",
-  ).replace(
-    '"./webLinksGateway.ts"',
-    JSON.stringify(pathToFileURL(resolve("src/platform/persistence/webLinksGateway.ts")).href),
-  ).replace(
-    '"../../shared/classification/anonymousActivity.ts"',
-    JSON.stringify(pathToFileURL(resolve("src/shared/classification/anonymousActivity.ts")).href),
-  ).replace(
-    'import { isPlainRecord as isRecord } from "../../shared/lib/runtimeTypeGuards.ts";',
-    'const isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);',
-  );
-  if (mutated) {
-    assert(
-      source.includes(WEB_AGGREGATE_REVISION_MUTANT.search),
-      `stale mutant search: ${WEB_AGGREGATE_REVISION_MUTANT.name}`,
-    );
-    source = source.replace(
-      WEB_AGGREGATE_REVISION_MUTANT.search,
-      WEB_AGGREGATE_REVISION_MUTANT.replacement,
-    );
-  }
-  const outputPath = resolve(TEMP_ROOT, `web-aggregate-${mutated ? "mutant" : "baseline"}.mjs`);
-  writeFileSync(outputPath, ts.transpileModule(source, {
-    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-  }).outputText, "utf8");
-  return import(`${pathToFileURL(outputPath).href}?run=${Date.now()}`);
-}
-
-async function verifyWebAggregateRevision(module: Record<string, unknown>) {
-  const load = module.loadWebActivityAggregateRange as (
-    startMs: number,
-    endMs: number,
-    boundaries: number[],
-    filter: null,
-    reader: (
-      startMs: number,
-      endMs: number,
-      boundaries: number[],
-      filter: null,
-      snapshotNowMs: number,
-    ) => Promise<{
-      records: unknown[];
-      domainCoverage: unknown[];
-      sourceRevision: string;
-      snapshotNowMs: number;
-    }>,
-  ) => Promise<{ sourceRevision: string }>;
-  const boundaries = Array.from({ length: 403 }, (_, index) => index * 1_000);
-  let calls = 0;
-  const result = await load(
-    boundaries[0],
-    boundaries.at(-1) ?? 0,
-    boundaries,
-    null,
-    async (_startMs, _endMs, _chunkBoundaries, _filter, snapshotNowMs) => {
-      const attemptIndex = Math.floor(calls / 2);
-      const chunkIndex = calls % 2;
-      calls += 1;
-      return {
-        records: [],
-        domainCoverage: [],
-        sourceRevision: attemptIndex === 0
-          ? (chunkIndex === 0 ? "1" : "2")
-          : "3",
-        snapshotNowMs,
-      };
-    },
-  );
-
-  assert.equal(calls, 4);
-  assert.equal(result.sourceRevision, "3");
 }
 
 async function withTimeout<T>(promise: Promise<T>, milliseconds = 200): Promise<T> {
@@ -622,7 +493,6 @@ try {
   await verify(await importMutant(SQLITE_SOURCE), SQLITE_SOURCE);
   await verify(await importMutant(ERROR_SOURCE), ERROR_SOURCE);
   await verify(await importMutant(SNAPSHOT_SOURCE), SNAPSHOT_SOURCE);
-  await verifyWebAggregateRevision(await importWebAggregateMutation(false));
   for (const mutant of SOURCE_CONTRACT_MUTANTS) {
     const source = readSource(mutant.source);
     mutant.verify(source);
@@ -640,14 +510,6 @@ try {
     }
   }
 
-  try {
-    await verifyWebAggregateRevision(await importWebAggregateMutation(true));
-    console.error(`SURVIVED ${WEB_AGGREGATE_REVISION_MUTANT.name}`);
-  } catch {
-    killed += 1;
-    console.log(`KILLED ${WEB_AGGREGATE_REVISION_MUTANT.name}`);
-  }
-
   for (const mutant of SOURCE_CONTRACT_MUTANTS) {
     try {
       verifySourceContractMutant(mutant);
@@ -658,7 +520,7 @@ try {
     }
   }
 
-  const total = MUTANTS.length + 1 + SOURCE_CONTRACT_MUTANTS.length;
+  const total = MUTANTS.length + SOURCE_CONTRACT_MUTANTS.length;
   const score = (killed / total) * 100;
   console.log(`Critical mutation score: ${killed}/${total} (${score.toFixed(1)}%)`);
   if (killed !== total) process.exitCode = 1;

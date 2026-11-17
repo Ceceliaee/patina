@@ -35,53 +35,74 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks(id) {
-          const normalizedId = id.replaceAll("\\", "/");
-          // Keep shared identity rules separate from whichever read gateway gains a consumer.
-          if (normalizedId.endsWith("/src/shared/classification/appClassification.ts")) return "appClassification";
-          if (normalizedId.endsWith("/src/shared/classification/objectColor.ts")) return "objectColor";
-          if (normalizedId.endsWith("/src/platform/browser/browserStorageGateway.ts")) return "browserStorage";
-          if (normalizedId.endsWith("/src/shared/theme/themePresets.ts")) return "themePresets";
-          const localeResourceMatch = normalizedId.match(
-            /\/src\/shared\/i18n\/generated\/locales\/([^/?]+)\.ts(?:\?.*)?$/,
-          );
-          if (localeResourceMatch) {
-            return `locale-${localeResourceMatch[1]}`;
-          }
-          if (!id.includes("node_modules")) {
-            return undefined;
-          }
+        codeSplitting: { groups: [
+          ...[
+            ["shared/i18n/runtime.ts", "runtime"],
+            ["shared/components/QuietAnchoredPopover.tsx", "QuietAnchoredPopover"],
+            ["shared/components/QuietCalendar.tsx", "QuietCalendar"],
+            ["shared/components/QuietSegmentedFilter.tsx", "QuietSegmentedFilter"],
+            ["shared/components/QuietSelect.tsx", "QuietSelect"],
+            ["shared/components/QuietTimePicker.tsx", "QuietTimePicker"],
+            ["shared/components/QuietSearchField.tsx", "QuietSearchField"],
+            ["shared/lib/webActivityViewModel.ts", "webActivityViewModel"],
+            ["shared/lib/activityTimelineCompiler.ts", "webActivityViewModel"],
+            ["shared/lib/timelineAxis.ts", "webActivityViewModel"],
+            ["shared/lib/timelineSegmentMerge.ts", "webActivityViewModel"],
+          ].map(([source, name]) => ({
+            name,
+            test: (id: string) => id.replaceAll("\\", "/").endsWith(`/src/${source}`),
+            includeDependenciesRecursively: false,
+            priority: 1,
+          })),
+          {
+            name(id) {
+              const normalizedId = id.replaceAll("\\", "/");
+              // Keep shared identity rules separate from whichever read gateway gains a consumer.
+              if (normalizedId.endsWith("/src/shared/classification/appClassification.ts")) return "appClassification";
+              if (normalizedId.endsWith("/src/shared/classification/objectColor.ts")) return "objectColor";
+              if (normalizedId.endsWith("/src/platform/browser/browserStorageGateway.ts")) return "browserStorage";
+              if (normalizedId.endsWith("/src/shared/theme/themePresets.ts")) return "themePresets";
+              const localeResourceMatch = normalizedId.match(
+                /\/src\/shared\/i18n\/generated\/locales\/([^/?]+)\.ts(?:\?.*)?$/,
+              );
+              if (localeResourceMatch) {
+                return `locale-${localeResourceMatch[1]}`;
+              }
+              if (!id.includes("node_modules")) {
+                return undefined;
+              }
 
-          // Shared actions stay lazy together instead of paying a module
-          // header and request for each tiny icon on settings and tool surfaces.
-          if (/\/node_modules\/lucide-react\/dist\/esm\/icons\/(square|pencil-line|save|refresh-cw|play|pause|plus|trash)\.mjs$/.test(normalizedId)) {
-            return "lazy-action-icons";
-          }
+              // Shared actions stay lazy together instead of paying a module
+              // header and request for each tiny icon on tool surfaces.
+              if (/\/node_modules\/lucide-react\/dist\/esm\/icons\/(square|pencil-line|save|refresh-cw|play|pause|plus|trash)\.mjs$/.test(normalizedId)) {
+                return "lazy-action-icons";
+              }
 
-          if (
-            normalizedId.includes("/node_modules/lucide-react/dist/esm/")
-            && (
-              !normalizedId.includes("/node_modules/lucide-react/dist/esm/icons/")
-              || normalizedId.endsWith("/node_modules/lucide-react/dist/esm/icons/rotate-ccw.mjs")
-            )
-          ) {
-            return "icons";
-          }
+              if (
+                normalizedId.includes("/node_modules/lucide-react/dist/esm/")
+                && (
+                  !normalizedId.includes("/node_modules/lucide-react/dist/esm/icons/")
+                  || normalizedId.endsWith("/node_modules/lucide-react/dist/esm/icons/rotate-ccw.mjs")
+                )
+              ) {
+                return "icons";
+              }
 
-          if (
-            id.includes("react-dom") ||
-            id.includes("\\node_modules\\react\\") ||
-            id.includes("/node_modules/react/")
-          ) {
-            return "react-vendor";
-          }
+              if (
+                id.includes("react-dom") ||
+                id.includes("\\node_modules\\react\\") ||
+                id.includes("/node_modules/react/")
+              ) {
+                return "react-vendor";
+              }
 
-          if (id.includes("@tauri-apps")) {
-            return "tauri";
-          }
+              if (id.includes("@tauri-apps")) {
+                return "tauri";
+              }
 
-          return undefined;
-        },
+              return undefined;
+          },
+        }] },
       },
     },
   },

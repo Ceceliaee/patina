@@ -31,22 +31,6 @@ const HIGH_RISK_THRESHOLDS: CoverageThreshold[] = [
     path: "src/app/services/startupWarmupService.ts",
     minimum: { statements: 90, branches: 85, functions: 90, lines: 90 },
   },
-  {
-    path: "src/features/data/services/dataHeatmapSnapshot.ts",
-    minimum: { statements: 90, branches: 85, functions: 90, lines: 90 },
-  },
-  {
-    path: "src/features/data/services/dataWebActivityReadModel.ts",
-    minimum: { statements: 90, branches: 85, functions: 90, lines: 90 },
-  },
-  {
-    path: "src/features/data/services/dataWebHeatmapRequestState.ts",
-    minimum: { statements: 90, branches: 85, functions: 90, lines: 90 },
-  },
-  {
-    path: "src/platform/persistence/webActivityAnalysisGateway.ts",
-    minimum: { statements: 90, branches: 85, functions: 90, lines: 90 },
-  },
 ];
 const METRICS: CoverageMetricName[] = ["statements", "branches", "functions", "lines"];
 

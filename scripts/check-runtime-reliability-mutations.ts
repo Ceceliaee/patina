@@ -6,10 +6,9 @@ import { qualityCargoEnv, qualityCargoProfile } from "./run-cargo-quality.ts";
 
 // Exclusive opt-in build: each mutant restores exact source bytes in finally.
 // The helper-crash test owns its Job, so assertion failure still reaps descendants.
-assert.ok(process.argv.length === 2 || (process.argv.length === 3 && ["--subscriptions-only", "--data-cache-only", "--audio-only", "--media-only", "--catalog-only", "--probe-lifecycle-only"].includes(process.argv[2])));
+assert.ok(process.argv.length === 2 || (process.argv.length === 3 && ["--subscriptions-only", "--audio-only", "--media-only", "--probe-lifecycle-only"].includes(process.argv[2])));
 const audioOnly = process.argv.includes("--audio-only");
 const mediaOnly = process.argv.includes("--media-only");
-const catalogOnly = process.argv.includes("--catalog-only");
 const probeOnly = process.argv.includes("--probe-lifecycle-only");
 const cases = [
   { name: "wait-for-name", file: "engine/tracking/active_session.rs",
@@ -102,7 +101,7 @@ function runSubscriptions(label: string) {
   return { status: result.status, log };
 }
 
-if (!audioOnly && !mediaOnly && !catalogOnly && !probeOnly && !process.argv.includes("--data-cache-only")) {
+if (!audioOnly && !mediaOnly && !probeOnly) {
 const subscriptionBaseline = runSubscriptions("subscriptions-baseline");
 assert.equal(subscriptionBaseline.status, 0, subscriptionBaseline.log);
 for (const mutation of [
@@ -132,112 +131,4 @@ for (const mutation of [
 const subscriptionsRestored = runSubscriptions("subscriptions-restored");
 assert.equal(subscriptionsRestored.status, 0, subscriptionsRestored.log);
 console.log("PASS restored subscription owners and browser tests");
-}
-
-if (!audioOnly && !mediaOnly && !catalogOnly && !probeOnly && !process.argv.includes("--subscriptions-only")) {
-  function runDataCache(label: string, entry = "tests/dataReadModel.test.ts") {
-    const result = spawnSync(process.execPath, ["--experimental-strip-types", entry],
-      { encoding: "utf8", windowsHide: true, timeout: 30_000, maxBuffer: 4 * 1024 * 1024 });
-    const log = String(result.stdout ?? "") + String(result.stderr ?? "") + String(result.error ?? "");
-    writeFileSync(resolve(output, `${label}.log`), log, "utf8");
-    if (result.error) throw result.error;
-    return { status: result.status, log };
-  }
-  const baseline = runDataCache("data-cache-baseline");
-  assert.equal(baseline.status, 0, baseline.log);
-  for (const mutation of [
-    { name: "trend-clears-native-slots", file: "dataTrendSnapshot.ts", search: "dataTrendSnapshotCacheEpoch += 1;", replacement: "dataTrendSnapshotCacheEpoch += 1; sessionPromises.clear();", failure: /trend invalidation released unfinished native query capacity/ },
-    { name: "heatmap-clears-native-slots", file: "dataHeatmapSnapshot.ts", search: "dataReadModelCacheEpoch += 1;", replacement: "dataReadModelCacheEpoch += 1; heatmapSnapshotPromises.clear();", failure: /heatmap invalidation released unfinished native query capacity/ },
-    { name: "heatmap-releases-partial-query", file: "dataHeatmapSnapshot.ts", search: "void Promise.allSettled([earliestStartTimePromise, sessionsPromise]).then(() => {", replacement: "void snapshotPromise.catch(() => undefined).then(() => {", failure: /partial heatmap failure released unfinished native query capacity/ },
-    { name: "trend-name-key-collision", file: "dataSessionIdentity.ts", search: "`${session.exeName.length}:${session.exeName}${session.appName}`", replacement: "session.exeName", failure: /identity reuse must preserve name-dependent filtering/ },
-    { name: "trend-unbounded-identity-entries", file: "dataSessionIdentity.ts", search: "identities.size < 128", replacement: "true", failure: /reuse common identities but retain at most 128 short keys/ },
-    { name: "trend-unbounded-identity-key", file: "dataSessionIdentity.ts", search: "session.exeName.length + session.appName.length <= 1024", replacement: "true", failure: /reuse common identities but retain at most 128 short keys/ },
-  ]) {
-    const source = resolve("src/features/data/services", mutation.file);
-    const original = readFileSync(source);
-    const text = original.toString("utf8");
-    assert.equal(text.split(mutation.search).length, 2, `mutation anchor drifted: ${mutation.name}`);
-    try {
-      writeFileSync(source, text.replace(mutation.search, mutation.replacement), "utf8");
-      const mutant = runDataCache(mutation.name);
-      assert.notEqual(mutant.status, 0, `SURVIVED ${mutation.name}`);
-      assert.match(mutant.log, /AssertionError/);
-      assert.match(mutant.log, mutation.failure);
-      console.log(`KILLED ${mutation.name}`);
-    } finally {
-      writeFileSync(source, original);
-      assert.deepEqual(readFileSync(source), original);
-    }
-  }
-  const restored = runDataCache("data-cache-restored");
-  assert.equal(restored.status, 0, restored.log);
-  console.log("PASS restored data cache owners and tests");
-
-  const historyBaseline = runDataCache("history-capacity-baseline", "tests/historyReadModel.test.ts");
-  assert.equal(historyBaseline.status, 0, historyBaseline.log);
-  const historySource = resolve("src/features/history/services/historyReadModel.ts");
-  const historyOriginal = readFileSync(historySource);
-  const historyText = historyOriginal.toString("utf8");
-  const release = "void Promise.allSettled(nativeReads).then(() => { pendingHistoryReadGroups -= 1; });";
-  assert.equal(historyText.split(release).length, 2, "History capacity mutation anchor drifted");
-  try {
-    writeFileSync(historySource, historyText.replace(release, "pendingHistoryReadGroups -= 1;"), "utf8");
-    const mutant = runDataCache("history-releases-partial-query", "tests/historyReadModel.test.ts");
-    assert.notEqual(mutant.status, 0, "SURVIVED history-releases-partial-query");
-    assert.match(mutant.log, /AssertionError/);
-    assert.match(mutant.log, /History partial failure released unfinished native query capacity/);
-    console.log("KILLED history-releases-partial-query");
-  } finally {
-    writeFileSync(historySource, historyOriginal);
-    assert.deepEqual(readFileSync(historySource), historyOriginal);
-  }
-  const historyRestored = runDataCache("history-capacity-restored", "tests/historyReadModel.test.ts");
-  assert.equal(historyRestored.status, 0, historyRestored.log);
-  console.log("PASS restored History native capacity and tests");
-}
-
-if (process.argv.length === 2 || catalogOnly) {
-  for (const mutation of [
-    { name: "catalog-missing-invalidation", file: "src/app/hooks/useWindowTracking.ts",
-      search: "ClassificationService.invalidateAppCatalog();", replacement: "void ClassificationService;",
-      failure: /data event must invalidate the warmed inactive catalog/, browser: true },
-    { name: "catalog-waits-for-name-event", file: "src/app/hooks/useWindowTracking.ts",
-      search: 'invalidateCaches || payload.reason === "session-transition" || payload.reason === "session-recovered"', replacement: "invalidateCaches",
-      failure: /data event must invalidate the warmed inactive catalog/, browser: true },
-    { name: "catalog-missing-mounted-refresh", file: "src/features/classification/hooks/useClassificationAppCatalog.ts",
-      search: "enabled, snapshot.status, snapshot.requestGeneration", replacement: "enabled",
-      failure: /mounted catalog must reread facts after invalidation/, browser: true },
-    { name: "catalog-releases-native-capacity", file: "src/features/classification/services/classificationAppCatalog.ts",
-      search: "if (this.inFlight) {", replacement: "if (this.inFlight && this.inFlight.generation === this.state.requestGeneration) {",
-      failure: /invalidations must share one trailing refresh|catalog invalidation released unfinished native query capacity/, browser: false },
-  ]) {
-    const runCatalog = (label: string) => {
-      if (mutation.browser) return runSubscriptions(label);
-      const result = spawnSync(process.execPath, ["--experimental-strip-types", "tests/classificationAppCatalog.test.ts"],
-        { encoding: "utf8", windowsHide: true, timeout: 30_000, maxBuffer: 4 * 1024 * 1024 });
-      const log = String(result.stdout ?? "") + String(result.stderr ?? "") + String(result.error ?? "");
-      writeFileSync(resolve(output, `${label}.log`), log, "utf8");
-      if (result.error) throw result.error;
-      return { status: result.status, log };
-    };
-    const baseline = runCatalog(`${mutation.name}-baseline`);
-    assert.equal(baseline.status, 0, baseline.log);
-    const source = resolve(mutation.file);
-    const original = readFileSync(source);
-    const text = original.toString("utf8");
-    assert.equal(text.split(mutation.search).length, 2, `mutation anchor drifted: ${mutation.name}`);
-    try {
-      writeFileSync(source, text.replace(mutation.search, mutation.replacement), "utf8");
-      const mutant = runCatalog(mutation.name);
-      assert.notEqual(mutant.status, 0, `SURVIVED ${mutation.name}`);
-      assert.match(mutant.log, mutation.failure, "the behavioral assertion must reject the mutant");
-      console.log(`KILLED ${mutation.name}`);
-    } finally {
-      writeFileSync(source, original);
-      assert.deepEqual(readFileSync(source), original);
-    }
-    const restored = runCatalog(`${mutation.name}-restored`);
-    assert.equal(restored.status, 0, restored.log);
-  }
-  console.log("PASS restored catalog owners and tests");
 }

@@ -18,9 +18,8 @@ function sourceChunkPattern(source: string): RegExp {
 }
 
 const INITIAL_JS_AND_CSS_GZIP_BUDGET_KI_B = 310;
-// Data used to be part of the initial graph. It now has its own route and runtime
-// budgets, so this unchanged aggregate tracks the remaining primary lazy routes.
-const NON_DATA_PRIMARY_LAZY_ROUTES_GZIP_BUDGET_KI_B = 86.5;
+// Remaining Tauri routes retain their existing aggregate limit.
+const PRIMARY_LAZY_ROUTES_GZIP_BUDGET_KI_B = 86.5;
 // Usage reminder flow: docs/archive/2026-10-30-usage-reminder-bundle-decision.md.
 // Preserve the existing aggregate buffer and the 3% headroom rule.
 // Timed reminder flow: docs/archive/2026-11-01-timed-reminder-bundle-decision.md.
@@ -37,7 +36,6 @@ const INITIAL_CHUNK_BUDGETS = [
   { label: "react-vendor", pattern: /^react-vendor-.*\.js$/, gzipKiB: 66.8 },
   { label: "icons", pattern: /^icons-.*\.js$/, gzipKiB: 8 },
   { label: "tauri", pattern: /^tauri-.*\.js$/, gzipKiB: 6 },
-  { label: "runtime type guards", pattern: /^runtimeTypeGuards-.*\.js$/, gzipKiB: 0.2 },
   // Production locale metadata lives here; translated text stays in its own
   // locale chunk. Initial and total graph budgets remain unchanged.
   { label: "localization", pattern: /^runtime-.*\.js$/, gzipKiB: 7.65 },
@@ -63,23 +61,10 @@ const SOURCE_LOCALE = Object.entries(LOCALE_REGISTRY).find(([, metadata]) => met
 if (!SOURCE_LOCALE) throw new Error("Bundle budget check requires one source locale.");
 
 const LAZY_PAGE_CHUNK_BUDGETS = [
-  { label: "Settings", pattern: /^Settings-.*\.js$/, gzipKiB: 16 },
-  // Scoped cost review: docs/archive/classification-link-layout-bundle-decision.md.
-  { label: "AppMapping", pattern: /^AppMapping-.*\.js$/, gzipKiB: 19.7 },
-  { label: "History", pattern: /^History-.*\.js$/, gzipKiB: 17.7 },
   { label: "Tools", pattern: /^Tools-.*\.js$/, gzipKiB: 18 },
-  // The destination analysis panel and its range control are both part of
-  // Data's first render; the private detail chunk owns day analysis only. The
-  // third application-category mode remains synchronous and feature-owned here;
-  // splitting it would duplicate the read-model graph into unowned support chunks.
-  // Chart handoff readiness: docs/archive/2026-11-04-data-navigation-bundle-decision.md.
-  { label: "Data", pattern: /^Data-.*\.js$/, gzipKiB: 22.8 },
-  { label: "About", pattern: /^About-.*\.js$/, gzipKiB: 18 },
 ] as const;
 
-const NON_DATA_PRIMARY_LAZY_ROUTE_BUDGETS = LAZY_PAGE_CHUNK_BUDGETS.filter(
-  (budget) => budget.label !== "Data",
-);
+const PRIMARY_LAZY_ROUTE_BUDGETS = LAZY_PAGE_CHUNK_BUDGETS;
 
 const LAZY_SECONDARY_CHUNK_BUDGETS = [
   { label: "Tool notification shell", pattern: /^ToolNotificationShell-.*\.js$/, gzipKiB: 0.31 },
@@ -88,41 +73,20 @@ const LAZY_SECONDARY_CHUNK_BUDGETS = [
   // Mini pages and bounded chart details; scoped decisions:
   // docs/archive/2026-10-28-mini-paged-content-bundle-decision.md.
   { label: "MiniShell", pattern: /^MiniShell-.*\.js$/, gzipKiB: 9 },
-  { label: "Settings import dialog", pattern: /^SettingsDataImportDialog-.*\.js$/, gzipKiB: 3 },
-  { label: "Settings export dialog", pattern: /^SettingsDataExportDialog-.*\.js$/, gzipKiB: 6.5 },
-  { label: "Settings scheduled export dialog", pattern: /^SettingsScheduledExportDialog-.*\.js$/, gzipKiB: 3.6 },
-  { label: "Settings backup dialog", pattern: /^SettingsBackupDialog-.*\.js$/, gzipKiB: 7 },
-  { label: "Data first-screen prewarm", pattern: /^dataFirstScreenPrewarm-.*\.js$/, gzipKiB: 6 },
-  { label: "Data trend snapshot", pattern: /^dataTrendSnapshot-.*\.js$/, gzipKiB: 2 },
-  { label: "Data bootstrap snapshot", pattern: /^dataBootstrapSnapshot-.*\.js$/, gzipKiB: 1.8 },
-  // The shared destination-detail entry preloads one cross-feature dialog while
-  // retaining a separate chunk so ordinary History and Data views
-  // do not pay for single-object analysis in their first-render graphs.
-  // Single-date controller returns to its sole consumer:
-  // docs/archive/2026-11-01-reminder-direct-picker-bundle-decision.md.
-  { label: "Destination detail", pattern: /^DestinationDetailDialog-.*\.js$/, gzipKiB: 9.3 },
-  // History and Data preload the editor on icon hover or focus.
-  { label: "Quick classification", pattern: /^QuickClassificationSurface-.*\.js$/, gzipKiB: 3.4 },
 ] as const;
 
 // Stable cross-feature owners stay lazy and receive their own narrow budget
 // instead of consuming the allowance for unowned support chunks.
 const LAZY_SHARED_UI_CHUNK_BUDGETS = [
-  { label: "quick classification launcher", pattern: /^useQuickClassificationLauncher-.*\.js$/, gzipKiB: 2.72 },
   { label: "activity timeline models", pattern: /^webActivityViewModel-.*\.js$/, gzipKiB: 4.4 },
   // Nested reminder controls: docs/archive/2026-11-01-reminder-standard-controls-bundle-decision.md.
   { label: "QuietAnchoredPopover", pattern: /^QuietAnchoredPopover-.*\.js$/, gzipKiB: 1.53 },
   { label: "QuietCalendar", pattern: /^QuietCalendar-.*\.js$/, gzipKiB: 1.3 },
   { label: "QuietSegmentedFilter", pattern: /^QuietSegmentedFilter-.*\.js$/, gzipKiB: 0.8 },
   { label: "QuietSearchField", pattern: /^QuietSearchField-.*\.js$/, gzipKiB: 0.5 },
-  { label: "QuietStepperSlider", pattern: /^QuietStepperSlider-.*\.js$/, gzipKiB: 1.1 },
-  { label: "QuietDateRangePicker", pattern: /^QuietDateRangePicker-.*\.js$/, gzipKiB: 2.1 },
   { label: "QuietSelect", pattern: sourceChunkPattern("src/shared/components/QuietSelect.tsx"), gzipKiB: 2.8 },
   { label: "QuietTimePicker", pattern: /^QuietTimePicker-.*\.js$/, gzipKiB: 2.04 },
-  { label: "scheduled task presentation", pattern: /^scheduledTaskPresentation-.*\.js$/, gzipKiB: 0.48 },
   { label: "requested app icons", pattern: /^useRequestedAppIcons-.*\.js$/, gzipKiB: 0.55 },
-  { label: "settings runtime adapter", pattern: /^settingsRuntimeAdapterService-.*\.js$/, gzipKiB: 3 },
-  { label: "duration formatting", pattern: /^durationFormatting-.*\.js$/, gzipKiB: 0.2 },
   { label: "icon representative", pattern: /^iconRepresentative-.*\.js$/, gzipKiB: 3 },
 ] as const;
 
@@ -132,8 +96,7 @@ const LAZY_SHARED_UI_CHUNK_BUDGETS = [
 const LAZY_SUPPORT_CHUNKS_GZIP_BUDGET_KI_B = 6.3;
 const SETTINGS_COPY_GZIP_BUDGET_KI_B = 12;
 // Import preview, destructuring, and batch deletion require matching locale resources.
-// Destination detail contributes shared bilingual resources used by
-// History and Data. Keep explicit headroom for that stable owner.
+// Shared locale resources are also consumed by the native frontend.
 const COPY_DOMAINS_GZIP_BUDGET_KI_B = 33;
 const NON_SETTINGS_COPY_GZIP_REVIEW_KI_B = 4;
 
@@ -254,7 +217,7 @@ function measureCopyDomains() {
 }
 
 function main() {
-  const fixtureFiles = ["browserStorage-fixture.js", "themePresets-fixture.js", "SettingsDataExportDialog-fixture.js", "QuietSwitch-fixture.js"];
+  const fixtureFiles = ["browserStorage-fixture.js", "themePresets-fixture.js", "QuietSelect-fixture.js"];
   const fixture = Object.fromEntries(BUNDLE_SOURCE_OWNERS.map((owner, index) => [owner.source, [fixtureFiles[index]]]));
   const fixtureAssets = new Set(fixtureFiles);
   const fixtureInitial = new Set([fixtureFiles[0], fixtureFiles[1]]);
@@ -306,16 +269,16 @@ function main() {
     );
   }
 
-  const nonDataPrimaryLazyRouteAssets = lazyJsAssets.filter((item) =>
-    matchesAnyBudget(item.file, NON_DATA_PRIMARY_LAZY_ROUTE_BUDGETS)
+  const primaryLazyRouteAssets = lazyJsAssets.filter((item) =>
+    matchesAnyBudget(item.file, PRIMARY_LAZY_ROUTE_BUDGETS)
   );
-  const nonDataPrimaryLazyRoutesGzipBytes = sumGzipBytes(nonDataPrimaryLazyRouteAssets);
+  const primaryLazyRoutesGzipBytes = sumGzipBytes(primaryLazyRouteAssets);
   if (
-    nonDataPrimaryLazyRoutesGzipBytes
-    > budgetHeadroomLimitBytes(NON_DATA_PRIMARY_LAZY_ROUTES_GZIP_BUDGET_KI_B)
+    primaryLazyRoutesGzipBytes
+    > budgetHeadroomLimitBytes(PRIMARY_LAZY_ROUTES_GZIP_BUDGET_KI_B)
   ) {
     violations.push(
-      `non-Data primary lazy routes gzip ${formatKiB(nonDataPrimaryLazyRoutesGzipBytes)} KiB exceeds ${describeBudgetLimit(NON_DATA_PRIMARY_LAZY_ROUTES_GZIP_BUDGET_KI_B)}`,
+      `primary lazy routes gzip ${formatKiB(primaryLazyRoutesGzipBytes)} KiB exceeds ${describeBudgetLimit(PRIMARY_LAZY_ROUTES_GZIP_BUDGET_KI_B)}`,
     );
   }
 
@@ -392,7 +355,7 @@ function main() {
   console.log("Bundle budget check passed.");
   console.log(`initial JS+CSS: ${formatKiB(initialJsCssGzipBytes)} KiB gzip`);
   console.log(
-    `non-Data primary lazy routes: ${formatKiB(nonDataPrimaryLazyRoutesGzipBytes)} KiB gzip`,
+    `primary lazy routes: ${formatKiB(primaryLazyRoutesGzipBytes)} KiB gzip`,
   );
   console.log(`all lazy JS: ${formatKiB(sumGzipBytes(lazyJsAssets))} KiB gzip`);
   console.log(`total JS+CSS: ${formatKiB(totalJsCssGzipBytes)} KiB gzip`);

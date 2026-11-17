@@ -4,16 +4,6 @@ import { extname, join, relative } from "node:path";
 
 const ARBITRARY_RADIUS_BASELINE: Record<string, number> = {
   "src/app/components/AppSidebar.tsx": 1,
-  "src/features/update/components/UpdateStatusPanel.tsx": 0,
-  "src/shared/components/QuietStepperSlider.tsx": 0,
-  "src/features/classification/components/AppMapping.tsx": 4,
-  "src/features/classification/components/CategoryColorControls.tsx": 1,
-  "src/features/settings/components/Settings.tsx": 3,
-  "src/features/history/components/History.tsx": 2,
-  "src/features/settings/components/SettingsDataSafetyPanel.tsx": 6,
-  "src/features/settings/components/SettingsRemoteBackupPanel.tsx": 8,
-  "src/features/history/components/HistoryTimelineDialogDateControls.tsx": 2,
-  "src/features/history/components/HistoryTimelineLists.tsx": 2,
 };
 
 const CANONICAL_SCROLL_REGION_PATH = "src/styles/components/quiet-scroll-region.css";

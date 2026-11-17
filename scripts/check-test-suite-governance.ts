@@ -57,7 +57,7 @@ const ALLOWED_IGNORED_TESTS = new Map([
   ],
   [
     "src-tauri/src/data/activity_read_model/catalog.rs::catalog_capacity_report",
-    "performance fixture; run with pnpm run perf:classification-app-catalog",
+    "performance fixture; run the ignored activity catalog benchmark explicitly",
   ],
   [
     "src-tauri/src/engine/tracking/runtime/loop_state.rs::recording_policy_cache_capacity_report",

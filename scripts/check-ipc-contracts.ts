@@ -25,6 +25,7 @@ const DYNAMIC_INVOKE_ALLOWLIST = new Map([
 
 // Commands intentionally invoked by Rust runtime, auxiliary windows, or tests rather than src/platform.
 const RUNTIME_ONLY_COMMANDS = new Map<string, string>([
+  ["cmd_delete_sessions_before", "native runtime verifies anonymous cleanup and Mini refresh after time-based deletion"],
   ["cmd_delete_sessions_by_exe_names", "native data-recovery exercises executable-scoped cleanup"],
   ["cmd_delete_sessions_by_exe_names_between", "native data-recovery exercises time-bounded executable cleanup"],
   ["cmd_delete_web_activity_segments_by_domain", "native runtime verifies exact web-history deletion independently of classification"],
@@ -48,7 +49,6 @@ const SENSITIVE_CALLER_GUARD_COMMANDS = new Set([
   "cmd_get_remote_backup_config_snapshot",
   "cmd_reveal_webdav_backup_secret",
   "cmd_delete_sessions_before",
-  "cmd_classification_object_deletion",
   "cmd_delete_sessions_by_exe_names",
   "cmd_delete_sessions_by_exe_names_between",
   "cmd_delete_web_activity_segments_by_domain",
@@ -57,7 +57,6 @@ const SENSITIVE_CALLER_GUARD_COMMANDS = new Set([
   "cmd_restart_and_apply_restore_default_storage_migration",
   "cmd_restart_and_apply_restore_default_webview_cache_migration",
   "cmd_restart_and_clear_webview_cache",
-  "cmd_install_update",
 ]);
 
 const MINI_COMMAND_ALLOWLIST = new Set([
@@ -342,15 +341,15 @@ function runSelfTest() {
     callerGuarded: new Set(SENSITIVE_CALLER_GUARD_COMMANDS),
   };
   const failures = validate(fixture);
-  const deletion = "cmd_classification_object_deletion";
+  const deletion = "cmd_delete_sessions_by_exe_names";
   const guards = new Set(SENSITIVE_CALLER_GUARD_COMMANDS);
   guards.delete(deletion);
   const commands = new Set([...commandSet, deletion]);
   const withoutDeletionGuard = validate({ ...fixture, called: commands, declared: commands,
     registered: commands, appManifest: commands, mainPermission: commands, callerGuarded: guards });
   if (withoutDeletionGuard.length !== 1 || withoutDeletionGuard[0] !==
-    "sensitive command is missing a main-window caller guard: cmd_classification_object_deletion") {
-    throw new Error("IPC self-test did not detect removal of the classification deletion caller guard alone");
+    "sensitive command is missing a main-window caller guard: cmd_delete_sessions_by_exe_names") {
+    throw new Error("IPC self-test did not detect removal of the executable deletion caller guard alone");
   }
   if (failures.length > 0 || frontend.dynamicCalls[0] !== "src/platform/demo.ts:proxy") {
     throw new Error(`IPC contract self-test failed: ${failures.join("; ")}`);
