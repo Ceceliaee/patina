@@ -3,13 +3,9 @@ import { spawnSync } from "node:child_process";
 const RUNS = 5;
 const NODE_ARGS = ["--experimental-strip-types", "--experimental-specifier-resolution=node"];
 const BENCHMARKS = [
-  "history-read-model-benchmark.ts",
   "dashboard-read-model-benchmark.ts",
-  "data-read-model-benchmark.ts",
-  "data-history-browser-benchmark.ts",
   "sqlite-query-plan-benchmark.ts",
   "startup-bootstrap-benchmark.ts",
-  "classification-app-catalog-benchmark.ts",
 ] as const;
 
 interface Measurement {
