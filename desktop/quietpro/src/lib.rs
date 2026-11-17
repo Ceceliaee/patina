@@ -9,20 +9,26 @@ mod theme;
 
 pub use activity_color::activity_display_color;
 pub use continuous_corner::{continuous_corner_fill, continuous_corner_layer};
-pub use controls::app_icon::app_icon_frame;
+pub use controls::app_icon::{
+    UNFRAMED_APP_ICON_SIZE, app_icon_frame, unframed_app_icon, unframed_app_icon_button,
+};
 pub use controls::dialog::{
     DIALOG_FRAME_INSET, DIALOG_WINDOW_MARGIN, dialog_actions, dialog_backdrop, dialog_surface,
 };
-pub use controls::distribution::distribution_row;
+pub use controls::distribution::{DistributionValue, distribution_row};
 pub use controls::donut::{DONUT_COMPACT_SIZE, DONUT_SIZE, DonutChart, DonutSlice};
+pub use controls::dot_pattern::dot_pattern;
 pub use controls::dropdown::Dropdown;
+pub use controls::heatmap::{HeatmapCell, heatmap_layout};
 pub use controls::icon_control::{ICON_CONTROL_SIZE, IconControl};
+pub use controls::metric_group::MetricGroup;
 pub use controls::search_input::search_input;
 pub use controls::segmented::segmented;
 pub use controls::slide_switch::{slide_switch, switch_control};
 pub use controls::slider::value_slider;
 pub use controls::text_button::text_button;
 pub use controls::text_input::TextInput;
+pub use controls::timeline::{TimelineOverview, TimelineSegment};
 pub use controls::trend_chart::{TrendChart, TrendSeries};
 pub use theme::{Palette, ThemePreset};
 
@@ -30,7 +36,7 @@ pub use gpui_kit::assets::IconName as Icon;
 
 pub const FILLED_PIN_ICON: &[u8] = include_bytes!("../assets/icons/pin-filled.svg");
 
-gpui_kit::assets::icon_assets!(pub QuietProAssets, [Globe, Bell, ToolCase, Tags, TagPlus, ZoomIn, Expand, Settings2, Info, AppWindow, Pencil, Palette, Type, EyeOff, ListX, ListPlus, Captions, CaptionsOff, Pipette, Search, Funnel, Check, Sparkles, ChartColumn, Clock, Menu, Layers, Maximize2, Minimize2, Minus, Plus, Monitor, Pin, SquareArrowOutUpRight, X, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, MousePointerClick, Server, Database, Dices, Eye, RefreshCw, FolderOpen, FolderPen, Trash, RotateCcw]);
+gpui_kit::assets::icon_assets!(pub QuietProAssets, [Globe, Bell, ToolCase, Tags, TagPlus, ZoomIn, Expand, Settings2, Info, AppWindow, Pencil, Palette, Type, EyeOff, ListX, ListPlus, Captions, CaptionsOff, Pipette, Search, Funnel, Check, Sparkles, ChartColumn, Clock, Menu, Layers, Maximize2, Minimize2, Minus, Plus, TrendingUp, TrendingDown, Monitor, Pin, SquareArrowOutUpRight, X, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, MousePointerClick, Server, Database, Dices, Eye, RefreshCw, FolderOpen, FolderPen, Trash, RotateCcw]);
 
 pub fn glyph(icon: Icon, color: Rgba) -> gpui_kit::Svg {
     gpui_kit::svg()
@@ -54,7 +60,7 @@ pub use controls::calendar::{
     calendar_weekdays,
 };
 pub use controls::checkbox::{checkbox, field_row};
-pub use controls::choice_card::{choice_card, choice_entry, choice_swatches};
+pub use controls::choice_card::{choice_card, choice_entry, choice_swatches, object_list_item};
 pub use controls::color_picker::{
     color_picker_surface, color_plane, color_swatch_button, hue_strip,
 };

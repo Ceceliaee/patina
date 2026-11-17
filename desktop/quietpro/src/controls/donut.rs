@@ -14,6 +14,7 @@ pub struct DonutSlice {
     pub value: f64,
     pub color: Rgba,
     pub description: SharedString,
+    pub dotted: bool,
 }
 
 #[derive(IntoElement)]
@@ -79,12 +80,7 @@ impl RenderOnce for DonutChart {
                         let arc = Arc::new()
                             .outer_radius(size / 2.)
                             .inner_radius(size / 2. - ring);
-                        arc.paint(
-                            &ArcData::new(&(), 0, 1., 0., TAU),
-                            c.track,
-                            &b,
-                            win,
-                        );
+                        arc.paint(&ArcData::new(&(), 0, 1., 0., TAU), c.track, &b, win);
                         for (slice, &(start, end)) in self.slices.iter().zip(geometry.iter()) {
                             if end > start {
                                 arc.paint(
@@ -93,6 +89,14 @@ impl RenderOnce for DonutChart {
                                     &b,
                                     win,
                                 );
+                                if slice.dotted {
+                                    let inset = Arc::new()
+                                        .outer_radius(size / 2. - 0.7)
+                                        .inner_radius(size / 2. - ring + 0.7);
+                                    super::dot_pattern::paint_dots(b, c.secondary, win, |p| {
+                                        inset.contains(&ArcData::new(&(), 0, 1., start, end), p, &b)
+                                    });
+                                }
                             }
                         }
                     },
@@ -112,6 +116,7 @@ mod tests {
             value,
             color: rgb(0),
             description: "test".into(),
+            dotted: false,
         }
     }
     #[test]

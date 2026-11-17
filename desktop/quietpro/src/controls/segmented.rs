@@ -14,10 +14,10 @@ const OPTION_RADIUS: f32 = 12.;
 const OPTION_PADDING: f32 = 8.;
 
 /// A controlled, horizontal single-choice group. Only its selected option is a tab stop.
-pub fn segmented<T: Copy + Eq + 'static, const N: usize>(
+pub fn segmented<T: Copy + Eq + 'static>(
     id: impl Into<ElementId>,
     label: String,
-    options: [(T, String, Option<Icon>, FocusHandle); N],
+    options: impl IntoIterator<Item = (T, String, Option<Icon>, FocusHandle)>,
     selected: T,
     enabled: bool,
     colors: Palette,
@@ -43,7 +43,8 @@ pub fn segmented<T: Copy + Eq + 'static, const N: usize>(
         .child(surface(TRACK_RADIUS, 0., colors.border))
         .child(surface(TRACK_RADIUS, 1., track_fill));
     let select = Rc::new(select);
-    let options = Rc::new(options);
+    let options = Rc::new(options.into_iter().collect::<Vec<_>>());
+    let count = options.len();
     for (index, (value, label, icon, focus)) in options.iter().enumerate() {
         let value = *value;
         let checked = value == selected;
@@ -74,7 +75,7 @@ pub fn segmented<T: Copy + Eq + 'static, const N: usize>(
         };
         let radio = Radio::new(("segment", index))
             .accessibility_label(label.clone())
-            .set_position(index + 1, N)
+            .set_position(index + 1, count)
             .checked(checked)
             .disabled(!enabled)
             .track_focus(focus)
@@ -113,8 +114,8 @@ pub fn segmented<T: Copy + Eq + 'static, const N: usize>(
                         return;
                     }
                     let next = match event.keystroke.key.as_str() {
-                        "left" => (index + N - 1) % N,
-                        "right" => (index + 1) % N,
+                        "left" => (index + count - 1) % count,
+                        "right" => (index + 1) % count,
                         _ => return,
                     };
                     let (next_value, _, _, handle) = &keyboard_options[next];

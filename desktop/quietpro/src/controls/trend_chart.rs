@@ -10,6 +10,8 @@ const DOT_SIZE: f32 = 4.;
 const ACTIVE_DOT_SIZE: f32 = 6.;
 const DOT_MIN_SPACING: f32 = 24.;
 const AREA_OPACITY: f32 = 0.08;
+const GRID_DASH: f32 = 4.;
+const GRID_GAP: f32 = 4.;
 
 pub struct TrendSeries {
     pub values: Vec<f32>,
@@ -146,6 +148,47 @@ impl RenderOnce for TrendChart {
             .fold(0., f32::max);
         let gutter = (gutter / 4.).ceil() * 4.;
         let series = self.series;
+        let grid_lines = canvas(
+            |_, _, _| (),
+            move |bounds, _, win, _| {
+                let width = f32::from(bounds.size.width);
+                let height = f32::from(bounds.size.height);
+                let mut path = PathBuilder::stroke(px(1.));
+                for row in 0..4 {
+                    let y = height * row as f32 / 3.;
+                    let mut x = 0.;
+                    while x < width {
+                        path.move_to(bounds.origin + point(px(x), px(y)));
+                        path.line_to(bounds.origin + point(px((x + GRID_DASH).min(width)), px(y)));
+                        x += GRID_DASH + GRID_GAP;
+                    }
+                }
+                let step = width / count.saturating_sub(1).max(1) as f32;
+                let stride = (64. / step.max(1.)).ceil().max(1.) as usize;
+                for i in 0..count {
+                    if i % stride != 0 && i != count - 1 {
+                        continue;
+                    }
+                    let x = if count == 1 {
+                        width / 2.
+                    } else {
+                        i as f32 * step
+                    };
+                    let mut y = 0.;
+                    while y < height {
+                        path.move_to(bounds.origin + point(px(x), px(y)));
+                        path.line_to(bounds.origin + point(px(x), px((y + GRID_DASH).min(height))));
+                        y += GRID_DASH + GRID_GAP;
+                    }
+                }
+                if let Ok(path) = path.build() {
+                    win.paint_path(path, c.border.opacity(0.65));
+                }
+            },
+        )
+        .absolute()
+        .inset_0()
+        .size_full();
         let plot = canvas(
             |_, _, _| (),
             move |bounds, _, win, _| {
@@ -183,7 +226,7 @@ impl RenderOnce for TrendChart {
                         line.cubic_bezier_to(end, c1, c2);
                         area.cubic_bezier_to(end, c1, c2);
                     }
-                    if series.len() == 1 && values.len() > 1 {
+                    if values.len() > 1 {
                         let last = pos(values.len() - 1, 0.);
                         area.line_to(last);
                         area.line_to(pos(0, 0.));
@@ -224,10 +267,7 @@ impl RenderOnce for TrendChart {
             .flex_1()
             .min_w_0()
             .h_full()
-            .flex()
-            .flex_col()
-            .justify_between()
-            .children((0..4).map(|_| div().w_full().border_b_1().border_color(c.track)));
+            .child(grid_lines);
         if let Some(i) = active {
             let x = if count <= 1 {
                 0.5
@@ -240,7 +280,8 @@ impl RenderOnce for TrendChart {
                     .top_0()
                     .bottom_0()
                     .left(relative(x))
-                    .w(px(1.))
+                    .ml(px(-1.))
+                    .w(px(2.))
                     .bg(c.border),
             );
         }
@@ -273,10 +314,10 @@ impl RenderOnce for TrendChart {
                     .on_hover(move |over, _, cx| highlight(&hover_state, i, *over, cx))
                     .when(self.activate.is_some(), |s| s.cursor_pointer())
                     .on_click(move |e, win, cx| {
-                        if e.click_count() == 2 {
-                            if let Some(action) = &click_action {
-                                action(i, win, cx);
-                            }
+                        if e.click_count() == 2
+                            && let Some(action) = &click_action
+                        {
+                            action(i, win, cx);
                         }
                     })
                     .on_key_down(move |e: &KeyDownEvent, win, cx| {
@@ -287,11 +328,11 @@ impl RenderOnce for TrendChart {
                                 cx.notify();
                             });
                             cx.stop_propagation();
-                        } else if e.keystroke.key == "enter" {
-                            if let Some(action) = &key_action {
-                                action(i, win, cx);
-                                cx.stop_propagation();
-                            }
+                        } else if e.keystroke.key == "enter"
+                            && let Some(action) = &key_action
+                        {
+                            action(i, win, cx);
+                            cx.stop_propagation();
                         }
                     }),
             );

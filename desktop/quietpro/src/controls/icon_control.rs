@@ -147,4 +147,33 @@ impl IconControl {
         )
         .on_change(change)
     }
+    /// A group policy reports indeterminate state when its members differ.
+    pub fn mixed_toggle(
+        self,
+        colors: Palette,
+        checked: bool,
+        mixed: bool,
+        change: impl Fn(bool, &ClickEvent, &mut Window, &mut App) + 'static,
+    ) -> impl IntoElement {
+        control(
+            gpui_kit::base::Checkbox::new(self.id)
+                .when_some(self.focus, |button, focus| button.track_focus(&focus))
+                .checked(checked)
+                .indeterminate(mixed)
+                .accessibility_label(self.label)
+                .disabled(self.disabled),
+            colors,
+            self.icon,
+            self.disabled,
+            None,
+        )
+        .on_change(move |state, event, win, cx| {
+            change(
+                state == gpui_kit::base::CheckboxState::Checked,
+                event,
+                win,
+                cx,
+            )
+        })
+    }
 }

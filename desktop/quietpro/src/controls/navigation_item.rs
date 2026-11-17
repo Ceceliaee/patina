@@ -2,7 +2,7 @@ use crate::{Icon, Palette, continuous_corner_layer, glyph};
 use gpui_kit::{base::Button, prelude::*, *};
 
 const GROUP: &str = "sidebar-navigation-item";
-const RADIUS: f32 = 12.;
+const RADIUS: f32 = 16.;
 
 pub fn navigation_item(
     id: &'static str,

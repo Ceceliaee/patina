@@ -4,15 +4,25 @@ use gpui_kit::{prelude::*, *};
 const ROW_HEIGHT: f32 = 48.;
 const ROW_RADIUS: f32 = 12.;
 
+pub struct DistributionValue {
+    pub label: String,
+    pub ratio: f32,
+    pub color: Rgba,
+}
+
 pub fn distribution_row(
     id: impl Into<ElementId>,
     name: String,
-    value: String,
-    ratio: f32,
-    color: Rgba,
+    name_content: impl IntoElement,
+    value: DistributionValue,
     mark: impl IntoElement,
     c: Palette,
 ) -> Stateful<Div> {
+    let DistributionValue {
+        label: value,
+        ratio,
+        color,
+    } = value;
     let ratio = if ratio.is_finite() {
         ratio.clamp(0., 1.)
     } else {
@@ -64,7 +74,7 @@ pub fn distribution_row(
                                 .flex_1()
                                 .min_w_0()
                                 .truncate()
-                                .child(name),
+                                .child(name_content),
                         )
                         .child(
                             div()

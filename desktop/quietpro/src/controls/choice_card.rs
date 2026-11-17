@@ -1,6 +1,47 @@
 use crate::SETTINGS_ROW_HEIGHT;
 use gpui_kit::{prelude::*, *};
 
+/// Compact object selection with a neutral border and selection feedback.
+pub fn object_list_item(
+    id: impl Into<ElementId>,
+    name: impl Into<SharedString>,
+    selected: bool,
+    c: crate::Palette,
+) -> gpui_kit::base::Button {
+    const GROUP: &str = "quietpro-object-list-item";
+    gpui_kit::base::Button::new(id)
+        .accessibility_label(name)
+        .selected(selected)
+        .aria_selected(selected)
+        .group(GROUP)
+        .relative()
+        .flex()
+        .items_center()
+        .w_full()
+        .min_w_0()
+        .flex_none()
+        .h(px(40.))
+        .px(px(8.))
+        .gap(px(8.))
+        .cursor_pointer()
+        .text_color(c.border)
+        .focus_visible(move |s| s.text_color(c.secondary))
+        .child(crate::continuous_corner_layer(px(16.), px(0.)))
+        .child(crate::continuous_corner_fill(px(16.), px(1.), c.panel))
+        .child(
+            div()
+                .id("feedback")
+                .absolute()
+                .inset_0()
+                .text_color(c.secondary.opacity(if selected { 0.08 } else { 0. }))
+                .group_hover(GROUP, move |s| {
+                    s.text_color(c.secondary.opacity(if selected { 0.10 } else { 0.04 }))
+                })
+                .group_active(GROUP, move |s| s.text_color(c.secondary.opacity(0.12)))
+                .child(crate::continuous_corner_layer(px(16.), px(1.))),
+        )
+}
+
 pub fn choice_card(
     id: impl Into<ElementId>,
     name: impl Into<SharedString>,
