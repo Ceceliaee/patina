@@ -766,7 +766,6 @@ export interface UiText {
     "dataSafetyTitle": string;
     "decreaseCleanupRange": string;
     "decreaseMinute": (label: string) => string;
-    "dynamicEffectsLabel": string;
     "globalTitleHint": string;
     "globalTitleLabel": string;
     "idle": string;

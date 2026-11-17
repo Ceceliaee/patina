@@ -351,18 +351,6 @@
           "markdownDescription": "Enables the cmd_cancel_reminder command without any pre-configured scope."
         },
         {
-          "description": "Enables the cmd_check_for_updates command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-check-for-updates",
-          "markdownDescription": "Enables the cmd_check_for_updates command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the cmd_classification_object_deletion command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-classification-object-deletion",
-          "markdownDescription": "Enables the cmd_classification_object_deletion command without any pre-configured scope."
-        },
-        {
           "description": "Enables the cmd_clear_data_bootstrap_snapshot_payload command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-clear-data-bootstrap-snapshot-payload",
@@ -463,12 +451,6 @@
           "type": "string",
           "const": "allow-cmd-dismiss-tool-alert",
           "markdownDescription": "Enables the cmd_dismiss_tool_alert command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the cmd_download_update command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-download-update",
-          "markdownDescription": "Enables the cmd_download_update command without any pre-configured scope."
         },
         {
           "description": "Enables the cmd_download_webdav_backup command without any pre-configured scope.",
@@ -657,12 +639,6 @@
           "markdownDescription": "Enables the cmd_get_tracker_health_snapshot command without any pre-configured scope."
         },
         {
-          "description": "Enables the cmd_get_update_snapshot command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-get-update-snapshot",
-          "markdownDescription": "Enables the cmd_get_update_snapshot command without any pre-configured scope."
-        },
-        {
           "description": "Enables the cmd_get_web_activity_aggregate_range command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-get-web-activity-aggregate-range",
@@ -685,12 +661,6 @@
           "type": "string",
           "const": "allow-cmd-get-web-links",
           "markdownDescription": "Enables the cmd_get_web_links command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the cmd_install_update command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-cmd-install-update",
-          "markdownDescription": "Enables the cmd_install_update command without any pre-configured scope."
         },
         {
           "description": "Enables the cmd_list_import_batches command without any pre-configured scope.",
@@ -1047,18 +1017,6 @@
           "markdownDescription": "Denies the cmd_cancel_reminder command without any pre-configured scope."
         },
         {
-          "description": "Denies the cmd_check_for_updates command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-check-for-updates",
-          "markdownDescription": "Denies the cmd_check_for_updates command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the cmd_classification_object_deletion command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-classification-object-deletion",
-          "markdownDescription": "Denies the cmd_classification_object_deletion command without any pre-configured scope."
-        },
-        {
           "description": "Denies the cmd_clear_data_bootstrap_snapshot_payload command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-clear-data-bootstrap-snapshot-payload",
@@ -1159,12 +1117,6 @@
           "type": "string",
           "const": "deny-cmd-dismiss-tool-alert",
           "markdownDescription": "Denies the cmd_dismiss_tool_alert command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the cmd_download_update command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-download-update",
-          "markdownDescription": "Denies the cmd_download_update command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_download_webdav_backup command without any pre-configured scope.",
@@ -1353,12 +1305,6 @@
           "markdownDescription": "Denies the cmd_get_tracker_health_snapshot command without any pre-configured scope."
         },
         {
-          "description": "Denies the cmd_get_update_snapshot command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-get-update-snapshot",
-          "markdownDescription": "Denies the cmd_get_update_snapshot command without any pre-configured scope."
-        },
-        {
           "description": "Denies the cmd_get_web_activity_aggregate_range command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-get-web-activity-aggregate-range",
@@ -1381,12 +1327,6 @@
           "type": "string",
           "const": "deny-cmd-get-web-links",
           "markdownDescription": "Denies the cmd_get_web_links command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the cmd_install_update command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-cmd-install-update",
-          "markdownDescription": "Denies the cmd_install_update command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_list_import_batches command without any pre-configured scope.",
@@ -4057,60 +3997,6 @@
           "type": "string",
           "const": "opener:deny-reveal-item-in-dir",
           "markdownDescription": "Denies the reveal_item_in_dir command without any pre-configured scope."
-        },
-        {
-          "description": "This permission set configures which kind of\nupdater functions are exposed to the frontend.\n\n#### Granted Permissions\n\nThe full workflow from checking for updates to installing them\nis enabled.\n\n\n#### This default permission set includes:\n\n- `allow-check`\n- `allow-download`\n- `allow-install`\n- `allow-download-and-install`",
-          "type": "string",
-          "const": "updater:default",
-          "markdownDescription": "This permission set configures which kind of\nupdater functions are exposed to the frontend.\n\n#### Granted Permissions\n\nThe full workflow from checking for updates to installing them\nis enabled.\n\n\n#### This default permission set includes:\n\n- `allow-check`\n- `allow-download`\n- `allow-install`\n- `allow-download-and-install`"
-        },
-        {
-          "description": "Enables the check command without any pre-configured scope.",
-          "type": "string",
-          "const": "updater:allow-check",
-          "markdownDescription": "Enables the check command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the download command without any pre-configured scope.",
-          "type": "string",
-          "const": "updater:allow-download",
-          "markdownDescription": "Enables the download command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the download_and_install command without any pre-configured scope.",
-          "type": "string",
-          "const": "updater:allow-download-and-install",
-          "markdownDescription": "Enables the download_and_install command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the install command without any pre-configured scope.",
-          "type": "string",
-          "const": "updater:allow-install",
-          "markdownDescription": "Enables the install command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the check command without any pre-configured scope.",
-          "type": "string",
-          "const": "updater:deny-check",
-          "markdownDescription": "Denies the check command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the download command without any pre-configured scope.",
-          "type": "string",
-          "const": "updater:deny-download",
-          "markdownDescription": "Denies the download command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the download_and_install command without any pre-configured scope.",
-          "type": "string",
-          "const": "updater:deny-download-and-install",
-          "markdownDescription": "Denies the download_and_install command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the install command without any pre-configured scope.",
-          "type": "string",
-          "const": "updater:deny-install",
-          "markdownDescription": "Denies the install command without any pre-configured scope."
         }
       ]
     },
