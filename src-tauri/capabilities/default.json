@@ -17,7 +17,6 @@
     "core:window:allow-start-dragging",
     "core:window:allow-toggle-maximize",
     "core:app:default",
-    "updater:default",
     "main-window-commands"
   ]
 }

@@ -1,17 +1,11 @@
 pub use crate::data::repositories::app_settings::AppSettingMutation;
 use crate::data::repositories::app_settings::{self, commit_app_setting_mutations};
-use crate::data::repositories::update_state;
 use crate::data::sqlite_error::SqliteOperationError;
 use crate::data::sqlite_pool::{reopen_sqlite_pool, wait_for_sqlite_pool};
 use crate::domain::settings::{
     DesktopBehaviorSettings, WebActivityBridgeSettings, WebActivitySettings,
 };
 use tauri::{AppHandle, Runtime};
-
-pub struct DesktopBehaviorStartupState {
-    pub settings: DesktopBehaviorSettings,
-    pub should_reopen_main_window: bool,
-}
 
 pub async fn migrate_history_timeline_mode(
     app: &AppHandle,
@@ -45,30 +39,6 @@ pub async fn migrate_legacy_web_links<R: Runtime>(app: &AppHandle<R>) -> Result<
     let mut tx = pool.begin().await.map_err(|error| error.to_string())?;
     super::repositories::web_links::migrate_legacy_web_grouping(&mut tx).await?;
     tx.commit().await.map_err(|error| error.to_string())
-}
-
-pub async fn load_desktop_behavior_startup_state<R: Runtime>(
-    app: &AppHandle<R>,
-) -> Result<DesktopBehaviorStartupState, String> {
-    let settings = load_desktop_behavior_settings(app).await?;
-    let pool = wait_for_sqlite_pool(app).await?;
-    let should_reopen_main_window = update_state::load_post_install_reopen_main_window(&pool)
-        .await
-        .map_err(|error| format!("failed to load post-install reopen intent: {error}"))?;
-
-    Ok(DesktopBehaviorStartupState {
-        settings,
-        should_reopen_main_window,
-    })
-}
-
-pub async fn clear_post_install_reopen_main_window<R: Runtime>(
-    app: &AppHandle<R>,
-) -> Result<(), String> {
-    let pool = wait_for_sqlite_pool(app).await?;
-    update_state::clear_post_install_reopen_main_window(&pool)
-        .await
-        .map_err(|error| format!("failed to clear post-install reopen intent: {error}"))
 }
 
 pub async fn load_desktop_behavior_settings<R: Runtime>(

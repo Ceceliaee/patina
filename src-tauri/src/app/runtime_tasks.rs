@@ -1,27 +1,15 @@
 use crate::app::tools as tools_runtime;
-use crate::app::updater;
 use crate::engine::tracking::watchdog::TrackingStage;
 use crate::engine::tracking::{
     runtime as tracking_runtime, startup as tracking_startup, watchdog as tracking_watchdog,
 };
-use crate::engine::updater::UpdaterRuntimeState;
 use futures_util::FutureExt;
 use std::sync::Arc;
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Runtime};
 use tokio::time::{sleep, Duration};
 
 const RETRY_DELAY_SECS: u64 = 2;
 const MAX_RETRY_DELAY_SECS: u64 = 30;
-
-pub(crate) fn spawn_updater_startup_auto_check<R: Runtime + 'static>(app: AppHandle<R>) {
-    let updater_state: UpdaterRuntimeState = {
-        let state = app.state::<UpdaterRuntimeState>();
-        (*state).clone()
-    };
-    tauri::async_runtime::spawn(async move {
-        updater::run_startup_auto_check(app, updater_state).await;
-    });
-}
 
 pub(crate) fn spawn_tracking_runtime_restart_loop<R: Runtime + 'static>(
     app: AppHandle<R>,

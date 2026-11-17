@@ -1,6 +1,7 @@
 pub mod activity_read_model;
 pub mod app_settings_service;
 pub mod backup;
+#[cfg(test)]
 pub(crate) mod classification_deletion;
 pub mod classification_service;
 pub mod export;
@@ -26,7 +27,6 @@ pub mod tools_store;
 pub mod tracking_pause_service;
 pub mod tracking_runtime;
 pub(crate) mod tracking_runtime_tauri;
-pub mod update_store;
 pub mod user_data_maintenance;
 pub mod web_activity_analysis;
 pub mod web_activity_store;

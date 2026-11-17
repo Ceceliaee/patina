@@ -3,5 +3,4 @@ pub mod export_scheduler;
 pub mod remote_status_bridge;
 pub mod tools;
 pub mod tracking;
-pub mod updater;
 pub mod web_activity;

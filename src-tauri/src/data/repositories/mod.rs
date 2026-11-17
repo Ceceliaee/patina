@@ -17,6 +17,5 @@ pub mod sessions;
 pub mod settings;
 pub mod tools;
 pub mod tracker_settings;
-pub mod update_state;
 pub mod web_activity;
 pub mod web_links;

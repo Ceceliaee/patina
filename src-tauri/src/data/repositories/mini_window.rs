@@ -80,7 +80,6 @@ pub struct MiniBootstrapSettings {
     pub history_timeline_mode: Option<String>,
     pub refresh_interval_secs: Option<String>,
     pub timeline_merge_gap_secs: Option<String>,
-    pub dynamic_effects: Option<String>,
     pub web_activity_available: bool,
 }
 
@@ -113,7 +112,7 @@ pub(crate) async fn load_mini_bootstrap_in_tx(
     let setting_rows = sqlx::query(
         "SELECT key, value
          FROM settings
-         WHERE key IN (?, ?, ?, ?, ?, 'hourly_activity_chart_mode', 'history_timeline_mode', 'refresh_interval_secs', 'timeline_merge_gap_secs', 'dynamic_effects', 'web_activity_enabled')
+         WHERE key IN (?, ?, ?, ?, ?, 'hourly_activity_chart_mode', 'history_timeline_mode', 'refresh_interval_secs', 'timeline_merge_gap_secs', 'web_activity_enabled')
          ORDER BY key ASC",
     )
     .bind(TRACKING_PAUSED_KEY)
@@ -173,7 +172,6 @@ pub(crate) async fn load_mini_bootstrap_in_tx(
             history_timeline_mode: settings_by_key.remove("history_timeline_mode"),
             refresh_interval_secs: settings_by_key.remove("refresh_interval_secs"),
             timeline_merge_gap_secs: settings_by_key.remove("timeline_merge_gap_secs"),
-            dynamic_effects: settings_by_key.remove("dynamic_effects"),
             web_activity_available: token_available
                 && settings_by_key
                     .get("web_activity_enabled")

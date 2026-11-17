@@ -120,7 +120,6 @@ pub fn setup(
     ) {
         return Err(std::io::Error::other("failed to establish startup UI recovery path").into());
     }
-    runtime_tasks::spawn_updater_startup_auto_check(app.handle().clone());
     runtime_tasks::spawn_tracking_runtime_restart_loop(
         app.handle().clone(),
         runtime_health.clone(),

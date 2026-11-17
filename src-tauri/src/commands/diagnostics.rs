@@ -1,5 +1,5 @@
 use crate::engine::tracking::metadata;
-use crate::engine::{tools, updater::UpdaterRuntimeState};
+use crate::engine::tools;
 use crate::platform::web_activity_bridge;
 use crate::platform::windows::{foreground, icon, resource};
 use serde::Serialize;
@@ -19,7 +19,6 @@ pub struct ResourceDiagnosticsSnapshot {
     pub icon_result_cache: icon::IconResultCacheStats,
     pub icon_negative_cache: metadata::IconNegativeCacheStats,
     pub tool_alerts: tools::ToolAlertQueueStats,
-    pub updater_retained_package: crate::engine::updater::UpdaterRetainedPackageStats,
     pub web_activity_bridge: web_activity_bridge::WebActivityBridgeConnectionStats,
     pub native_probes: Vec<crate::platform::windows::native_probe::NativeProbeDiagnostics>,
     pub diagnostic_output_counts: Option<(u64, u64)>,
@@ -61,14 +60,6 @@ pub fn cmd_get_resource_diagnostics(app: tauri::AppHandle) -> ResourceDiagnostic
         icon_result_cache: icon::icon_result_cache_stats(),
         icon_negative_cache: metadata::icon_negative_cache_stats(now_ms()),
         tool_alerts: tools::alert_queue_stats(&app),
-        updater_retained_package: app
-            .try_state::<UpdaterRuntimeState>()
-            .map(|state| state.retained_package_stats())
-            .unwrap_or(crate::engine::updater::UpdaterRetainedPackageStats {
-                retained: false,
-                storage: None,
-                size_bytes: None,
-            }),
         web_activity_bridge: app
             .try_state::<web_activity_bridge::WebActivityBridgeRuntimeState>()
             .map(|state| state.connection_stats())

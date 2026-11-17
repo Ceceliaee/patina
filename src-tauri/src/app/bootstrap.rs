@@ -16,7 +16,6 @@ use crate::engine::{
         pause_state::TrackingPauseRuntimeState, runtime_snapshot::TrackingRuntimeSnapshotState,
         title_state::TitleRecordingRuntimeState, watchdog::RuntimeHealthState,
     },
-    updater::UpdaterRuntimeState,
     web_activity::WebActivityRuntimeState,
 };
 use crate::{commands, data};
@@ -70,7 +69,7 @@ fn register_single_instance_plugin(
 
 fn register_managed_state_and_plugins(
     builder: tauri::Builder<tauri::Wry>,
-    app_version: &str,
+    _app_version: &str,
     runtime_health: Arc<RuntimeHealthState>,
 ) -> tauri::Builder<tauri::Wry> {
     builder
@@ -96,7 +95,6 @@ fn register_managed_state_and_plugins(
         .manage(crate::platform::web_activity_bridge::WebActivityBridgeRuntimeState::default())
         .manage(crate::engine::remote_status_bridge::RemoteStatusBridgeRuntimeState::default())
         .manage(WebActivityRuntimeState::default())
-        .manage(UpdaterRuntimeState::new(app_version.to_string()))
         .manage(crate::app::scheduled_backup::ScheduledBackupRuntimeState::default())
         .manage(crate::app::scheduled_export::ScheduledExportRuntimeState::default())
         .plugin(autostart_plugin())
@@ -104,7 +102,6 @@ fn register_managed_state_and_plugins(
         .manage(crate::data::activity_read_model::ReadModelWake::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
 }
 
 fn autostart_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
@@ -199,10 +196,6 @@ fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Build
         commands::window::cmd_get_main_window_render_token,
         commands::window::cmd_mark_main_window_ready,
         commands::window::cmd_take_main_tools_target,
-        commands::update::cmd_get_update_snapshot,
-        commands::update::cmd_check_for_updates,
-        commands::update::cmd_download_update,
-        commands::update::cmd_install_update,
         commands::web_activity_analysis::cmd_get_web_activity_aggregate_range,
         commands::backup::cmd_pick_backup_save_file,
         commands::backup::cmd_pick_backup_file,
@@ -233,7 +226,6 @@ fn register_invoke_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Build
         commands::storage::cmd_open_storage_directory,
         commands::persistence::cmd_delete_sessions_before,
         commands::persistence::cmd_delete_sessions_by_exe_names,
-        commands::persistence::cmd_classification_object_deletion,
         commands::persistence::cmd_delete_sessions_by_exe_names_between,
         commands::persistence::cmd_delete_web_activity_segments_by_domain,
         commands::persistence::cmd_save_remote_backup_settings,
@@ -271,19 +263,15 @@ fn register_runtime_hooks(
             }
             tauri::async_runtime::block_on(data::app_settings_service::migrate_legacy_web_links(app.handle()))
                 .map_err(std::io::Error::other)?;
-            let mut should_clear_update_reopen_intent = false;
             let startup = match tauri::async_runtime::block_on(
-                data::app_settings_service::load_desktop_behavior_startup_state(app.handle()),
+                data::app_settings_service::load_desktop_behavior_settings(app.handle()),
             ) {
-                Ok(startup_state) => {
-                    should_clear_update_reopen_intent =
-                        startup_state.should_reopen_main_window;
+                Ok(settings) => {
                     runtime::StartupContext::new(
-                        startup_state.settings,
+                        settings,
                         resolve_startup_source(
                             launched_by_autostart,
                             handled_storage_restart,
-                            startup_state.should_reopen_main_window,
                         ),
                     )
                 }
@@ -298,15 +286,6 @@ fn register_runtime_hooks(
                 }
             };
             runtime::setup(app, runtime_health.clone(), startup)?;
-            if should_clear_update_reopen_intent {
-                if let Err(error) = tauri::async_runtime::block_on(
-                    data::app_settings_service::clear_post_install_reopen_main_window(app.handle()),
-                ) {
-                    eprintln!(
-                        "[startup] main window reopened but update intent could not be cleared: {error}"
-                    );
-                }
-            }
             Ok(())
         })
 }
@@ -314,12 +293,9 @@ fn register_runtime_hooks(
 fn resolve_startup_source(
     launched_by_autostart: bool,
     handled_storage_restart: bool,
-    should_reopen_after_update: bool,
 ) -> StartupSource {
     if handled_storage_restart {
         StartupSource::StorageRestart
-    } else if should_reopen_after_update {
-        StartupSource::UpdateRestart
     } else if launched_by_autostart {
         StartupSource::Autostart
     } else {
@@ -388,12 +364,9 @@ mod tests {
 
     #[test]
     fn ordinary_launch_sources_are_distinguished() {
+        assert_eq!(resolve_startup_source(false, false), StartupSource::Manual);
         assert_eq!(
-            resolve_startup_source(false, false, false),
-            StartupSource::Manual
-        );
-        assert_eq!(
-            resolve_startup_source(true, false, false),
+            resolve_startup_source(true, false),
             StartupSource::Autostart
         );
     }
@@ -401,15 +374,11 @@ mod tests {
     #[test]
     fn explicit_restarts_override_autostart_arguments() {
         assert_eq!(
-            resolve_startup_source(true, false, true),
-            StartupSource::UpdateRestart
-        );
-        assert_eq!(
-            resolve_startup_source(true, true, true),
+            resolve_startup_source(true, true),
             StartupSource::StorageRestart
         );
         assert_eq!(
-            resolve_startup_source(false, true, false),
+            resolve_startup_source(false, true),
             StartupSource::StorageRestart
         );
     }

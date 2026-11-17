@@ -6,7 +6,7 @@ const KEY: &str = "tools_notification_preferences";
 pub async fn appearance(
     pool: &Pool<Sqlite>,
 ) -> Result<std::collections::BTreeMap<String, String>, String> {
-    let rows: Vec<(String, String)> = sqlx::query_as("SELECT key,value FROM settings WHERE key IN ('theme_mode','language','color_scheme_light','color_scheme_dark','dynamic_effects')")
+    let rows: Vec<(String, String)> = sqlx::query_as("SELECT key,value FROM settings WHERE key IN ('theme_mode','language','color_scheme_light','color_scheme_dark')")
         .fetch_all(pool).await.map_err(|e| e.to_string())?;
     Ok(rows.into_iter().collect())
 }

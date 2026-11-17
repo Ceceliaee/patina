@@ -46,7 +46,6 @@ impl StartupUiStrategy {
 pub(crate) enum StartupSource {
     Manual,
     Autostart,
-    UpdateRestart,
     StorageRestart,
     SettingsRecovery,
 }
@@ -56,17 +55,13 @@ impl StartupSource {
         match self {
             Self::Manual => "manual",
             Self::Autostart => "autostart",
-            Self::UpdateRestart => "update-restart",
             Self::StorageRestart => "storage-restart",
             Self::SettingsRecovery => "settings-recovery",
         }
     }
 
     fn must_show_main_window(self) -> bool {
-        matches!(
-            self,
-            Self::UpdateRestart | Self::StorageRestart | Self::SettingsRecovery
-        )
+        matches!(self, Self::StorageRestart | Self::SettingsRecovery)
     }
 }
 
@@ -467,7 +462,6 @@ mod tests {
         let settings = DesktopBehaviorSettings::default();
 
         for source in [
-            StartupSource::UpdateRestart,
             StartupSource::StorageRestart,
             StartupSource::SettingsRecovery,
         ] {
