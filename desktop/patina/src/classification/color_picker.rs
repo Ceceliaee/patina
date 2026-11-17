@@ -10,6 +10,7 @@ use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use std::{cell::Cell, rc::Rc};
 
 pub(super) struct Changed(pub Option<String>);
+pub(super) struct FormatChanged(pub usize);
 
 pub(super) fn parse_hex(value: &str) -> Option<Rgba> {
     let raw = value.trim().strip_prefix('#').unwrap_or(value.trim());
@@ -87,6 +88,7 @@ impl ColorPicker {
         client: Rc<Client>,
         value: Rgba,
         default: Rgba,
+        format: usize,
         win: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -110,7 +112,7 @@ impl ColorPicker {
             hue,
             saturation,
             brightness,
-            format: 0,
+            format,
             format_focus: std::array::from_fn(|_| cx.focus_handle()),
             area_focus: cx.focus_handle(),
             hue_focus: cx.focus_handle(),
@@ -367,6 +369,7 @@ impl ColorPicker {
 }
 
 impl EventEmitter<Changed> for ColorPicker {}
+impl EventEmitter<FormatChanged> for ColorPicker {}
 impl Render for ColorPicker {
     fn render(&mut self, win: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = self.client.palette(win);
@@ -398,6 +401,7 @@ impl Render for ColorPicker {
             move |format, win, cx| {
                 let _ = view.update(cx, |t, cx| {
                     t.format = format;
+                    cx.emit(FormatChanged(format));
                     t.sync_fields(win, cx);
                     cx.notify();
                 });

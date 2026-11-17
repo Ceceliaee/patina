@@ -39,6 +39,9 @@ impl Classification {
         {
             rule.category = target.clone();
         }
+        if !self.categories().iter().any(|(id, _)| id == &rule.category) {
+            rule.category = "other".into();
+        }
         rule
     }
     pub(super) fn categories(&self) -> Vec<(String, String)> {
@@ -63,7 +66,7 @@ impl Classification {
         entries
     }
 
-    fn default_category_color(&self, id: &str) -> String {
+    pub(super) fn default_category_color(&self, id: &str) -> String {
         self.rules
             .as_ref()
             .and_then(|r| r.category_default_colors.get(id))
@@ -445,10 +448,15 @@ impl Classification {
                                 client.clone(),
                                 display,
                                 default,
+                                t.color_format,
                                 win,
                                 cx,
                             )
                         });
+                        cx.subscribe(&picker, |t, _, format: &color_picker::FormatChanged, _| {
+                            t.color_format = format.0;
+                        })
+                        .detach();
                         let id = color_id.clone();
                         cx.subscribe(&picker, move |t, _, value: &color_picker::Changed, cx| {
                             t.category_edit(&id).color = Some(value.0.clone().unwrap_or_default());
@@ -689,7 +697,7 @@ impl Classification {
 
 #[cfg(test)]
 mod tests {
-    use super::compare_category_names;
+    use super::compare_names;
     use std::cmp::Ordering;
 
     #[test]

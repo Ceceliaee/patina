@@ -52,6 +52,12 @@ impl Card {
             || self.identity.to_lowercase().contains(query)
             || matches!(&self.source, Source::Web(site) if site.members.iter().any(|member| member.contains(query)))
     }
+    pub fn titles_mixed(&self) -> bool {
+        matches!(&self.source, Source::Web(s) if s.titles_mixed)
+    }
+    pub fn tracking_mixed(&self) -> bool {
+        matches!(&self.source, Source::Web(s) if s.tracking_mixed)
+    }
     pub fn is_web(&self) -> bool {
         matches!(self.source, Source::Web(_))
     }

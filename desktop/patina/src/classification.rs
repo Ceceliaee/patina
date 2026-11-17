@@ -3,6 +3,9 @@ mod card;
 mod category_manager;
 use card::Card;
 mod color_picker;
+mod layout;
+mod links;
+mod web;
 
 use crate::{
     page_controls::{label, save_status},
@@ -48,9 +51,20 @@ pub(super) struct Classification {
     category_filter: Option<String>,
     color_picker: Option<(String, Entity<color_picker::ColorPicker>)>,
     color_focus: BTreeMap<String, FocusHandle>,
+    color_format: usize,
 
     name: Entity<InputState>,
     web: bool,
+    web_draft: Option<patina_recorder::WebDraft>,
+    web_group: Option<String>,
+    web_group_focus: BTreeMap<String, FocusHandle>,
+    web_icons: BTreeMap<String, Option<AppIcon>>,
+    favicon_read: Option<Task<()>>,
+    link_edits: BTreeMap<String, patina_recorder::AppLinkEdit>,
+    adding_link: bool,
+    link_layout: layout::LinkLayout,
+    list_scroll: ScrollHandle,
+    link_search: Entity<InputState>,
     mode_initialized: bool,
     mode_focus: [FocusHandle; 2],
     filter: usize,
@@ -91,6 +105,8 @@ impl Classification {
             }
         })
         .detach();
+        let link_search = field("mapping.addLinkedApp", win, cx);
+        cx.observe(&link_search, |_, _, cx| cx.notify()).detach();
         let name = field("mapping.editAppName", win, cx);
         for input in [&name, &category_name] {
             cx.subscribe(input, |_, _, event, cx| {
@@ -152,8 +168,19 @@ impl Classification {
             category_filter: None,
             color_picker: None,
             color_focus: BTreeMap::new(),
+            color_format: 0,
             name,
             web: false,
+            web_draft: None,
+            web_group: None,
+            web_group_focus: BTreeMap::new(),
+            web_icons: BTreeMap::new(),
+            favicon_read: None,
+            link_edits: BTreeMap::new(),
+            adding_link: false,
+            link_layout: layout::LinkLayout::default(),
+            list_scroll: ScrollHandle::new(),
+            link_search,
             mode_initialized: false,
             mode_focus: std::array::from_fn(|_| cx.focus_handle()),
             filter: 0,
@@ -166,10 +193,10 @@ impl Classification {
             delete_cancel: cx.focus_handle(),
             delete_focus: BTreeMap::new(),
         };
-        this.reload(cx);
+        this.reload(false, cx);
         this
     }
-    fn reload(&mut self, cx: &mut Context<Self>) {
+    fn reload(&mut self, discard_saved_draft: bool, cx: &mut Context<Self>) {
         self.icons_loading = true;
         let read = self.client.request::<Rules>(Query::Rules);
         let client = self.client.clone();
@@ -185,10 +212,20 @@ impl Classification {
                         this.icons
                             .retain(|key, _| r.apps.iter().any(|a| &a.exe == key));
                         this.rules = Some(r);
+                        if discard_saved_draft {
+                            this.pending.clear();
+                            this.web_draft = None;
+                            this.web_group = None;
+                            this.link_edits.clear();
+                            this.category_edits.clear();
+                            this.editing_name = None;
+                            this.busy = false;
+                        }
                         this.error = false;
                     }
                     Err(_) => {
                         this.error = true;
+                        this.busy = false;
                         this.icons_loading = false;
                     }
                 }
@@ -248,7 +285,7 @@ impl Classification {
                 .iter()
                 .cloned()
                 .map(Card::from)
-                .chain(rules.websites.iter().cloned().map(Card::from))
+                .chain(self.websites().into_iter().map(Card::from))
                 .find(|card| card.key == key)
         })
     }
@@ -275,14 +312,49 @@ impl Classification {
         }
     }
     pub(super) fn dirty(&self, cx: &App) -> bool {
-        !self.pending.is_empty()
-            || !self.category_edits.is_empty()
+        let mut websites = self.website_draft();
+        if let Some(key) = &self.editing_name
+            && let Some(mut rule) = self.name_rule(key).and_then(|card| card.web_rule())
+            && let Some(draft) = &mut websites
+        {
+            rule.name = self.name.read(cx).value().trim().into();
+            draft.assign(&rule);
+        }
+        websites.is_some_and(|d| d.dirty())
+            || !self.link_edits.is_empty()
+            || self.rules.as_ref().is_some_and(|rules| {
+                rules.apps.iter().any(|saved| {
+                    let key = format!("app:{}", saved.exe);
+                    let mut draft = self
+                        .pending
+                        .get(&key)
+                        .and_then(Card::app_rule)
+                        .unwrap_or_else(|| saved.clone());
+                    if self.editing_name.as_ref() == Some(&key) {
+                        draft.name = self.name.read(cx).value().trim().into();
+                    }
+                    draft != *saved
+                })
+            })
+            || self.category_edits.values().any(|e| {
+                if e.replacement.is_some() {
+                    return e.previous.is_some();
+                }
+                e.previous.as_ref() != Some(&e.label)
+                    || e.color.as_ref().is_some_and(|color| {
+                        let before = e
+                            .previous_color
+                            .clone()
+                            .unwrap_or_else(|| self.default_category_color(&e.id));
+                        let after = if color.is_empty() {
+                            self.default_category_color(&e.id)
+                        } else {
+                            color.clone()
+                        };
+                        !before.eq_ignore_ascii_case(&after)
+                    })
+            })
             || self.busy
-            || self
-                .editing_name
-                .as_ref()
-                .and_then(|exe| self.name_rule(exe))
-                .is_some_and(|rule| self.name.read(cx).value().trim() != rule.name)
     }
     pub(super) fn save(&mut self, cx: &mut Context<Self>) {
         if self.busy {
@@ -297,24 +369,19 @@ impl Classification {
                 .map(|a| self.effective_rule(a))
                 .filter_map(|a| a.app_rule())
                 .collect(),
-            self.pending
-                .values()
-                .map(|a| self.effective_rule(a))
-                .filter_map(|a| a.web_rule())
-                .collect(),
+            self.website_draft(),
+            self.link_edits.values().cloned().collect(),
             self.category_edits.values().cloned().collect(),
         ));
         cx.spawn(async move |view, cx| {
             let res = write.await;
             let _ = view.update(cx, |this, cx| {
-                this.busy = false;
                 this.error = res.is_err();
                 if res.is_ok() {
-                    this.pending.clear();
-                    this.category_edits.clear();
-                    this.editing_name = None;
-                    this.reload(cx);
+                    this.reload(true, cx);
                     cx.emit(crate::main_window::Saved);
+                } else {
+                    this.busy = false;
                 }
                 cx.notify();
             });
@@ -368,7 +435,7 @@ impl Classification {
                     if apply {
                         this.deleting = None;
                         this.search.update(cx, |input, cx| input.focus(win, cx));
-                        this.reload(cx);
+                        this.reload(false, cx);
                         cx.emit(crate::main_window::Saved);
                     } else {
                         this.delete_impact = Some(impact);
@@ -383,6 +450,7 @@ impl Classification {
 }
 impl Render for Classification {
     fn render(&mut self, win: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.load_web_icons(cx);
         let c = self.client.palette(win);
         let locale = self.client.locale.get();
         let tr = |k| text(locale, k);
@@ -404,6 +472,9 @@ impl Render for Classification {
                 text_button("cancel", tr("common.cancel"), c, can_apply).on_click(cx.listener(
                     |t, _, _, cx| {
                         t.pending.clear();
+                        t.web_draft = None;
+                        t.web_group = None;
+                        t.link_edits.clear();
                         t.category_edits.clear();
                         t.editing_name = None;
                         t.color_picker = None;
@@ -415,12 +486,39 @@ impl Render for Classification {
                 text_button("save", tr("common.save"), c, can_apply)
                     .on_click(cx.listener(|t, _, _, cx| t.save(cx))),
             );
-        let mut body =
-            page(c).child(page_title_row(tr("mapping.title"), Icon::Sparkles, c).child(actions));
+        let view = cx.weak_entity();
+        let pointer_events = canvas(
+            |_, _, _| (),
+            move |_, _, win, _| {
+                let down = view.clone();
+                win.on_mouse_event(move |_: &MouseDownEvent, phase, _, cx| {
+                    if phase == DispatchPhase::Capture {
+                        let _ = down.update(cx, |t, _| t.link_layout.pointer_down = true);
+                    }
+                });
+                let up = view.clone();
+                win.on_mouse_event(move |_: &MouseUpEvent, phase, _, cx| {
+                    if phase == DispatchPhase::Capture {
+                        let up = up.clone();
+                        cx.defer(move |cx| {
+                            let _ = up.update(cx, |t, cx| {
+                                t.link_layout.pointer_down = false;
+                                cx.notify();
+                            });
+                        });
+                    }
+                });
+            },
+        )
+        .absolute()
+        .inset_0();
+        let mut body = page(c)
+            .child(pointer_events)
+            .child(page_title_row(tr("mapping.title"), Icon::Sparkles, c).child(actions));
         if self.error {
             body = body.child(
                 text_button("retry", tr("common.retry"), c, true)
-                    .on_click(cx.listener(|t, _, _, cx| t.reload(cx))),
+                    .on_click(cx.listener(|t, _, _, cx| t.reload(false, cx))),
             );
         }
         if let Some(rules) = &self.rules
@@ -449,8 +547,11 @@ impl Render for Classification {
             .iter()
             .cloned()
             .map(Card::from)
-            .chain(rules.websites.iter().cloned().map(Card::from))
+            .chain(self.websites().into_iter().map(Card::from))
         {
+            self.web_group_focus
+                .entry(app.key.clone())
+                .or_insert_with(|| cx.focus_handle());
             self.delete_focus
                 .entry(app.key.clone())
                 .or_insert_with(|| cx.focus_handle());
@@ -461,15 +562,25 @@ impl Render for Classification {
                 .entry(app.key.clone())
                 .or_insert_with(|| cx.focus_handle());
         }
+        let titles_enabled = rules.titles_enabled;
         let categories = self.categories();
         let apps: Vec<_> = rules
             .apps
             .iter()
             .cloned()
             .map(Card::from)
-            .chain(rules.websites.iter().cloned().map(Card::from))
-            .filter(|a| a.is_web() == self.web)
-            .map(|a| self.effective_rule(self.pending.get(&a.key).unwrap_or(&a)))
+            .chain(self.websites().into_iter().map(Card::from))
+            .filter(|a| {
+                a.is_web() == self.web
+                    && (a.is_web() || !self.app_links().contains_key(&a.identity))
+            })
+            .map(|a| {
+                self.effective_rule(if a.is_web() {
+                    &a
+                } else {
+                    self.pending.get(&a.key).unwrap_or(&a)
+                })
+            })
             .collect();
         let total = apps.iter().filter(|a| a.track).count();
         let unclassified = apps
@@ -580,6 +691,7 @@ impl Render for Classification {
                         t.finish_name(cx);
                         t.color_picker = None;
                         t.web = web;
+                        t.web_group = None;
                         let write = t.client.request::<()>(Query::ClassificationMode(web));
                         cx.spawn(async move |_, _| {
                             let _ = write.await;
@@ -624,6 +736,7 @@ impl Render for Classification {
         let query = self.search.read(cx).value().to_lowercase();
         let mut grid = div()
             .id("rule-grid")
+            .track_scroll(&self.list_scroll)
             .min_h_0()
             .flex_1()
             .overflow_y_scroll()
@@ -633,7 +746,7 @@ impl Render for Classification {
         let mut visible: Vec<_> = apps
             .into_iter()
             .filter(|a| {
-                (a.matches_query(&query))
+                self.matches_card(a, &query)
                     && self
                         .category_filter
                         .as_ref()
@@ -658,9 +771,29 @@ impl Render for Classification {
                 "mapping.emptyState"
             })));
         }
-        for pair in visible.chunks(2) {
+        let (slots, focus) = self.link_layout.arrange(
+            visible.iter().map(|a| a.key.clone()).collect(),
+            self.web_group.as_deref(),
+            format!(
+                "{}:{}:{:?}:{}:{:?}",
+                self.web,
+                self.filter,
+                self.category_filter,
+                query,
+                win.viewport_size()
+            ),
+            &self.list_scroll,
+        );
+        if let Some(focus) = focus.and_then(|key| self.rename_focus.get(&key)) {
+            win.focus(focus, cx);
+        }
+        for pair in slots.chunks(2) {
             let mut row = div().grid().grid_cols(2).gap(px(APP_CARD_GAP));
-            for a in pair {
+            for key in pair {
+                let Some(a) = visible.iter().find(|a| &a.key == key) else {
+                    row = row.child(div().h(px(92.)));
+                    continue;
+                };
                 let draft = (*a).clone();
                 let selected_category = categories
                     .iter()
@@ -697,7 +830,7 @@ impl Render for Classification {
                 let name_action = draft.clone();
                 let color_action = draft.clone();
                 let default_color =
-                    if let Some(color) = self.icons.get(&a.identity).and_then(|icon| icon.color) {
+                    if let Some(color) = self.card_icon(a).and_then(|icon| icon.color) {
                         rgb(color)
                     } else if a.category == "other" {
                         rgb(patina_recorder::default_app_color(&a.identity))
@@ -715,8 +848,8 @@ impl Render for Classification {
                 } else {
                     Icon::AppWindow
                 };
-                let icon = quietpro::app_icon_frame(display_color, c).child(
-                    match (!a.is_web()).then(|| self.icons.get(&a.identity)).flatten() {
+                let icon =
+                    quietpro::app_icon_frame(display_color, c).child(match self.card_icon(a) {
                         Some(image) => div()
                             .id("app-icon")
                             .role(Role::Image)
@@ -741,8 +874,7 @@ impl Render for Classification {
                         None => quietpro::glyph(fallback_icon, c.secondary)
                             .size(px(24.))
                             .into_any_element(),
-                    },
-                );
+                    });
                 let details = div()
                     .min_w_0()
                     .flex_1()
@@ -828,9 +960,20 @@ impl Render for Classification {
                             ),
                     )
                     .child(
-                        label(a.identity.clone())
-                            .id("app-filename")
-                            .text_size(px(12.)),
+                        div()
+                            .flex()
+                            .items_center()
+                            .min_w_0()
+                            .gap(px(8.))
+                            .child(self.identity_control(a, titles_enabled, c, cx))
+                            .when(!a.track && !a.tracking_mixed(), |d| {
+                                d.child(
+                                    label(tr("mapping.noStats"))
+                                        .flex_none()
+                                        .text_size(px(12.))
+                                        .text_color(c.secondary),
+                                )
+                            }),
                     );
                 let picker = self
                     .color_picker
@@ -888,10 +1031,18 @@ impl Render for Classification {
                                     client.clone(),
                                     display_color,
                                     default_color,
+                                    t.color_format,
                                     win,
                                     cx,
                                 )
                             });
+                            cx.subscribe(
+                                &picker,
+                                |t, _, format: &color_picker::FormatChanged, _| {
+                                    t.color_format = format.0;
+                                },
+                            )
+                            .detach();
                             let draft = color_action.clone();
                             cx.subscribe(
                                 &picker,
@@ -919,15 +1070,21 @@ impl Render for Classification {
                     .child(
                         quietpro::IconControl::new(
                             "title-policy",
-                            tr("mapping.titleRecorded"),
-                            if a.titles {
+                            tr(if titles_enabled {
+                                "mapping.titleRecorded"
+                            } else {
+                                "mapping.globalTitleDisabled"
+                            }),
+                            if a.titles_mixed() {
+                                Icon::Minus
+                            } else if a.titles {
                                 Icon::Captions
                             } else {
                                 Icon::CaptionsOff
                             },
                         )
-                        .disabled(self.busy)
-                        .toggle(c, a.titles, {
+                        .disabled(self.busy || !titles_enabled)
+                        .mixed_toggle(c, a.titles, a.titles_mixed(), {
                             let view = cx.weak_entity();
                             move |_, _, _, cx| {
                                 let _ = view.update(cx, |t, cx| {
@@ -944,10 +1101,16 @@ impl Render for Classification {
                         quietpro::IconControl::new(
                             "tracking-policy",
                             tr("mapping.excludeStats"),
-                            if a.track { Icon::ListX } else { Icon::ListPlus },
+                            if a.tracking_mixed() {
+                                Icon::Minus
+                            } else if a.track {
+                                Icon::ListX
+                            } else {
+                                Icon::ListPlus
+                            },
                         )
                         .disabled(self.busy)
-                        .toggle(c, !a.track, {
+                        .mixed_toggle(c, !a.track, a.tracking_mixed(), {
                             let view = cx.weak_entity();
                             move |_, _, _, cx| {
                                 let _ = view.update(cx, |t, cx| {
@@ -960,6 +1123,7 @@ impl Render for Classification {
                             }
                         }),
                     )
+                    .child(self.merge_control(a, c, cx))
                     .child(
                         quietpro::IconControl::new(
                             "delete-records",
