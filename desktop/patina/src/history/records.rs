@@ -4,8 +4,13 @@ use gpui_kit::base::Popover;
 use quietpro::{Icon, IconControl};
 use std::collections::BTreeMap;
 
+const RECORD_CARD_HEIGHT: f32 = 48.;
+const RECORD_CARD_GAP: f32 = 8.;
+const RECORD_LIST_MAX_HEIGHT: f32 = RECORD_CARD_HEIGHT * 7. + RECORD_CARD_GAP * 6.;
+const DETAIL_RECORD_LIST_MAX_HEIGHT: f32 = RECORD_CARD_HEIGHT * 5. + RECORD_CARD_GAP * 4.;
+
 pub(super) struct RecordsState {
-    web: bool,
+    pub(super) web: bool,
     expanded: Option<usize>,
     modes: [FocusHandle; 2],
 }
@@ -22,45 +27,82 @@ impl RecordsState {
     }
 }
 
-struct RecordGroup<'a> {
-    id: usize,
+pub(super) struct RecordGroup<'a> {
+    pub(super) id: usize,
     first: &'a HistoryRecord,
+    start: i64,
     end: i64,
     duration: i64,
     count: usize,
-    titles: Vec<(i64, i64, String)>,
+    current: bool,
+    titles: Vec<(i64, i64, String, Option<String>, i64)>,
 }
 
 fn groups(day: &HistoryDay, minimum: i64) -> Vec<RecordGroup<'_>> {
+    groups_in_range(day, minimum, (day.start, day.end))
+}
+
+pub(super) fn groups_in_range(
+    day: &HistoryDay,
+    minimum: i64,
+    range: (i64, i64),
+) -> Vec<RecordGroup<'_>> {
     let mut groups = BTreeMap::<usize, RecordGroup<'_>>::new();
     for record in &day.records {
+        let start = record.start.max(range.0);
+        let end = record.end.min(range.1);
+        if end <= start {
+            continue;
+        }
         let group = groups
             .entry(record.group_id)
             .or_insert_with(|| RecordGroup {
                 id: record.group_id,
                 first: record,
-                end: record.end,
+                start,
+                end,
                 duration: 0,
                 count: 0,
+                current: false,
                 titles: Vec::new(),
             });
-        group.end = group.end.max(record.end);
-        group.duration += (record.end - record.start).max(0);
+        group.end = group.end.max(end);
+        group.duration += end - start;
         group.count += 1;
-        group.titles.extend(record.titles.iter().cloned());
+        group.current |= record.current && record.end <= range.1;
+        group
+            .titles
+            .extend(record.titles.iter().filter_map(|(a, b, title, url)| {
+                let a = (*a).max(start);
+                let b = (*b).min(end);
+                (b > a).then(|| (a, b, title.clone(), url.clone(), b - a))
+            }));
     }
     let mut groups: Vec<_> = groups
         .into_values()
         .filter(|g| g.duration >= minimum)
         .collect();
     for group in &mut groups {
-        group.titles.sort_by_key(|t| t.0);
+        group.titles.sort_by_key(|t| (t.0, t.1));
+        let mut merged: Vec<(i64, i64, String, Option<String>, i64)> = Vec::new();
+        for title in group.titles.drain(..) {
+            if let Some(previous) = merged.last_mut()
+                && previous.2 == title.2
+                && previous.3 == title.3
+            {
+                previous.4 += title.4;
+                previous.1 = previous.1.max(title.1);
+            } else {
+                merged.push(title);
+            }
+        }
+        group.titles = merged;
     }
     groups.sort_by_key(|g| (g.first.start, g.id));
     groups
 }
 
-fn elapsed(ms: i64) -> String {
+pub(super) fn elapsed(ms: i64) -> String {
     if ms < 60_000 {
         format!("{}s", ms.max(0) / 1000)
     } else {
@@ -69,56 +111,117 @@ fn elapsed(ms: i64) -> String {
 }
 
 fn title_rows(
-    titles: &[(i64, i64, String)],
+    titles: &[(i64, i64, String, Option<String>, i64)],
     colors: Palette,
     locale: Locale,
-    viewport: Size<Pixels>,
+    win: &Window,
+    close: impl IntoElement,
 ) -> Div {
+    let viewport = win.viewport_size();
+    let width = 428_f32.min(f32::from(viewport.width) - 48.);
+    let measure = |value: &str, size: f32| {
+        let run = win.text_style().to_run(value.len());
+        f32::from(
+            win.text_system()
+                .shape_line(value.to_owned().into(), px(size), &[run], None)
+                .width,
+        )
+    };
     let mut list = div()
         .id("timeline-title-list")
         .overflow_y_scroll()
         .min_h_0()
-        .flex_1()
+        .flex_initial()
+        .max_h(px(40. * 5. + 8. * 4.))
         .flex()
         .flex_col()
-        .gap(px(6.));
-    for (index, (start, end, title)) in titles.iter().enumerate() {
+        .gap(px(8.));
+    for (index, (start, end, title, url, active)) in titles.iter().enumerate() {
+        let time = format!(
+            "{} – {}",
+            stamp(*start, "%H:%M:%S"),
+            stamp(*end, "%H:%M:%S")
+        );
+        let duration = elapsed(*active);
+        let truncated = measure(title, 12.)
+            > width - 34. - 24. - 12. - 8. - measure(&duration, 12.) - measure(&time, 10.);
+        let full_title = url
+            .as_ref()
+            .map_or_else(|| title.clone(), |url| format!("{title}\n{url}"));
         list = list.child(
-            div()
+            quietpro::continuous_frame(px(12.), colors.border, colors.panel)
                 .id(("timeline-title", index))
                 .flex()
-                .items_start()
+                .flex_none()
+                .h(px(40.))
+                .items_center()
                 .gap(px(12.))
-                .py(px(6.))
-                .border_b_1()
-                .border_color(colors.border)
-                .child(label(title.clone()).flex_1().min_w_0().text_size(px(12.)))
+                .px(px(12.))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .child(
+                            label(title.clone())
+                                .id(("title-text", index))
+                                .truncate()
+                                .text_size(px(12.))
+                                .when(truncated || url.is_some(), |label| {
+                                    label.tooltip(move |_, cx| {
+                                        cx.new(|_| TitleTip(full_title.clone(), colors)).into()
+                                    })
+                                }),
+                        )
+                        .children(url.as_ref().map(|url| {
+                            label(url.clone())
+                                .truncate()
+                                .text_size(px(10.))
+                                .text_color(colors.secondary)
+                        })),
+                )
                 .child(
                     div()
                         .flex_none()
                         .flex()
-                        .flex_col()
-                        .items_end()
-                        .gap(px(2.))
-                        .child(label(elapsed(end - start)).text_size(px(12.)))
-                        .child(
-                            label(format!(
-                                "{} – {}",
-                                stamp(*start, "%H:%M:%S"),
-                                stamp(*end, "%H:%M:%S")
-                            ))
-                            .text_size(px(10.))
-                            .text_color(colors.secondary),
-                        ),
+                        .items_center()
+                        .gap(px(8.))
+                        .child(label(duration).text_size(px(12.)))
+                        .child(label(time).text_size(px(10.)).text_color(colors.secondary)),
                 ),
         );
     }
     quietpro::dialog_surface(colors, viewport)
-        .w(px(426.).min(viewport.width - px(24.)))
-        .max_h(px(260.).min(viewport.height - px(24.)))
-        .gap(px(8.))
-        .child(label(text(locale, "history.titleDetails")).font_weight(FontWeight::SEMIBOLD))
+        .w(px(width))
+        .gap(px(quietpro::CARD_TITLE_GAP))
+        .child(
+            div()
+                .flex()
+                .flex_none()
+                .items_center()
+                .child(
+                    label(text(locale, "history.titleDetails"))
+                        .flex_1()
+                        .text_size(px(14.))
+                        .line_height(px(20.))
+                        .font_weight(FontWeight::SEMIBOLD),
+                )
+                .child(close),
+        )
         .child(list)
+}
+
+struct TitleTip(String, Palette);
+
+impl Render for TitleTip {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        content_card(self.1.border, self.1.panel)
+            .p(px(8.))
+            .max_w(px(400.))
+            .text_size(px(12.))
+            .child(self.0.clone())
+    }
 }
 
 impl History {
@@ -142,12 +245,13 @@ impl History {
             .id("timeline-record-list")
             .role(Role::Group)
             .aria_label(tr("history.timeline"))
-            .flex_1()
+            .flex_initial()
             .min_h_0()
+            .max_h(px(RECORD_LIST_MAX_HEIGHT))
             .overflow_y_scroll()
             .flex()
             .flex_col()
-            .gap(px(8.));
+            .gap(px(RECORD_CARD_GAP));
         if data.is_none() || groups.is_empty() {
             let key = if self.error || (self.records_view.web && self.web_error) {
                 "destinationDetail.dayError"
@@ -183,7 +287,9 @@ impl History {
                     None,
                     self.records_view.modes[i].clone(),
                 )
-            }),
+            })
+            .into_iter()
+            .take(if self.web_enabled { 2 } else { 1 }),
             self.records_view.web,
             true,
             colors,
@@ -288,11 +394,11 @@ impl History {
             .items_center()
             .justify_between()
             .gap(px(12.))
-            .pb(px(10.))
+            .pb(px(12.))
             .border_b_1()
             .border_color(colors.border)
             .child(
-                div().flex().items_center().gap(px(10.)).child(tabs).child(
+                div().flex().items_center().gap(px(12.)).child(tabs).child(
                     label(format_text(
                         locale,
                         "history.sessionCount",
@@ -311,7 +417,6 @@ impl History {
                 .role(Role::Group)
                 .aria_label(tr("history.timeline"))
                 .w(px(760.).min(win.viewport_size().width - px(48.)))
-                .h(px(560.).min(win.viewport_size().height - px(48.)))
                 .child(
                     div()
                         .flex()
@@ -337,6 +442,48 @@ impl History {
         )
     }
 
+    pub(super) fn detail_records(
+        &self,
+        day: &HistoryDay,
+        groups: &[RecordGroup<'_>],
+        colors: Palette,
+        win: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Stateful<Div> {
+        let mut list = div()
+            .id("detail-record-list")
+            .accessibility_id("detail-record-list")
+            .role(Role::Group)
+            .aria_label(text(self.client.locale.get(), "destinationDetail.records"))
+            .flex_initial()
+            .min_h_0()
+            .max_h(px(DETAIL_RECORD_LIST_MAX_HEIGHT))
+            .overflow_y_scroll()
+            .flex()
+            .flex_col()
+            .gap(px(RECORD_CARD_GAP));
+        if groups.is_empty() {
+            let locale = self.client.locale.get();
+            let (left, right) = self.viewport(day);
+            let message = if day.records.is_empty() {
+                text(locale, "destinationDetail.noActivity")
+            } else if !day.records.iter().any(|r| r.end > left && r.start < right) {
+                text(locale, "destinationDetail.noActivityInWindow")
+            } else {
+                format_text(
+                    locale,
+                    "destinationDetail.noActivityAtMinimum",
+                    &[("minutes", (self.minimum.unwrap_or(60) / 60).to_string())],
+                )
+            };
+            list = list.child(label(message).text_color(colors.secondary));
+        }
+        for group in groups {
+            list = list.child(self.record_card(group, day, colors, win, cx));
+        }
+        list
+    }
+
     fn record_card(
         &self,
         group: &RecordGroup<'_>,
@@ -348,36 +495,42 @@ impl History {
         let locale = self.client.locale.get();
         let record = group.first;
         let anonymous = record.key == "activity:anonymous";
-        let color = quietpro::activity_display_color(
-            self.source_color(day, &record.key, false),
-            colors.panel,
-            self.client.dark(win),
-        );
+        let source_color = self.source_color(day, &record.key, false);
+        let color =
+            quietpro::activity_display_color(source_color, colors.panel, self.client.dark(win));
         let icon = match self.icons.get(&record.key) {
-            Some(icon) => img(icon.image.clone()).size(px(18.)).into_any_element(),
+            _ if anonymous => crate::page_controls::anonymous::icon(
+                color,
+                record.name.clone(),
+                quietpro::UNFRAMED_APP_ICON_SIZE,
+            )
+            .into_any_element(),
+            Some(icon) => img(icon.image.clone())
+                .size(px(quietpro::UNFRAMED_APP_ICON_SIZE))
+                .into_any_element(),
             None => quietpro::glyph(
-                if anonymous {
-                    Icon::EyeOff
-                } else if self.records_view.web {
+                if self.web || self.records_view.web {
                     Icon::Globe
                 } else {
                     Icon::AppWindow
                 },
                 colors.secondary,
             )
-            .size(px(18.))
+            .size(px(quietpro::UNFRAMED_APP_ICON_SIZE))
             .into_any_element(),
         };
         let mut identity = div()
-            .flex_1()
+            .flex_initial()
             .min_w_0()
             .flex()
             .items_center()
-            .gap(px(6.))
+            .gap(px(8.))
             .child(
                 label(record.name.clone())
                     .min_w_0()
                     .truncate()
+                    .text_size(px(14.))
+                    .line_height(px(20.))
                     .font_weight(FontWeight::MEDIUM),
             );
         if !anonymous {
@@ -396,18 +549,32 @@ impl History {
                     )
                 ))
                 .text_size(px(10.))
+                .line_height(px(16.))
                 .text_color(colors.secondary)
                 .flex_none(),
             );
         }
+        if group.current {
+            identity = identity.child(
+                label(text(locale, "destinationDetail.current"))
+                    .text_size(px(10.))
+                    .text_color(colors.accent)
+                    .flex_none(),
+            );
+        }
+        let mut action = div().w(px(28.)).flex_none();
         if !group.titles.is_empty() && !anonymous {
             let id = group.id;
             let open = self.records_view.expanded == Some(id);
+            let trigger_focus =
+                win.use_keyed_state(("record-details-focus", id), cx, |_, cx| cx.focus_handle());
+            let trigger_focus = trigger_focus.read(cx).clone();
             let bounds = win.use_keyed_state(("record-details-bounds", id), cx, |_, _| {
                 Bounds::<Pixels>::default()
             });
             let rect = *bounds.read(cx);
-            let anchor = if win.viewport_size().height - rect.bottom() < px(268.)
+            let popup_height = 34. + 28. + 12. + (group.titles.len().min(5) as f32 * 48. - 8.);
+            let anchor = if win.viewport_size().height - rect.bottom() < px(popup_height + 8.)
                 && rect.top() > win.viewport_size().height - rect.bottom()
             {
                 Anchor::BottomLeft
@@ -415,8 +582,9 @@ impl History {
                 Anchor::TopLeft
             };
             let titles = group.titles.clone();
+            let view = cx.weak_entity();
             let name = format!("{} · {}", text(locale, "history.titleDetails"), record.name);
-            identity = identity.child(
+            action = action.child(
                 Popover::new(("record-details", id))
                     .open(open)
                     .anchor(anchor)
@@ -432,6 +600,7 @@ impl History {
                             },
                         )
                         .button(colors)
+                        .track_focus(&trigger_focus)
                         .child(
                             canvas(
                                 move |rect, _, cx| {
@@ -448,61 +617,71 @@ impl History {
                         cx.notify();
                     }))
                     .content(move |_, win, _| {
-                        title_rows(&titles, colors, locale, win.viewport_size())
+                        let view = view.clone();
+                        let trigger_focus = trigger_focus.clone();
+                        let close = IconControl::new(
+                            "close-title-details",
+                            text(locale, "common.close"),
+                            Icon::X,
+                        )
+                        .action(colors, move |_, win, cx| {
+                            let _ = view.update(cx, |this, cx| {
+                                this.records_view.expanded = None;
+                                win.focus(&trigger_focus, cx);
+                                cx.notify();
+                            });
+                        });
+                        title_rows(&titles, colors, locale, win, close)
                     }),
             );
         }
-        div()
+        quietpro::continuous_frame(px(16.), colors.border, colors.panel)
             .id(("timeline-record", group.id))
             .role(Role::Group)
             .aria_label(format!("{} · {}", record.name, elapsed(group.duration)))
             .flex()
             .flex_none()
             .items_center()
-            .gap(px(12.))
-            .p(px(12.))
-            .min_h(px(64.))
-            .border_1()
-            .border_color(colors.border)
-            .rounded(px(12.))
-            .bg(colors.canvas)
+            .gap(px(8.))
+            .px(px(12.))
+            .py(px(8.))
+            .min_h(px(RECORD_CARD_HEIGHT))
             .child(
                 div()
-                    .w(px(4.))
-                    .h(px(36.))
+                    .size(px(quietpro::UNFRAMED_APP_ICON_SIZE))
                     .flex_none()
-                    .rounded_full()
-                    .bg(color),
+                    .child(icon),
             )
             .child(
                 div()
-                    .size(px(32.))
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .child(identity)
+                    .child(action),
+            )
+            .child(
+                div()
                     .flex_none()
                     .flex()
                     .items_center()
-                    .justify_center()
-                    .rounded(px(8.))
-                    .border_1()
-                    .border_color(colors.border)
-                    .bg(colors.panel)
-                    .child(icon),
-            )
-            .child(identity)
-            .child(
-                div()
-                    .flex_none()
-                    .flex()
-                    .flex_col()
-                    .items_end()
-                    .gap(px(2.))
-                    .child(label(elapsed(group.duration)).text_size(px(12.)))
+                    .gap(px(8.))
+                    .child(
+                        label(elapsed(group.duration))
+                            .text_size(px(14.))
+                            .line_height(px(20.))
+                            .font_weight(FontWeight::MEDIUM),
+                    )
                     .child(
                         label(format!(
                             "{} – {}",
-                            stamp(record.start, "%H:%M:%S"),
+                            stamp(group.start, "%H:%M:%S"),
                             stamp(group.end, "%H:%M:%S")
                         ))
                         .text_size(px(10.))
+                        .line_height(px(16.))
                         .text_color(colors.secondary),
                     ),
             )
@@ -539,7 +718,7 @@ impl History {
 
 #[cfg(test)]
 mod tests {
-    use super::groups;
+    use super::{groups, groups_in_range};
     use patina_recorder::{HistoryDay, HistoryRecord};
     use std::collections::BTreeMap;
 
@@ -553,13 +732,15 @@ mod tests {
             start,
             end,
             group_duration: 180_000,
-            titles: vec![(start, end, "Draft".into())],
+            titles: vec![(start, end, "Draft".into(), None)],
+            current: false,
         };
-        let day = HistoryDay {
+        let mut day = HistoryDay {
             start: 0,
             end: 86_400_000,
             apps: Vec::new(),
             minimum_seconds: 0,
+            timeline_merge_gap_ms: 180_000,
             colors: BTreeMap::new(),
             custom_colors: BTreeMap::new(),
             favicons: BTreeMap::new(),
@@ -579,9 +760,34 @@ mod tests {
             (visible[0].first.start, visible[0].end, visible[0].duration),
             (0, 240_000, 180_000)
         );
-        assert_eq!((visible[0].count, visible[0].titles.len()), (2, 2));
+        assert_eq!((visible[0].count, visible[0].titles.len()), (2, 1));
         assert_eq!(visible[1].id, 2);
         assert_eq!(groups(&day, 0).len(), 3);
         assert!(groups(&day, 181_000).is_empty());
+        let clipped = groups_in_range(&day, 60_000, (60_000, 210_000));
+        assert_eq!(clipped.len(), 2);
+        assert_eq!(
+            (clipped[0].start, clipped[0].end, clipped[0].duration),
+            (60_000, 210_000, 90_000)
+        );
+        assert_eq!(
+            clipped[0].titles,
+            vec![(60_000, 210_000, "Draft".into(), None, 90_000)]
+        );
+        assert!(groups_in_range(&day, 100_000, (60_000, 210_000)).is_empty());
+        day.records[0].titles[0].3 = Some("https://example.test/a".into());
+        day.records[2].titles[0].3 = Some("https://example.test/b".into());
+        assert_eq!(
+            groups(&day, 0)[0].titles.len(),
+            2,
+            "same title with different URLs stays distinct"
+        );
+        day.records[2].titles[0].3 = Some("https://example.test/a".into());
+        let merged = groups(&day, 0);
+        assert_eq!(merged[0].titles.len(), 1);
+        assert_eq!(
+            merged[0].titles[0].4, 180_000,
+            "merged title excludes the idle gap"
+        );
     }
 }
