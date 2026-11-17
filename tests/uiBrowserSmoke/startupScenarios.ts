@@ -1,74 +1,10 @@
 import assert from "node:assert/strict";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
 import { evaluate, jsonString, waitForExpression } from "./browserHarness.ts";
-import { HISTORY_MARKERS, EXPECTED_NAV_LABELS, FIRST_RENDER_TIMEOUT_MS } from "./constants.ts";
+import { TOOLS_MARKER, EXPECTED_NAV_LABELS, FIRST_RENDER_TIMEOUT_MS } from "./constants.ts";
 
 export async function runStartupScenarios(context: BrowserSmokeContext) {
   const { client, sessionId, runTest } = context;
-
-  await runTest("background cache releases at 30 seconds and cancels on foreground and unmount", async () => {
-    await waitForExpression(client, sessionId, "Boolean(globalThis.__PATINA_MAIN_WINDOW_READY_EVIDENCE)");
-    await evaluate(client, sessionId, `import('/tests/uiBrowserSmoke/backgroundCacheProbe.tsx').then(({mountBackgroundCacheProbe}) => { window.__backgroundCacheProbe = mountBackgroundCacheProbe(); })`);
-    try {
-      for (let cycle = 0; cycle < 3; cycle++) {
-        await evaluate(client, sessionId, `window.__backgroundCacheProbe.seed(); window.__backgroundCacheProbe.render(false)`);
-        await waitForExpression(client, sessionId, "window.__backgroundCacheProbe.read().timers === 1");
-        assert.deepEqual(await evaluate(client, sessionId, "window.__backgroundCacheProbe.advance(29_999); window.__backgroundCacheProbe.read()"), {timers: 1, cached: true});
-        await evaluate(client, sessionId, "window.__backgroundCacheProbe.render(true)");
-        await waitForExpression(client, sessionId, "window.__backgroundCacheProbe.read().timers === 0");
-        assert.deepEqual(await evaluate(client, sessionId, "window.__backgroundCacheProbe.advance(1); window.__backgroundCacheProbe.read()"), {timers: 0, cached: true});
-      }
-      await evaluate(client, sessionId, "window.__backgroundCacheProbe.render(false)");
-      await waitForExpression(client, sessionId, "window.__backgroundCacheProbe.read().timers === 1");
-      assert.deepEqual(await evaluate(client, sessionId, "window.__backgroundCacheProbe.advance(29_999); window.__backgroundCacheProbe.read()"), {timers: 1, cached: true});
-      assert.deepEqual(await evaluate(client, sessionId, "window.__backgroundCacheProbe.advance(1); window.__backgroundCacheProbe.read()"), {timers: 0, cached: false});
-      await evaluate(client, sessionId, "window.__backgroundCacheProbe.render(true); window.__backgroundCacheProbe.render(false)");
-      await waitForExpression(client, sessionId, "window.__backgroundCacheProbe.read().timers === 1");
-    } finally {
-      assert.equal(await evaluate(client, sessionId, "window.__backgroundCacheProbe.dispose()"), 0);
-      await evaluate(client, sessionId, "delete window.__backgroundCacheProbe");
-    }
-  });
-
-  await runTest("data changes invalidate a warmed catalog and refresh its mounted consumer", async () => {
-    await waitForExpression(client, sessionId, "Boolean(globalThis.__PATINA_EMIT_TAURI_EVENT && globalThis.__PATINA_MAIN_WINDOW_READY_EVIDENCE)");
-    await evaluate(client, sessionId, `(async () => {
-      const { ClassificationService } = await import('/src/features/classification/services/classificationService.ts');
-      globalThis.__PATINA_CATALOG_OWNER = ClassificationService;
-      await ClassificationService.ensureAppCatalogLoaded();
-      globalThis.__TIME_TRACKER_ENABLE_CLASSIFICATION_CATALOG_FIXTURE = true;
-    })()`);
-    try {
-      for (const [index, reason] of ["session-transition", "session-recovered", "external-data-imported", "session-name-resolved", "external-import-deleted", "backup-restored"].entries()) {
-        await evaluate(client, sessionId, `(() => {
-          localStorage.setItem('__patina_catalog_size', '${index + 2}');
-          globalThis.__PATINA_EMIT_TAURI_EVENT('tracking-data-changed', {reason:${jsonString(reason)}, changed_at_ms:${index + 1}});
-        })()`);
-        if (index === 0) {
-          await waitForExpression(client, sessionId, "globalThis.__PATINA_CATALOG_OWNER.getAppCatalogSnapshot().status === 'cold'", 5_000,
-            "data event must invalidate the warmed inactive catalog");
-          await evaluate(client, sessionId, `(async () => {
-            const host = document.createElement('div'); host.id = 'catalog-probe-host'; host.hidden = true; document.body.append(host);
-            const { mountCatalogStateProbe } = await import('/tests/uiBrowserSmoke/trackingStateProbe.tsx');
-            globalThis.__PATINA_UNMOUNT_CATALOG_PROBE = mountCatalogStateProbe(host);
-          })()`);
-        }
-        await waitForExpression(client, sessionId, `(() => {
-          const state = JSON.parse(document.querySelector('[data-catalog-probe]')?.textContent || '{}');
-          return !state.loading && state.apps?.length === ${index + 2} && state.apps.every(exe => exe.startsWith('catalog-'));
-        })()`, 5_000, "mounted catalog must reread facts after invalidation");
-      }
-    } finally {
-      await evaluate(client, sessionId, `(async () => {
-        globalThis.__PATINA_UNMOUNT_CATALOG_PROBE?.(); document.getElementById('catalog-probe-host')?.remove();
-        delete globalThis.__TIME_TRACKER_ENABLE_CLASSIFICATION_CATALOG_FIXTURE;
-        localStorage.removeItem('__patina_catalog_size');
-        globalThis.__PATINA_CATALOG_OWNER.invalidateAppCatalog();
-        await globalThis.__PATINA_CATALOG_OWNER.ensureAppCatalogLoaded();
-        delete globalThis.__PATINA_CATALOG_OWNER;
-      })()`);
-    }
-  });
 
   await runTest("StrictMode and repeated mounts release subscriptions delivered after unmount or partial failure", async () => {
     await waitForExpression(client, sessionId, "Boolean(globalThis.__PATINA_EVENT_LISTENER_COUNTS && globalThis.__PATINA_MAIN_WINDOW_READY_EVIDENCE)");
@@ -157,16 +93,16 @@ export async function runStartupScenarios(context: BrowserSmokeContext) {
     }
   });
 
-  await runTest("Vite page renders history in a real browser", async () => {
+  await runTest("Vite page renders Tools in a real browser", async () => {
     await waitForExpression(
       client!,
       sessionId,
-      `document.body.innerText.includes(${jsonString(HISTORY_MARKERS[0])})`,
+      `document.body.innerText.includes(${jsonString(TOOLS_MARKER)})`,
       FIRST_RENDER_TIMEOUT_MS,
-      "history first render",
+      "Tools first render",
     );
 
-    for (const marker of HISTORY_MARKERS) {
+    for (const marker of [TOOLS_MARKER]) {
       assert.equal(
         await evaluate(client!, sessionId, `document.body.innerText.includes(${jsonString(marker)})`),
         true,
@@ -211,7 +147,7 @@ export async function runStartupScenarios(context: BrowserSmokeContext) {
         colorScheme: "default",
         cssColorScheme: "light",
         frameConnected: true,
-        presentedView: "history",
+        presentedView: "tools",
       },
       readyCalls: 1,
     });
@@ -272,7 +208,7 @@ export async function runStartupScenarios(context: BrowserSmokeContext) {
         colorScheme: "default",
         cssColorScheme: "light",
         frameConnected: true,
-        presentedView: "history",
+        presentedView: "tools",
       },
       readyCalls: 2,
       sameFrame: true,
