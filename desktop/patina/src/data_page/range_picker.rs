@@ -38,6 +38,15 @@ pub(super) enum RangeSelection {
 }
 
 impl RangeSelection {
+    fn monthly(self, today: NaiveDate) -> bool {
+        match self {
+            Self::All | Self::Rolling(365) | Self::Period(PickerMode::Year, _) => true,
+            Self::Custom(_, _) => self
+                .bounds(today)
+                .is_some_and(|(a, b)| (b - a).num_days() + 1 > 62),
+            _ => false,
+        }
+    }
     fn bounds(self, today: NaiveDate) -> Option<(NaiveDate, NaiveDate)> {
         let (a, b) = match self {
             Self::All => return None,
@@ -162,6 +171,9 @@ impl RangeControl {
             controls_bounds: Rc::new(std::cell::Cell::new(Bounds::default())),
         }
     }
+    pub(super) fn monthly(&self) -> bool {
+        self.selection.monthly(Local::now().date_naive())
+    }
     pub(super) fn range(&self) -> Option<(i64, i64)> {
         self.selection
             .bounds(Local::now().date_naive())
@@ -215,7 +227,7 @@ impl RangePicker {
 }
 
 impl DataPage {
-    fn close_range(&mut self, restore: bool, win: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn close_range(&mut self, restore: bool, win: &mut Window, cx: &mut Context<Self>) {
         if let Some(picker) = self.range_picker.take()
             && restore
         {
@@ -648,6 +660,16 @@ impl DataPage {
 mod tests {
     use super::{PickerMode, RangeSelection};
     use chrono::{Datelike, Days, NaiveDate};
+    #[test]
+    fn year_granularity_does_not_change_with_available_days() {
+        let today = NaiveDate::from_ymd_opt(2026, 1, 5).unwrap();
+        assert!(RangeSelection::Period(PickerMode::Year, today).monthly(today));
+        assert!(RangeSelection::All.monthly(today));
+        assert!(RangeSelection::Rolling(365).monthly(today));
+        assert!(!RangeSelection::Period(PickerMode::Month, today).monthly(today));
+        assert!(!RangeSelection::Custom(today - Days::new(61), today).monthly(today));
+        assert!(RangeSelection::Custom(today - Days::new(62), today).monthly(today));
+    }
     #[test]
     fn range_navigation_matches_legacy_control() {
         let today = NaiveDate::from_ymd_opt(2026, 11, 16).unwrap();

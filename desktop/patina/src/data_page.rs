@@ -17,6 +17,7 @@ use std::{
     rc::Rc,
     sync::Arc,
 };
+mod heatmap;
 mod range_picker;
 mod trend;
 use range_picker::{RangeControl, RangePicker, RangeTarget};
@@ -29,11 +30,19 @@ fn noon(date: NaiveDate) -> Option<i64> {
             .timestamp_millis(),
     )
 }
+pub(super) struct OpenHistoryDay(pub i64);
+
 pub(super) struct DataPage {
+    quick_edit: Option<Entity<crate::page_controls::quick_edit::QuickEdit>>,
     client: Rc<Client>,
+    refresh_timer: Option<Task<()>>,
+    detailed: bool,
+    web_enabled: bool,
+    view_focus: [FocusHandle; 2],
     year: i32,
     recent_heat: bool,
     heat: Option<Trends>,
+    heat_focus: std::cell::RefCell<HashMap<&'static str, heatmap::HeatmapFocus>>,
     heat_read: Option<Task<()>>,
     weekly: bool,
     mode_focus: [FocusHandle; 3],
@@ -49,6 +58,8 @@ pub(super) struct DataPage {
     read: Option<Task<()>>,
     error: bool,
     selected: BTreeSet<String>,
+    selections: [BTreeSet<String>; 3],
+    selection_notice: bool,
     icons: HashMap<String, trend::SourceIcon>,
     icon_read: Option<Task<()>>,
     trend_heat: Option<(SeriesKind, Trends)>,
@@ -56,27 +67,78 @@ pub(super) struct DataPage {
     trend_heat_year: Option<i32>,
     trend_heat_weekly: bool,
     trend_heat_mode_focus: [FocusHandle; 2],
-    search: Entity<InputState>,
+    searches: [Entity<InputState>; 3],
     detail: Option<Entity<History>>,
     detail_focus: FocusHandle,
     detail_trigger: Option<FocusHandle>,
 }
+impl EventEmitter<OpenHistoryDay> for DataPage {}
+
 impl DataPage {
+    fn open_quick_edit(
+        &mut self,
+        key: String,
+        name: String,
+        web: bool,
+        position: Point<Pixels>,
+        win: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let trigger = win.focused(cx);
+        let edit = cx.new(|cx| {
+            crate::page_controls::quick_edit::QuickEdit::new(
+                self.client.clone(),
+                key,
+                name,
+                web,
+                position,
+                win,
+                cx,
+            )
+        });
+        cx.subscribe_in(
+            &edit,
+            win,
+            move |this, _, event: &crate::page_controls::quick_edit::Closed, win, cx| {
+                this.quick_edit = None;
+                if let Some(trigger) = &trigger {
+                    win.focus(trigger, cx);
+                }
+                if event.0 {
+                    this.refresh(cx);
+                }
+                cx.notify();
+            },
+        )
+        .detach();
+        self.quick_edit = Some(edit);
+        cx.notify();
+    }
+
     pub(super) fn new(client: Rc<Client>, win: &mut Window, cx: &mut Context<Self>) -> Self {
         let today = Local::now().date_naive();
-        let search = cx.new(|cx| InputState::new(win, cx));
-        cx.subscribe(&search, |_, _, event, cx| {
-            if matches!(event, InputEvent::Focus | InputEvent::Blur) {
-                cx.notify();
-            }
-        })
-        .detach();
-        cx.observe(&search, |_, _, cx| cx.notify()).detach();
+        let searches = std::array::from_fn(|_| {
+            let search = cx.new(|cx| InputState::new(win, cx));
+            cx.subscribe(&search, |_, _, event, cx| {
+                if matches!(event, InputEvent::Focus | InputEvent::Blur) {
+                    cx.notify();
+                }
+            })
+            .detach();
+            cx.observe(&search, |_, _, cx| cx.notify()).detach();
+            search
+        });
         let mut this = Self {
+            quick_edit: None,
             client,
+            refresh_timer: None,
+            detailed: false,
+            web_enabled: false,
+            view_focus: std::array::from_fn(|_| cx.focus_handle()),
             year: today.year(),
             recent_heat: true,
             heat: None,
+            heat_focus: Default::default(),
             heat_read: None,
             weekly: false,
             mode_focus: std::array::from_fn(|_| cx.focus_handle()),
@@ -91,6 +153,8 @@ impl DataPage {
             read: None,
             error: false,
             selected: BTreeSet::new(),
+            selections: Default::default(),
+            selection_notice: false,
             icons: HashMap::new(),
             icon_read: None,
             trend_heat: None,
@@ -98,13 +162,35 @@ impl DataPage {
             trend_heat_year: None,
             trend_heat_weekly: false,
             trend_heat_mode_focus: std::array::from_fn(|_| cx.focus_handle()),
-            search,
+            searches,
             detail: None,
             detail_focus: cx.focus_handle(),
             detail_trigger: None,
         };
         this.refresh(cx);
-        this.load_heat(cx);
+        this.refresh_timer = Some(cx.spawn_in(win, async move |view, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_secs(30))
+                    .await;
+                if view
+                    .update_in(cx, |this, win, cx| {
+                        if win.is_window_active() {
+                            this.refresh(cx);
+                        }
+                    })
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        }));
+        cx.observe_window_activation(win, |this: &mut Self, win, cx| {
+            if win.is_window_active() {
+                this.refresh(cx);
+            }
+        })
+        .detach();
         this
     }
     fn load_heat(&mut self, cx: &mut Context<Self>) {
@@ -119,7 +205,6 @@ impl DataPage {
             )
         };
         let read = self.client.trends(start.zip(end), SeriesKind::App);
-        self.heat = None;
         self.heat_read = Some(cx.spawn(async move |view, cx| {
             let res = read.await;
             let _ = view.update(cx, |this, cx| {
@@ -131,10 +216,28 @@ impl DataPage {
             });
         }));
     }
-    fn refresh(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn refresh(&mut self, cx: &mut Context<Self>) {
+        let read = self
+            .client
+            .request::<([u8; 3], bool)>(crate::window_process::Query::HistoryModes(None));
+        cx.spawn(async move |view, cx| {
+            if let Ok((_, enabled)) = read.await {
+                let _ = view.update(cx, |this, cx| {
+                    this.web_enabled = enabled;
+                    if !enabled && this.kind == SeriesKind::Web {
+                        this.kind = SeriesKind::App;
+                        this.load_destination(cx);
+                    }
+                    cx.notify();
+                });
+            }
+        })
+        .detach();
         self.error = false;
         self.load_overview(cx);
         self.load_destination(cx);
+        self.load_heat(cx);
+        self.load_trend_heat(cx);
     }
     fn load_overview(&mut self, cx: &mut Context<Self>) {
         let read = self.client.trends(
@@ -163,7 +266,8 @@ impl DataPage {
                 match result {
                     Ok(data) => {
                         if this.data_kind != kind {
-                            this.selected.clear();
+                            this.selections[this.data_kind as usize] = this.selected.clone();
+                            this.selected = this.selections[kind as usize].clone();
                         }
                         this.data_kind = kind;
                         this.selected
@@ -191,61 +295,23 @@ impl DataPage {
         cx.notify();
     }
 }
-impl Render for DataPage {
-    fn render(&mut self, win: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+impl DataPage {
+    fn overview_panel(
+        &self,
+        colors: quietpro::Palette,
+        win: &Window,
+        cx: &mut Context<Self>,
+    ) -> Stateful<Div> {
         let locale = self.client.locale.get();
-        let tr = |k| text(locale, k);
-        let colors = self.client.palette(win);
-
-        let mut page = shell(colors);
-
-        page = page.child(page_title_row(
-            tr("data.title"),
-            quietpro::Icon::ChartColumn,
-            colors,
-        ));
-        let mode_options = [
-            (SeriesKind::App, "data.destinationApp"),
-            (SeriesKind::Category, "data.destinationCategory"),
-            (SeriesKind::Web, "data.destinationWeb"),
-        ];
-        let view = cx.weak_entity();
-        let modes = quietpro::segmented(
-            "destination-mode",
-            tr("data.destinationMode"),
-            std::array::from_fn::<_, 3, _>(|i| {
-                let (kind, key) = mode_options[i];
-                (kind, tr(key), None, self.mode_focus[i].clone())
-            }),
-            self.kind,
-            true,
-            colors,
-            move |kind, _, cx| {
-                let _ = view.update(cx, |this, cx| {
-                    if this.kind != kind {
-                        this.kind = kind;
-                        this.load_destination(cx);
-                    }
-                });
-            },
-        );
-
-        if self.error {
-            page = page.child(label(tr("destinationDetail.dayError"))).child({
-                let accessible_name = tr("common.retry");
-                quietpro::text_button("retry", tr("common.retry"), colors, true)
-                    .accessibility_label(accessible_name)
-                    .on_click(cx.listener(|this, _, _, cx| this.refresh(cx)))
-            });
-        }
-        let (Some(data), Some(_)) = (&self.overview, &self.data) else {
-            return page.child(label(tr("common.loading")));
-        };
+        let tr = |key| text(locale, key);
+        let data = self.overview.as_ref().unwrap();
         let overall = daily_totals(data);
         let overview_total = overall.iter().sum::<i64>();
         let mut overview = content_card(colors.border, colors.panel)
             .id("data-overview")
-            .flex_none()
+            .accessibility_id("data-overview")
+            .flex_1()
+            .min_h(px(480.))
             .gap(px(12.));
         overview = overview.child(
             div()
@@ -271,7 +337,7 @@ impl Render for DataPage {
                 *points
                     .entry(stamp(
                         day,
-                        if data.days.len() > 62 {
+                        if self.ranges[RangeTarget::Overview as usize].monthly() {
                             "%Y-%m"
                         } else {
                             "%Y-%m-%d"
@@ -287,23 +353,17 @@ impl Render for DataPage {
                 .collect();
             let days = data.days.clone();
             let view = cx.weak_entity();
-            let activate = (data.days.len() <= 62).then(|| {
-                Rc::new(move |i: usize, win: &mut Window, cx: &mut App| {
+            let activate = (!self.ranges[RangeTarget::Overview as usize].monthly()).then(|| {
+                Rc::new(move |i: usize, _win: &mut Window, cx: &mut App| {
                     if let Some(&day) = days.get(i) {
-                        let _ = view.update(cx, |this, cx| {
-                            this.detail_trigger = win.focused(cx);
-                            win.focus(&this.detail_focus, cx);
-                            this.detail = Some(cx.new(|cx| {
-                                History::new_source(this.client.clone(), day, None, false, win, cx)
-                            }));
-                            cx.notify();
-                        });
+                        let _ = view.update(cx, |_, cx| cx.emit(OpenHistoryDay(day)));
                     }
                 }) as Rc<dyn Fn(usize, &mut Window, &mut App)>
             });
             div()
                 .w_full()
-                .h(px(height))
+                .flex_1()
+                .min_h(px(height))
                 .flex()
                 .flex_col()
                 .child(quietpro::TrendChart {
@@ -327,11 +387,15 @@ impl Render for DataPage {
                     activate,
                 })
         };
-        overview = overview.child(make_chart("overview-trend", &overall, 240.));
+        overview = overview.child(make_chart("overview-trend", &overall, 200.));
         let mut heat = div()
+            .id("overview-heatmap")
+            .role(Role::Group)
+            .accessibility_id("overview-heatmap")
+            .flex_none()
             .border_t_1()
             .border_color(colors.border)
-            .pt(px(14.))
+            .pt(px(16.))
             .flex()
             .flex_col()
             .gap(px(12.))
@@ -421,116 +485,120 @@ impl Render for DataPage {
                             )),
                     ),
             );
-        if let Some(data) = &self.heat {
-            let mut heat_totals = vec![0i64; data.days.len()];
-            for s in &data.series {
-                for (&i, d) in &s.daily {
-                    heat_totals[i] += d;
-                }
-            }
-            let start_date = data
-                .days
-                .first()
-                .and_then(|s| chrono::DateTime::from_timestamp_millis(*s))
-                .map(|t| t.with_timezone(&Local).date_naive())
-                .unwrap_or(Local::now().date_naive());
-            let offset = start_date.weekday().num_days_from_monday() as usize;
-            let max = heat_totals.iter().copied().max().unwrap_or(1).max(1) as f32;
-            let mut grid = div().flex().w_full().gap(px(2.));
-            for week in 0usize..53 {
-                let mut column = div().flex().flex_col().flex_1().gap(px(2.));
-                for day in 0..if self.weekly { 1 } else { 7 } {
-                    let slot = week * 7 + day;
-                    let value = if self.weekly {
-                        (0..7)
-                            .filter_map(|n| {
-                                (week * 7 + n)
-                                    .checked_sub(offset)
-                                    .and_then(|i| heat_totals.get(i))
-                            })
-                            .sum()
-                    } else {
-                        slot.checked_sub(offset)
-                            .and_then(|i| heat_totals.get(i))
-                            .copied()
-                            .unwrap_or(0)
-                    };
-                    let date = start_date + chrono::Duration::days(slot as i64 - offset as i64);
-                    let active = date >= start_date
-                        && date <= Local::now().date_naive()
-                        && (self.recent_heat || date.year() == self.year);
-                    let name = format!("{date} · {}", duration(value));
-                    let bg = if value == 0 {
-                        colors.canvas
-                    } else {
-                        colors.accent.opacity((value as f32 / max).clamp(0.16, 1.))
-                    };
-                    let ms = noon(date);
-                    column = column.child(
-                        div()
-                            .id(SharedString::from(format!("heat-{date}")))
-                            .role(Role::Button)
-                            .aria_label(name)
-                            .w_full()
-                            .h(px(if self.weekly { 74. } else { 12. }))
-                            .rounded(px(2.))
-                            .when(active, |s| {
-                                s.border_1()
-                                    .border_color(colors.border)
-                                    .bg(bg)
-                                    .cursor_pointer()
-                                    .on_click(cx.listener(move |this, _, win, cx| {
-                                        if let Some(d) = ms {
-                                            this.detail_trigger = win.focused(cx);
-                                            win.focus(&this.detail_focus, cx);
-                                            this.detail = Some(cx.new(|cx| {
-                                                History::new(this.client.clone(), d, None, win, cx)
-                                            }));
-                                            cx.notify();
-                                        }
-                                    }))
-                            }),
-                    );
-                }
-                grid = grid.child(column);
-            }
-            let months = div()
-                .w_full()
-                .flex()
-                .justify_between()
-                .children((0..12).map(|i| {
-                    let date = start_date + chrono::Duration::days(i * 30 + 8);
-                    div()
-                        .child(date.format("%b").to_string())
-                        .text_size(px(10.))
-                        .text_color(colors.secondary)
-                }));
-            let weekdays = div()
-                .w(px(27.))
-                .flex()
-                .flex_col()
-                .justify_between()
-                .text_size(px(9.))
-                .text_color(colors.secondary)
-                .children([1, 3, 5, 7].map(|i| div().child(i.to_string())));
-            heat = heat
-                .child(months)
-                .child(div().flex().gap(px(4.)).child(weekdays).child(grid))
-                .pb(px(10.));
+        let totals = self.heat.as_ref().map(daily_totals).unwrap_or_default();
+        heat = heat.child(
+            self.render_heatmap(
+                heatmap::HeatmapView {
+                    id: "overview-heatmap",
+                    days: self
+                        .heat
+                        .as_ref()
+                        .map(|data| data.days.as_slice())
+                        .unwrap_or_default(),
+                    totals: &totals,
+                    year: (!self.recent_heat).then_some(self.year),
+                    weekly: self.weekly,
+                    loading: self.heat.is_none(),
+                },
+                colors,
+                cx,
+            ),
+        );
+        overview.child(heat)
+    }
+}
+
+impl Render for DataPage {
+    fn render(&mut self, win: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let locale = self.client.locale.get();
+        let tr = |k| text(locale, k);
+        let colors = self.client.palette(win);
+
+        let mut page = shell(colors);
+
+        let view = cx.weak_entity();
+        let view_switch = quietpro::segmented(
+            "data-view",
+            tr("data.title"),
+            std::array::from_fn::<_, 2, _>(|i| {
+                let (detailed, key) =
+                    [(false, "data.overview"), (true, "data.detailedAnalysis")][i];
+                (detailed, tr(key), None, self.view_focus[i].clone())
+            }),
+            self.detailed,
+            true,
+            colors,
+            move |detailed, win, cx| {
+                let _ = view.update(cx, |this, cx| {
+                    if this.detailed != detailed {
+                        this.close_range(false, win, cx);
+                        this.detailed = detailed;
+                        cx.notify();
+                    }
+                });
+            },
+        );
+        page = page.child(
+            page_title_row(tr("data.title"), quietpro::Icon::ChartColumn, colors)
+                .child(view_switch),
+        );
+        let mode_options = [
+            (SeriesKind::App, "data.destinationApp"),
+            (SeriesKind::Category, "data.destinationCategory"),
+            (SeriesKind::Web, "data.destinationWeb"),
+        ];
+        let view = cx.weak_entity();
+        let modes = quietpro::segmented(
+            "destination-mode",
+            tr("data.destinationMode"),
+            std::array::from_fn::<_, 3, _>(|i| {
+                let (kind, key) = mode_options[i];
+                (kind, tr(key), None, self.mode_focus[i].clone())
+            })
+            .into_iter()
+            .take(if self.web_enabled { 3 } else { 2 }),
+            self.kind,
+            true,
+            colors,
+            move |kind, _, cx| {
+                let _ = view.update(cx, |this, cx| {
+                    if this.kind != kind {
+                        this.kind = kind;
+                        this.load_destination(cx);
+                    }
+                });
+            },
+        );
+
+        if self.error {
+            page = page.child(label(tr("destinationDetail.dayError"))).child({
+                let accessible_name = tr("common.retry");
+                quietpro::text_button("retry", tr("common.retry"), colors, true)
+                    .accessibility_label(accessible_name)
+                    .on_click(cx.listener(|this, _, _, cx| this.refresh(cx)))
+            });
         }
-        overview = overview.child(heat);
-        let destination = self.trend_panel(modes, colors, win, cx);
+        if (self.detailed && self.data.is_none()) || (!self.detailed && self.overview.is_none()) {
+            return page.child(label(tr("common.loading")));
+        }
+        let panel = if self.detailed {
+            self.trend_panel(modes, colors, win, cx)
+        } else {
+            self.overview_panel(colors, win, cx)
+        };
         let page = page.child(
             div()
-                .id("data-scroll")
+                .id(if self.detailed {
+                    "data-detail-scroll"
+                } else {
+                    "data-overview-scroll"
+                })
                 .flex_1()
                 .min_h_0()
                 .overflow_y_scroll()
                 .flex()
                 .flex_col()
-                .gap(px(quietpro::CARD_GAP))
-                .child(overview)
-                .child(destination),
+                .child(panel),
         );
         if let Some(detail) = &self.detail {
             let view = cx.weak_entity();
@@ -552,6 +620,7 @@ impl Render for DataPage {
                 cx,
             ));
         }
+        let page = page.children(self.quick_edit.clone());
         if self.range_picker.is_some() {
             page.child(self.range_popup(colors, win, cx))
         } else {
