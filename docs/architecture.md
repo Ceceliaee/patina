@@ -166,8 +166,8 @@ Tauri application command 采用显式、默认拒绝的窗口授权模型：
 - settings、classification、backup settings、数据清理与类似写侧操作默认通过 typed Rust command 完成
 - main、mini 均无 SQL plugin 权限；连接池由 `AppSqlitePool` 持有，数据库替换后 command 解析到当前连接池，不能通过 WebView 加载或操作任意 SQL 连接
 - settings 原始读取、tracker health 时间戳与类似本地持久化适配，默认归 `platform/persistence/*`
-- `app/services/*` 只保留应用启动、运行时同步或全局偏好写入所需的薄协调，不从 `features/settings/*` 借基础能力
-- `features/settings/*` 只保留 settings 页面的保存、cleanup、backup、restore 与外链打开等 feature 私有流程
+- `app/services/*` 只保留应用启动、运行时同步或全局偏好写入所需的薄协调，不从页面模块借基础能力
+- 原生设置和存储弹窗的归属见[原生设置与存储](#48-原生设置与存储)
 - 涉及运行时写侧、数据写侧和平台副作用的操作，优先迁往 Rust command
 - 需要持久化、跨页面复用或保证事实/派生一致性的读索引，默认由 Rust data owner 维护并经 typed command 读取
 - 页面特有的格式化、分类映射、图表组合和精确时间线几何继续留在对应 feature read model
@@ -268,9 +268,15 @@ GPUI 主窗口在「分类」与「设置」之间提供「工具」入口。窗
 
 ### 4.7 GPUI 原生更新
 
-[`desktop/updater`](../desktop/updater/src/lib.rs) 拥有更新清单、版本比较、HTTPS 下载、Minisign 验签和安装交接。常驻宿主持有更新服务，窗口只请求操作并读取状态；关闭窗口或切换导航不会取消下载。[关于页](../desktop/patina/src/about.rs) 在下载完成后提供独立安装确认。
+[`desktop/updater`](../desktop/updater/src/lib.rs) 拥有更新清单、版本比较、HTTPS 下载、Minisign 验签和安装交接。常驻宿主持有更新服务，窗口只请求操作并读取状态；关闭窗口或切换导航不会取消下载。[关于页](../desktop/patina/src/about.rs) 展示版本差异、更新说明、下载进度和失败后的重试与手动下载入口，在下载完成后提供独立安装确认。安装前保存返回页面，新窗口启动时一次性消费该记录。
 
 安装请求由[宿主消息循环](../desktop/patina/src/window_process.rs)串行处理，只能执行服务持有并再次验签的安装包。启动安装器后，宿主关闭窗口进程、停止工具任务并结算录制，成功后写入退出凭据。[NSIS 安装器](../desktop/installer/patina.nsi)等待宿主退出并检查该凭据，之后替换程序文件。安装器不清理用户数据；包格式、签名与分发规则见[发布规范](versioning-and-release-policy.md#96-gpui-原生更新包)。
+
+### 4.8 原生设置与存储
+
+[设置窗口](../desktop/patina/src/settings.rs) 拥有主题和语言预览，取消或离开页面时还原未保存的预览。[存储界面](../desktop/patina/src/settings/storage.rs) 拥有导出、导入、备份、恢复和定时配置弹窗；[存储服务](../src-tauri/src/recording/storage.rs) 复用共享数据协议与事务，持久保存按格式区分的导出偏好。
+
+原生数据目录迁移在所选目录下使用 `Patina` 子目录，所选目录本身已名为 `Patina` 时直接使用它。数据库和本地备份在重启时一起迁移；[迁移实现](../src-tauri/src/recording/storage/migration.rs) 拒绝覆盖已有目标，用暂存目录确认发布归属，持久保存新位置后才清理已确认复制的源文件。共享的数据库、导入导出和备份模块仍由原有 data owner 维护。
 
 ## 5. 前端长期结构
 
@@ -586,7 +592,7 @@ Rust 侧允许为了稳定演进保留少量入口协调或兼容封装，但规
 
 补充边界：
 
-- settings 页面私有保存、清理、备份与恢复流程归 `features/settings/*`；应用启动读取偏好和 tracker health 协调归 `app/services/*`；原始 persistence adapter 归 `platform/persistence/*`。
+- 设置页面及其弹窗归 `desktop/patina/src/settings*`；应用启动读取偏好和 tracker health 协调归各宿主；尚在使用的前端 persistence adapter 归 `platform/persistence/*`，共享数据事务继续归 Rust data owner。
 - 持续参与识别按 `platform/windows/* -> domain/tracking* -> engine/tracking/*` 的 owner 链收口，不回流到 `commands/*`、`lib.rs` 或前端本地规则。
 - 不能明确证明共享时，先留在 feature 或最小 owner；不能明确证明平台边界时，不进入 `platform/*`。
 
