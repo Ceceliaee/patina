@@ -1,4 +1,3 @@
-export { deleteSessionsBefore } from "./persistenceWriteRuntimeGateway.ts";
 import { invokeWithCommandError } from "./commandError.ts";
 
 interface SettingRow {

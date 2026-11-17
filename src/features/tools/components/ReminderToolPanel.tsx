@@ -149,7 +149,7 @@ function ActivityReminderPanel({
   const renderRuleIcon = (row: ActivityReminderRuleRowViewModel, label = row.targetLabel) => {
     const option = findActivityReminderTargetOption(`${row.kind}:${row.targetKey}`, targetOptions);
     const icon = row.kind === "app" ? resolveAppIcon(icons, row.exeName) : option?.iconUrl;
-    return <span className="data-app-option-icon" aria-hidden
+    return <span className="tools-target-option-icon" aria-hidden
       style={option?.accentColor ? { "--activity-category-color": option.accentColor } as CSSProperties : undefined}>
       {row.kind === "category" ? <span className="tools-activity-category-dot" />
         : icon ? <img src={icon} alt="" draggable={false} /> : appInitial(label)}

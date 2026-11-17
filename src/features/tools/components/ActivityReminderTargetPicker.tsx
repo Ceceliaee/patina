@@ -218,7 +218,7 @@ export default function ActivityReminderTargetPicker({
                 data-activity-target-kind={option.target.kind}
                 aria-selected={isSelected}
                 tabIndex={-1}
-                className={`data-app-option ${isActive ? "tools-activity-target-option-active" : ""}`.trim()}
+                className={`tools-target-option ${isActive ? "tools-activity-target-option-active" : ""}`.trim()}
                 onMouseMove={() => {
                   if (activeIndex >= 0) setActiveIndex(-1);
                 }}
@@ -226,7 +226,7 @@ export default function ActivityReminderTargetPicker({
                 onClick={() => selectOption(option)}
               >
                 <span
-                  className="data-app-option-icon"
+                  className="tools-target-option-icon"
                   data-activity-category-marker={option.accentColor ? "" : undefined}
                   aria-hidden
                   style={option.accentColor ? { "--activity-category-color": option.accentColor } as CSSProperties : undefined}
@@ -237,9 +237,9 @@ export default function ActivityReminderTargetPicker({
                     <img src={option.iconUrl} alt="" draggable={false} />
                   ) : optionInitial(option.label)}
                 </span>
-                <span className="data-app-option-main">
-                  <span className="data-app-option-name">{option.label}</span>
-                  <span className="data-app-option-meta">
+                <span className="tools-target-option-main">
+                  <span className="tools-target-option-name">{option.label}</span>
+                  <span className="tools-target-option-meta">
                     {[typeLabels[option.target.kind], option.meta].filter(Boolean).join(" · ")}
                   </span>
                 </span>

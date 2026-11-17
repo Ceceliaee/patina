@@ -11,11 +11,5 @@
 @import "./styles/components/quiet-anchored-popover.css";
 @import "./styles/app-shell.css";
 @import "./styles/mini-window.css";
-@import "./styles/features/settings.css";
-@import "./styles/features/classification.css";
-@import "./styles/features/history.css";
-@import "./styles/features/data.css";
-@import "./styles/features/destination.css";
-@import "./styles/features/about.css";
 @import "./styles/features/tools.css";
 @import "./styles/motion.css";

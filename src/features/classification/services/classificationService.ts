@@ -1,5 +1,3 @@
-import { classificationDeletion, type DeletionImpact, type DeletionTarget } from "../../../platform/persistence/classificationDeletionGateway.ts";
-export type { DeletionTarget } from "../../../platform/persistence/classificationDeletionGateway.ts";
 import { AppClassification } from "../../../shared/classification/appClassification.ts";
 import type { AppLinks } from "../../../shared/classification/appLinks.ts";
 import { ProcessMapper } from "../../../shared/classification/processMapper.ts";
@@ -20,7 +18,6 @@ import {
 } from "./classificationBootstrapCache.ts";
 import {
   buildClassificationDraftChangePlan,
-  hasClassificationDraftChanges,
   normalizeWebDomainOverride,
   sanitizeDeletedCategories,
   type ClassificationDraftState,
@@ -31,22 +28,6 @@ import {
 } from "./importedClassification.ts";
 import type { ImportCategoryCandidate } from "../../../platform/persistence/importRuntimeGateway.ts";
 import type { ClassificationSettingMutation } from "../../../platform/persistence/classificationSettingsGateway.ts";
-import type { RecordedAppCatalogQueryInput } from "../../../platform/persistence/classificationPersistence.ts";
-import {
-  ClassificationAppCatalogController,
-  ClassificationAppCatalogSnapshotStore,
-  type CompleteAppCatalogSnapshot,
-} from "./classificationAppCatalog.ts";
-import { prewarmIconThemeColors } from "../../../shared/hooks/useIconThemeColors.ts";
-import { loadClassificationIconsForExecutables } from "./classificationIconService.ts";
-import { resolveCanonicalExecutable } from "../../../shared/classification/processNormalization.ts";
-export { filterAndSortCandidates } from "./classificationCandidateFiltering.ts";
-export {
-  ClassificationAppCatalogController,
-  countClassificationCandidates,
-  loadClassificationAppCatalogBatch,
-} from "./classificationAppCatalog.ts";
-export type { RecordedAppCatalogCursor } from "./classificationAppCatalog.ts";
 
 export type { AppOverride } from "../../../shared/classification/processMapper.ts";
 export type { ClassificationDraftState } from "./classificationDraftState.ts";
@@ -105,28 +86,6 @@ interface PreparedImportedClassification {
   applyRuntime: () => void;
 }
 
-interface ClassificationPresentationWarmupDeps {
-  loadIcons: typeof loadClassificationIconsForExecutables;
-  prewarmThemeColors: typeof prewarmIconThemeColors;
-}
-
-const defaultClassificationPresentationWarmupDeps: ClassificationPresentationWarmupDeps = {
-  loadIcons: loadClassificationIconsForExecutables,
-  prewarmThemeColors: prewarmIconThemeColors,
-};
-
-export async function prewarmClassificationPresentationAssets(
-  catalog: CompleteAppCatalogSnapshot | null,
-  deps: ClassificationPresentationWarmupDeps = defaultClassificationPresentationWarmupDeps,
-): Promise<void> {
-  if (!catalog || catalog.candidates.length === 0) return;
-
-  const icons = await deps.loadIcons(
-    catalog.candidates.map((candidate) => candidate.exeName),
-  );
-  await deps.prewarmThemeColors(icons);
-}
-
 export function createClassificationCommitDeps(
   commitChangePlan: ClassificationCommitDeps["commitChangePlan"] = classificationStore.commitDraftChangePlan,
 ): ClassificationCommitDeps {
@@ -139,12 +98,6 @@ export function createClassificationCommitDeps(
   };
 }
 
-const defaultClassificationCommitDeps: ClassificationCommitDeps = createClassificationCommitDeps();
-const classificationAppCatalogSnapshotStore = new ClassificationAppCatalogSnapshotStore({
-  createController: () => new ClassificationAppCatalogController({
-    loadRecordedPage: classificationStore.loadAppCatalogPage,
-  }),
-});
 const defaultClassificationBootstrapDeps: ClassificationBootstrapDeps = {
   loadAppLinks: () => classificationStore.loadAppLinks(),
   loadObservedWebDomainCandidates: () => ClassificationService.loadObservedWebDomainCandidates(),
@@ -186,38 +139,6 @@ async function loadOptionalWebClassificationData(
 }
 
 export class ClassificationService {
-  static async loadAppCatalogPage(input: RecordedAppCatalogQueryInput) {
-    return classificationStore.loadAppCatalogPage(input);
-  }
-
-  static createAppCatalogController() {
-    return new ClassificationAppCatalogController({ loadRecordedPage: this.loadAppCatalogPage });
-  }
-
-  static getAppCatalogSnapshot = classificationAppCatalogSnapshotStore.getSnapshot;
-
-  static subscribeAppCatalogSnapshot = classificationAppCatalogSnapshotStore.subscribe;
-
-  static ensureAppCatalogLoaded() {
-    return classificationAppCatalogSnapshotStore.ensureLoaded();
-  }
-
-  static prewarmAppCatalog() {
-    return classificationAppCatalogSnapshotStore.prewarm();
-  }
-
-  static refreshAppCatalog() {
-    return classificationAppCatalogSnapshotStore.refresh();
-  }
-
-  static retryAppCatalog() {
-    return classificationAppCatalogSnapshotStore.retry();
-  }
-
-  static invalidateAppCatalog(input: { discardCommitted?: boolean } = {}) {
-    classificationAppCatalogSnapshotStore.invalidate(input);
-  }
-
   static async loadObservedWebDomainCandidates(days: number = 30, limit: number = 120): Promise<ObservedWebDomainCandidate[]> {
     return classificationStore.loadObservedWebDomainCandidates(days, limit);
   }
@@ -314,69 +235,6 @@ export class ClassificationService {
     return this.loadClassificationBootstrap();
   }
 
-  static async saveAppOverride(exeName: string, override: AppOverride | null) {
-    if (!override?.displayName && AppClassification.getLinkedAppKeys(exeName).length > 1
-      && AppClassification.resolveStatisticalApp(exeName) === resolveCanonicalExecutable(exeName)) {
-      await this.ensureAppCatalogLoaded();
-      const candidate = this.getAppCatalogSnapshot().committed?.candidates
-        .find((item) => item.exeName === resolveCanonicalExecutable(exeName));
-      override = { ...override, enabled: true, displayName: AppClassification.mapAppWithoutOverride(exeName,
-        { appName: candidate?.appName }).name };
-    }
-    await classificationStore.saveAppOverride(exeName, override);
-    ProcessMapper.setUserOverride(exeName, override);
-    const canonicalExe = resolveCanonicalExecutable(exeName);
-    if (!canonicalExe) return;
-    const bootstrap = getClassificationBootstrapCache();
-    if (bootstrap) {
-      const loadedOverrides = { ...bootstrap.loadedOverrides };
-      if (canonicalExe !== exeName) {
-        delete loadedOverrides[exeName];
-      }
-      const runtimeOverride = ProcessMapper.getUserOverride(canonicalExe);
-      if (runtimeOverride) {
-        loadedOverrides[canonicalExe] = runtimeOverride;
-      } else {
-        delete loadedOverrides[canonicalExe];
-      }
-      setClassificationBootstrapCache({ ...bootstrap, loadedOverrides });
-    }
-  }
-
-  static async saveWebDomainOverride(
-    normalizedDomain: string,
-    override: WebDomainOverride | null,
-  ) {
-    const domainKey = normalizedDomain.trim().replace(/\.$/, "").toLocaleLowerCase();
-    if (!domainKey) return;
-    await classificationStore.saveWebDomainOverride(domainKey, override);
-    const bootstrap = getClassificationBootstrapCache();
-    if (!bootstrap) return;
-    setClassificationBootstrapCache(
-      applySavedWebDomainOverrideToBootstrap(bootstrap, domainKey, override),
-    );
-  }
-
-  static async removeCategoryDefaultColorAssignment(category: AppCategory) {
-    await ProcessMapper.removeCategoryDefaultColorAssignment(category);
-  }
-
-  static setDeletedCategories(categories: AppCategory[]) {
-    ProcessMapper.setDeletedCategories(sanitizeDeletedCategories(categories));
-  }
-
-  static deleteObject(target: DeletionTarget, confirmed?: DeletionImpact) {
-    return classificationDeletion(target, confirmed);
-  }
-
-  static hasDraftChanges(saved: ClassificationDraftState, draft: ClassificationDraftState): boolean {
-    return hasClassificationDraftChanges(saved, draft);
-  }
-
-  static async commitDraftChanges(saved: ClassificationDraftState, draft: ClassificationDraftState): Promise<void> {
-    await commitDraftChangesWithDeps(saved, draft, defaultClassificationCommitDeps);
-  }
-
   static async prepareImportedCategoryCandidates(
     candidates: readonly ImportCategoryCandidate[],
   ): Promise<PreparedImportedClassification> {
@@ -415,12 +273,7 @@ export class ClassificationService {
 }
 
 export async function prewarmClassificationBootstrapCache(): Promise<ClassificationBootstrapData> {
-  const [bootstrap, catalog] = await Promise.all([
-    ClassificationService.prewarmBootstrapCache(),
-    ClassificationService.prewarmAppCatalog(),
-  ]);
-  await prewarmClassificationPresentationAssets(catalog);
-  return bootstrap;
+  return ClassificationService.prewarmBootstrapCache();
 }
 
 export async function commitDraftChangesWithDeps(

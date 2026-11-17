@@ -22,7 +22,6 @@ interface RawMiniBootstrapSettings {
   history_timeline_mode: string | null;
   refresh_interval_secs: string | null;
   timeline_merge_gap_secs: string | null;
-  dynamic_effects: string | null;
   web_activity_available: boolean;
 }
 
@@ -119,7 +118,7 @@ function isRawMiniBootstrapSettings(value: unknown): value is RawMiniBootstrapSe
     && isOptionalString(record.color_scheme_light)
     && isOptionalString(record.color_scheme_dark)
     && [record.hourly_activity_chart_mode, record.history_timeline_mode, record.refresh_interval_secs,
-      record.timeline_merge_gap_secs, record.dynamic_effects].every(isOptionalString)
+      record.timeline_merge_gap_secs].every(isOptionalString)
     && typeof record.web_activity_available === "boolean";
 }
 
@@ -162,7 +161,6 @@ export function parseMiniBootstrapSnapshot(value: unknown): MiniBootstrapSnapsho
       hourly_activity_chart_mode: value.settings.hourly_activity_chart_mode ?? undefined,
       refresh_interval_secs: value.settings.refresh_interval_secs ?? undefined,
       timeline_merge_gap_secs: value.settings.timeline_merge_gap_secs ?? undefined,
-      dynamic_effects: value.settings.dynamic_effects ?? undefined,
     }),
     timelineMode: effectiveActivityTimelineMode(parseActivityTimelineMode(value.settings.history_timeline_mode), value.settings.web_activity_available),
     categorySettings: value.category_settings.map(row => ({ ...row })),

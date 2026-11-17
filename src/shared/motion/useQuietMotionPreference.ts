@@ -14,7 +14,7 @@ function readPrefersReducedMotion() {
   return window.matchMedia(REDUCED_MOTION_QUERY).matches;
 }
 
-export function useQuietMotionPreference(enhancedMotionEnabled: boolean): QuietMotionMode {
+export function useQuietMotionPreference(): QuietMotionMode {
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(readPrefersReducedMotion);
 
   useEffect(() => {
@@ -31,7 +31,6 @@ export function useQuietMotionPreference(enhancedMotionEnabled: boolean): QuietM
   }, []);
 
   return resolveQuietMotionMode({
-    enhancedMotionEnabled,
     prefersReducedMotion,
   });
 }

@@ -1,7 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import {
   isFiniteNumber as isNumber,
-  isNullableString,
   isStringArray,
 } from "../../shared/lib/runtimeTypeGuards.ts";
 
@@ -36,11 +35,6 @@ interface RawToolAlertStats {
   limit: number;
 }
 
-interface RawUpdaterRetainedPackageStats {
-  retained: boolean;
-  storage: string | null;
-  size_bytes: number | null;
-}
 
 type WebActivityBridgeRuntimeStatus =
   | "disabled"
@@ -84,7 +78,6 @@ interface RawResourceDiagnosticsSnapshot {
   icon_result_cache: RawIconResultCacheStats;
   icon_negative_cache: RawIconNegativeCacheStats;
   tool_alerts: RawToolAlertStats;
-  updater_retained_package: RawUpdaterRetainedPackageStats;
   web_activity_bridge: RawWebActivityBridgeStats;
 }
 
@@ -116,11 +109,6 @@ export interface ResourceDiagnosticsSnapshot {
   toolAlerts: {
     entries: number;
     limit: number;
-  };
-  updaterRetainedPackage: {
-    retained: boolean;
-    storage: string | null;
-    sizeBytes: number | null;
   };
   webActivityBridge: {
     activeClients: number;
@@ -193,16 +181,6 @@ function isRawIconNegativeCacheStats(value: unknown): value is RawIconNegativeCa
     && isNullableNumber(record.oldest_age_ms);
 }
 
-function isRawUpdaterRetainedPackageStats(value: unknown): value is RawUpdaterRetainedPackageStats {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const record = value as Record<string, unknown>;
-  return typeof record.retained === "boolean"
-    && isNullableString(record.storage)
-    && isNullableNumber(record.size_bytes);
-}
 
 function isRawWebActivityBridgeStats(value: unknown): value is RawWebActivityBridgeStats {
   if (!value || typeof value !== "object") {
@@ -264,7 +242,6 @@ function isRawResourceDiagnostics(value: unknown): value is RawResourceDiagnosti
     && isRawCacheStats(record.icon_result_cache)
     && isRawIconNegativeCacheStats(record.icon_negative_cache)
     && isRawLimitStats(record.tool_alerts)
-    && isRawUpdaterRetainedPackageStats(record.updater_retained_package)
     && isRawWebActivityBridgeStats(record.web_activity_bridge);
 }
 
@@ -297,11 +274,6 @@ function mapRawResourceDiagnostics(raw: RawResourceDiagnosticsSnapshot): Resourc
     toolAlerts: {
       entries: raw.tool_alerts.entries,
       limit: raw.tool_alerts.limit,
-    },
-    updaterRetainedPackage: {
-      retained: raw.updater_retained_package.retained,
-      storage: raw.updater_retained_package.storage,
-      sizeBytes: raw.updater_retained_package.size_bytes,
     },
     webActivityBridge: {
       activeClients: raw.web_activity_bridge.active_clients,

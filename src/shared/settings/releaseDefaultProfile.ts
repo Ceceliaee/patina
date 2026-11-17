@@ -12,7 +12,6 @@ interface ReleaseDefaultSettingsProfile {
   themeMode: "light" | "dark" | "system";
   language: Locale;
   hourlyActivityChartMode: "total" | "category";
-  dynamicEffects: boolean;
   colorSchemeLight:
     | "default"
     | "absolutely"
@@ -82,7 +81,6 @@ export const RELEASE_DEFAULT_SETTINGS: ReleaseDefaultSettingsProfile = {
   themeMode: "light",
   language: "zh-CN",
   hourlyActivityChartMode: "total",
-  dynamicEffects: false,
   colorSchemeLight: "default",
   colorSchemeDark: "default",
   launchAtLogin: true,

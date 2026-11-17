@@ -1,6 +1,5 @@
 import { invokeWithCommandError } from "./commandError.ts";
 import {
-  deleteSessionsBefore,
   loadAllSettingRows,
   loadSettingTimestamp,
 } from "./settingsPersistence.ts";
@@ -34,7 +33,6 @@ type RawAppSettingsKey =
   | "theme_mode"
   | "language"
   | "hourly_activity_chart_mode"
-  | "dynamic_effects"
   | "color_scheme_light"
   | "color_scheme_dark"
   | "launch_at_login"
@@ -60,7 +58,6 @@ const APP_SETTINGS_RAW_KEYS: Record<keyof AppSettings, RawAppSettingsKey> = {
   themeMode: "theme_mode",
   language: "language",
   hourlyActivityChartMode: "hourly_activity_chart_mode",
-  dynamicEffects: "dynamic_effects",
   colorSchemeLight: "color_scheme_light",
   colorSchemeDark: "color_scheme_dark",
   launchAtLogin: "launch_at_login",
@@ -112,10 +109,6 @@ export async function saveAppSetting<K extends keyof AppSettings>(
 
 export async function saveAppSettingsPatch(patch: AppSettingsPatch): Promise<void> {
   await commitAppSettingMutations(buildAppSettingMutations(buildRawAppSettingsPatch(patch)));
-}
-
-export async function clearSessionsBefore(cutoffTime: number): Promise<void> {
-  await deleteSessionsBefore(cutoffTime);
 }
 
 export async function loadTrackerHealthTimestamp(): Promise<number | null> {

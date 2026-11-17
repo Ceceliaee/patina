@@ -193,7 +193,6 @@ export function normalizeSettingsRecord(
     themeMode: normalizeThemeMode(record.theme_mode),
     language: normalizeLanguage(record.language),
     hourlyActivityChartMode: normalizeHourlyActivityChartMode(record.hourly_activity_chart_mode),
-    dynamicEffects: parseBooleanSetting(record.dynamic_effects, DEFAULT_SETTINGS.dynamicEffects),
     colorSchemeLight: normalizeColorScheme(
       record.color_scheme_light ?? DEFAULT_SETTINGS.colorSchemeLight,
       LIGHT_COLOR_SCHEMES,
