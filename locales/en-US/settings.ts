@@ -202,7 +202,6 @@ export const MESSAGES = {
       ]
     }
   },
-  "settings.dynamicEffectsLabel": "Dynamic effects",
   "settings.globalTitleHint": "Save application window titles and webpage titles for activity history details.",
   "settings.globalTitleLabel": "Global titles",
   "settings.idle": "Saved",

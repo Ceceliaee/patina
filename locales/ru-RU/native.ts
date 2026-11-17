@@ -1,5 +1,8 @@
 // ru-RU locale resource. Pure data only.
 export const MESSAGES = {
+  "native.export.completed": {"$type": "message", "body": {"$op": "concat", "parts": ["Экспортировано записей: ", {"$op": "arg", "name": "count"}, "", "\n", {"$op": "arg", "name": "path"}]}},
+  "data.overview": "Обзор",
+  "data.detailedAnalysis": "Подробный анализ",
   "native.category.learning": "Обучение",
   "native.tools.freeFocusTitle": "Свободная концентрация",
 

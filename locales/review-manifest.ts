@@ -546,7 +546,6 @@ export const LOCALE_SOURCE_REVIEWS = {
     "settings.languageOptions.zhCN": "ae5501d6922ab917",
     "settings.languageOptions.enUS": "32889a931b08ba01",
     "settings.colorSchemeLabel": "da072d00cc7fedc7",
-    "settings.dynamicEffectsLabel": "3fed5966904a4ad9",
     "settings.colorSchemeDialogFallbackTitle": "5b264da79a73b61a",
     "settings.colorSchemeSaving": "968cc17cddaa07af",
     "settings.dataSafetyTitle": "23ede04e19385860",
@@ -1044,7 +1043,10 @@ export const LOCALE_SOURCE_REVIEWS = {
     "date.compactPattern": "5f066905037d7f38",
     "categories.learning": "22c293c7d88f174a",
     "categories.short.learning": "22c293c7d88f174a",
-    "native.category.learning": "22c293c7d88f174a"
+    "native.category.learning": "22c293c7d88f174a",
+    "data.overview": "d2031e07a198e4cd",
+    "data.detailedAnalysis": "0902a1de2f09ff6d",
+    "native.export.completed": "00ba3f65568937fc"
   },
   "es": {
     "about.description": "9e6291ff14b79ed3",
@@ -1672,7 +1674,6 @@ export const LOCALE_SOURCE_REVIEWS = {
     "settings.dataSafetyTitle": "23ede04e19385860",
     "settings.decreaseCleanupRange": "fd82bc27da436947",
     "settings.decreaseMinute": "becb2b91b5fda388",
-    "settings.dynamicEffectsLabel": "3fed5966904a4ad9",
     "settings.globalTitleHint": "bd3fa2ac3a3d9667",
     "settings.globalTitleLabel": "e8299b18017de3a8",
     "settings.idle": "ade0afea53583e9e",
@@ -2090,7 +2091,10 @@ export const LOCALE_SOURCE_REVIEWS = {
     "date.compactPattern": "5f066905037d7f38",
     "categories.learning": "22c293c7d88f174a",
     "categories.short.learning": "22c293c7d88f174a",
-    "native.category.learning": "22c293c7d88f174a"
+    "native.category.learning": "22c293c7d88f174a",
+    "data.overview": "d2031e07a198e4cd",
+    "data.detailedAnalysis": "0902a1de2f09ff6d",
+    "native.export.completed": "00ba3f65568937fc"
   },
   "ru-RU": {
     "about.description": "9e6291ff14b79ed3",
@@ -2726,7 +2730,6 @@ export const LOCALE_SOURCE_REVIEWS = {
     "settings.dataSafetyTitle": "23ede04e19385860",
     "settings.decreaseCleanupRange": "fd82bc27da436947",
     "settings.decreaseMinute": "becb2b91b5fda388",
-    "settings.dynamicEffectsLabel": "3fed5966904a4ad9",
     "settings.globalTitleHint": "bd3fa2ac3a3d9667",
     "settings.globalTitleLabel": "e8299b18017de3a8",
     "settings.idle": "ade0afea53583e9e",
@@ -3136,6 +3139,9 @@ export const LOCALE_SOURCE_REVIEWS = {
     "date.compactPattern": "5f066905037d7f38",
     "categories.learning": "22c293c7d88f174a",
     "categories.short.learning": "22c293c7d88f174a",
-    "native.category.learning": "22c293c7d88f174a"
+    "native.category.learning": "22c293c7d88f174a",
+    "data.overview": "d2031e07a198e4cd",
+    "data.detailedAnalysis": "0902a1de2f09ff6d",
+    "native.export.completed": "00ba3f65568937fc"
   }
 } as const;

@@ -154,12 +154,20 @@ function nativeExpression(value: MessageValue, locale: string): string {
 
 function renderRustResources(allMessages: Record<string, Record<string, MessageValue>>): string {
   const nativeEntries = schemaEntriesBySurface("native");
-  const nativeKeys = nativeEntries.filter(([, entry]) => entry.kind !== "data").map(([key]) => key).sort();
+  const nativeKeys = nativeEntries.filter(([, entry]) => entry.kind !== "data" && entry.kind !== "string-array").map(([key]) => key).sort();
   const arms: string[] = [];
   for (const locale of Object.keys(LOCALE_REGISTRY)) {
     const variant = `Locale::${rustLocaleVariant(locale)}`;
     for (const key of nativeKeys) {
-      arms.push(`        (${variant}, ${rustString(key)}) => Some(${nativeExpression(allMessages[locale][key], locale)}),`);
+      const value = allMessages[locale][key];
+      const entry = MESSAGE_SCHEMA[key as keyof typeof MESSAGE_SCHEMA];
+      if (entry.kind === "string-record") {
+        for (const [field, message] of Object.entries(value as Record<string, string>)) {
+          arms.push(`        (${variant}, ${rustString(`${key}.${field}`)}) => Some(${nativeExpression(message, locale)}),`);
+        }
+      } else {
+        arms.push(`        (${variant}, ${rustString(key)}) => Some(${nativeExpression(value, locale)}),`);
+      }
     }
   }
   const russianCases = (RUSSIAN_FIXTURE["fixture.cases"] as readonly string[]).map((entry) => {
@@ -176,7 +184,7 @@ function renderRustResources(allMessages: Record<string, Record<string, MessageV
 }
 
 function renderRustData(allMessages: Record<string, Record<string, MessageValue>>): string {
-  const dataKeys = schemaEntriesBySurface("native").filter(([, entry]) => entry.kind === "data").map(([key]) => key).sort();
+  const dataKeys = schemaEntriesBySurface("native").filter(([, entry]) => (entry.kind === "data" || entry.kind === "string-array")).map(([key]) => key).sort();
   const arms: string[] = [];
   for (const locale of Object.keys(LOCALE_REGISTRY)) {
     const variant = `Locale::${rustLocaleVariant(locale)}`;

@@ -356,7 +356,6 @@ export const MESSAGES = {
       ]
     }
   },
-  "settings.dynamicEffectsLabel": "Анимация",
   "settings.globalTitleHint": "Сохранять заголовки окон и веб-страниц в истории активности.",
   "settings.globalTitleLabel": "Запись заголовков",
   "settings.idle": "Сохранено",

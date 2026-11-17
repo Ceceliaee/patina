@@ -1,5 +1,6 @@
 // Canonical language-neutral message contract. Do not derive this file from a locale at build time.
 export const MESSAGE_SCHEMA = {
+  "native.export.completed": {"kind": "message", "params": [{"name": "count", "type": "number", "optional": false}, {"name": "path", "type": "string", "optional": false}], "surface": "native"},
   "settings.storageFrequency": {"kind": "string", "params": [], "surface": "native", "description": "Frequency label for native scheduled storage tasks."},
   "settings.storageCleanupBefore": {"kind": "message", "params": [{"name": "days", "type": "number", "optional": false}], "surface": "native", "description": "Native cleanup slider value: records from this many days ago and earlier."},
 
@@ -91,8 +92,8 @@ export const MESSAGE_SCHEMA = {
   "tools.usageLimitSummary": {"kind": "message", "params": [{"name": "value", "type": "string", "optional": false}], "surface": "frontend", "description": "Actual usage followed by the notice that the usage limit has been reached. The parameter is a localized duration."},
   "native.webview.recoveryFailed": {"kind": "string", "params": [], "surface": "native", "description": "Native error after repeated window recovery failures. Do not promise recording health; backend status is independent."},
 
-  "mapping.webIndependent": {"kind": "string", "params": [], "surface": "frontend", "description": "Keep this exact domain outside its automatic website group"},
-  "mapping.mergeWebDomain": {"kind": "message", "params": [{"name": "domain", "type": "string", "optional": false}], "surface": "frontend", "description": "Merge an independent domain into its automatic root group"},
+  "mapping.webIndependent": {"kind": "string", "params": [], "surface": "frontend", "alsoNative": true, "description": "Keep this exact domain outside its automatic website group"},
+  "mapping.mergeWebDomain": {"kind": "message", "params": [{"name": "domain", "type": "string", "optional": false}], "surface": "frontend", "alsoNative": true, "description": "Merge an independent domain into its automatic root group"},
   "mapping.deletionMembers": { "alsoNative": true, "kind": "string", "params": [], "surface": "frontend" },
   "mapping.deletionLinks": { "alsoNative": true, "kind": "string", "params": [], "surface": "frontend" },
   "mapping.deletionReminders": { "alsoNative": true, "kind": "string", "params": [], "surface": "frontend" },
@@ -113,16 +114,16 @@ export const MESSAGE_SCHEMA = {
   "settings.runtimeBehaviorTitle": {"kind": "string", "params": [], "surface": "frontend", "alsoNative": true, "description": "Settings group heading: Runtime behavior"},
   "native.export.anonymousActivity": { "kind": "string", "params": [], "surface": "native", "description": "Anonymous activity label in exported data; identity fields remain empty." },
   "common.anonymousActivity": { "kind": "string", "params": [], "surface": "frontend", "alsoNative": true, "description": "Single anonymous activity identity; duration is retained without application or website identity." },
-  "mapping.webLinks": { "kind": "string", "params": [], "surface": "frontend", "description": "Website grouping and exact-domain controls" },
+  "mapping.webLinks": { "kind": "string", "params": [], "surface": "frontend", "alsoNative": true, "description": "Website grouping and exact-domain controls" },
   "mapping.addLinkedWebDomain": { "kind": "string", "params": [], "surface": "frontend", "description": "Add an observed website to this parent" },
   "mapping.backToLinkedWebDomains": { "kind": "string", "params": [], "surface": "frontend", "description": "Return from the website picker" },
-  "mapping.mainWebDomain": { "kind": "string", "params": [], "surface": "frontend", "description": "Accessible label for the parent website" },
+  "mapping.mainWebDomain": { "kind": "string", "params": [], "surface": "frontend", "alsoNative": true, "description": "Accessible label for the parent website" },
 
-  "mapping.linkedApps": { "kind": "string", "params": [], "surface": "frontend" },
-  "mapping.addLinkedApp": { "kind": "string", "params": [], "surface": "frontend" },
-  "mapping.mainApp": { "kind": "string", "params": [], "surface": "frontend" },
-  "mapping.unlinkApp": { "kind": "string", "params": [], "surface": "frontend" },
-  "mapping.backToLinkedApps": { "kind": "string", "params": [], "surface": "frontend" },
+  "mapping.linkedApps": { "kind": "string", "params": [], "surface": "frontend", "alsoNative": true },
+  "mapping.addLinkedApp": { "kind": "string", "params": [], "surface": "frontend", "alsoNative": true },
+  "mapping.mainApp": { "kind": "string", "params": [], "surface": "frontend", "alsoNative": true },
+  "mapping.unlinkApp": { "kind": "string", "params": [], "surface": "frontend", "alsoNative": true },
+  "mapping.backToLinkedApps": { "kind": "string", "params": [], "surface": "frontend", "alsoNative": true },
   "mapping.individualControls": { "kind": "string", "params": [], "surface": "frontend" },
 
 
@@ -141,11 +142,13 @@ export const MESSAGE_SCHEMA = {
     "translatorNote": "Keep GitHub and Issues as service and product terms."
   },
   "about.feedbackDialog.githubOpening": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "about.feedbackDialog.githubTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -170,11 +173,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "about.supportDialog.description": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "about.supportDialog.kofiTitle": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -391,11 +396,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "accessibility.date.nextMonth": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "accessibility.date.previousMonth": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -687,6 +694,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "backup.appVersion": {
+    "alsoNative": true,
     "kind": "message",
     "params": [
       {
@@ -698,6 +706,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "backup.exportedAt": {
+    "alsoNative": true,
     "kind": "message",
     "params": [
       {
@@ -709,11 +718,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "backup.formatLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "backup.importItemCounts": {
+    "alsoNative": true,
     "kind": "message",
     "params": [
       {
@@ -735,6 +746,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "backup.itemCounts": {
+    "alsoNative": true,
     "kind": "message",
     "params": [
       {
@@ -777,6 +789,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "backup.restoreSafety": {
+    "alsoNative": true,
     "kind": "message",
     "params": [
       {
@@ -1121,6 +1134,8 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
+  "data.overview": { "kind": "string", "params": [], "surface": "native", "description": "Data page tab for overall activity trends and heatmap." },
+  "data.detailedAnalysis": { "kind": "string", "params": [], "surface": "native", "description": "Data page tab for individual apps, categories and websites." },
   "data.appHeatmap": {
     "alsoNative": true,
     "kind": "string",
@@ -1579,6 +1594,7 @@ export const MESSAGE_SCHEMA = {
   "date.calendarMonth": {"kind": "message", "params": [{"name": "year", "type": "string", "optional": false}, {"name": "month", "type": "string", "optional": false}], "surface": "native"},
   "date.calendarWeekday": {"kind": "message", "params": [{"name": "day", "type": "string", "optional": false}], "surface": "native", "description": "Monday-based short weekday label in the native calendar."},
   "date.weekdaysShort": {
+    "alsoNative": true,
     "kind": "string-array",
     "params": [],
     "surface": "frontend"
@@ -1647,6 +1663,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "destinationDetail.current": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1702,11 +1719,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "destinationDetail.noActivity": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "destinationDetail.noActivityAtMinimum": {
+    "alsoNative": true,
     "kind": "message",
     "params": [
       {
@@ -1718,6 +1737,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "destinationDetail.noActivityInWindow": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -1971,11 +1991,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "export.exportFailed": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "export.exporting": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2462,11 +2484,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "export.nextRange": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "export.openRangePicker": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2477,6 +2501,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "export.previousRange": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -2494,6 +2519,7 @@ export const MESSAGE_SCHEMA = {
     "alsoNative": true
   },
   "export.scheduledErrors": {
+    "alsoNative": true,
     "kind": "string-record",
     "params": [],
     "surface": "frontend"
@@ -3102,7 +3128,7 @@ export const MESSAGE_SCHEMA = {
   "mapping.globalTitleDisabled": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "mapping.idle": {
     "kind": "string",
@@ -3268,7 +3294,7 @@ export const MESSAGE_SCHEMA = {
   "mapping.searchNoResults": {
     "kind": "string",
     "params": [],
-    "surface": "frontend"
+    "surface": "frontend", "alsoNative": true
   },
   "mapping.statsEnabled": {
     "kind": "string",
@@ -3465,6 +3491,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "native"
   },
   "native.export.field.end_time": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "native"
@@ -3530,6 +3557,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "native"
   },
   "native.export.field.start_time": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "native"
@@ -3738,6 +3766,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.backupExporting": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3770,6 +3799,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.backupTargetLocalHint": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3781,6 +3811,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.backupTargetRemoteHint": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3919,6 +3950,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.dataImport.availableLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -3935,6 +3967,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.dataImport.batchTitle": {
+    "alsoNative": true,
     "kind": "message",
     "params": [
       {
@@ -3946,16 +3979,19 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.dataImport.categorizedAppsLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.dataImport.categoryConflictNote": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.dataImport.conflictedAppsLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4004,6 +4040,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.dataImport.deleteSuccess": {
+    "alsoNative": true,
     "kind": "message",
     "params": [
       { "name": "count", "type": "integer", "optional": false }
@@ -4028,6 +4065,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.dataImport.destructureSuccess": {
+    "alsoNative": true,
     "kind": "message",
     "params": [
       { "name": "count", "type": "integer", "optional": false },
@@ -4071,11 +4109,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.dataImport.hourLabel": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.dataImport.importSuccess": {
+    "alsoNative": true,
     "kind": "message",
     "params": [
       { "name": "count", "type": "integer", "optional": false }
@@ -4084,6 +4124,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.dataImport.lineError": {
+    "alsoNative": true,
     "kind": "message",
     "params": [
       {
@@ -4134,12 +4175,8 @@ export const MESSAGE_SCHEMA = {
     ],
     "surface": "frontend"
   },
-  "settings.dynamicEffectsLabel": {
-    "kind": "string",
-    "params": [],
-    "surface": "frontend"
-  },
   "settings.globalTitleHint": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4167,6 +4204,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.importRecordCount": {
+    "alsoNative": true,
     "kind": "message",
     "params": [
       {
@@ -4223,6 +4261,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.loadFailed": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4305,6 +4344,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.restoreSourceLocalHint": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4316,6 +4356,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.restoreSourceRemoteHint": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4367,6 +4408,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.retry": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4393,11 +4435,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.scheduledBackupCleanupWarning": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "settings.scheduledBackupLabels": {
+    "alsoNative": true,
     "kind": "string-record",
     "params": [],
     "surface": "frontend"
@@ -4439,6 +4483,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.storage.restartAndApplyAction": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4471,6 +4516,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.storage.storageDataMigrationConfirmDetail": {
+    "alsoNative": true,
     "kind": "message",
     "params": [
       {
@@ -4499,6 +4545,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.storage.storageMigrationFailed": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4761,7 +4808,6 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "settings.webDavRemoteBackupsEmpty": {
-    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4811,11 +4857,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "time.hours": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "time.minutes": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4826,11 +4874,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "toast.backupExportFailed": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "toast.backupExportSuccess": {
+    "alsoNative": true,
     "kind": "message",
     "params": [
       {
@@ -4854,41 +4904,49 @@ export const MESSAGE_SCHEMA = {
   },
   "toast.backupFormatUnsupported": { "kind": "string", "params": [], "surface": "frontend", "description": "The selected file is not a supported SQLite snapshot backup. Preserve the source file." },
   "toast.backupPreviewFailed": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "toast.backupRestoreFailed": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "toast.backupRestoreSuccess": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "toast.cleanupFailed": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "toast.cleanupSuccess": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "toast.feedbackOpenFailed": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "toast.releaseNotesOpenFailed": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "toast.repositoryOpenFailed": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4899,41 +4957,49 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "toast.supportOpenFailed": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "toast.webDavConfigDeleted": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "toast.webDavConfigDeleteFailed": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "toast.webDavConfigSaved": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "toast.webDavConfigSaveFailed": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "toast.webDavDownloadFailed": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "toast.webDavListFailed": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "toast.webDavMissingConfig": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -4944,21 +5010,25 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "toast.webDavTestFailed": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "toast.webDavTestSuccess": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "toast.webDavUploadFailed": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "toast.webDavUploadIndexWarning": {
+    "alsoNative": true,
     "kind": "message",
     "params": [
       {
@@ -4970,6 +5040,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "toast.webDavUploadSuccess": {
+    "alsoNative": true,
     "kind": "message",
     "params": [
       {
@@ -5347,11 +5418,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "update.checkAgain": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "update.checkErrorDetail": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5363,6 +5436,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "update.checkFailedDialog": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5374,6 +5448,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "update.checkingUpdates": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5385,11 +5460,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "update.dialogAvailable": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "update.dialogAvailableDetail": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5407,11 +5484,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "update.dialogDownloading": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "update.dialogDownloadingDetail": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5454,6 +5533,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "update.downloadErrorDetail": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5465,6 +5545,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "update.downloadFailedDialog": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5476,6 +5557,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "update.downloadInstaller": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5526,11 +5608,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "update.installAgain": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "update.installErrorDetail": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5542,6 +5626,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "update.installFailedDialog": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5563,6 +5648,7 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "update.later": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
@@ -5601,11 +5687,13 @@ export const MESSAGE_SCHEMA = {
     "surface": "frontend"
   },
   "update.progressPending": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"
   },
   "update.redownloadInstaller": {
+    "alsoNative": true,
     "kind": "string",
     "params": [],
     "surface": "frontend"

@@ -319,7 +319,6 @@ export const MESSAGES = {
       ]
     }
   },
-  "settings.dynamicEffectsLabel": "Animaciones",
   "settings.globalTitleHint": "Guarda los títulos de ventanas y páginas web en los detalles del historial de actividad.",
   "settings.globalTitleLabel": "Registro global de títulos",
   "settings.idle": "Guardado",

@@ -1,5 +1,8 @@
 // zh-CN native locale resource. Pure data only.
 export const MESSAGES = {
+  "native.export.completed": {"$type": "message", "body": {"$op": "concat", "parts": ["已导出 ", {"$op": "arg", "name": "count"}, " 条记录", "\n", {"$op": "arg", "name": "path"}]}},
+  "data.overview": "总览",
+  "data.detailedAnalysis": "详细分析",
   "native.category.learning": "学习",
   "native.tools.freeFocusTitle": "自由专注",
 

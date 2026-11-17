@@ -1,5 +1,8 @@
 // en-US native locale resource. Pure data only.
 export const MESSAGES = {
+  "native.export.completed": {"$type": "message", "body": {"$op": "concat", "parts": ["Exported ", {"$op": "arg", "name": "count"}, " records", "\n", {"$op": "arg", "name": "path"}]}},
+  "data.overview": "Overview",
+  "data.detailedAnalysis": "Detailed analysis",
   "native.category.learning": "Learning",
   "native.tools.freeFocusTitle": "Free focus",
 

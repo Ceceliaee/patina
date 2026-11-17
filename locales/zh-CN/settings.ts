@@ -193,7 +193,6 @@ export const MESSAGES = {
       ]
     }
   },
-  "settings.dynamicEffectsLabel": "灵动视效",
   "settings.globalTitleHint": "保存应用窗口标题和网页标题，用于历史活动明细。",
   "settings.globalTitleLabel": "全局标题",
   "settings.idle": "已保存",
