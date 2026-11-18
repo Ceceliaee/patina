@@ -85,11 +85,11 @@ Rust 负责：
 
 ### 4.2 窗口与常驻进程
 
-[桌面协议](../crates/desktop-protocol/src/lib.rs)定义请求、事件和响应，[窗口进程管理](../apps/patina/src/window_process.rs)负责启动、握手和退出，常驻进程持有录制、工具与更新服务。主窗口、Mini 和通知窗口通过客户端提交操作。涉及工具身份、过期提醒或安装交接的请求，由持有对应状态的服务再次校验。
+窗口进程管理负责握手、连接代次、请求编号、在途上限及退出。桌面请求按操作选择并行、串行或排空在途任务，再使用实际窗口身份校验敏感操作。移动或恢复数据库成功后重启宿主，安装成功后退出。业务操作区分冲突与普通拒绝，协议和客户端保留错误类别，到界面展示时才转成文字。[窗口进程管理](../apps/patina/src/window_process.rs) · [请求分派](../apps/patina/src/requests.rs) · [桌面协议](../crates/desktop-protocol/src/lib.rs)
 
 ### 4.3 本地数据读取通道
 
-[Recorder](../crates/activity/src/lib.rs) 提供公开读写接口，SQLite 查询与事务由数据模块实现。
+[后台入口](../apps/patina/src/lib.rs) 持有资料写锁、Tokio 运行时和 SQLite 连接池。[录制器](../crates/activity/src/recording/desktop.rs) 启停采样并按最后成功采样时间封口。托盘只持有录制控制句柄。历史与统计使用 `ActivityQueries`，分类使用 `Classification`。两者可直接接入已经打开的连接池。桌面请求将历史、趋势、今日、近期和图标读取提交到既有 Tokio 工作线程，Windows 消息线程继续处理托盘与窗口事件。当前前台活动和最后采样时间由录制控制句柄提供。[活动查询](../crates/activity/src/recording/queries.rs) · [分类操作](../crates/activity/src/recording/classification.rs)
 
 #### 活动派生状态与应用关联
 
@@ -104,9 +104,9 @@ Rust 负责：
 
 小时投影在来源优先级确定后按小时和应用归并原生片段，导入仍保留必要的批次身份。原生重叠时长可以累计超过一小时，存储分行不能钳制总量。非整小时边界先读取完整小时的占用事实、完成来源分配，再精确裁剪；不能由汇总时长按比例推算局部分布。
 
-页面通过 Recorder 读取活动事实和汇总，展示时应用分类与别名。可编辑规则单独持久化。
+页面通过活动查询读取活动事实和汇总，展示时应用分类与别名。可编辑规则单独持久化。
 
-应用关联使用独立的成员到主程序设置，不修改 canonical executable 或原始会话。Recorder 在分类统计中解析归属。配置 repository 在同一事务中检查预期旧归属与最终完整关系，拒绝自身关联、嵌套和循环。来源优先级、时间裁剪与原程序排除先于归属聚合，精确明细保留原程序边界。备份恢复验证合并后的完整关系。
+应用关联使用独立的成员到主程序设置，不修改 canonical executable 或原始会话。活动查询在分类统计中解析归属。配置 repository 在同一事务中检查预期旧归属与最终完整关系，拒绝自身关联、嵌套和循环。来源优先级、时间裁剪与原程序排除先于归属聚合，精确明细保留原程序边界。备份恢复验证合并后的完整关系。
 
 存储页按时间清理活动记录，保留应用和网站的用户配置。记录删除事务只检查本次涉及的对象。仍有活动记录、已保存的关联、分类配置或使用提醒引用时保留图标，否则一并移除数据库中的图标缓存。
 
@@ -126,7 +126,7 @@ Rust 负责：
 
 #### 读取与备份边界
 
-SQL、参数绑定及跨表一致性归 Recorder。页面消费具名的查询结果，负责展示格式、图表组合与时间线几何。精确会话与标题须在同一读取快照中取得。
+活动查询和写入操作各自拥有 SQL、参数绑定和事务。页面消费具名的查询结果，负责展示格式、图表组合与时间线几何。精确会话与标题须在同一读取快照中取得。
 
 #### 备份与恢复
 
@@ -173,11 +173,17 @@ SQL、参数绑定及跨表一致性归 Recorder。页面消费具名的查询�
 
 Rust 模块、函数与字段使用 snake_case，类型使用 PascalCase。数据库、备份格式、宿主消息和独立发布的 Web Sync 协议各自维护兼容边界。协议字段的序列化名称与既有数据保持兼容。
 
+活动（activity）是被记录的应用或网页使用情况。采样（sample）是一次观察，录制器（Recorder）按跟踪规则把连续使用归入活动会话（session）。历史页面按日期读取并展示记录（record）。涉及 Windows 登录会话或测试桌面时，在名称中标明所属上下文。
+
+工具（tool）是用户在工具页选择的功能。插件（plugin）是交付该功能的可安装包，插件宿主负责校验、加载和执行。桌面窗口通过 `WindowRequest` 提交读取或修改操作，宿主以 `Reply` 返回结果。窗口关闭等已经发生的事实以事件表达。
+
 ### 4.6 GPUI 实验版工具插件
 
 GPUI 主窗口在「分类」与「设置」之间提供「工具」入口。窗口负责绘制插件声明的面板、收集表单值和呈现安装确认。常驻宿主登记插件身份、运行 Wasm、调度到期任务并保存状态。关闭最后一个窗口后，已有计时继续推进。Mini 与主窗口读取同一份计时和提醒投影，点击状态时由主窗口完成导航和未保存编辑确认。[主窗口](../apps/patina-ui/src/windows/main/mod.rs) · [常驻工具服务](../apps/patina/src/tool_service.rs)
 
-外部插件以单个签名包分发。宿主在预览和确认时校验内容摘要、API 版本和发布者。更新及重装须符合原 ID 的发布者绑定。新模块成功返回合规面板后，宿主才原子替换已有安装；实例代次用于拒绝旧动作。工具无法自行取得文件、网络或数据库访问。插件所需的通用能力在安装时展示，Rust 作者可用同一入口发布文本、表单、按钮和后台计时。[包校验与运行时](../crates/tool-host/src/lib.rs) · [插件作者指南](../plugins/counter/README.md)
+插件运行时依赖 SDK 中的包、安装和 guest 契约。后台按已安装身份绑定专注和提醒的数据访问，窗口通过桌面协议请求已安装列表、面板或操作结果。[SDK 安装契约](../crates/plugin-sdk/src/installation.rs) · [后台绑定](../apps/patina/src/bundled_tools.rs)
+
+外部插件以单个签名包分发。宿主在预览和确认时校验内容摘要、API 版本和发布者。更新及重装须符合原 ID 的发布者绑定。新模块成功返回合规面板后，宿主才原子替换已有安装；实例代次用于拒绝旧动作。工具无法自行取得文件、网络或数据库访问。插件所需的通用能力在安装时展示，Rust 作者可用同一入口发布文本、表单、按钮和后台计时。[包校验与运行时](../crates/plugin-host/src/lib.rs) · [插件作者指南](../plugins/counter/README.md)
 
 专注和提醒随程序分发为两个独立 Wasm 包。两者各自拥有面板及任务动作，绑定的原生数据适配器复用已有 SQLite 任务、阶段转换、专注历史和日程事务。旧任务沿用原 ID、历史关系和备份身份。卸载专注会结算活动区间，卸载提醒会暂停日程与使用规则。宿主保留数据和卸载选择；重启会完成中断的撤销，主动重装后由用户重新启动任务。通知确认还校验当前事件及其来源任务。[随附插件](../plugins/official) · [原生数据适配器](../crates/activity/src/recording/tools.rs) · [通知与使用提醒](../apps/patina/src/tool_events.rs)
 
@@ -185,25 +191,25 @@ GPUI 主窗口在「分类」与「设置」之间提供「工具」入口。窗
 
 [`crates/updater`](../crates/updater/src/lib.rs) 拥有更新清单、版本比较、HTTPS 下载、Minisign 验签和安装交接。常驻宿主持有更新服务，窗口只请求操作并读取状态；关闭窗口或切换导航不会取消下载。[关于页](../apps/patina-ui/src/features/about/mod.rs) 展示版本差异、更新说明、下载进度和失败后的重试与手动下载入口，在下载完成后提供独立安装确认。安装前保存返回页面，新窗口启动时一次性消费该记录。
 
-安装请求由[宿主消息循环](../apps/patina/src/window_process.rs)串行处理，只能执行服务持有并再次验签的安装包。启动安装器后，宿主关闭窗口进程、停止工具任务并结算录制，成功后写入退出凭据。[NSIS 安装器](../packaging/windows/patina.nsi)等待宿主退出并检查该凭据，之后替换程序文件。安装器不清理用户数据；包格式、签名与分发规则见[发布规范](versioning-and-release-policy.md#96-gpui-原生更新包)。
+安装请求由[桌面用例](../apps/patina/src/requests.rs)串行处理，只能执行服务持有并再次验签的安装包。启动安装器后，宿主关闭窗口进程、等待在途请求、停止工具和后台作业、结算录制，再关闭数据库。宿主确认收尾成功后写入退出凭据。[NSIS 安装器](../packaging/windows/patina.nsi)等待宿主退出并检查该凭据，之后替换程序文件。安装器不清理用户数据；包格式、签名与分发规则见[发布规范](versioning-and-release-policy.md#96-gpui-原生更新包)。
 
 ### 4.8 原生设置与存储
 
-[设置窗口](../apps/patina-ui/src/features/settings/mod.rs) 拥有主题和语言预览，取消或离开页面时还原未保存的预览。[存储界面](../apps/patina-ui/src/features/settings/storage.rs) 拥有导出、导入、备份、恢复和定时配置弹窗；[存储服务](../crates/activity/src/recording/storage.rs) 复用共享数据协议与事务，持久保存按格式区分的导出偏好。
+[常驻设置用例](../apps/patina/src/requests/settings.rs) 核对原设置，依次变更登录项、托盘可见性并提交偏好。失败时恢复已应用的系统效果，同时保留补偿失败的诊断。[设置窗口](../apps/patina-ui/src/features/settings/mod.rs) 拥有主题和语言预览，取消或离开页面时还原未保存的预览。[存储界面](../apps/patina-ui/src/features/settings/storage.rs) 拥有导出、导入、备份、恢复和定时配置弹窗；[存储服务](../crates/activity/src/recording/storage.rs) 复用共享数据协议与事务，持久保存按格式区分的导出偏好。
 
 原生数据目录迁移在所选目录下使用 `Patina` 子目录，所选目录本身已名为 `Patina` 时直接使用它。数据库和本地备份在重启时一起迁移；[迁移实现](../crates/storage/src/location/migration.rs) 拒绝覆盖已有目标，用暂存目录确认发布归属，持久保存新位置后才清理已确认复制的源文件。共享的数据库、导入导出和备份模块仍由原有 data owner 维护。
 
 ## 5. 前端长期结构
 
-[主窗口](../apps/patina-ui/src/windows/main/mod.rs)持有页面导航和未保存编辑的确认。[页面实体](../apps/patina-ui/src/features)管理各自的选择、查询与草稿。[宿主客户端](../apps/patina-ui/src/client/mod.rs)按请求编号分派回复，连接结束时通知等待者。工具页的左侧分区显示已安装工具，跟随主导航的图标或图文模式。首次打开优先显示提醒，重开时恢复此 profile 上次选择的已安装工具。Mini 指定的工具优先于保存的选择。面板动作交给常驻工具服务。共享布局、输入、选择控件、键盘焦点、主题与色板归 [QuietPro](../crates/quietpro/src/lib.rs)。
+[主窗口](../apps/patina-ui/src/windows/main/mod.rs)持有页面导航和未保存编辑的确认。[页面实体](../apps/patina-ui/src/features)管理各自的选择、查询与草稿。[宿主客户端](../apps/patina-ui/src/client/mod.rs)按请求编号分派回复，连接结束时通知等待者。工具页用下拉框选择已安装的工具。首次打开优先显示提醒，重开时恢复此 profile 上次选择的已安装工具。Mini 指定的工具优先于保存的选择。面板动作交给常驻工具服务。共享布局、输入、选择控件、键盘焦点、主题与色板归 [QuietPro](../crates/quietpro/src/lib.rs)。
 
 #### Mini 生命周期
 
-[Mini](../apps/patina-ui/src/windows/mini/mod.rs)读取当前活动和工具状态，点击工具时由主窗口导航。隐藏和重开由窗口生命周期管理，录制继续运行。
+[Mini](../apps/patina-ui/src/windows/mini/mod.rs)读取当前活动和工具状态，点击工具时由主窗口导航。Mini 的尺寸、物理坐标、贴边裁剪和交互时序由窗口模块维护。隐藏和重开由窗口生命周期管理，录制继续运行。旧资料中的停靠位置及固定状态由存储兼容测试验证。[窗口几何](../apps/patina-ui/src/windows/mini/geometry.rs) · [历史资料](../crates/storage/src/sqlite_pool/widget_retirement_tests/mini_preferences.rs)
 
 ## 6. Rust 长期结构
 
-[桌面工作区](../Cargo.toml)分别维护应用、录制与存储、控件、工具宿主、插件 SDK、更新及原生测试支持。桌面入口负责装配和退出顺序。以下模块路径相对 Recorder 源码目录。
+[桌面工作区](../Cargo.toml)分别维护应用、录制与存储、控件、工具宿主、插件 SDK、更新及原生测试支持。桌面入口负责装配和退出顺序。以下模块路径相对 `crates/activity/src`。
 
 ### 6.4 `platform/`
 
@@ -294,13 +300,13 @@ Windows 任务管理器展开 Patina 组时，子进程使用公共文件描述 
 | --- | --- |
 | 托盘、单实例、任务调度与退出 | `apps/patina` |
 | 主窗口、Mini、通知、页面状态与 GPUI 输入 | `apps/patina-ui` |
-| 窗口请求、结果和事件 | `crates/desktop-protocol` |
-| 活动计算、专用 SQL、统计和备份合并 | `crates/activity`；共享领域类型由 `crates/activity-model` 拥有 |
+| 窗口传输、业务操作与协议 | `apps/patina/src/window_process.rs` 管连接和在途请求，`apps/patina/src/requests` 处理桌面设置，`requests.rs` 分派操作，`crates/desktop-protocol` 定义消息 |
+| 采样、活动查询、分类事务与存储操作 | `crates/activity/src/recording` 下按用途提供入口，活动查询与分类共用的领域类型归 `crates/activity-model` |
 | SQLite 连接、schema、WAL、数据库位置与迁移 | `crates/storage` |
 | 原生采样和故障隔离 | `crates/windows-integration/src/windows/native_probe` |
 | 调色板、布局和可复用控件 | `crates/quietpro` |
 | 翻译、运行时消息与工作簿 | `locales`、`crates/i18n`、`xtask/src/i18n` |
-| 工具包校验与执行、作者接口和官方工具 | `crates/tool-host`、`crates/plugin-sdk`、`plugins/` |
+| 工具包校验与执行、作者接口和官方工具 | `crates/plugin-host`、`crates/plugin-sdk`、`plugins/` |
 | 更新清单、下载、签名、安装与分发 | `crates/updater`、`packaging/windows`、`xtask/src/release` |
 | 隔离桌面与跨 crate 测试辅助 | `crates/test-support` |
 
@@ -310,7 +316,7 @@ Windows 任务管理器展开 Patina 组时，子进程使用公共文件描述 
 
 ## 11. 最低验证门槛
 
-改数据边界时验证 Recorder 事务与恢复。窗口、进程及系统集成使用对应 Windows 验收。验证入口及其适用范围见[工程质量](engineering-quality.md#5-默认验证门槛)。
+改数据边界时验证相关用例的事务、恢复和录制封口。窗口、进程及系统集成使用对应 Windows 验收。验证入口及其适用范围见[工程质量](engineering-quality.md#5-默认验证门槛)。
 
 ## 12. 与其他长期文档的关系
 

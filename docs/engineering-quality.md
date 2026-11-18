@@ -69,7 +69,7 @@
 | 实际改动 | 本地验收范围 |
 | --- | --- |
 | 纯文档 | `cargo xtask docs check`，核对事实、UTF-8、链接和义务；治理或验证政策变化追加 `cargo test -p xtask docs::` 及受影响规则的正反场景 |
-| 局部 GPUI/QuietPro 界面或选项持久化 | 所属 Rust 模块或 Recorder 契约、受影响的具名原生交互用例，以及相关格式、编译或本地化检查；不运行无关页面与资源长测 |
+| 局部 GPUI/QuietPro 界面或选项持久化 | 所属 Rust 模块或活动数据契约、受影响的具名原生交互用例，以及相关格式、编译或本地化检查；不运行无关页面与资源长测 |
 | 局部 Rust、tracking、SQLite 或桌面 runtime 行为 | 受影响模块及真实消费者的测试、相关 Rust 静态检查和命中风险的原生/数据专项；不因涉及 Rust 或持久化就运行全仓测试 |
 | 跨模块改动 | GPUI workspace 运行 `cargo test-headless --locked` 及受影响 crate 的格式、编译和 Clippy 检查，并补命中风险的原生专项；仓库工具或公共构建链变化追加 `cargo xtask check tools`。 |
 | 正式发布 | `cargo xtask check` 和 `cargo xtask release validate-changelog`，并遵循[发布验收](versioning-and-release-policy.md#10-发布前的最低验证门槛) |
@@ -95,7 +95,7 @@ GPUI 桌面版和 QuietPro 的自动化测试统一用 Rust 编写，包括控�
 按被测行为放置测试：
 
 - 纯计算、状态转换和控件模型的单元测试留在所属生产模块。
-- Recorder 公开接口的数据、事务、恢复与本地化契约放在 [`crates/activity/tests/contracts.rs`](../crates/activity/tests/contracts.rs) 及其领域子模块；这些用例不启动 GPUI。Recorder 内部单元测试由该 crate 的 lib target 执行。
+- [活动契约](../crates/activity/tests/contracts.rs) 在临时 SQLite 库上验证查询、分类、设置及存储操作。涉及实时采样、关窗续录或退出封口时使用真实进程生命周期用例。[窗口与进程](../apps/patina/tests/lifecycle.rs)
 - QuietPro 无头控件交互放在 `crates/quietpro/tests/headless.rs`，启用 `test-support` 后运行；复用生产控件，断言指针、键盘、禁用状态与回调行为。
 - 页面窗口交互放在 `apps/patina/tests/pages/`，由 `pages.rs` 注册；Today 交互由 `today.rs` 注册，QuietPro 控件交互放在 `crates/quietpro/tests/`。布局用例直接进入对应页面或弹窗，不以导入、备份等无关长流程作为前置步骤。
 - 专用会话资源采样与基线对照保留具名 ignored 用例；普通页面布局修改不自动触发资源长测。跨 target 复用的环境与 fixture 放在 `crates/test-support/`，页面私有断言留在页面测试模块。
@@ -105,7 +105,7 @@ GPUI 桌面版和 QuietPro 的自动化测试统一用 Rust 编写，包括控�
 ```sh
 cargo test-headless --locked
 cargo test --locked -p quietpro --features test-support --test headless
-cargo test --locked -p patina-recorder --test contracts services::web_sync_guide_data_is_localized_and_preserves_actions -- --exact
+cargo test --locked -p patina-activity --test contracts services::web_sync_guide_data_is_localized_and_preserves_actions -- --exact
 cargo test --locked -p patina --features native-tests --test pages storage::settings_webdav_layout -- --ignored --exact --test-threads=1
 cargo test --locked -p patina --features native-tests --test lifecycle -- --ignored --test-threads=1
 cargo test --locked -p quietpro --features native-tests --test controls accessible_controls -- --ignored --exact --test-threads=1
@@ -114,6 +114,8 @@ cargo test --locked -p quietpro --features native-tests --test controls accessib
 一次执行同一领域时可使用模块过滤器；不能用 `--include-ignored` 无差别执行带资源、凭据或专用会话前提的用例。Cargo 零匹配可能返回成功退出码，验收还须核对实际执行数非零；`--no-run` 只证明编译。移动测试时核对新旧清单、断言与 ignore 理由，保持默认聚合可达。
 
 显式启用的原生 GPUI 窗口用例从 Cargo 入口自动进入[临时 Win32 测试桌面](../crates/test-support/src/lib.rs)，驱动、Patina 和渲染进程在同一非输入桌面完成交互，退出后释放。纯数据和控件模型用例直接运行。
+
+Windows 安全软件曾在测试开始前隔离 `updater-*.exe`。遇到相同记录的机器，直接在隔离桌面用系统 UI Automation 操作真实 Patina 窗口，分别记录验签、确认、退出回执和重启结果。被隔离的测试入口单独记为未执行。[本机检测与独立验证记录](archive/2026-11-18-rust-gpui-architecture.md#更新窗口实测)
 
 验收真实前台焦点、系统托盘、物理鼠标或交互会话资源基线时，使用专用 Windows 虚拟机或独立交互登录会话。在该环境的 PowerShell 中设置进程级 `$env:PATINA_DEDICATED_TEST_SESSION = '1'`，再运行对应的具名用例或 `native-lifecycle` 示例。这个变量声明运行环境已经专用，设置它本身不会创建会话。日常桌面保持未设置；显式选中这类用例时，测试会在启动窗口前报告缺少专用会话。
 
@@ -127,7 +129,7 @@ cargo test --locked -p quietpro --features native-tests --test controls accessib
 
 #### 各层证据与覆盖范围
 
-仓库工具测试覆盖翻译资源、发布产物、依赖审计及外部 PR 准入。Rust 单元测试保护状态转换，Recorder 契约覆盖数据库、旧结构升级、备份与恢复。QuietPro 无头测试覆盖控件行为，隔离桌面测试覆盖真实窗口、输入、系统集成和进程回收。
+仓库工具测试覆盖翻译资源、发布产物、依赖审计及外部 PR 准入。Rust 单元测试保护状态转换，活动数据契约覆盖数据库、旧结构升级、备份与恢复。QuietPro 无头测试覆盖控件行为，隔离桌面测试覆盖真实窗口、输入、系统集成和进程回收。
 
 同一测试在不同发布架构上需使用实际目标产物。安装器、更新签名、真实系统托盘和长期资源采样仍按对应环境验收。移除旧格式支持前应验证已发布版本的升级义务、迁移与恢复。
 

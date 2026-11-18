@@ -193,7 +193,7 @@ Worker 验收使用 worker-build 0.9 和本地 workerd。错误令牌被拒绝�
 | 活动与数据 | 旧版和新版的跨日、夏令时、重叠网页与匿名样本得到相同结果，数值见 A。并发读取保持同一快照。合并晚期失败回滚，回环 WebDAV 的凭据保存、上传及恢复通过。v1.10.0 数据库副本经原生安装、升级和卸载保留 60 秒记录与自定义位置。[活动契约](../../crates/activity/tests) |
 | GPUI | 页面实体通过乱序响应、销毁、重建和草稿焦点测试。Windows 原生测试实际打开主窗口、Mini 和独立提醒，验证主题预览、工具设置键盘操作、提醒确认与正常关窗。QuietPro 的 `accessible_controls` 用 UIA 验证控件名称、禁用状态、切换和单次激活。[窗口验收](../../apps/patina/tests/pages.rs) · [控件验收](../../crates/quietpro/tests/controls.rs) |
 | 翻译与仓库检查 | 4 种语言每种 1,046 项。新旧生成表达式、结构化资源和已有法语、阿拉伯语 XLSX 的比对见 F。篡改和过期资源被拒绝，失败导入保持原目录。PR 准入、候选提交和审计分别有 Rust 正反例。[翻译工具](../../xtask/src/i18n) · [CI 工具](../../xtask/src/ci) |
-| 插件与外部协议 | 真实 Wasmtime 使用临时签名的 counter 0.1.0/0.1.1 完成安装、更新、重启、实例隔离、拒绝过期动作及卸载。官方专注与提醒均冻结编译。Web Sync 0.2.1 的两个实际后台脚本使用模拟标签和权限访问本机真实宿主，Worker 使用本地 workerd 跨进程重启复查持久化。未部署外部服务。[工具宿主](../../crates/tool-host) · [Worker 示例](../../examples/remote-status-bridge-worker) |
+| 插件与外部协议 | 真实 Wasmtime 使用临时签名的 counter 0.1.0/0.1.1 完成安装、更新、重启、实例隔离、拒绝过期动作及卸载。官方专注与提醒均冻结编译。Web Sync 0.2.1 的两个实际后台脚本使用模拟标签和权限访问本机真实宿主，Worker 使用本地 workerd 跨进程重启复查持久化。未部署外部服务。[工具宿主](../../crates/plugin-host) · [Worker 示例](../../examples/remote-status-bridge-worker) |
 
 产品源码与测试、工具、工作流和资源合计 654 个非 Markdown 文件。现场复核的内容指纹为 `add3180de5525a4066a0eb637144b19ece86ab2e86b2e4156d9b99138345adb3`。复算时取当前仍存在的跟踪文件与非忽略的新文件，按 UTF-8 相对路径字节排序，对每项拼接路径、NUL 及文件原始字节的 32 字节 SHA-256，再对整体求 SHA-256。436 个 Rust 源文件，项目自有 TS、JS、PowerShell 和 Python 脚本文件均为零。五份锁文件的解析包数分别为根工作区 942、Worker 82、示例插件 43、官方插件 44、vendored AccessKit 204；各自的 Tauri 包数均为零。
 
