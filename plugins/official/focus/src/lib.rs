@@ -4,10 +4,10 @@ use serde_json::{Value, json};
 
 #[plugin_fn]
 pub fn panel(Json(request): Json<Request>) -> FnResult<Json<Response>> {
-    Ok(Json(view(request)))
+    Ok(Json(handle_event(request)))
 }
 
-fn view(request: Request) -> Response {
+fn handle_event(request: Request) -> Response {
     let data = &request.data;
     let label = |key: &str| data["labels"][key].as_str().unwrap_or(key).to_string();
     let mut panel = Vec::new();

@@ -22,8 +22,11 @@ pub use activity_reminders::{
     fire_due_activity_reminders, merge_activity_reminder_rules, set_activity_reminder_enabled,
     update_activity_reminder_limit,
 };
-pub(crate) use read::fetch_all_activity_reminder_rules;
 pub use read::fetch_tools_snapshot;
+pub(crate) use read::{
+    fetch_active_activity_reminder_rules, fetch_all_activity_reminder_rules,
+    fetch_visible_reminders,
+};
 
 pub use backup_restore::{
     fetch_all_daily_stats_for_backup, fetch_all_pomodoro_runs_for_backup,

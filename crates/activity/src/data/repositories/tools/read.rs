@@ -137,7 +137,7 @@ pub(super) async fn fetch_active_activity_reminder_rules_tx(
         .collect()
 }
 
-async fn fetch_active_activity_reminder_rules(
+pub(crate) async fn fetch_active_activity_reminder_rules(
     pool: &Pool<Sqlite>,
 ) -> Result<Vec<ToolActivityReminderRule>, String> {
     let query = format!(
@@ -309,7 +309,9 @@ pub(super) async fn fetch_web_usage_facts_tx(
         .collect())
 }
 
-async fn fetch_visible_reminders(pool: &Pool<Sqlite>) -> Result<Vec<ToolReminder>, String> {
+pub(crate) async fn fetch_visible_reminders(
+    pool: &Pool<Sqlite>,
+) -> Result<Vec<ToolReminder>, String> {
     let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
         "SELECT id, label, scheduled_at, created_at, status, fired_at, cancelled_at, {REMINDER_RECURRENCE_COLUMNS}
          FROM tool_reminders

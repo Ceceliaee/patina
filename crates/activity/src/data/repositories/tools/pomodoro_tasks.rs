@@ -46,7 +46,7 @@ pub(super) async fn complete_group(
     })
 }
 
-pub(super) async fn fetch_tasks(pool: &Pool<Sqlite>) -> Result<Vec<ToolPomodoroTask>, String> {
+pub(crate) async fn fetch_tasks(pool: &Pool<Sqlite>) -> Result<Vec<ToolPomodoroTask>, String> {
     let rows = sqlx::query("SELECT r.*, COALESCE(t.label, '') AS task_label, COALESCE(c.completed_groups, 0) AS completed_groups FROM tool_pomodoro_runs r
         LEFT JOIN tool_pomodoro_tasks t ON t.run_id = r.id
         LEFT JOIN tool_pomodoro_task_completions c ON c.run_id = r.id WHERE t.deleted_at IS NULL ORDER BY r.created_at, r.id")
