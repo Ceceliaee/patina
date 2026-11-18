@@ -18,12 +18,6 @@ SetCompressor /SOLID lzma
 !ifndef APP_BINARY
   !error "APP_BINARY is required"
 !endif
-!ifndef UI_BINARY
-  !error "UI_BINARY is required"
-!endif
-!ifndef PROBE_BINARY
-  !error "PROBE_BINARY is required"
-!endif
 !ifndef OUTPUT_FILE
   !error "OUTPUT_FILE is required"
 !endif
@@ -179,13 +173,11 @@ FunctionEnd
 Section "Patina"
   SetOutPath "$INSTDIR"
   Call Recover
-  ; Keep all executable payloads and the uninstaller private until every file is staged.
+  ; The previous installation can contain separate window and probe executables.
   CreateDirectory "$INSTDIR\.patina-previous"
   SetOutPath "$INSTDIR\.patina-staging"
   ClearErrors
   File /oname=patina.exe "${APP_BINARY}"
-  File /oname=patina-ui.exe "${UI_BINARY}"
-  File /oname=patina-probe.exe "${PROBE_BINARY}"
   WriteUninstaller "$INSTDIR\.patina-staging\Uninstall.exe"
   FileOpen $0 "$INSTDIR\.patina-staging\patina-gpui-installation" w
   FileWrite $0 "patina-gpui"
@@ -204,8 +196,6 @@ Section "Patina"
   ClearErrors
   Rename "$INSTDIR\.patina-backing" "$INSTDIR\.patina-publishing"
   IfErrors rollback
-  !insertmacro Publish "patina-ui.exe"
-  !insertmacro Publish "patina-probe.exe"
   !insertmacro Publish "Uninstall.exe"
   !insertmacro Publish "patina-gpui-installation"
   !insertmacro Publish "patina.exe"

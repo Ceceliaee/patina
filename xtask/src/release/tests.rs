@@ -20,7 +20,7 @@ fn pe_bytes(t: Target) -> Vec<u8> {
     bytes
 }
 #[test]
-fn signed_bundles_require_both_architectures_and_all_programs() -> Result<()> {
+fn signed_bundles_require_one_program_for_each_architecture() -> Result<()> {
     let fixture: Value = serde_json::from_str(include_str!(
         "../../../crates/updater/tests/fixtures/signed.json"
     ))?;
@@ -37,9 +37,7 @@ fn signed_bundles_require_both_architectures_and_all_programs() -> Result<()> {
         let dir = input.join(arch(t));
         fs::create_dir_all(&dir)?;
         fs::write(dir.join(installer_name(&ver, t)), &payload)?;
-        for name in BINARIES {
-            fs::write(dir.join(format!("{name}.exe")), pe_bytes(t))?;
-        }
+        fs::write(dir.join(EXECUTABLE), pe_bytes(t))?;
         let entry = Artifact {
             url: asset_url(&ver, "example/patina", t)?,
             size: payload.len() as u64,
@@ -173,14 +171,16 @@ fn signed_bundles_require_both_architectures_and_all_programs() -> Result<()> {
     fs::write(&installer, bytes)?;
     assert!(check().is_err());
     fs::write(installer, payload)?;
-    for exe in BINARIES {
-        let file = input.join("arm64").join(format!("{exe}.exe"));
-        fs::remove_file(&file)?;
-        assert!(check().is_err());
-        fs::write(&file, pe_bytes(Target::X64))?;
-        assert!(check().is_err());
-        fs::write(file, pe_bytes(Target::Arm64))?;
-    }
+    let file = input.join("arm64").join(EXECUTABLE);
+    fs::remove_file(&file)?;
+    assert!(check().is_err());
+    fs::write(&file, pe_bytes(Target::X64))?;
+    assert!(check().is_err());
+    fs::write(file, pe_bytes(Target::Arm64))?;
+    let obsolete = input.join("arm64").join("patina-ui.exe");
+    fs::write(&obsolete, pe_bytes(Target::Arm64))?;
+    assert!(check().is_err());
+    fs::remove_file(obsolete)?;
     check()?;
     Ok(())
 }
@@ -283,23 +283,20 @@ fn verification_binds_exact_repo_revision_attempt_and_jobs() -> Result<()> {
 }
 
 #[test]
-fn product_version_and_all_local_programs_stay_aligned() -> Result<()> {
+fn application_and_version_bound_crates_follow_the_product_version() -> Result<()> {
     let root = tempfile::tempdir()?;
     fs::write(
         root.path().join("Cargo.toml"),
         "[workspace]\nmembers=['apps/*','crates/*']\nresolver='3'\n[workspace.package]\nversion = '1.0.0'\n",
     )?;
-    let mut lock = String::new();
-    for name in BINARIES {
-        let dir = root.path().join("apps").join(name);
-        fs::create_dir_all(dir.join("src"))?;
-        fs::write(dir.join("src/main.rs"), "fn main() {}")?;
-        fs::write(
-            dir.join("Cargo.toml"),
-            format!("[package]\nname='{name}'\nversion.workspace=true\n"),
-        )?;
-        lock.push_str(&format!("[[package]]\nname='{name}'\nversion='1.0.0'\n"));
-    }
+    let app = root.path().join("apps/patina");
+    fs::create_dir_all(app.join("src"))?;
+    fs::write(app.join("src/main.rs"), "fn main() {}")?;
+    fs::write(
+        app.join("Cargo.toml"),
+        "[package]\nname='patina'\nversion.workspace=true\n",
+    )?;
+    let mut lock = String::from("[[package]]\nname='patina'\nversion='1.0.0'\n");
     let shared = root.path().join("crates/desktop-protocol");
     fs::create_dir_all(shared.join("src"))?;
     fs::write(shared.join("src/lib.rs"), "")?;

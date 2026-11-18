@@ -77,9 +77,7 @@ fn sign_product_installers_with_disposable_key() -> Result<()> {
             &m.platforms[t.key()],
             &config,
         )?;
-        for name in BINARIES {
-            assets::pe(&dir.join(format!("{name}.exe")), t)?;
-        }
+        assets::pe(&dir.join(EXECUTABLE), t)?;
         println!("Verified {} {} with disposable key", t.key(), version);
     }
     if target.is_none() {

@@ -1,5 +1,5 @@
 use super::{
-    BINARIES, MANIFEST, Result, TARGETS, Target, Version, arch, assets, installer_name, version,
+    EXECUTABLE, MANIFEST, Result, TARGETS, Target, Version, arch, assets, installer_name, version,
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
 use patina_updater::{Artifact, Config, Manifest};
@@ -21,7 +21,7 @@ fn triple(t: Target) -> &'static str {
     }
 }
 
-fn build(root: &Path, target: Target, secrets: &[&str]) -> Result<BTreeMap<String, PathBuf>> {
+fn build(root: &Path, target: Target, secrets: &[&str]) -> Result<PathBuf> {
     let mut command = Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into()));
     command.current_dir(root).args([
         "build",
@@ -30,34 +30,34 @@ fn build(root: &Path, target: Target, secrets: &[&str]) -> Result<BTreeMap<Strin
         "--target",
         triple(target),
         "--message-format=json-render-diagnostics",
+        "-p",
+        "patina",
+        "--bin",
+        "patina",
     ]);
-    for name in BINARIES {
-        command.args(["-p", name]);
-    }
     for var in secrets {
         command.env_remove(var);
     }
     let mut child = command.stdout(Stdio::piped()).spawn()?;
-    let mut binaries = BTreeMap::new();
+    let mut executable = None;
     let read = (|| -> Result<()> {
         for line in BufReader::new(child.stdout.take().unwrap()).lines() {
             let msg: serde_json::Value = serde_json::from_str(&line?)?;
             if msg["reason"] == "compiler-artifact"
-                && let (Some(name), Some(path)) =
-                    (msg["target"]["name"].as_str(), msg["executable"].as_str())
-                && BINARIES.contains(&name)
+                && msg["target"]["name"] == "patina"
+                && let Some(path) = msg["executable"].as_str()
             {
-                binaries.insert(name.to_owned(), PathBuf::from(path));
+                executable = Some(PathBuf::from(path));
             }
         }
         Ok(())
     })();
     let status = child.wait()?;
     read?;
-    if !status.success() || binaries.len() != BINARIES.len() {
-        return Err(format!("Missing release binaries for {}", triple(target)).into());
+    if !status.success() {
+        return Err(format!("Could not build {EXECUTABLE} for {}", triple(target)).into());
     }
-    Ok(binaries)
+    executable.ok_or_else(|| format!("Missing {EXECUTABLE} for {}", triple(target)).into())
 }
 
 fn define(key: &str, value: &Path) -> OsString {
@@ -71,13 +71,11 @@ fn package_target(
     temp: &Path,
     version: &Version,
     target: Target,
-    bins: &BTreeMap<String, PathBuf>,
+    executable: &Path,
     makensis: &str,
     secrets: &[&str],
 ) -> Result<PathBuf> {
-    for exe in bins.values() {
-        assets::pe(exe, target)?;
-    }
+    assets::pe(executable, target)?;
     let path = temp.join(installer_name(version, target));
     if [version.major, version.minor, version.patch]
         .iter()
@@ -97,9 +95,7 @@ fn package_target(
             "/DRESOURCE_VERSION={}.{}.{}.0",
             version.major, version.minor, version.patch
         ))
-        .arg(define("APP_BINARY", &bins["patina"]))
-        .arg(define("UI_BINARY", &bins["patina-ui"]))
-        .arg(define("PROBE_BINARY", &bins["patina-probe"]))
+        .arg(define("APP_BINARY", executable))
         .arg(define("OUTPUT_FILE", &path))
         .arg(root.join("packaging/windows/patina.nsi"))
         .status()?;
@@ -194,13 +190,16 @@ pub(super) fn package(root: &Path, args: &[&str], config: Config) -> Result<()> 
         .into_iter()
         .chain(options.get("--signing-key-env").copied())
         .collect();
-    let bins = build(root, target, &secrets)?;
+    let build_output = build(root, target, &secrets)?;
+    let staging = temp.path().canonicalize()?;
+    let executable = staging.join(EXECUTABLE);
+    fs::copy(build_output, &executable)?;
     let installer = package_target(
         root,
-        &temp.path().canonicalize()?,
+        &staging,
         &ver,
         target,
-        &bins,
+        &executable,
         options.get("--makensis").unwrap_or(&"makensis"),
         &secrets,
     )?;
@@ -255,13 +254,7 @@ pub(super) fn package(root: &Path, args: &[&str], config: Config) -> Result<()> 
             },
         )?;
     }
-    let mut outputs = Vec::new();
-    for (name, path) in &bins {
-        let file = format!("{name}.exe");
-        fs::copy(path, temp.path().join(&file))?;
-        outputs.push(file);
-    }
-    outputs.push(name);
+    let mut outputs = vec![EXECUTABLE.to_owned(), name];
     if !unsigned {
         outputs.push(MANIFEST.to_owned());
     }

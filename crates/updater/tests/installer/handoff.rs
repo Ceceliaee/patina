@@ -1,5 +1,5 @@
 use super::{Cleanup, Error, run};
-use patina_test_desktop::polling::wait_observed;
+use patina_test_desktop::{polling::wait_observed, process};
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
 use std::{
     env, fs,
@@ -9,35 +9,16 @@ use std::{
 };
 use windows::{
     Win32::{
-        Foundation::{CloseHandle, HWND, LPARAM, MAX_PATH, WPARAM},
-        System::{Diagnostics::ToolHelp::*, Threading::*},
+        Foundation::{HWND, LPARAM, WPARAM},
         UI::WindowsAndMessaging::*,
     },
-    core::{PWSTR, w},
+    core::w,
 };
 use winreg::{
     RegKey, RegValue,
     enums::{HKEY_CURRENT_USER, REG_BINARY},
 };
 
-fn process_path(pid: u32) -> Option<PathBuf> {
-    let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }.ok()?;
-    let mut buffer = [0u16; MAX_PATH as usize * 2];
-    let mut len = buffer.len() as u32;
-    let ok = unsafe {
-        QueryFullProcessImageNameW(
-            process,
-            PROCESS_NAME_FORMAT(0),
-            PWSTR(buffer.as_mut_ptr()),
-            &mut len,
-        )
-        .is_ok()
-    };
-    unsafe {
-        let _ = CloseHandle(process);
-    }
-    ok.then(|| PathBuf::from(String::from_utf16_lossy(&buffer[..len as usize])))
-}
 fn resident(exe: &Path) -> Result<(HWND, u32), Error> {
     Ok(wait_observed("installed host tray", || {
         let hwnd = unsafe { FindWindowW(None, w!("Patina GPUI")) }.map_err(|e| e.to_string())?;
@@ -45,33 +26,12 @@ fn resident(exe: &Path) -> Result<(HWND, u32), Error> {
         unsafe {
             GetWindowThreadProcessId(hwnd, Some(&mut pid));
         }
-        if process_path(pid).and_then(|p| p.canonicalize().ok()) == Some(exe.to_path_buf()) {
+        if process::path(pid).and_then(|p| p.canonicalize().ok()) == Some(exe.to_path_buf()) {
             Ok((hwnd, pid))
         } else {
             Err("installed host not ready".into())
         }
     })?)
-}
-fn children(parent: u32) -> Result<Vec<PathBuf>, Error> {
-    let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) }?;
-    let mut row = PROCESSENTRY32W {
-        dwSize: std::mem::size_of::<PROCESSENTRY32W>() as _,
-        ..Default::default()
-    };
-    let mut found = Vec::new();
-    let mut ok = unsafe { Process32FirstW(snapshot, &mut row).is_ok() };
-    while ok {
-        if row.th32ParentProcessID == parent
-            && let Some(p) = process_path(row.th32ProcessID)
-        {
-            found.push(p);
-        }
-        ok = unsafe { Process32NextW(snapshot, &mut row).is_ok() };
-    }
-    unsafe {
-        CloseHandle(snapshot)?;
-    }
-    Ok(found)
 }
 fn sample(path: &Path) -> Result<(i64, i64, String), Error> {
     let rt = tokio::runtime::Builder::new_current_thread()
@@ -86,7 +46,7 @@ fn sample(path: &Path) -> Result<(i64, i64, String), Error> {
 }
 
 #[test]
-#[ignore = "requires native Windows release binaries and NSIS"]
+#[ignore = "requires a native Windows application and NSIS"]
 fn published_profile_copy_survives_install_upgrade_and_uninstall() -> Result<(), Error> {
     if !patina_test_desktop::run_case()? {
         return Ok(());
@@ -107,7 +67,7 @@ fn published_profile_copy_survives_install_upgrade_and_uninstall() -> Result<(),
     }))?;
     let bins = PathBuf::from(
         env::var_os("PATINA_TEST_RELEASE_BIN_DIR")
-            .ok_or("Set PATINA_TEST_RELEASE_BIN_DIR to the native release binaries")?,
+            .ok_or("Set PATINA_TEST_RELEASE_BIN_DIR to the directory containing patina.exe")?,
     )
     .canonicalize()?;
     let state: serde_json::Value = serde_json::from_slice(&old_control)?;
@@ -161,14 +121,6 @@ fn published_profile_copy_survives_install_upgrade_and_uninstall() -> Result<(),
             "/DAPP_BINARY={}",
             bins.join("patina.exe").display()
         ))
-        .arg(format!(
-            "/DUI_BINARY={}",
-            bins.join("patina-ui.exe").display()
-        ))
-        .arg(format!(
-            "/DPROBE_BINARY={}",
-            bins.join("patina-probe.exe").display()
-        ))
         .arg(installer))?;
     let setup_and_exit = || -> Result<(), Error> {
         run(Command::new(&setup)
@@ -176,6 +128,10 @@ fn published_profile_copy_survives_install_upgrade_and_uninstall() -> Result<(),
             .arg(format!("/PROFILEPARENT={}", parent.display()))
             .raw_arg(format!("/D={}", install.display())))?;
         let application = install.join("patina.exe").canonicalize()?;
+        assert!(fs::read(&application)? == fs::read(bins.join("patina.exe"))?);
+        for retired in ["patina-ui.exe", "patina-probe.exe"] {
+            assert!(!install.join(retired).exists());
+        }
         let (tray, pid) = match resident(&application) {
             Ok(host) => host,
             Err(problem) => {
@@ -199,18 +155,22 @@ fn published_profile_copy_survives_install_upgrade_and_uninstall() -> Result<(),
                 .into());
             }
         };
-        let gui = install.join("patina-ui.exe").canonicalize()?;
-        let probe = install.join("patina-probe.exe").canonicalize()?;
-        wait_observed("installed UI and sampling probe", || {
-            let paths = children(pid)
-                .map_err(|e| e.to_string())?
-                .into_iter()
-                .filter_map(|p| p.canonicalize().ok())
-                .collect::<Vec<_>>();
-            if paths.contains(&gui) && paths.contains(&probe) {
+        wait_observed("installed UI and sampling probe roles", || {
+            let children = process::children(pid, &application).map_err(|e| e.to_string())?;
+            let has = |role: &str| {
+                children.iter().any(|c| {
+                    c.arguments.get(1).map(String::as_str) == Some("--role")
+                        && c.arguments.get(2).map(String::as_str) == Some(role)
+                })
+            };
+            if has("Patina UI") && has("Patina Probe") {
                 Ok(())
             } else {
-                Err(format!("observed {} child programs", paths.len()))
+                Err(format!(
+                    "observed UI={}, probe={}",
+                    has("Patina UI"),
+                    has("Patina Probe")
+                ))
             }
         })?;
         let exclusive = fs::OpenOptions::new()
@@ -227,7 +187,7 @@ fn published_profile_copy_survives_install_upgrade_and_uninstall() -> Result<(),
             PostMessageW(Some(tray), WM_COMMAND, WPARAM(2), LPARAM(0))?;
         }
         wait_observed("installed host clean shutdown", || {
-            if process_path(pid).is_none() {
+            if process::path(pid).is_none() {
                 Ok(())
             } else {
                 Err("active".into())
@@ -237,6 +197,13 @@ fn published_profile_copy_survives_install_upgrade_and_uninstall() -> Result<(),
         Ok(())
     };
     setup_and_exit()?;
+    // A previous build's real application files can be supplied for a release rehearsal.
+    if let Some(previous) = env::var_os("PATINA_TEST_PREVIOUS_BIN_DIR") {
+        let previous = PathBuf::from(previous);
+        for name in ["patina.exe", "patina-ui.exe", "patina-probe.exe"] {
+            fs::copy(previous.join(name), install.join(name))?;
+        }
+    }
     setup_and_exit()?;
     // The old registry entry belongs to the other installation.
     assert_eq!(legacy.get_raw_value("State")?.bytes, old_control);

@@ -11,7 +11,7 @@ use std::{env, error::Error, fs, path::Path};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
-const BINARIES: [&str; 3] = ["patina", "patina-ui", "patina-probe"];
+const EXECUTABLE: &str = "patina.exe";
 const TARGETS: [Target; 2] = [Target::X64, Target::Arm64];
 const MANIFEST: &str = "gpui-latest.json";
 

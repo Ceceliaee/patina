@@ -41,7 +41,7 @@
 
 每次发布时，下列位置必须保持同一个版本语义：
 
-- 根 `Cargo.toml` 的 `workspace.package.version`，由三个程序及需要绑定程序版本的进程协议包继承
+- 根 `Cargo.toml` 的 `workspace.package.version`，由桌面程序和需要绑定产品版本的工作区包继承
 - 根 `Cargo.lock` 中所有继承产品版本的本地包条目
 - Git tag
 - GitHub Release 标题
@@ -414,7 +414,7 @@ cargo xtask release package --target x64 --output target/bundles/x64 --makensis 
 cargo xtask release package --target arm64 --output target/bundles/arm64 --makensis $makensis --minisign $minisign --signing-key $signingKey --base-url $assetBaseUrl
 ```
 
-[`cargo xtask release package`](../xtask/src/release/package.rs) 读取工作区产品版本，在本地构建宿主、界面和探测进程，逐个检查 PE 架构并生成单一 NSIS 安装包。工具用应用公钥复验签名成功后才写入更新清单。需要安装验收时，使用 `--unsigned` 代替签名参数，输出仅包含安装包与三个程序。安装器的 Windows 发布者和文件公司名称为 `Ceceliaee`。
+[`cargo xtask release package`](../xtask/src/release/package.rs) 从工作区构建指定架构的 `patina.exe`，检查 PE 架构后生成 NSIS 安装包。宿主、界面和探测进程均从这一个文件启动。升级已有三程序安装时，安装器先备份旧程序，成功后清理旧界面和探测文件。文件被占用或替换中断时，安装器恢复上一组程序，之后可重试。工具用应用公钥复验签名后写入更新清单。安装验收可使用 `--unsigned`，输出包含安装包和 `patina.exe`。安装器的 Windows 发布者和文件公司名称为 `Ceceliaee`。
 
 工作流在各架构的 Windows runner 上调用同一个打包工具，合并清单后独立验证，再为两个最终安装包生成证明。签名步骤使用 `PATINA_SIGNING_PRIVATE_KEY` 和 `PATINA_SIGNING_PRIVATE_KEY_PASSWORD`。前者保存 Base64 编码的 Minisign 私钥文件，后者经进程标准输入交给签名器。工具回收临时私钥文件。
 
@@ -434,7 +434,7 @@ GitHub Actions 生成正式发布资产后、发布 GitHub Release 前，还必�
 
 - `cargo xtask release verify <version> <bundle-dir> <output-dir> <repository> v<version>`
 
-该 gate 必须重新读取磁盘产物。`<bundle-dir>` 下使用 `x64/` 与 `arm64/` 两个子目录，每个目录包含 `patina.exe`、`patina-ui.exe`、`patina-probe.exe`、签名安装包和该架构的 `gpui-latest.json`；逐个校验三个程序的 PE 架构、输入与最终安装包 SHA-256、完整 `SHA256SUMS.txt`、清单版本、平台、字节数和下载 URL，并使用应用公钥验证最终安装包签名及版本、架构注释。生成命令成功不能代替独立校验命令成功。发布后还须从 GitHub 下载四个公开附件，逐一比对本地产物摘要；回读失败阻断镜像同步，但不能覆盖已发布资产。
+独立校验命令重新读取磁盘产物。`<bundle-dir>` 下的 `x64/` 和 `arm64/` 各含三个文件，即 `patina.exe`、签名安装包和该架构的 `gpui-latest.json`。校验器核对桌面程序的 PE 架构、输入与最终安装包的 SHA-256、完整 `SHA256SUMS.txt`、清单版本、平台、字节数和下载 URL，并使用应用公钥验证安装包签名及版本、架构注释。发布后从 GitHub 下载四个公开附件，逐一比对本地产物摘要。回读失败时停止镜像同步，保留已发布资产。
 
 默认不在本地手工生成 `dist-release`、安装包或更新清单。
 `cargo xtask release` 的 `write-release-notes`、`package` 和 `prepare` 子命令

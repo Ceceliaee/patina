@@ -1,4 +1,4 @@
-use super::{BINARIES, Result, Version, version};
+use super::{Result, Version, version};
 use std::{fs, io::Write, path::Path};
 use toml_edit::{DocumentMut, value};
 
@@ -59,10 +59,8 @@ fn members(root: &Path) -> Result<Vec<String>> {
             );
         }
     }
-    for name in BINARIES {
-        if !inherited.iter().any(|n| n == name) {
-            return Err(format!("{name} must inherit the product version").into());
-        }
+    if !inherited.iter().any(|n| n == "patina") {
+        return Err("patina must inherit the product version".into());
     }
     Ok(inherited)
 }

@@ -1,5 +1,6 @@
 use super::{
-    BINARIES, MANIFEST, Result, TARGETS, Target, Version, arch, asset_url, installer_name, version,
+    EXECUTABLE, MANIFEST, Result, TARGETS, Target, Version, arch, asset_url, installer_name,
+    version,
 };
 use patina_updater::{Artifact, Config, MAX_INSTALLER, MAX_MANIFEST, Manifest, Release};
 use sha2::{Digest, Sha256};
@@ -140,8 +141,14 @@ pub fn inputs(dir: &Path, ver: &Version, repo: &str, config: &Config) -> Result<
         let name = installer_name(ver, target);
         let path = arch_dir.join(&name);
         signed(&path, ver, target, &entry, config)?;
-        for bin in BINARIES {
-            pe(&arch_dir.join(format!("{bin}.exe")), target)?;
+        pe(&arch_dir.join(EXECUTABLE), target)?;
+        for file in fs::read_dir(&arch_dir)? {
+            let file = file?;
+            if !file.file_type()?.is_file()
+                || ![EXECUTABLE, MANIFEST, &name].contains(&file.file_name().to_str().unwrap_or(""))
+            {
+                return Err(format!("Unexpected build input {}", file.path().display()).into());
+            }
         }
         inputs.push(Input {
             target,

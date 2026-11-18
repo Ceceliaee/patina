@@ -2,6 +2,7 @@
 mod handoff;
 use std::{
     env, fs,
+    io::Write,
     os::windows::{fs::OpenOptionsExt, process::CommandExt},
     path::{Path, PathBuf},
     process::{Command, Output},
@@ -89,8 +90,6 @@ fn main() {
         .arg("/DRESOURCE_VERSION=0.2.0.0")
         .arg(format!("/DINSTALLATION_ID={id}"))
         .arg(format!("/DAPP_BINARY={}", binary.display()))
-        .arg(format!("/DUI_BINARY={}", binary.display()))
-        .arg(format!("/DPROBE_BINARY={}", binary.display()))
         .arg(format!("/DOUTPUT_FILE={}", setup.display()))
         .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packaging/windows/patina.nsi")))?;
     let destination = root.path().join("install with spaces");
@@ -118,7 +117,28 @@ fn main() {
         registration.get_value::<String, _>("DisplayVersion")?,
         "0.2.0"
     );
-    let before = fs::read(destination.join("patina.exe"))?;
+    let expected = fs::read(&binary)?;
+    assert!(fs::read(destination.join("patina.exe"))? == expected);
+    let before = b"previous resident executable";
+    let mut old_host =
+        patina_test_desktop::polling::wait_observed("installed fixture exit", || {
+            fs::OpenOptions::new()
+                .write(true)
+                .open(destination.join("patina.exe"))
+                .map_err(|e| e.to_string())
+        })?;
+    old_host.set_len(0)?;
+    old_host.write_all(before)?;
+    drop(old_host);
+    let previous_ui = b"previous window executable";
+    let previous_probe = b"previous probe executable";
+    for (name, bytes) in [
+        ("patina-ui.exe", previous_ui.as_slice()),
+        ("patina-probe.exe", previous_probe.as_slice()),
+    ] {
+        assert!(!destination.join(name).exists());
+        fs::write(destination.join(name), bytes)?;
+    }
     let locked = fs::OpenOptions::new()
         .read(true)
         .share_mode(1)
@@ -132,17 +152,23 @@ fn main() {
         "locked installation must not be replaced"
     );
     assert_eq!(fs::read(destination.join("patina.exe"))?, before);
-    assert_eq!(fs::read(destination.join("patina-ui.exe"))?, before);
-    assert_eq!(fs::read(destination.join("patina-probe.exe"))?, before);
+    assert_eq!(fs::read(destination.join("patina-ui.exe"))?, previous_ui);
+    assert_eq!(
+        fs::read(destination.join("patina-probe.exe"))?,
+        previous_probe
+    );
     assert!(!destination.join(".patina-staging").exists());
     let blocked_uninstall = Command::new(destination.join("Uninstall.exe"))
         .arg("/S")
         .raw_arg(format!("_?={}", destination.display()))
         .output()?;
     assert!(!blocked_uninstall.status.success());
-    for file in ["patina.exe", "patina-ui.exe", "patina-probe.exe"] {
-        assert_eq!(fs::read(destination.join(file))?, before);
-    }
+    assert_eq!(fs::read(destination.join("patina.exe"))?, before);
+    assert_eq!(fs::read(destination.join("patina-ui.exe"))?, previous_ui);
+    assert_eq!(
+        fs::read(destination.join("patina-probe.exe"))?,
+        previous_probe
+    );
     drop(locked);
     // Recover a setup interrupted after two replacement files were published.
     let prior = destination.join(".patina-previous");
@@ -169,11 +195,14 @@ fn main() {
         .output()?;
     assert!(!retry.status.success());
     assert!(destination.join(".patina-backing").is_file());
-    assert_eq!(fs::read(prior.join("patina-probe.exe"))?, before);
+    assert_eq!(fs::read(prior.join("patina-probe.exe"))?, previous_probe);
+    assert_eq!(fs::read(destination.join("patina-ui.exe"))?, previous_ui);
+    assert_eq!(fs::read(destination.join("patina.exe"))?, before);
     drop(held);
     run(&mut install)?;
-    for name in ["patina.exe", "patina-ui.exe", "patina-probe.exe"] {
-        assert_eq!(fs::read(destination.join(name))?, before);
+    assert!(fs::read(destination.join("patina.exe"))? == expected);
+    for name in ["patina-ui.exe", "patina-probe.exe"] {
+        assert!(!destination.join(name).exists());
     }
     assert!(!prior.exists());
     let missing_gate = root.path().join("missing-gate");
@@ -184,7 +213,7 @@ fn main() {
         .raw_arg(format!("/D={}", destination.display()))
         .output()?;
     assert!(!bad.status.success());
-    assert_eq!(fs::read(destination.join("patina.exe"))?, before);
+    assert!(fs::read(destination.join("patina.exe"))? == expected);
     fs::remove_file(destination.join("started.txt"))?;
     let gate = root.path().join("clean-gate");
     let mut host = Command::new(&binary).arg("--gate").arg(&gate).spawn()?;
