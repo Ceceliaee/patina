@@ -92,7 +92,6 @@
   "settings.dataSafetyTitle": "Storage",
   "settings.decreaseCleanupRange": "Shorten clear range",
   "settings.decreaseMinute": {"$type":"message","body":{"$op":"concat","parts":["Decrease ",{"$op":"arg","name":"label"}," by 1 minute"]}},
-  "settings.globalTitleHint": "Save application window titles and webpage titles for activity history details.",
   "settings.globalTitleLabel": "Global titles",
   "settings.idle": "Saved",
   "settings.idleTimeoutHint": "When the current app has audio or similar signals, keep counting that time.",

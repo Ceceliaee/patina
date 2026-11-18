@@ -276,19 +276,7 @@ impl Render for Settings {
             toggle_row("settings.trackingPausedLabel", p.paused, |p, v| {
                 p.paused = v
             }),
-            div()
-                .flex_1()
-                .flex()
-                .flex_col()
-                .gap(px(4.))
-                .child(toggle_row("settings.globalTitleLabel", p.titles, |p, v| {
-                    p.titles = v
-                }))
-                .child(
-                    label(tr("settings.globalTitleHint"))
-                        .text_size(px(12.))
-                        .text_color(c.secondary),
-                ),
+            toggle_row("settings.globalTitleLabel", p.titles, |p, v| p.titles = v),
         );
         let behavior = p.desktop;
         let windows = pair(

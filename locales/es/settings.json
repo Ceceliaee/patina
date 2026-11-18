@@ -92,7 +92,6 @@
   "settings.dataSafetyTitle": "Almacenamiento",
   "settings.decreaseCleanupRange": "Reducir intervalo de eliminación",
   "settings.decreaseMinute": {"$type":"message","body":{"$op":"concat","parts":["Reducir ",{"$op":"arg","name":"label"}," en un minuto"]}},
-  "settings.globalTitleHint": "Guarda los títulos de ventanas y páginas web en los detalles del historial de actividad.",
   "settings.globalTitleLabel": "Registro global de títulos",
   "settings.idle": "Guardado",
   "settings.idleTimeoutHint": "Sigue contando el tiempo si la app actual tiene audio u otras señales similares.",

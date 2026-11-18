@@ -92,7 +92,6 @@
   "settings.dataSafetyTitle": "存储",
   "settings.decreaseCleanupRange": "缩短清理范围",
   "settings.decreaseMinute": {"$type":"message","body":{"$op":"concat","parts":["",{"$op":"arg","name":"label"},"减少 1 分钟"]}},
-  "settings.globalTitleHint": "保存应用窗口标题和网页标题，用于历史活动明细。",
   "settings.globalTitleLabel": "全局标题",
   "settings.idle": "已保存",
   "settings.idleTimeoutHint": "当前应用有音频等持续信号时，继续计入这段时间。",

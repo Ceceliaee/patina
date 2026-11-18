@@ -513,7 +513,6 @@ pub fn settings_data_import_preview_title(locale: Locale) -> String { super::for
 pub fn settings_data_import_action(locale: Locale) -> String { super::format_text(locale, "settings.dataImportAction", &[]) }
 pub fn settings_data_safety_title(locale: Locale) -> String { super::format_text(locale, "settings.dataSafetyTitle", &[]) }
 pub fn settings_decrease_cleanup_range(locale: Locale) -> String { super::format_text(locale, "settings.decreaseCleanupRange", &[]) }
-pub fn settings_global_title_hint(locale: Locale) -> String { super::format_text(locale, "settings.globalTitleHint", &[]) }
 pub fn settings_global_title_label(locale: Locale) -> String { super::format_text(locale, "settings.globalTitleLabel", &[]) }
 pub fn settings_idle_timeout_label(locale: Locale) -> String { super::format_text(locale, "settings.idleTimeoutLabel", &[]) }
 pub fn settings_import_record_count(locale: Locale, count: f64) -> String { super::format_text(locale, "settings.importRecordCount", &[("count", count.to_string())]) }

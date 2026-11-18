@@ -765,7 +765,6 @@
   "settings.dataSafetyTitle": {"alsoNative":true,"kind":"string","params":[],"surface":"frontend"},
   "settings.decreaseCleanupRange": {"kind":"string","params":[],"surface":"frontend","alsoNative":true},
   "settings.decreaseMinute": {"kind":"message","params":[{"name":"label","type":"string","optional":false}],"surface":"frontend"},
-  "settings.globalTitleHint": {"alsoNative":true,"kind":"string","params":[],"surface":"frontend"},
   "settings.globalTitleLabel": {"alsoNative":true,"kind":"string","params":[],"surface":"frontend"},
   "settings.idle": {"kind":"string","params":[],"surface":"frontend"},
   "settings.idleTimeoutHint": {"kind":"string","params":[],"surface":"frontend"},

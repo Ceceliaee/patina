@@ -92,7 +92,6 @@
   "settings.dataSafetyTitle": "Хранилище",
   "settings.decreaseCleanupRange": "Сократить период очистки",
   "settings.decreaseMinute": {"$type":"message","body":{"$op":"concat","parts":["Уменьшить ",{"$op":"arg","name":"label"}," на 1 минуту"]}},
-  "settings.globalTitleHint": "Сохранять заголовки окон и веб-страниц в истории активности.",
   "settings.globalTitleLabel": "Запись заголовков",
   "settings.idle": "Сохранено",
   "settings.idleTimeoutHint": "Продолжать учёт при воспроизведении звука или других признаках активности текущего приложения.",
