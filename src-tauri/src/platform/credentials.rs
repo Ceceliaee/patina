@@ -3,6 +3,8 @@ use crate::platform::app_paths::AppProfile;
 mod store;
 pub use store::{CredentialStore, WebDavCredentialStore};
 
+pub(super) use windows_credentials::{read_secret, write_secret};
+
 const WEBDAV_BACKUP_LEGACY_CREDENTIAL_TARGET: &str = "com.ceceliaee.patina.backup.webdav.default";
 const WEBDAV_BACKUP_CREDENTIAL_TARGET_PREFIX: &str = "com.ceceliaee.patina.backup.webdav";
 
@@ -83,8 +85,22 @@ mod windows_credentials {
         username: &str,
         password: &str,
     ) -> Result<(), String> {
+        write_secret(
+            credential_target,
+            "Patina WebDAV backup credential",
+            username,
+            password,
+        )
+    }
+
+    pub fn write_secret(
+        credential_target: &str,
+        comment: &str,
+        username: &str,
+        password: &str,
+    ) -> Result<(), String> {
         let mut target = wide_null(credential_target);
-        let mut comment = wide_null("Patina WebDAV backup credential");
+        let mut comment = wide_null(comment);
         let mut username = wide_null(username);
         let mut password_bytes = SensitiveBytes(password.as_bytes().to_vec());
 
@@ -95,7 +111,7 @@ mod windows_credentials {
             CredentialBlobSize: password_bytes
                 .len()
                 .try_into()
-                .map_err(|_| "WebDAV password is too large to store".to_string())?,
+                .map_err(|_| "credential is too large to store".to_string())?,
             CredentialBlob: password_bytes.as_mut_ptr(),
             Persist: CRED_PERSIST_LOCAL_MACHINE,
             UserName: PWSTR(username.as_mut_ptr()),
@@ -104,11 +120,15 @@ mod windows_credentials {
 
         unsafe {
             CredWriteW(&credential, 0)
-                .map_err(|error| format!("failed to save WebDAV credential: {error}"))
+                .map_err(|error| format!("failed to save credential: {error}"))
         }
     }
 
     pub fn read_webdav_password(credential_target: &str) -> Result<Option<String>, String> {
+        read_secret(credential_target)
+    }
+
+    pub fn read_secret(credential_target: &str) -> Result<Option<String>, String> {
         let target = wide_null(credential_target);
         let mut credential: *mut CREDENTIALW = ptr::null_mut();
 
@@ -133,11 +153,11 @@ mod windows_credentials {
                     credential_ref.CredentialBlobSize as usize,
                 )?;
                 let secret = String::from_utf8(bytes)
-                    .map_err(|_| "stored WebDAV credential is not valid UTF-8".to_string())?;
+                    .map_err(|_| "stored credential is not valid UTF-8".to_string())?;
                 Ok(Some(secret))
             }
             Err(error) if is_not_found(&error) => Ok(None),
-            Err(error) => Err(format!("failed to read WebDAV credential: {error}")),
+            Err(error) => Err(format!("failed to read credential: {error}")),
         }
     }
 
@@ -179,6 +199,14 @@ mod windows_credentials {
 
 #[cfg(not(target_os = "windows"))]
 mod windows_credentials {
+    pub fn write_secret(_: &str, _: &str, _: &str, _: &str) -> Result<(), String> {
+        Err("credential storage is only available on Windows".into())
+    }
+
+    pub fn read_secret(_: &str) -> Result<Option<String>, String> {
+        Ok(None)
+    }
+
     pub fn save_webdav_password(
         _credential_target: &str,
         _username: &str,

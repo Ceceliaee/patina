@@ -19,6 +19,7 @@ import {
   type ClassificationDraftState,
 } from "../services/classificationService";
 import { cloneClassificationDraftState } from "../services/classificationDraftState.ts";
+import { applyAiClassificationSuggestions, buildAiClassificationRequest, loadAiClassificationConfig, suggestAiCategories } from "../services/aiClassification.ts";
 import {
   getClassificationBootstrapCache,
   setClassificationBootstrapCache,
@@ -119,6 +120,19 @@ export function useAppMappingState({
   const [actionError, setActionError] = useState<"save" | "delete" | "refresh" | null>(null);
   const deletingAppRecordsRef = useRef(false);
   const saving = saveStatus === "saving";
+  const [aiConfigured, setAiConfigured] = useState(false);
+  const [aiRunning, setAiRunning] = useState(false);
+  const [aiStatus, setAiStatus] = useState<"failed" | "empty" | null>(null);
+  const aiRequestGeneration = useRef(0);
+  const pendingSave = useRef<Promise<unknown> | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void loadAiClassificationConfig().then((config) => {
+      if (active) setAiConfigured(config !== null);
+    }).catch(() => undefined);
+    return () => { active = false; aiRequestGeneration.current += 1; };
+  }, []);
   const [deletingSessionsExe, setDeletingSessionsExe] = useState<string | null>(null);
   const [showCategoryDialog, setShowCategoryDialog] = useState(false);
   const [colorFormat, setColorFormat] = useState<ColorDisplayFormat>("hex");
@@ -688,14 +702,40 @@ export function useAppMappingState({
     updateOverride(candidate.exeName, nextOverride);
   }, [draftOverrides, updateOverride]);
 
+  const handleAiClassification = async () => {
+    if (!draftState || !aiConfigured || aiRunning || saving) return;
+    const request = buildAiClassificationRequest(appCatalog.candidates, draftState, candidateCategoryOptions);
+    if (!request.payload.apps.length || !request.payload.categories.length) {
+      setAiStatus("empty");
+      return;
+    }
+    const generation = ++aiRequestGeneration.current;
+    setAiRunning(true);
+    setAiStatus(null);
+    try {
+      const suggestions = await suggestAiCategories(request.payload);
+      while (pendingSave.current) {
+        await pendingSave.current.catch(() => undefined);
+      }
+      if (generation !== aiRequestGeneration.current) return;
+      if (!suggestions.length) setAiStatus("empty");
+      const catalog = ClassificationService.getAppCatalogSnapshot().committed?.candidates ?? [];
+      setDraftState((current) => current && applyAiClassificationSuggestions(current, request, suggestions, catalog));
+    } catch {
+      if (generation === aiRequestGeneration.current) setAiStatus("failed");
+    } finally {
+      if (generation === aiRequestGeneration.current) setAiRunning(false);
+    }
+  };
+
   const handleSave = useCallback(async (): Promise<boolean> => {
     if (!savedState || !draftState) return false;
     if (!hasUnsavedChanges) return true;
-    if (saving) return false;
+    if (saving || pendingSave.current) return false;
     setActionError(null);
     setSaveStatus("saving");
     try {
-      const result = await saveAppMappingStateWithDeps({
+      const commit = saveAppMappingStateWithDeps({
         savedState,
         draftState,
         webDomainCandidates,
@@ -704,6 +744,8 @@ export function useAppMappingState({
       }, {
         commitDraftChanges: ClassificationService.commitDraftChanges,
       });
+      pendingSave.current = commit;
+      const result = await commit;
       if (result.nextSavedState) {
         setSavedState(result.nextSavedState);
       }
@@ -730,6 +772,8 @@ export function useAppMappingState({
       setActionError("save");
       setSaveStatus("idle");
       return false;
+    } finally {
+      pendingSave.current = null;
     }
   }, [draftState, hasUnsavedChanges, onOverridesChanged, resetNameEditors, savedState, saving, webDomainCandidates]);
 
@@ -747,12 +791,15 @@ export function useAppMappingState({
   }, [handleSave, onRegisterSaveHandler]);
 
   const handleCancel = useCallback(() => {
-    if (!savedState || !hasUnsavedChanges || saving) return;
+    if (!savedState || (!hasUnsavedChanges && !aiRunning) || saving) return;
+    aiRequestGeneration.current += 1;
+    setAiRunning(false);
+    setAiStatus(null);
     setActionError(null);
     setDraftState(savedState);
     resetNameEditors();
     setSaveStatus("idle");
-  }, [hasUnsavedChanges, savedState, saving, resetNameEditors]);
+  }, [aiRunning, hasUnsavedChanges, savedState, saving, resetNameEditors]);
 
   const handleNameBlur = useCallback((candidate: ObservedAppCandidate) => {
     if (skipNextNameBlurExeRef.current === candidate.exeName) {
@@ -775,6 +822,10 @@ export function useAppMappingState({
   return {
     allAppCandidates: appCatalog.candidates,
     handleAppLink,
+    aiConfigured,
+    aiRunning,
+    aiStatus,
+    handleAiClassification,
     dialogs,
     icons: mappingIcons,
     loading,

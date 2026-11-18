@@ -4,6 +4,7 @@ import { ListX, RefreshCw, Save, Sparkles, SlidersHorizontal } from "lucide-reac
 
 import QuietDialog from "../../../shared/components/QuietDialog";
 import QuietButton from "../../../shared/components/QuietButton";
+import QuietTooltip from "../../../shared/components/QuietTooltip";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader";
 import QuietSelect from "../../../shared/components/QuietSelect";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter";
@@ -54,6 +55,10 @@ export default function AppMapping(props: Props) {
   const {
     allAppCandidates,
     handleAppLink,
+    aiConfigured,
+    aiRunning,
+    aiStatus,
+    handleAiClassification,
     dialogs,
     icons,
     loading,
@@ -206,7 +211,7 @@ export default function AppMapping(props: Props) {
             <QuietButton
               size="large"
               onClick={() => { appLayout.reset(); webLayout.reset(); handleCancel(); }}
-              disabled={!bootstrapReady || !hasUnsavedChanges || saving}
+              disabled={!bootstrapReady || (!hasUnsavedChanges && !aiRunning) || saving}
               className="rounded-[8px]"
             >
               {UI_TEXT.mapping.cancel}
@@ -257,6 +262,18 @@ export default function AppMapping(props: Props) {
               placeholder={searchPlaceholder}
               disabled={!activeCatalogReady}
             />
+            {effectiveObjectMode === "app" && (
+              <QuietTooltip label={aiConfigured ? null : UI_TEXT.mapping.aiNotConfigured}>
+                <span tabIndex={aiConfigured ? undefined : 0}>
+                  <QuietButton busy={aiRunning} disabled={!aiConfigured || !activeCatalogReady || saving || deletingSessionsExe !== null}
+                    onClick={() => void handleAiClassification()}>
+                    <Sparkles size={14} aria-hidden />{UI_TEXT.settings.aiClassification}
+                  </QuietButton>
+                </span>
+              </QuietTooltip>
+            )}
+            {effectiveObjectMode === "app" && aiStatus === "failed" && <span role="alert">{UI_TEXT.mapping.aiFailed}</span>}
+            {effectiveObjectMode === "app" && aiStatus === "empty" && <span role="status">{UI_TEXT.mapping.aiEmpty}</span>}
           </div>
           <div className="flex flex-wrap items-center gap-3">
             {effectiveObjectMode === "app" && appCatalogRefreshError && (

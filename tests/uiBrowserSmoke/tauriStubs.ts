@@ -107,6 +107,12 @@ function tauriStubFor(path: string) {
 
       export async function invoke(command, payload = {}) {
         globalThis.__PATINA_INVOKED_COMMANDS.push({ command, payload });
+        if (command === "cmd_get_ai_classification_config") return globalThis.__PATINA_AI_CONFIG ?? null;
+        if (command === "cmd_list_ai_classification_models") return ["fixture-model"];
+        if (command === "cmd_save_ai_classification_config") return globalThis.__PATINA_AI_CONFIG = payload.config;
+        if (command === "cmd_suggest_ai_categories") return new Promise(resolve => {
+          globalThis.__PATINA_FINISH_AI = () => resolve([{ appId: payload.payload.apps[0].id, categoryId: payload.payload.categories[0].id }]);
+        });
         if (command === "cmd_get_tool_presentation") {
           // Existing modal scenarios explicitly exercise dialog delivery; notification scenarios override it.
           const preferences = JSON.parse(localStorage.getItem('__patina_notification_preferences') ?? '{"delivery":"dialog","sound":"none"}');

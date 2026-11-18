@@ -1,5 +1,8 @@
 // es locale resource. Pure data only.
 export const MESSAGES = {
+  "mapping.aiNotConfigured": "No hay ningún modelo configurado en Ajustes",
+  "mapping.aiFailed": "Falló la clasificación con IA. Las categorías existentes no han cambiado.",
+  "mapping.aiEmpty": "No hay sugerencias de IA aplicables.",
 
   "mapping.webIndependent": "Mostrar por separado",
   "mapping.mergeWebDomain": {"$type": "message", "body": {"$op": "concat", "parts": ["Combinar en ", {"$op": "arg", "name": "domain"}]}},

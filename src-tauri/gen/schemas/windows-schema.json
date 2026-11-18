@@ -519,6 +519,12 @@
           "markdownDescription": "Enables the cmd_get_activity_read_model_status command without any pre-configured scope."
         },
         {
+          "description": "Enables the cmd_get_ai_classification_config command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-get-ai-classification-config",
+          "markdownDescription": "Enables the cmd_get_ai_classification_config command without any pre-configured scope."
+        },
+        {
           "description": "Enables the cmd_get_earliest_activity_start_time command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-get-earliest-activity-start-time",
@@ -697,6 +703,12 @@
           "type": "string",
           "const": "allow-cmd-install-update",
           "markdownDescription": "Enables the cmd_install_update command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_list_ai_classification_models command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-list-ai-classification-models",
+          "markdownDescription": "Enables the cmd_list_ai_classification_models command without any pre-configured scope."
         },
         {
           "description": "Enables the cmd_list_import_batches command without any pre-configured scope.",
@@ -903,6 +915,12 @@
           "markdownDescription": "Enables the cmd_reveal_webdav_backup_secret command without any pre-configured scope."
         },
         {
+          "description": "Enables the cmd_save_ai_classification_config command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-save-ai-classification-config",
+          "markdownDescription": "Enables the cmd_save_ai_classification_config command without any pre-configured scope."
+        },
+        {
           "description": "Enables the cmd_save_data_bootstrap_snapshot_payload command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cmd-save-data-bootstrap-snapshot-payload",
@@ -991,6 +1009,12 @@
           "type": "string",
           "const": "allow-cmd-start-pomodoro",
           "markdownDescription": "Enables the cmd_start_pomodoro command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the cmd_suggest_ai_categories command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cmd-suggest-ai-categories",
+          "markdownDescription": "Enables the cmd_suggest_ai_categories command without any pre-configured scope."
         },
         {
           "description": "Enables the cmd_take_main_tools_target command without any pre-configured scope.",
@@ -1221,6 +1245,12 @@
           "markdownDescription": "Denies the cmd_get_activity_read_model_status command without any pre-configured scope."
         },
         {
+          "description": "Denies the cmd_get_ai_classification_config command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-get-ai-classification-config",
+          "markdownDescription": "Denies the cmd_get_ai_classification_config command without any pre-configured scope."
+        },
+        {
           "description": "Denies the cmd_get_earliest_activity_start_time command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-get-earliest-activity-start-time",
@@ -1399,6 +1429,12 @@
           "type": "string",
           "const": "deny-cmd-install-update",
           "markdownDescription": "Denies the cmd_install_update command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_list_ai_classification_models command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-list-ai-classification-models",
+          "markdownDescription": "Denies the cmd_list_ai_classification_models command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_list_import_batches command without any pre-configured scope.",
@@ -1605,6 +1641,12 @@
           "markdownDescription": "Denies the cmd_reveal_webdav_backup_secret command without any pre-configured scope."
         },
         {
+          "description": "Denies the cmd_save_ai_classification_config command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-save-ai-classification-config",
+          "markdownDescription": "Denies the cmd_save_ai_classification_config command without any pre-configured scope."
+        },
+        {
           "description": "Denies the cmd_save_data_bootstrap_snapshot_payload command without any pre-configured scope.",
           "type": "string",
           "const": "deny-cmd-save-data-bootstrap-snapshot-payload",
@@ -1693,6 +1735,12 @@
           "type": "string",
           "const": "deny-cmd-start-pomodoro",
           "markdownDescription": "Denies the cmd_start_pomodoro command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cmd_suggest_ai_categories command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cmd-suggest-ai-categories",
+          "markdownDescription": "Denies the cmd_suggest_ai_categories command without any pre-configured scope."
         },
         {
           "description": "Denies the cmd_take_main_tools_target command without any pre-configured scope.",

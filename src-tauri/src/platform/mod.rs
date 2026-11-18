@@ -1,3 +1,4 @@
+pub mod ai_classification;
 pub mod app_paths;
 pub mod clock;
 pub mod credentials;

@@ -1,5 +1,11 @@
 // ru-RU locale resource. Pure data only.
 export const MESSAGES = {
+  "settings.aiClassification": "Классификация с ИИ",
+  "settings.aiApiUrl": "Базовый URL API",
+  "settings.aiApiKey": "Ключ API",
+  "settings.aiFetchModels": "Загрузить модели",
+  "settings.aiModel": "Выбрать модель",
+  "settings.aiConfigFailed": "Не удалось загрузить или сохранить настройки ИИ либо получить список моделей. Проверьте настройки и повторите попытку.",
   "settings.timeRulesTitle": "Правила времени",
   "settings.recordingOptionsTitle": "Параметры записи",
   "settings.themeGroupTitle": "Тема",
