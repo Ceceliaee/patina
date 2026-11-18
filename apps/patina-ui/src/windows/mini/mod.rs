@@ -1,20 +1,13 @@
 mod activity;
+pub(crate) mod geometry;
+mod interaction;
+mod native;
+use geometry::logical_dock_bounds;
 use gpui_kit::{prelude::*, *};
-use patina_activity_model::{
-    Activity, Interaction, MiniRect, PANEL_HEIGHT, PANEL_WIDTH, Placement, mini_bounds,
-};
+use interaction::{Interaction, LEAVE_GRACE, motion_progress};
+use patina_activity_model::CurrentActivity;
 use quietpro::{Icon, IconControl, Palette};
-use std::{
-    rc::Rc,
-    time::{Duration, Instant},
-};
-
-fn panel_size() -> Size<Pixels> {
-    size(px(PANEL_WIDTH as f32), px(PANEL_HEIGHT as f32))
-}
-
-const LEAVE_GRACE: Duration = Duration::from_millis(180);
-const MORPH_DURATION: Duration = Duration::from_millis(180);
+use std::{rc::Rc, time::Instant};
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum StatusTone {
@@ -25,12 +18,12 @@ enum StatusTone {
 }
 
 impl StatusTone {
-    fn for_activity(activity: &Activity) -> Self {
+    fn for_activity(activity: &CurrentActivity) -> Self {
         match activity {
-            Activity::Application(_) | Activity::Anonymous => Self::Recording,
-            Activity::Paused => Self::Paused,
-            Activity::Unavailable => Self::Failed,
-            Activity::Waiting | Activity::Inactive => Self::Idle,
+            CurrentActivity::Application(_) | CurrentActivity::Anonymous => Self::Recording,
+            CurrentActivity::Paused => Self::Paused,
+            CurrentActivity::Unavailable => Self::Failed,
+            CurrentActivity::Waiting | CurrentActivity::Inactive => Self::Idle,
         }
     }
 
@@ -52,7 +45,7 @@ pub struct Mini {
     leave: Option<Task<()>>,
     pointer_inside: Option<bool>,
     awaiting_entry: bool,
-    recent: Option<Result<patina_activity_model::Recent, String>>,
+    recent: Option<Result<patina_activity_model::Recent, patina_desktop_protocol::RequestError>>,
     read: Option<Task<()>>,
     client: Rc<crate::client::Client>,
     motion: Option<(Instant, f32)>,
@@ -66,14 +59,12 @@ impl Mini {
         client: Rc<crate::client::Client>,
         focus: bool,
     ) -> Result<(AnyWindowHandle, WeakEntity<Self>)> {
-        let panel = panel_size();
         let area = cx.primary_display().map(|d| d.visible_bounds());
         let options = WindowOptions {
-            window_bounds: area.map(|b| {
-                WindowBounds::Windowed(Bounds {
-                    origin: point(b.center().x - panel.width / 2., b.origin.y),
-                    size: panel,
-                })
+            window_bounds: area.map(|work| {
+                let mut bounds = logical_dock_bounds(work.size, true);
+                bounds.origin += work.origin;
+                WindowBounds::Windowed(bounds)
             }),
             app_id: Some(crate::APP_ID.into()),
             kind: WindowKind::PopUp,
@@ -95,7 +86,7 @@ impl Mini {
                 })
                 .detach();
                 let mut mini = Self {
-                    tone: StatusTone::for_activity(&client.activity()),
+                    tone: StatusTone::for_activity(&client.current_activity()),
                     focus: cx.focus_handle(),
                     interaction: Interaction {
                         expanded: true,
@@ -121,7 +112,7 @@ impl Mini {
         })?;
         handle
             .update(cx, |_, win, _| {
-                let placed = crate::windows::placement::place(win);
+                let placed = native::place(win);
                 if placed.is_err() {
                     win.remove_window();
                 }
@@ -163,7 +154,7 @@ impl Mini {
         if !changed {
             return;
         }
-        self.motion = (!cx.reduce_motion() && crate::windows::placement::animations_enabled())
+        self.motion = (!cx.reduce_motion() && native::animations_enabled())
             .then(|| (Instant::now(), self.progress));
         if self.interaction.expanded {
             self.read_recent(cx);
@@ -200,7 +191,7 @@ impl Mini {
     }
 
     fn sync_pointer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let inside = crate::windows::placement::contains_cursor(window);
+        let inside = native::contains_cursor(window);
         if inside {
             self.awaiting_entry = false;
         }
@@ -217,7 +208,7 @@ impl Mini {
         self.leave = None;
         let mut next = self.interaction.clone();
         next.protected = protected;
-        next.tick_with_leave_delay(inside, true, Instant::now(), LEAVE_GRACE);
+        next.observe_pointer(inside, Instant::now());
         let deadline = next.leave_since.map(|t| t + LEAVE_GRACE);
         self.apply(next, cx);
         if let Some(deadline) = deadline {
@@ -283,7 +274,7 @@ impl Mini {
     }
 
     pub fn recording_changed(&mut self, cx: &mut Context<Self>) {
-        let next = StatusTone::for_activity(&self.client.activity());
+        let next = StatusTone::for_activity(&self.client.current_activity());
         if self.interaction.expanded || next != self.tone {
             self.tone = next;
             cx.notify();
@@ -307,7 +298,7 @@ impl Mini {
         }
     }
 
-    fn handle(&self, colors: Palette, cx: &Context<Self>) -> gpui_kit::base::Button {
+    fn expand_button(&self, colors: Palette, cx: &Context<Self>) -> gpui_kit::base::Button {
         let status = self.text(match self.tone {
             StatusTone::Idle => "miniWindow.idle",
             StatusTone::Recording => "miniWindow.tracking",
@@ -336,17 +327,7 @@ impl Render for Mini {
         // deliver another MouseMove to the panel, especially across a child control.
         self.sync_pointer(window, cx);
         let target = if self.interaction.expanded { 1. } else { 0. };
-        self.progress = match self.motion {
-            Some((since, from)) if !cx.reduce_motion() => {
-                let step = since.elapsed().as_secs_f32() / MORPH_DURATION.as_secs_f32();
-                if target > from {
-                    (from + step).min(target)
-                } else {
-                    (from - step).max(target)
-                }
-            }
-            _ => target,
-        };
+        self.progress = motion_progress(target, self.motion, Instant::now(), cx.reduce_motion());
         if self.progress == target {
             self.motion = None;
             if !self.interaction.expanded {
@@ -357,26 +338,16 @@ impl Render for Mini {
         }
         let p = self.progress * self.progress * (3. - 2. * self.progress);
         let viewport = window.viewport_size();
-        let handle = mini_bounds(
-            &Placement::default(),
-            false,
-            MiniRect::new(
-                0,
-                0,
-                f32::from(viewport.width) as u32,
-                f32::from(viewport.height) as u32,
-            ),
-            1.,
-        );
-        let width = px(handle.width as f32) * (1. - p) + viewport.width * p;
-        let height = px(handle.height as f32) * (1. - p) + viewport.height * p;
+        let handle = logical_dock_bounds(viewport, false).size;
+        let width = handle.width * (1. - p) + viewport.width * p;
+        let height = handle.height * (1. - p) + viewport.height * p;
         let bounds = Bounds {
             origin: point((viewport.width - width) / 2., px(0.)),
             size: size(width, height),
         };
         let clip = (bounds, window.scale_factor());
         if width > px(0.) && height > px(0.) && self.clipped != Some(clip) {
-            match crate::windows::placement::clip(window, bounds) {
+            match native::clip(window, bounds) {
                 Ok(()) => self.clipped = Some(clip),
                 Err(error) => eprintln!("clip Mini: {error}"),
             }
@@ -444,7 +415,7 @@ impl Render for Mini {
                         )
                         .when(
                             !self.interaction.expanded && self.motion.is_none(),
-                            |marker| marker.child(self.handle(colors, cx)),
+                            |marker| marker.child(self.expand_button(colors, cx)),
                         ),
                 )
             });

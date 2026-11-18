@@ -339,10 +339,16 @@ fn exercise(
             }
             let scale = f64::from(unsafe { GetDpiForWindow(hwnd) }) / 96.0;
             assert!(
-                (client.right - (patina_recorder::PANEL_WIDTH * scale).round() as i32).abs() <= 1
+                (client.right
+                    - (f64::from(patina_ui::MINI_PANEL_SIZE_DIP.0) * scale).round() as i32)
+                    .abs()
+                    <= 1
             );
             assert!(
-                (client.bottom - (patina_recorder::PANEL_HEIGHT * scale).round() as i32).abs() <= 1
+                (client.bottom
+                    - (f64::from(patina_ui::MINI_PANEL_SIZE_DIP.1) * scale).round() as i32)
+                    .abs()
+                    <= 1
             );
             assert_ne!(
                 unsafe { GetForegroundWindow() },
@@ -403,7 +409,7 @@ fn main() -> Outcome {
     if let Some(result) = patina::run_child_if_requested() {
         return result.map_err(|error| error.to_string().into());
     }
-    patina_test_desktop::dedicated_session()?;
+    patina_test_support::dedicated_session()?;
 
     if env::args().any(|a| a == "--invalid-root") {
         let (tx, rx) = async_channel::unbounded();

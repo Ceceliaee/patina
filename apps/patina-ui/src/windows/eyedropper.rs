@@ -327,7 +327,7 @@ mod tests {
     #[cfg(feature = "native-tests")]
     #[ignore = "isolated Win32 desktop"]
     fn native_screen_selection_and_cancellation() -> Result<(), Box<dyn std::error::Error>> {
-        if !patina_test_desktop::run_case()? {
+        if !patina_test_support::run_case()? {
             return Ok(());
         }
         for action in [WM_LBUTTONUP, WM_KEYDOWN, WM_RBUTTONUP, WM_CLOSE] {

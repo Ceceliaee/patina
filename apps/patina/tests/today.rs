@@ -4,6 +4,8 @@ mod children;
 mod desktop;
 #[path = "today/handles.rs"]
 mod handles;
+#[path = "today/mini.rs"]
+mod mini;
 #[path = "today/presentation.rs"]
 mod presentation;
 fn hash(path: &Path) -> Result<String, Error> {
@@ -471,7 +473,7 @@ fn headings(hwnd: HWND) -> Result<serde_json::Value, Error> {
 #[test]
 #[ignore = "dedicated Windows session: resource sampler and lifecycle baseline"]
 fn main_window_lifecycle() -> Result<(), Error> {
-    patina_test_desktop::dedicated_session()?;
+    patina_test_support::dedicated_session()?;
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -729,7 +731,7 @@ fn main_window_lifecycle() -> Result<(), Error> {
 #[test]
 #[ignore = "isolated Win32 desktop"]
 fn ranked_app_actions() -> Result<(), Error> {
-    if !patina_test_desktop::run_case()? {
+    if !patina_test_support::run_case()? {
         return Ok(());
     }
     let _com = ComApartment::init()?;

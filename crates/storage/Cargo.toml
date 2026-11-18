@@ -15,5 +15,4 @@ serde = { version = "1", features = ["derive"] }
 futures-util = "0.3"
 
 [dev-dependencies]
-patina-activity-model = { path = "../activity-model" }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
