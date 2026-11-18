@@ -1,3 +1,5 @@
+#[path = "installer/handoff.rs"]
+mod handoff;
 use std::{
     env, fs,
     os::windows::{fs::OpenOptionsExt, process::CommandExt},
@@ -87,15 +89,22 @@ fn main() {
         .arg("/DRESOURCE_VERSION=0.2.0.0")
         .arg(format!("/DINSTALLATION_ID={id}"))
         .arg(format!("/DAPP_BINARY={}", binary.display()))
+        .arg(format!("/DUI_BINARY={}", binary.display()))
+        .arg(format!("/DPROBE_BINARY={}", binary.display()))
         .arg(format!("/DOUTPUT_FILE={}", setup.display()))
-        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("../installer/patina.nsi")))?;
+        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packaging/windows/patina.nsi")))?;
     let destination = root.path().join("install with spaces");
+    // The first GPUI installer had one executable and the same installation identity.
+    fs::create_dir_all(&destination)?;
+    fs::write(destination.join("patina-gpui.exe"), b"previous application")?;
+    fs::write(destination.join("patina-gpui-installation"), b"patina-gpui")?;
     let mut install = Command::new(&setup);
     install
         .arg("/S")
         .raw_arg(format!("/D={}", destination.display()));
     run(&mut install)?;
     wait_file(&destination.join("started.txt"));
+    assert!(!destination.join("patina-gpui.exe").exists());
     assert!(destination.join("patina-gpui-installation").is_file());
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     let registration = hkcu.open_subkey(format!(
@@ -109,11 +118,11 @@ fn main() {
         registration.get_value::<String, _>("DisplayVersion")?,
         "0.2.0"
     );
-    let before = fs::read(destination.join("patina-gpui.exe"))?;
+    let before = fs::read(destination.join("patina.exe"))?;
     let locked = fs::OpenOptions::new()
         .read(true)
         .share_mode(1)
-        .open(destination.join("patina-gpui.exe"))?;
+        .open(destination.join("patina-probe.exe"))?;
     let busy = Command::new(&setup)
         .arg("/S")
         .raw_arg(format!("/D={}", destination.display()))
@@ -122,9 +131,51 @@ fn main() {
         !busy.status.success(),
         "locked installation must not be replaced"
     );
-    assert_eq!(fs::read(destination.join("patina-gpui.exe"))?, before);
-    assert!(!destination.join("patina-gpui.new.exe").exists());
+    assert_eq!(fs::read(destination.join("patina.exe"))?, before);
+    assert_eq!(fs::read(destination.join("patina-ui.exe"))?, before);
+    assert_eq!(fs::read(destination.join("patina-probe.exe"))?, before);
+    assert!(!destination.join(".patina-staging").exists());
+    let blocked_uninstall = Command::new(destination.join("Uninstall.exe"))
+        .arg("/S")
+        .raw_arg(format!("_?={}", destination.display()))
+        .output()?;
+    assert!(!blocked_uninstall.status.success());
+    for file in ["patina.exe", "patina-ui.exe", "patina-probe.exe"] {
+        assert_eq!(fs::read(destination.join(file))?, before);
+    }
     drop(locked);
+    // Recover a setup interrupted after two replacement files were published.
+    let prior = destination.join(".patina-previous");
+    fs::create_dir(&prior)?;
+    for name in [
+        "patina.exe",
+        "patina-ui.exe",
+        "patina-probe.exe",
+        "Uninstall.exe",
+        "patina-gpui-installation",
+    ] {
+        fs::rename(destination.join(name), prior.join(name))?;
+    }
+    fs::write(destination.join(".patina-publishing"), "")?;
+    fs::write(destination.join("patina-ui.exe"), b"partial update")?;
+    fs::write(destination.join("patina-probe.exe"), b"partial update")?;
+    let held = fs::OpenOptions::new()
+        .read(true)
+        .share_mode(1)
+        .open(prior.join("patina-probe.exe"))?;
+    let retry = Command::new(&setup)
+        .arg("/S")
+        .raw_arg(format!("/D={}", destination.display()))
+        .output()?;
+    assert!(!retry.status.success());
+    assert!(destination.join(".patina-backing").is_file());
+    assert_eq!(fs::read(prior.join("patina-probe.exe"))?, before);
+    drop(held);
+    run(&mut install)?;
+    for name in ["patina.exe", "patina-ui.exe", "patina-probe.exe"] {
+        assert_eq!(fs::read(destination.join(name))?, before);
+    }
+    assert!(!prior.exists());
     let missing_gate = root.path().join("missing-gate");
     let bad = Command::new(&setup)
         .arg("/S")
@@ -133,7 +184,7 @@ fn main() {
         .raw_arg(format!("/D={}", destination.display()))
         .output()?;
     assert!(!bad.status.success());
-    assert_eq!(fs::read(destination.join("patina-gpui.exe"))?, before);
+    assert_eq!(fs::read(destination.join("patina.exe"))?, before);
     fs::remove_file(destination.join("started.txt"))?;
     let gate = root.path().join("clean-gate");
     let mut host = Command::new(&binary).arg("--gate").arg(&gate).spawn()?;
@@ -148,7 +199,7 @@ fn main() {
     assert!(host.wait()?.success());
     wait_file(&destination.join("started.txt"));
     assert!(fs::read_to_string(destination.join("started.txt"))?.contains("--profile-parent"));
-    assert!(!destination.join("patina-gpui.previous.exe").exists());
+    assert!(!destination.join(".patina-previous").exists());
     let data = destination.join("user-data.db");
     fs::write(&data, "preserve")?;
     let mut uninstall = Command::new(destination.join("Uninstall.exe"));
@@ -156,7 +207,9 @@ fn main() {
         .arg("/S")
         .raw_arg(format!("_?={}", destination.display()));
     run(&mut uninstall)?;
-    assert!(!destination.join("patina-gpui.exe").exists());
+    for filename in ["patina.exe", "patina-ui.exe", "patina-probe.exe"] {
+        assert!(!destination.join(filename).exists());
+    }
     assert_eq!(fs::read_to_string(data)?, "preserve");
     assert!(
         hkcu.open_subkey(format!(

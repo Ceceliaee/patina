@@ -177,6 +177,7 @@ fn fallback_deduplicates_and_preserves_verified_download() {
     service.request(Request::Download).unwrap();
     let ready = settled(&service);
     assert_eq!(ready.phase, Phase::Ready);
+    assert_eq!(ready.installed_version, "0.1.0");
     assert_eq!(ready.received, ready.release.unwrap().size);
     assert_eq!(transport.calls.load(Ordering::SeqCst), 3);
     assert_eq!(

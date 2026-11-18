@@ -60,23 +60,23 @@ pub struct Release {
     pub size: u64,
 }
 
-#[derive(Deserialize)]
-struct Manifest {
-    schema: u32,
-    application: String,
-    version: String,
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+pub struct Manifest {
+    pub schema: u32,
+    pub application: String,
+    pub version: String,
     #[serde(default)]
-    notes: String,
-    platforms: BTreeMap<String, Artifact>,
+    pub notes: String,
+    pub platforms: BTreeMap<String, Artifact>,
 }
-#[derive(Deserialize)]
-struct Artifact {
-    url: String,
-    signature: String,
-    size: u64,
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+pub struct Artifact {
+    pub url: String,
+    pub signature: String,
+    pub size: u64,
 }
 
-pub(crate) fn https_url(value: &str) -> Result<url::Url> {
+pub fn https_url(value: &str) -> Result<url::Url> {
     let url = url::Url::parse(value).map_err(|e| e.to_string())?;
     if url.scheme() != "https"
         || url.host_str().is_none()
@@ -89,7 +89,7 @@ pub(crate) fn https_url(value: &str) -> Result<url::Url> {
     Ok(url)
 }
 
-pub(crate) fn parse(
+pub fn parse(
     bytes: &[u8],
     config: &Config,
     current: &str,

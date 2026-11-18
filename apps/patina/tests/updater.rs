@@ -1,8 +1,8 @@
-#[path = "../../test-support/children.rs"]
+#[path = "../../../crates/test-support/children.rs"]
 mod children;
-#[path = "../../test-support/windows.rs"]
+#[path = "../../../crates/test-support/windows.rs"]
 mod desktop;
-#[path = "../../test-support/recording.rs"]
+#[path = "../../../crates/test-support/recording.rs"]
 mod fixture;
 use desktop::{ComApartment, Error, TestChild, controls, wait, window};
 use fixture::seed;
@@ -66,13 +66,14 @@ fn native_update_download_confirmation_and_navigation() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let dir = root.path().join(patina_gpui::APP_ID);
+    let dir = root.path().join(patina::APP_ID);
     fs::create_dir(&dir)?;
     seed(&dir.join("patina.db"))?;
     let fixture = root.path().join("updater-fixture");
     fs::create_dir(&fixture)?;
-    let signed: Value =
-        serde_json::from_str(include_str!("../../updater/tests/fixtures/signed.json"))?;
+    let signed: Value = serde_json::from_str(include_str!(
+        "../../../crates/updater/tests/fixtures/signed.json"
+    ))?;
     let payload = STANDARD.decode(signed["payload"].as_str().unwrap())?;
     fs::write(fixture.join("payload.bin"), &payload)?;
     fs::write(
@@ -93,7 +94,7 @@ fn native_update_download_confirmation_and_navigation() -> Result<(), Error> {
         )?,
     )?;
     let mut child = TestChild(
-        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+        Command::new(env!("CARGO_BIN_EXE_patina"))
             .arg("--today")
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
             .env("PATINA_GPUI_UPDATE_FIXTURE", &fixture)

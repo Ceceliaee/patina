@@ -1,0 +1,36 @@
+[package]
+name = "patina-updater"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[features]
+default = ["native-runtime"]
+native-runtime = ["dep:windows", "dep:tempfile"]
+native-tests = ["native-runtime"]
+
+[[test]]
+name = "installer"
+required-features = ["native-tests"]
+
+[dependencies]
+base64 = "0.22"
+minisign-verify = "0.2.5"
+semver = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+url = "2"
+
+[target.'cfg(windows)'.dependencies]
+tempfile = { version = "3", optional = true }
+windows = { version = "0.62.2", optional = true, features = ["Win32_Networking_WinHttp"] }
+
+[dev-dependencies]
+patina-test-desktop = { path = "../test-support" }
+winreg = "0.56"
+
+[target.'cfg(windows)'.dev-dependencies]
+flate2 = "1"
+sqlx.workspace = true
+tokio = { version = "1", features = ["rt", "time"] }
+windows = { version = "0.62.2", features = ["Win32_System_Diagnostics_ToolHelp", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }

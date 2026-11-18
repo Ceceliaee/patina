@@ -1,5 +1,4 @@
-use crate::{Config, Release, Result, Target, Transport, WindowsHttp, manifest, verify};
-use serde::{Deserialize, Serialize};
+use crate::{Config, Result, Target, Transport, WindowsHttp, manifest, verify};
 use std::{
     fs::{self, File, OpenOptions},
     os::windows::{fs::OpenOptionsExt, process::CommandExt},
@@ -9,30 +8,8 @@ use std::{
 };
 use tempfile::TempDir;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum Phase {
-    Idle,
-    Checking,
-    Current,
-    Available,
-    Downloading,
-    Ready,
-    Installing,
-    Failed,
-}
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-pub enum Request {
-    Status,
-    Check,
-    Download,
-}
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Snapshot {
-    pub phase: Phase,
-    pub release: Option<Release>,
-    pub received: u64,
-    pub error: Option<String>,
-}
+use crate::{Phase, Request, Snapshot};
+
 struct Downloaded {
     _lock: File,
     directory: TempDir,
@@ -50,7 +27,6 @@ pub struct Service {
     inner: Arc<Mutex<Inner>>,
     config: Arc<Config>,
     transport: Arc<dyn Transport>,
-    current: String,
     target: Target,
     root: PathBuf,
 }
@@ -119,19 +95,13 @@ impl Service {
         }
         Ok(Self {
             inner: Arc::new(Mutex::new(Inner {
-                snapshot: Snapshot {
-                    phase: Phase::Idle,
-                    release: None,
-                    received: 0,
-                    error: None,
-                },
+                snapshot: Snapshot::idle(current),
                 ready: None,
                 gate: None,
                 installation_lock: None,
             })),
             config: Arc::new(config),
             transport,
-            current: current.into(),
             target,
             root,
         })
@@ -193,13 +163,20 @@ impl Service {
         state.snapshot.error = Some(error);
     }
     fn check(&self) -> Result<()> {
+        let installed_version = self
+            .inner
+            .lock()
+            .unwrap()
+            .snapshot
+            .installed_version
+            .clone();
         let mut last = "No update endpoints".to_owned();
         for endpoint in &self.config.endpoints {
             let result = (|| {
                 let mut bytes = Vec::new();
                 self.transport
                     .get(endpoint, manifest::MAX_MANIFEST, &mut bytes, &mut |_| {})?;
-                manifest::parse(&bytes, &self.config, &self.current, self.target)
+                manifest::parse(&bytes, &self.config, &installed_version, self.target)
             })();
             match result {
                 Ok(release) => {
