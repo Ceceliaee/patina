@@ -1,5 +1,11 @@
 // es locale resource. Pure data only.
 export const MESSAGES = {
+  "settings.aiClassification": "Clasificación con IA",
+  "settings.aiApiUrl": "URL base de la API",
+  "settings.aiApiKey": "Clave de API",
+  "settings.aiFetchModels": "Obtener modelos",
+  "settings.aiModel": "Seleccionar modelo",
+  "settings.aiConfigFailed": "No se pudo cargar o guardar la configuración de IA, u obtener modelos. Revisa la configuración y vuelve a intentarlo.",
   "settings.timeRulesTitle": "Reglas de tiempo",
   "settings.recordingOptionsTitle": "Opciones de registro",
   "settings.themeGroupTitle": "Tema",

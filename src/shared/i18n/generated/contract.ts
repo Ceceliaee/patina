@@ -588,6 +588,9 @@ export interface UiText {
   "mapping": {
     "addLinkedApp": string;
     "addLinkedWebDomain": string;
+    "aiEmpty": string;
+    "aiFailed": string;
+    "aiNotConfigured": string;
     "appSearchPlaceholder": string;
     "backToLinkedApps": string;
     "backToLinkedWebDomains": string;
@@ -697,6 +700,12 @@ export interface UiText {
     "tracking": string;
   };
   "settings": {
+    "aiApiKey": string;
+    "aiApiUrl": string;
+    "aiClassification": string;
+    "aiConfigFailed": string;
+    "aiFetchModels": string;
+    "aiModel": string;
     "appearanceTitle": string;
     "backupExportAction": string;
     "backupExporting": string;
