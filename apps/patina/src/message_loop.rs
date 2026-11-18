@@ -28,7 +28,7 @@ impl Wake for MessageWake {
     }
 }
 
-pub(super) fn run(future: impl Future<Output = ()>) -> io::Result<()> {
+pub(super) fn run<T>(future: impl Future<Output = T>) -> io::Result<T> {
     let handle = unsafe { CreateEventW(None, false, false, None)? };
     let event = Arc::new(MessageWake(unsafe {
         OwnedHandle::from_raw_handle(handle.0)
@@ -37,8 +37,8 @@ pub(super) fn run(future: impl Future<Output = ()>) -> io::Result<()> {
     let mut context = Context::from_waker(&waker);
     let mut future = std::pin::pin!(future);
     loop {
-        if let Poll::Ready(()) = future.as_mut().poll(&mut context) {
-            return Ok(());
+        if let Poll::Ready(output) = future.as_mut().poll(&mut context) {
+            return Ok(output);
         }
         let result = unsafe {
             MsgWaitForMultipleObjectsEx(Some(&[handle]), INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE)

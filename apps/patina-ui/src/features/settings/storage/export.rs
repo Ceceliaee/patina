@@ -161,7 +161,7 @@ impl StorageCard {
                             s.calendar_active = b;
                             s.calendar_month = b.with_day(1).unwrap();
                             s.calendar_mode = "custom";
-                            s.go(View::Range, w, cx);
+                            s.open_view(View::Range, w, cx);
                         })),
                 );
             }

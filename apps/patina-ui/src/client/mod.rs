@@ -1,11 +1,11 @@
 mod requests;
 use patina_desktop_protocol::{
-    FromWindow, Query, Target, ToWindow, handshake, read_messages, writer,
+    FromWindow, Target, ToWindow, WindowRequest, handshake, read_messages, writer,
 };
 
 use crate::windows::AppWindows;
 use gpui_kit::{QuitMode, WindowingRequest};
-use patina_activity_model::{Activity, Locale};
+use patina_activity_model::{CurrentActivity, Locale};
 use patina_desktop_protocol::{FromReply, MAX_PENDING, RequestError};
 use std::{
     cell::{Cell, RefCell},
@@ -38,11 +38,11 @@ pub(crate) struct Client {
     pub(crate) theme: Cell<patina_activity_model::Theme>,
     pub(crate) schemes: RefCell<[String; 2]>,
     pub(crate) scheme_preview: Cell<Option<(gpui_kit::WindowId, bool, &'static str)>>,
-    activity: RefCell<Activity>,
+    activity: RefCell<CurrentActivity>,
     paused: Cell<bool>,
     serial: Cell<u64>,
     revision: Cell<u64>,
-    next: Cell<u64>,
+    next_request_id: Cell<u64>,
     pending: Rc<Pending>,
     tx: mpsc::Sender<FromWindow>,
 }
@@ -62,11 +62,11 @@ impl Client {
             theme: Cell::new(theme),
             schemes: RefCell::new(schemes),
             scheme_preview: Cell::new(None),
-            activity: RefCell::new(Activity::Waiting),
+            activity: RefCell::new(CurrentActivity::Waiting),
             paused: Cell::new(false),
             serial: Cell::new(0),
             revision: Cell::new(0),
-            next: Cell::new(0),
+            next_request_id: Cell::new(0),
             pending: Default::default(),
             tx,
         }
@@ -203,7 +203,7 @@ impl Client {
         let dark = self.dark(win);
         quietpro::Palette::for_scheme(dark, &self.schemes.borrow()[usize::from(dark)])
     }
-    pub(crate) fn activity(&self) -> Activity {
+    pub(crate) fn current_activity(&self) -> CurrentActivity {
         self.activity.borrow().clone()
     }
     pub(crate) fn paused(&self) -> bool {
@@ -224,34 +224,30 @@ impl Client {
     }
     fn request<T: FromReply>(
         &self,
-        query: Query,
-    ) -> impl Future<Output = Result<T, String>> + 'static {
-        let id = self.next.get();
+        request: WindowRequest,
+    ) -> impl Future<Output = Result<T, RequestError>> + 'static {
+        let id = self.next_request_id.get();
         let (tx, rx) = async_channel::bounded(1);
         let reservation = if self.pending.borrow().len() >= MAX_PENDING {
             Err(RequestError::Busy)
         } else if let Some(next) = id.checked_add(1) {
-            self.next.set(next);
+            self.next_request_id.set(next);
             self.pending.borrow_mut().insert(id, tx);
             let guard = PendingRequest {
                 id,
                 requests: Rc::downgrade(&self.pending),
             };
             self.tx
-                .send(FromWindow::Query(id, Box::new(query)))
+                .send(FromWindow::Request(id, Box::new(request)))
                 .map(|()| guard)
                 .map_err(|_| RequestError::Disconnected)
         } else {
             Err(RequestError::SequenceExhausted)
         };
         async move {
-            let _guard = reservation.map_err(|e| e.to_string())?;
-            let value = rx
-                .recv()
-                .await
-                .map_err(|_| RequestError::Disconnected.to_string())?
-                .map_err(|e| e.to_string())?;
-            T::from_reply(value)
+            let _guard = reservation?;
+            let value = rx.recv().await.map_err(|_| RequestError::Disconnected)??;
+            T::from_reply(value).map_err(RequestError::Rejected)
         }
     }
     fn idle(&self) {
@@ -420,6 +416,10 @@ impl Client {
         )
     }
 
+    pub(crate) fn test_reject(&self, id: u64, error: RequestError) {
+        self.receive_answer(id, Err(error));
+    }
+
     pub(crate) fn test_answer(&self, id: u64, result: patina_desktop_protocol::Reply) {
         self.receive_answer(id, Ok(result));
     }
@@ -434,13 +434,33 @@ mod tests {
     };
 
     #[test]
+    fn request_keeps_the_error_category_until_the_view_handles_it() {
+        let (client, _requests) = Client::test_connection();
+        let mut cx = Context::from_waker(Waker::noop());
+        for (id, conflict) in [(0, true), (1, false)] {
+            let pending = client.install_update();
+            let error = if conflict {
+                RequestError::Conflict("same".into())
+            } else {
+                RequestError::Rejected("same".into())
+            };
+            client.receive_answer(id, Err(error));
+            let result = pin!(pending).as_mut().poll(&mut cx);
+            match result {
+                Poll::Ready(Err(RequestError::Conflict(_))) => assert!(conflict),
+                Poll::Ready(Err(RequestError::Rejected(_))) => assert!(!conflict),
+                other => panic!("unexpected response: {other:?}"),
+            }
+        }
+    }
+    #[test]
     fn cancel_releases_request_capacity_and_ignores_late_responses() {
         let (client, _requests) = Client::test_connection();
         let mut pending: Vec<_> = (0..MAX_PENDING).map(|_| client.install_update()).collect();
         let mut cx = Context::from_waker(Waker::noop());
         assert_eq!(
             pin!(client.install_update()).as_mut().poll(&mut cx),
-            Poll::Ready(Err(RequestError::Busy.to_string()))
+            Poll::Ready(Err(RequestError::Busy))
         );
         drop(pending.pop());
         let replacement = client.install_update();
@@ -451,7 +471,7 @@ mod tests {
         client.disconnect();
         assert_eq!(
             replacement.as_mut().poll(&mut cx),
-            Poll::Ready(Err(RequestError::Disconnected.to_string()))
+            Poll::Ready(Err(RequestError::Disconnected))
         );
         assert!(client.pending.borrow().is_empty());
     }

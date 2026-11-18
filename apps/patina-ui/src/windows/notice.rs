@@ -71,7 +71,7 @@ impl ToolNotice {
                             });
                         }
                     }
-                    Err(e) => t.error = Some(e),
+                    Err(e) => t.error = Some(e.to_string()),
                 }
                 cx.notify();
             });
@@ -156,7 +156,7 @@ impl Render for ToolNotice {
                                 let result = task.await;
                                 let _ = view.update(cx, |t, cx| match result {
                                     Err(e) => {
-                                        t.error = Some(e);
+                                        t.error = Some(e.to_string());
                                         cx.notify();
                                     }
                                     Ok(()) => t.refresh(cx),

@@ -1,6 +1,6 @@
 use model::views::storage::StorageReply;
 use patina_activity_model as model;
-use patina_activity_model::{Activity, AppEdit};
+use patina_activity_model::{AppEdit, CurrentActivity};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
     io::{self, BufRead, BufReader, BufWriter, Read, Write},
@@ -23,7 +23,7 @@ pub enum Target {
 }
 
 #[derive(Serialize, Deserialize)]
-pub enum Query {
+pub enum WindowRequest {
     Update(patina_updater::Request),
     InstallUpdate,
     OpenExternal(String),
@@ -39,14 +39,14 @@ pub enum Query {
     DeleteWebsite(String, Option<patina_activity_model::DeletionImpact>),
     SaveRules(
         Vec<patina_activity_model::AppRule>,
-        Option<patina_activity_model::WebDraft>,
+        Option<patina_activity_model::WebsiteRuleDraft>,
         Vec<patina_activity_model::AppLinkEdit>,
         Vec<patina_activity_model::CategoryEdit>,
     ),
     Preferences,
     SavePreferences(
-        patina_activity_model::TrackingPreferences,
-        patina_activity_model::TrackingPreferences,
+        patina_activity_model::AppPreferences,
+        patina_activity_model::AppPreferences,
     ),
     Trends(Option<(i64, i64)>, patina_activity_model::SeriesKind),
     History {
@@ -71,12 +71,12 @@ pub enum ToWindow {
         serial: u64,
         revision: u64,
         target: Target,
-        activity: Activity,
+        activity: CurrentActivity,
         paused: bool,
     },
     Changed {
         revision: u64,
-        activity: Activity,
+        activity: CurrentActivity,
         paused: bool,
     },
     Answer(u64, Result<Box<Reply>, RequestError>),
@@ -90,9 +90,9 @@ pub enum Reply {
     Update(patina_updater::Snapshot),
     Zoom(f32),
     HistoryModes(([u8; 3], bool)),
-    Rules(model::Rules),
+    Rules(model::ClassificationRules),
     Deletion(model::DeletionImpact),
-    Preferences(model::TrackingPreferences),
+    Preferences(model::AppPreferences),
     Trends(model::Trends),
     History(model::HistoryDay),
     Today(model::DaySummary),
@@ -129,29 +129,21 @@ impl std::fmt::Display for RequestError {
         }
     }
 }
+impl std::error::Error for RequestError {}
+
 impl From<String> for RequestError {
     fn from(message: String) -> Self {
-        match message.as_str() {
-            "remote_name_conflict"
-            | "webdav_config_changed"
-            | "setting changed since loading"
-            | "application changed since loading"
-            | "resident settings changed since loading"
-            | "deletion scope changed; preview again"
-            | "Backup preview expired"
-            | "Tool changed since preview; open the package again" => Self::Conflict(message),
-            _ => Self::Rejected(message),
-        }
+        Self::Rejected(message)
     }
 }
 impl From<&str> for RequestError {
     fn from(message: &str) -> Self {
-        message.to_owned().into()
+        Self::Rejected(message.to_owned())
     }
 }
 impl ToWindow {
-    pub fn answer(id: u64, response: Result<Reply, String>) -> Self {
-        Self::Answer(id, response.map(Box::new).map_err(RequestError::from))
+    pub fn answer(id: u64, response: Result<Reply, RequestError>) -> Self {
+        Self::Answer(id, response.map(Box::new))
     }
 }
 
@@ -170,7 +162,7 @@ macro_rules! reply_types {
 }
 reply_types! {
     Storage(StorageReply), Update(patina_updater::Snapshot), Zoom(f32), HistoryModes(([u8;3],bool)),
-    Rules(model::Rules), Deletion(model::DeletionImpact), Preferences(model::TrackingPreferences),
+    Rules(model::ClassificationRules), Deletion(model::DeletionImpact), Preferences(model::AppPreferences),
     Trends(model::Trends), History(model::HistoryDay), Today(model::DaySummary), Recent(model::Recent),
     Icons(Vec<(String,String)>), Tools(ToolList), Stopping(Vec<String>), Shortcuts(Vec<model::Shortcut>),
     Installed(tools::Installed), Notices(Vec<tools::Notice>), NoticePreferences(model::NoticePreferences),
@@ -198,7 +190,8 @@ pub enum FromWindow {
     MainOpened(Option<usize>),
     MainClosed,
     Idle(u64),
-    Query(u64, Box<Query>),
+    #[serde(rename = "Query")]
+    Request(u64, Box<WindowRequest>),
 }
 
 pub struct Peer<R>(BufReader<R>);
@@ -282,6 +275,50 @@ pub fn writer<T: Serialize + Send + 'static>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn window_requests_keep_the_version_two_wire_tag() {
+        for frame in [
+            r#"{"Query":[7,"Preferences"]}"#,
+            r#"{"Query":[8,{"SaveRules":[[],null,[],[]]}]}"#,
+        ] {
+            let message: FromWindow = serde_json::from_str(frame).unwrap();
+            assert!(
+                matches!(
+                    &message,
+                    FromWindow::Request(7, request) if matches!(**request, WindowRequest::Preferences)
+                ) || matches!(
+                    &message,
+                    FromWindow::Request(8, request) if matches!(**request, WindowRequest::SaveRules(..))
+                )
+            );
+            assert_eq!(serde_json::to_string(&message).unwrap(), frame);
+        }
+    }
+
+    #[test]
+    fn version_two_errors_keep_their_category_independent_of_diagnostics() {
+        for (frame, error) in [
+            (
+                r#"{"Answer":[17,{"Err":{"Conflict":"changed"}}]}"#,
+                RequestError::Conflict("changed".into()),
+            ),
+            (
+                r#"{"Answer":[17,{"Err":{"Conflict":"new wording"}}]}"#,
+                RequestError::Conflict("new wording".into()),
+            ),
+            (
+                r#"{"Answer":[17,{"Err":{"Rejected":"changed"}}]}"#,
+                RequestError::Rejected("changed".into()),
+            ),
+        ] {
+            let message = ToWindow::answer(17, Err(error));
+            assert_eq!(serde_json::to_string(&message).unwrap(), frame);
+            let decoded: ToWindow = serde_json::from_str(frame).unwrap();
+            assert!(
+                matches!((message, decoded), (ToWindow::Answer(17, Err(sent)), ToWindow::Answer(17, Err(received))) if sent == received)
+            );
+        }
+    }
     #[test]
     fn wrong_peer_cannot_deliver_a_request() {
         let mut delivered = false;

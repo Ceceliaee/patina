@@ -1,7 +1,6 @@
 use crate::Action;
-use base64::{Engine as _, engine::general_purpose::STANDARD};
-use patina_desktop_protocol::Reply;
-use patina_recorder::Recorder;
+use crate::requests::{DesktopRequests, Dispatch, ExitAction, WindowCaller};
+use patina_activity::RecordingControl;
 use std::{
     io,
     os::windows::{
@@ -22,7 +21,7 @@ use std::{
 };
 
 use patina_desktop_protocol::{
-    FromWindow, Query, Target, ToWindow, WIRE_VERSION, handshake, read_messages, writer,
+    FromWindow, Target, ToWindow, WIRE_VERSION, handshake, read_messages, writer,
 };
 
 enum Event {
@@ -43,7 +42,7 @@ struct WindowProcess {
 impl WindowProcess {
     fn start(
         generation: u64,
-        preferences: &patina_recorder::TrackingPreferences,
+        preferences: &patina_activity::AppPreferences,
         events: async_channel::Sender<Event>,
     ) -> io::Result<Self> {
         let job =
@@ -107,7 +106,12 @@ impl WindowProcess {
             }
         }
     }
-    fn open(&mut self, target: Target, recorder: &Recorder, revision: u64) -> io::Result<()> {
+    fn open(
+        &mut self,
+        target: Target,
+        recorder: &RecordingControl,
+        revision: u64,
+    ) -> io::Result<()> {
         if self.child.try_wait()?.is_some() {
             return Err(io::Error::other("window process has exited"));
         }
@@ -126,7 +130,7 @@ impl WindowProcess {
                 serial: self.serial,
                 revision,
                 target,
-                activity: recorder.activity(),
+                activity: recorder.current_activity(),
                 paused: recorder.paused(),
             })
             .map_err(|_| io::Error::other("window pipe closed"))
@@ -149,163 +153,19 @@ impl Drop for WindowProcess {
     }
 }
 
-async fn answer(
-    recorder: &Recorder,
-    tools: &crate::tool_service::ToolService,
-    query: Query,
-) -> Result<Reply, String> {
-    match query {
-        Query::OpenExternal(url) => {
-            if !url.starts_with("https://") || url.contains('\0') {
-                return Err("Invalid external link".into());
-            }
-            use windows::{
-                Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL},
-                core::{PCWSTR, w},
-            };
-            let wide: Vec<u16> = url.encode_utf16().chain(Some(0)).collect();
-            let result = unsafe {
-                ShellExecuteW(
-                    None,
-                    w!("open"),
-                    PCWSTR(wide.as_ptr()),
-                    None,
-                    None,
-                    SW_SHOWNORMAL,
-                )
-            };
-            if result.0 as isize <= 32 {
-                return Err("Could not open external link".into());
-            }
-            Ok(Reply::Done)
-        }
-        Query::Storage(request) => recorder.storage(request).await.map(Reply::Storage),
-        Query::Tools(request) => tools.request(request, recorder.locale.get().tag()).await,
-        Query::DetailZoom(hours) => recorder.detail_zoom(hours).await.map(Reply::Zoom),
-        Query::HistoryModes(modes) => recorder.history_modes(modes).await.map(Reply::HistoryModes),
-        Query::HistoryZoom(hours) => recorder.history_zoom(hours).await.map(Reply::Zoom),
-        Query::HistoryMinimum(d, v) => recorder
-            .set_history_minimum(d, v)
-            .await
-            .map(|()| Reply::Done),
-        Query::Rules => recorder.rules().await.map(Reply::Rules),
-        Query::ClassificationMode(web) => recorder
-            .remember_classification_mode(web)
-            .await
-            .map(|()| Reply::Done),
-        Query::DeleteApplication(exe, confirmed) => {
-            let apply = confirmed.is_some();
-            let impact = recorder.delete_application(exe, confirmed).await?;
-            if apply {
-                tools.wake();
-            }
-            Ok(Reply::Deletion(impact))
-        }
-        Query::SaveRules(r, w, l, c) => recorder.save_rules(r, w, l, c).await.map(|()| Reply::Done),
-        Query::DeleteWebsite(identity, confirmed) => {
-            let apply = confirmed.is_some();
-            let impact = recorder.delete_website(identity, confirmed).await?;
-            if apply {
-                tools.wake();
-            }
-            Ok(Reply::Deletion(impact))
-        }
-        Query::Preferences => recorder.preferences().await.map(Reply::Preferences),
-        Query::SavePreferences(..) | Query::Update(_) | Query::InstallUpdate => {
-            unreachable!("host operations are serialized")
-        }
-        Query::Trends(r, k) => recorder.trends(r, k).await.map(Reply::Trends),
-        Query::History {
-            day,
-            app,
-            titles,
-            web,
-        } => recorder
-            .history_source(day, app, titles, web)
-            .await
-            .map(Reply::History),
-        Query::Today => recorder.today().await.map(Reply::Today),
-        Query::Recent => recorder.recent().await.map(Reply::Recent),
-        Query::Icons(keys) => Ok(Reply::Icons(
-            recorder
-                .icons(keys)
-                .await?
-                .into_iter()
-                .map(|(key, bytes)| (key, STANDARD.encode(bytes)))
-                .collect::<Vec<_>>(),
-        )),
-        Query::ChartMode(mode) => recorder.set_chart_mode(mode).await.map(|()| Reply::Done),
-        Query::Edit(key, edit) => recorder.edit_app(key, edit).await.map(|()| Reply::Done),
-    }
-}
-
-async fn save_preferences(
-    recorder: &Recorder,
-    tray: &crate::tray::Tray,
-    login: &crate::login::LoginEntry,
-    old: patina_recorder::TrackingPreferences,
-    next: patina_recorder::TrackingPreferences,
-) -> Result<Reply, String> {
-    let current = tray.behavior.get();
-    if old.desktop != current && old.desktop != next.desktop {
-        return Err("resident settings changed since loading".into());
-    }
-    let desired = if old.desktop == next.desktop {
-        current
-    } else {
-        next.desktop
-    };
-    let login_changed = desired.launch_at_login != current.launch_at_login;
-    if login_changed {
-        login
-            .apply(desired.launch_at_login)
-            .map_err(|e| e.to_string())?;
-    }
-    let result = async {
-        tray.apply_visibility(desired).map_err(|e| e.to_string())?;
-        recorder.save_preferences(old, next).await
-    }
-    .await;
-    if let Err(error) = result {
-        let icon = tray.apply_visibility(current);
-        let registration = if login_changed {
-            login.apply(current.launch_at_login)
-        } else {
-            Ok(())
-        };
-        if icon.is_err() || registration.is_err() {
-            return Err(format!(
-                "{error}; restore tray: {icon:?}, restore login: {registration:?}"
-            ));
-        }
-        return Err(error);
-    }
-    tray.behavior.set(desired);
-    Ok(Reply::Done)
-}
-
-pub(super) struct Services {
-    pub tools: crate::tool_service::ToolService,
-    pub tray: crate::tray::Tray,
-    pub login: crate::login::LoginEntry,
-    pub updater: patina_updater::Service,
-}
-
 /// The last-window notification only retires the process if it has handled the latest open request.
 pub(super) async fn serve(
     executor: &async_executor::LocalExecutor<'_>,
     actions: async_channel::Receiver<Action>,
-    recorder: Rc<Recorder>,
     windows_open: Arc<AtomicBool>,
     revision: Arc<AtomicU64>,
-    services: Services,
-) {
-    let Services {
-        tools,
-        tray,
-        login,
-        updater,
-    } = services;
+    requests: DesktopRequests,
+) -> ExitAction {
+    let requests = Rc::new(requests);
+    let recorder = &requests.recording;
+    let tray = &requests.tray;
+    let tools = &requests.tools;
+    let mut exit = ExitAction::Quit;
     let (events, inbox) = async_channel::unbounded();
     let tray_events = events.clone();
     executor
@@ -349,7 +209,7 @@ pub(super) async fn serve(
                     if let Some(w) = &worker {
                         let _ = w.tx.send(ToWindow::Changed {
                             revision: revision.load(Ordering::Acquire),
-                            activity: recorder.activity(),
+                            activity: recorder.current_activity(),
                             paused: recorder.paused(),
                         });
                     }
@@ -380,111 +240,44 @@ pub(super) async fn serve(
                             }
                             None
                         }
-                        FromWindow::Query(request, query) => {
+                        FromWindow::Request(request_id, request) => {
                             let tx = current.tx.clone();
-                            if let Query::Update(command) = query.as_ref() {
-                                let result = updater.request(*command).map(Reply::Update);
-                                let _ = tx.send(ToWindow::answer(request, result));
+                            let caller = WindowCaller {
+                                main_hwnd: current.main_hwnd,
+                                pid: current.child.id(),
+                            };
+                            if let Err(error) = caller.authorize(&request) {
+                                let _ = tx.send(ToWindow::answer(request_id, Err(error)));
                                 continue;
                             }
-                            if matches!(query.as_ref(), Query::InstallUpdate) {
-                                let result = if current.main_hwnd.is_none() {
-                                    Err("Open the main window to install an update".into())
-                                } else {
-                                    let updater = updater.clone();
-                                    blocking::unblock(move || {
-                                        let executable =
-                                            std::env::current_exe().map_err(|e| e.to_string())?;
-                                        updater.begin_install(&executable)
-                                    })
-                                    .await
-                                };
-                                let installed = result.is_ok();
-                                let _ =
-                                    tx.send(ToWindow::answer(request, result.map(|_| Reply::Done)));
-                                if installed {
+                            let dispatch = Dispatch::for_request(&request);
+                            if dispatch != Dispatch::Parallel {
+                                if dispatch == Dispatch::ReplaceDatabase {
+                                    for task in active.drain(..) {
+                                        task.await;
+                                    }
+                                }
+                                let result = requests.handle(*request).await;
+                                let next = dispatch.exit_after(&result);
+                                let _ = tx.send(ToWindow::answer(request_id, result));
+                                if let Some(next) = next {
+                                    exit = next;
                                     break;
                                 }
-                                continue;
-                            }
-                            if let Query::Storage(patina_recorder::StorageRequest::DavReveal(
-                                hwnd,
-                            )) = query.as_ref()
-                            {
-                                use windows::Win32::{
-                                    Foundation::HWND,
-                                    UI::WindowsAndMessaging::{
-                                        GetForegroundWindow, GetWindowThreadProcessId,
-                                    },
-                                };
-                                let handle = HWND(*hwnd as _);
-                                let mut pid = 0;
-                                let foreground = unsafe {
-                                    GetWindowThreadProcessId(handle, Some(&mut pid));
-                                    GetForegroundWindow()
-                                };
-                                if current.main_hwnd != Some(*hwnd)
-                                    || pid != current.child.id()
-                                    || foreground != handle
-                                {
-                                    let _ = tx.send(ToWindow::answer(
-                                        request,
-                                        Err(
-                                            "Open the main Settings window to reveal this password"
-                                                .into(),
-                                        ),
-                                    ));
-                                    continue;
-                                }
-                            }
-                            if matches!(
-                                query.as_ref(),
-                                Query::Storage(
-                                    patina_recorder::StorageRequest::Move(_)
-                                        | patina_recorder::StorageRequest::Restore { .. }
-                                )
-                            ) {
-                                for task in active.drain(..) {
-                                    task.await;
-                                }
-                                let result = answer(&recorder, &tools, *query).await;
-                                let restart = result.is_ok();
-                                let _ = tx.send(ToWindow::answer(request, result));
-                                if restart {
-                                    crate::RESTART_AFTER_STORAGE.store(true, Ordering::Release);
-                                    break;
-                                }
-                                continue;
-                            }
-                            if matches!(
-                                query.as_ref(),
-                                Query::DetailZoom(_)
-                                    | Query::HistoryZoom(_)
-                                    | Query::HistoryModes(_)
-                            ) {
-                                let result = answer(&recorder, &tools, *query).await;
-                                let _ = tx.send(ToWindow::answer(request, result));
-                                continue;
-                            }
-                            if let Query::SavePreferences(old, next) = *query {
-                                let result =
-                                    save_preferences(&recorder, &tray, &login, old, next).await;
-                                let _ = tx.send(ToWindow::answer(request, result));
                                 continue;
                             }
                             active.retain(|task| !task.is_finished());
                             if active.len() >= patina_desktop_protocol::MAX_PENDING {
                                 let _ = tx.send(ToWindow::Answer(
-                                    request,
+                                    request_id,
                                     Err(patina_desktop_protocol::RequestError::Busy),
                                 ));
                                 continue;
                             }
-                            let recorder = recorder.clone();
-                            let tools = tools.clone();
+                            let requests = Rc::clone(&requests);
                             active.push(executor.spawn(async move {
-                                let result = answer(&recorder, &tools, *query).await;
-                                let _ = tx.send(ToWindow::answer(request, result));
+                                let result = requests.handle(*request).await;
+                                let _ = tx.send(ToWindow::answer(request_id, result));
                             }));
                             None
                         }
@@ -501,7 +294,7 @@ pub(super) async fn serve(
             };
             if let Some(target) = target {
                 if let Some(w) = worker.as_mut()
-                    && w.open(target, &recorder, revision.load(Ordering::Acquire))
+                    && w.open(target, recorder, revision.load(Ordering::Acquire))
                         .is_ok()
                 {
                     continue;
@@ -509,7 +302,8 @@ pub(super) async fn serve(
                 drop(worker.take());
                 generation += 1;
                 windows_open.store(true, Ordering::Release);
-                match recorder
+                match requests
+                    .preferences
                     .preferences()
                     .await
                     .map_err(io::Error::other)
@@ -517,7 +311,7 @@ pub(super) async fn serve(
                         WindowProcess::start(generation, &preferences, events.clone())
                     })
                     .and_then(|mut w| {
-                        w.open(target, &recorder, revision.load(Ordering::Acquire))?;
+                        w.open(target, recorder, revision.load(Ordering::Acquire))?;
                         Ok(w)
                     }) {
                     Ok(w) => {
@@ -531,7 +325,7 @@ pub(super) async fn serve(
                             let _ = tools
                                 .request(
                                     patina_desktop_protocol::tools::ToolRequest::DisplayFailed,
-                                    recorder.locale.get().tag(),
+                                    requests.preferences.locale().tag(),
                                 )
                                 .await;
                         }
@@ -545,4 +339,5 @@ pub(super) async fn serve(
             task.await;
         }
     }
+    exit
 }

@@ -272,7 +272,7 @@ impl StorageCard {
                 self.message.clear();
                 cx.notify();
             } else {
-                self.go(View::Home, win, cx);
+                self.open_view(View::Home, win, cx);
             }
         }
     }
@@ -295,7 +295,7 @@ impl StorageCard {
             cx.notify();
         }
     }
-    fn go(&mut self, view: View, win: &mut Window, cx: &mut Context<Self>) {
+    fn open_view(&mut self, view: View, win: &mut Window, cx: &mut Context<Self>) {
         if view != View::Home && self.view != View::Home && view != self.view {
             self.remember_parent(win, cx);
         }
@@ -370,7 +370,7 @@ impl StorageCard {
                         s.saved_password_preview = true;
                         s.revealed = true;
                     }
-                    Err(e) => s.message = e,
+                    Err(e) => s.message = e.to_string(),
                     _ => (),
                 }
                 c.notify();
@@ -425,7 +425,7 @@ impl StorageCard {
                 s.busy = false;
                 match response {
                     Err(e) => {
-                        s.message = s.failed(&outcome, &e);
+                        s.message = s.failed(&outcome, &e.to_string());
                     }
                     Ok(data) => {
                         if testing {
@@ -896,7 +896,7 @@ impl StorageCard {
                 .items_center()
                 .gap(px(8.))
         };
-        let go = |key, next| self.btn(key, c, cx, move |s, w, c| s.go(next, w, c));
+        let view_button = |key, next| self.btn(key, c, cx, move |s, w, c| s.open_view(next, w, c));
         let picker = |key, pick| self.btn(key, c, cx, move |s, w, c| s.choose(pick, w, c));
         let button =
             |key, f: fn(&mut Self, &mut Window, &mut Context<Self>)| self.btn(key, c, cx, f);
@@ -927,7 +927,7 @@ impl StorageCard {
             header_icons.push(
                 IconControl::new("storage-header-action", self.tr(key), icon)
                     .disabled(self.busy)
-                    .action(c, cx.listener(move |s, _, w, cx| s.go(next, w, cx)))
+                    .action(c, cx.listener(move |s, _, w, cx| s.open_view(next, w, cx)))
                     .into_any_element(),
             );
         }
@@ -1048,7 +1048,7 @@ impl StorageCard {
                         .justify_between()
                         .gap(px(8.))
                         .child(label(self.tr(key)))
-                        .child(go(key, view))
+                        .child(view_button(key, view))
                 };
                 let portable = settings_rows_card(c).child(pair(
                     entry("settings.dataExportAction", Export),
@@ -1082,7 +1082,7 @@ impl StorageCard {
                             );
                         })),
                     )
-                    .child(go("settings.webDavEdit", Dav))
+                    .child(view_button("settings.webDavEdit", Dav))
                     .child(
                         text_button(
                             "dav-delete",
@@ -1119,7 +1119,7 @@ impl StorageCard {
                             Icon::RefreshCw,
                         )
                         .disabled(self.busy)
-                        .action(c, cx.listener(|s, _, w, cx| s.go(Home, w, cx))),
+                        .action(c, cx.listener(|s, _, w, cx| s.open_view(Home, w, cx))),
                     );
                 let directory = |key, id: &'static str| {
                     let name = self.tr(key);
@@ -1181,7 +1181,7 @@ impl StorageCard {
                                 Icon::Trash,
                             )
                             .disabled(self.busy)
-                            .action(c, cx.listener(|s, _, w, cx| s.go(Cleanup, w, cx))),
+                            .action(c, cx.listener(|s, _, w, cx| s.open_view(Cleanup, w, cx))),
                         );
                         if self.paths.as_ref().is_some_and(|info| {
                             info.data.as_ref() != Some(&info.default) || info.pending.is_some()
@@ -1513,7 +1513,7 @@ impl StorageCard {
                                         .on_click(
                                             cx.listener(move |s, _, w, cx| {
                                                 if remote {
-                                                    s.go(Upload, w, cx)
+                                                    s.open_view(Upload, w, cx)
                                                 } else {
                                                     s.choose(Pick::Backup, w, cx)
                                                 }
@@ -1543,7 +1543,7 @@ impl StorageCard {
                                             c,
                                             cx.listener(move |s, _, w, cx| {
                                                 s.schedule_target = Some(remote);
-                                                s.go(Schedule(true), w, cx);
+                                                s.open_view(Schedule(true), w, cx);
                                             }),
                                         ),
                                     ),
@@ -1599,7 +1599,7 @@ impl StorageCard {
                         .into_any_element(),
                     );
                 } else {
-                    body = body.child(go("settings.webDavConfigTitle", Dav));
+                    body = body.child(view_button("settings.webDavConfigTitle", Dav));
                 }
             }
             Restore => {
@@ -1613,7 +1613,7 @@ impl StorageCard {
                             .text_color(c.secondary),
                     )
                     .child(choice("settings.restoreSourceRemoteTitle", |s, w, cx| {
-                        s.go(Remote, w, cx)
+                        s.open_view(Remote, w, cx)
                     }))
                     .child(
                         label(self.tr("settings.restoreSourceRemoteHint"))

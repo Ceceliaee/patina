@@ -96,7 +96,7 @@ impl Tools {
                 this.busy = false;
                 match result {
                     Ok(data) => done(this, data, cx),
-                    Err(e) => this.error = Some(e),
+                    Err(e) => this.error = Some(e.to_string()),
                 }
                 if !this.busy && std::mem::take(&mut this.refresh_pending) {
                     this.background_refresh(cx);
@@ -276,7 +276,7 @@ impl Render for Tools {
                 .position(|tool| tool.manifest.id == selected.manifest.id)
         });
         let view = cx.weak_entity();
-        let selector = quietpro::Dropdown::new(
+        let tool_dropdown = quietpro::Dropdown::new(
             "tool-select",
             tr("tools.title"),
             self.tools.iter().enumerate().map(|(index, tool)| {
@@ -306,7 +306,9 @@ impl Render for Tools {
         .disabled(!ready);
         let top = page_title_row(tr("tools.title"), quietpro::Icon::ToolCase, colors).child(
             page_actions()
-                .when(!self.tools.is_empty(), |actions| actions.child(selector))
+                .when(!self.tools.is_empty(), |actions| {
+                    actions.child(tool_dropdown)
+                })
                 .child(manager)
                 .child(preferences),
         );

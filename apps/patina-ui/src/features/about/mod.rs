@@ -120,7 +120,7 @@ impl About {
         if matches!(request, Request::Check) {
             self.status.phase = Phase::Checking;
             self.status.release = None;
-            self.status.received = 0;
+            self.status.received_bytes = 0;
         }
         if matches!(request, Request::Download) {
             self.status.phase = Phase::Downloading;
@@ -138,7 +138,7 @@ impl About {
                             Ok(snapshot) => t.status = snapshot,
                             Err(error) => {
                                 t.status.phase = Phase::Failed;
-                                t.status.error = Some(error);
+                                t.status.error = Some(error.to_string());
                             }
                         }
                         cx.notify();
@@ -185,7 +185,7 @@ impl About {
                 let _ = client.save_resume_page(String::new()).await;
                 let _ = view.update(cx, |t, cx| {
                     t.status.phase = Phase::Ready;
-                    t.status.error = Some(error);
+                    t.status.error = Some(error.to_string());
                     t.install_error = true;
                     cx.notify();
                 });
@@ -258,7 +258,7 @@ impl Render for About {
                 Phase::Downloading => format!(
                     "{} {:.1} / {:.1} MiB",
                     tr("update.downloading"),
-                    self.status.received as f64 / 1048576.,
+                    self.status.received_bytes as f64 / 1048576.,
                     self.status.release.as_ref().map_or(0, |r| r.size) as f64 / 1048576.
                 ),
                 Phase::Ready => tr("update.dialogDownloaded"),
