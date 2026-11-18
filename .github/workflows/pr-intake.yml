@@ -21,7 +21,7 @@ jobs:
     name: Pull request intake gate
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
 
     steps:
       - name: Checkout trusted base revision
@@ -40,11 +40,8 @@ jobs:
           git fetch --no-tags origin "pull/${PR_NUMBER}/head:refs/remotes/pr-intake/head"
           test "$(git rev-parse refs/remotes/pr-intake/head)" = "${HEAD_SHA}"
 
-      - name: Setup Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version-file: .node-version
-          package-manager-cache: false
+      - name: Install repository Rust toolchain
+        run: rustup toolchain install --no-self-update
 
       - name: Run trusted pull request intake gate
         env:
@@ -53,7 +50,7 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         shell: bash
         run: >-
-          node --experimental-strip-types scripts/check-pr-intake.ts
+          cargo xtask ci intake
           --base "${BASE_SHA}"
           --head "${HEAD_SHA}"
           --body-env PR_BODY

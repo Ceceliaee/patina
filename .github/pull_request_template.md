@@ -37,10 +37,10 @@ Mention unrelated follow-up work separately.
 
 <!--
 Explain why the changed files belong under these owners.
-Examples: features/settings, platform/persistence, engine/export, data/repositories.
+Examples: apps/patina-ui, crates/storage, crates/activity.
 -->
 
-- Frontend owner:
+- GPUI owner:
 - Rust owner:
 - Why this placement fits:
 
@@ -77,14 +77,14 @@ Follow docs/versioning-and-release-policy.md for version, tag, updater, packagin
 Focused tests must match the changed risk area; unrelated tests do not satisfy the intake gate.
 -->
 
-- [ ] `pnpm run check:docs` for documentation-only changes
-- [ ] `pnpm run check:docs:self-test` for documentation-governance or validation-policy changes
-- [ ] `pnpm run check` for repository tooling changes
-- [ ] `pnpm run check:full` when required by engineering-quality.md §5
+- [ ] `cargo xtask docs check` for documentation-only changes
+- [ ] `cargo test -p xtask docs::` for documentation-governance or validation-policy changes
+- [ ] `cargo xtask check tools` for repository tooling changes
+- [ ] `cargo xtask check` when required by engineering-quality.md §5
 - [ ] Named native Windows tests for window, process, desktop integration, or installer changes
 - [ ] Related performance benchmarks for affected read-model, SQLite-query, or navigation behavior (list actual commands below)
-- [ ] `pnpm run release:validate-changelog` for release, changelog, or updater changes
-- [ ] `pnpm run release:check` for formal release preparation
+- [ ] `cargo xtask release validate-changelog` for release, changelog, or updater changes
+- [ ] `cargo xtask release validate-version-files <version>` for formal release preparation
 - [ ] Added or updated focused tests for the changed behavior
 
 Additional validation (for local changes, list the actual related commands as checked items):

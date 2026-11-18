@@ -29,7 +29,7 @@ jobs:
       github.event.workflow_run.event == 'pull_request') ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     permissions:
       contents: read
       actions: read
@@ -44,23 +44,20 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Setup trusted Node runtime
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version-file: .node-version
-          package-manager-cache: false
+      - name: Install repository Rust toolchain
+        run: rustup toolchain install --no-self-update
 
       - name: Recheck fixed candidate with trusted base intake
         id: verify
         env:
           GH_TOKEN: ${{ github.token }}
           VERIFY_WORKFLOW_REF: ${{ github.workflow_ref }}
-        run: node --experimental-strip-types scripts/check-verify-candidate.ts
+        run: cargo xtask ci candidate
 
   tooling:
     name: Repository tooling checks
     needs: candidate
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout verified candidate
@@ -80,31 +77,18 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or $actual -cne $env:VERIFIED_HEAD_SHA) { throw "Verified candidate HEAD mismatch" }
           Write-Output "Executing verified candidate $actual"
 
-      - name: Install pinned pnpm
-        shell: pwsh
-        run: |
-          $packageManager = (Get-Content package.json -Raw | ConvertFrom-Json).packageManager
-          npm install --global $packageManager
-          if ($LASTEXITCODE -ne 0) { throw "pnpm installation failed" }
-
-      - name: Setup Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version-file: .node-version
-          package-manager-cache: false
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Install repository Rust toolchain
+        run: rustup toolchain install --no-self-update
 
       - name: Check repository tooling
-        run: pnpm run check
+        run: cargo xtask check tools
 
       - name: Verify dependency advisories
         shell: pwsh
         run: |
           cargo install cargo-audit --version 0.22.2 --locked
           if ($LASTEXITCODE -ne 0) { throw "Audit tool installation failed" }
-          pnpm run check:dependencies
+          cargo xtask audit
 
   native-desktop:
     name: Native desktop checks (${{ matrix.arch }})
@@ -139,9 +123,8 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or $actual -cne $env:VERIFIED_HEAD_SHA) { throw "Verified candidate HEAD mismatch" }
           Write-Output "Executing verified candidate $actual"
 
-      - name: Setup Rust from desktop/rust-toolchain.toml
+      - name: Setup Rust from rust-toolchain.toml
         shell: pwsh
-        working-directory: desktop
         run: |
           rustup set default-host ${{ matrix.target }}
           if ($LASTEXITCODE -ne 0) { throw "Rust host configuration failed" }
@@ -152,16 +135,9 @@ jobs:
 
       - name: Check headless workspace
         shell: pwsh
-        working-directory: desktop
         run: |
-          cargo fmt --all -- --check
-          if ($LASTEXITCODE -ne 0) { throw "Native format check failed" }
-          cargo test-headless --locked
-          if ($LASTEXITCODE -ne 0) { throw "Native workspace tests failed" }
-          cargo clippy --locked --workspace --exclude patina-recorder --all-targets --features quietpro/test-support,quietpro/native-tests,patina-gpui/native-tests,patina-updater/native-tests -- -D warnings
-          if ($LASTEXITCODE -ne 0) { throw "Native Clippy failed" }
-          cargo clippy --locked -p patina-recorder --all-targets -- -D warnings
-          if ($LASTEXITCODE -ne 0) { throw "Recorder Clippy failed" }
+          cargo xtask check native
+          if ($LASTEXITCODE -ne 0) { throw "Native workspace checks failed" }
 
   native-acceptance:
     name: Native Windows acceptance (${{ matrix.arch }})
@@ -196,9 +172,8 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or $actual -cne $env:VERIFIED_HEAD_SHA) { throw "Verified candidate HEAD mismatch" }
           Write-Output "Executing verified candidate $actual"
 
-      - name: Setup Rust from desktop/rust-toolchain.toml
+      - name: Setup Rust from rust-toolchain.toml
         shell: pwsh
-        working-directory: desktop
         run: |
           rustup set default-host ${{ matrix.target }}
           if ($LASTEXITCODE -ne 0) { throw "Rust host configuration failed" }
@@ -215,14 +190,20 @@ jobs:
 
       - name: Verify update interactions and installer lifecycle
         shell: pwsh
-        working-directory: desktop
         run: |
           $env:PATINA_TEST_MAKENSIS = "${env:ProgramFiles(x86)}/NSIS/makensis.exe"
-          foreach ($case in @("tools::preference_segments_persist_and_support_keyboard", "tools::mini_opens_the_selected_tool_and_keeps_dirty_settings", "tools::in_window_reminder_uses_the_selected_delivery")) {
-            cargo test --locked -p patina-gpui --features native-tests --test pages $case -- --ignored --exact --test-threads=1
+          cargo build --locked -p patina -p patina-ui -p patina-probe --bins
+          if ($LASTEXITCODE -ne 0) { throw "Desktop program build failed" }
+          foreach ($case in @("tools::preference_segments_persist_and_support_keyboard", "tools::mini_opens_the_selected_tool_and_keeps_dirty_settings", "tools::in_window_reminder_uses_the_selected_delivery", "tools::separate_reminder_survives_window_release")) {
+            cargo test --locked -p patina --features native-tests --test pages $case -- --ignored --exact --test-threads=1
             if ($LASTEXITCODE -ne 0) { throw "Native tool interaction failed: $case" }
           }
-          cargo test --locked -p patina-gpui --features native-tests --test updater native_update_download_confirmation_and_navigation -- --ignored --exact --test-threads=1
+          cargo test --locked -p patina --features native-tests --test lifecycle -- --ignored --test-threads=1
+          if ($LASTEXITCODE -ne 0) { throw "Desktop process recovery failed" }
+          cargo test --locked -p patina --features native-tests --test updater native_update_download_confirmation_and_navigation -- --ignored --exact --test-threads=1
           if ($LASTEXITCODE -ne 0) { throw "Native update interaction test failed" }
           cargo test --locked -p patina-updater --features native-tests --test installer native_install_upgrade_shutdown_and_uninstall -- --ignored --exact --test-threads=1
           if ($LASTEXITCODE -ne 0) { throw "Installer lifecycle test failed" }
+          $env:PATINA_TEST_RELEASE_BIN_DIR = (Resolve-Path 'target/debug').Path
+          cargo test --locked -p patina-updater --features native-tests --test installer handoff::published_profile_copy_survives_install_upgrade_and_uninstall -- --ignored --exact --test-threads=1
+          if ($LASTEXITCODE -ne 0) { throw "Historical profile handoff failed" }
