@@ -14,7 +14,7 @@ pub struct CategoryPlan {
 pub fn plan(
     snapshot: &ClassificationSnapshot,
     changes: &[CategoryEdit],
-) -> Result<CategoryPlan, String> {
+) -> Result<CategoryPlan, crate::ActivityError> {
     let original: BTreeMap<_, _> = snapshot
         .available_categories()
         .into_iter()
@@ -33,7 +33,9 @@ pub fn plan(
             || original.get(&change.id).map(|c| &c.label) != change.previous.as_ref()
             || original.get(&change.id).map(|c| &c.color) != change.previous_color.as_ref()
         {
-            return Err("category changed since loading".into());
+            return Err(crate::ActivityError::Conflict(
+                "category changed since loading".into(),
+            ));
         }
         if change.previous.is_none() && !change.id.starts_with("custom:category_") {
             return Err("invalid new category".into());

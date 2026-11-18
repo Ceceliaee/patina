@@ -1,6 +1,6 @@
 #[test]
 fn web_sync_guide_data_is_localized_and_preserves_actions() {
-    use patina_recorder::{localized_data as data, text, Locale};
+    use patina_activity::{localized_data as data, text, Locale};
     for (locale, title) in [
         (Locale::ZhCn, "准备连接信息"),
         (Locale::EnUs, "Prepare connection details"),

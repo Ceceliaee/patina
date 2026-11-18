@@ -17,7 +17,7 @@ pub fn seed_profile(db: &Path, show_icon: bool) -> Result<(), Error> {
         .enable_all()
         .build()?;
     rt.block_on(async {
-        let pool = patina_recorder::open_database(db).await?;
+        let pool = patina_activity::open_database(db).await?;
         let mut c = pool.acquire().await?;
         for (key,value) in [
             ("language","en-US"), ("tracking_paused","1"), ("start_minimized","1"), ("launch_at_login","0"),

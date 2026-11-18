@@ -2,12 +2,14 @@ use super::*;
 use crate::domain::web_links::{registrable_domain, SETTING_PREFIX};
 use sqlx::{Sqlite, Transaction};
 
-pub(super) async fn read(tx: &mut Transaction<'_, Sqlite>) -> Result<WebDraft, String> {
+pub(super) async fn load_draft_in_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+) -> Result<WebsiteRuleDraft, String> {
     let snapshot = crate::data::repositories::web_links::snapshot_in_tx(tx).await?;
     let stored: Vec<(String, String)> = sqlx::query_as(
         "SELECT key,value FROM settings WHERE key GLOB '__web_domain_override::*' OR key GLOB '__web_site::*'",
     ).fetch_all(&mut **tx).await.map_err(|e| e.to_string())?;
-    let mut draft = WebDraft {
+    let mut draft = WebsiteRuleDraft {
         original: stored.into_iter().map(|(k, v)| (k, Some(v))).collect(),
         domains: snapshot
             .domains
@@ -17,7 +19,7 @@ pub(super) async fn read(tx: &mut Transaction<'_, Sqlite>) -> Result<WebDraft, S
             .collect(),
         totals: snapshot.totals,
         favicons: snapshot.favicons,
-        ..WebDraft::default()
+        ..WebsiteRuleDraft::default()
     };
     for domain in &draft.domains {
         draft
@@ -34,16 +36,16 @@ pub(super) async fn read(tx: &mut Transaction<'_, Sqlite>) -> Result<WebDraft, S
     Ok(draft)
 }
 
-pub(super) async fn changes(
+pub(super) async fn plan_mutations_in_tx(
     tx: &mut Transaction<'_, Sqlite>,
-    draft: Option<&WebDraft>,
+    draft: Option<&WebsiteRuleDraft>,
     labels: &BTreeMap<String, String>,
     categories: &[CategoryEdit],
-) -> Result<Vec<ClassificationSettingMutation>, String> {
+) -> Result<Vec<ClassificationSettingMutation>, crate::ActivityError> {
     let Some(draft) = draft.filter(|d| d.dirty()) else {
         return Ok(vec![]);
     };
-    let current = read(tx).await?;
+    let current = load_draft_in_tx(tx).await?;
     let mut mutations = Vec::new();
     for (key, value) in draft.changed() {
         let mut value = value.clone();
@@ -58,7 +60,9 @@ pub(super) async fn changes(
         if !current.original.contains_key(key)
             || current.original.get(key) != draft.original.get(key)
         {
-            return Err("website changed since loading".into());
+            return Err(crate::ActivityError::Conflict(
+                "website changed since loading".into(),
+            ));
         }
         // A newly observed member must not silently escape a group-wide policy edit.
         let domain = key
@@ -69,7 +73,9 @@ pub(super) async fn changes(
         if let Some(root) = &root {
             let group_key = format!("{SETTING_PREFIX}{root}");
             if current.original.get(&group_key) != draft.original.get(&group_key) {
-                return Err("website grouping changed since loading".into());
+                return Err(crate::ActivityError::Conflict(
+                    "website grouping changed since loading".into(),
+                ));
             }
         }
         let same_group = |candidate: &&String| {
@@ -83,7 +89,9 @@ pub(super) async fn changes(
             .filter(same_group)
             .ne(draft.domains.iter().filter(same_group))
         {
-            return Err("website members changed since loading".into());
+            return Err(crate::ActivityError::Conflict(
+                "website members changed since loading".into(),
+            ));
         }
         if value
             .get("category")

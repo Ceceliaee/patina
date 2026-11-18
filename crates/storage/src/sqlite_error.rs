@@ -9,6 +9,7 @@ pub enum SqliteErrorCode {
     PoolClosed,
     PoolTimedOut,
     InvalidInput,
+    Conflict,
     OperationFailed,
 }
 
@@ -26,6 +27,14 @@ impl SqliteOperationError {
             code,
             context,
             detail: error.to_string(),
+        }
+    }
+
+    pub fn conflict(context: &'static str, detail: impl Into<String>) -> Self {
+        Self {
+            code: SqliteErrorCode::Conflict,
+            context,
+            detail: detail.into(),
         }
     }
 
@@ -67,6 +76,7 @@ impl SqliteErrorCode {
             Self::Locked => "SQLITE_LOCKED",
             Self::PoolClosed => "SQLITE_POOL_CLOSED",
             Self::PoolTimedOut => "SQLITE_POOL_TIMED_OUT",
+            Self::Conflict => "CONFLICT",
             Self::InvalidInput => "SQLITE_INVALID_INPUT",
             Self::OperationFailed => "SQLITE_OPERATION_FAILED",
         }

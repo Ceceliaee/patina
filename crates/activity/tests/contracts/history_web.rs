@@ -42,8 +42,16 @@ fn websites_preserve_sources_grouping_icons_and_privacy() -> Result<(), Error> {
             .bind(start+65*60000).bind(start+70*60000).bind(start+70*60000).execute(&mut c).await?;
         Ok::<_, Error>(())
     })?;
-    let recorder = patina_recorder::Recorder::start(&db, || {})?;
-    let day = rt.block_on(recorder.history_source(start, None, true, true))?;
+    let queries =
+        patina_activity::ActivityQueries::new(rt.block_on(patina_activity::open_database(&db))?);
+    let day = rt.block_on(queries.history_source(
+        start,
+        None,
+        true,
+        true,
+        patina_activity::Locale::EnUs,
+        None,
+    ))?;
     let group = r#"{"kind":"group","domain":"example.com"}"#;
     assert_eq!(day.apps.iter().map(|a| a.2).sum::<i64>(), 27 * 60000);
     assert_eq!(day.hours.iter().sum::<i64>(), 27 * 60000);
@@ -59,8 +67,11 @@ fn websites_preserve_sources_grouping_icons_and_privacy() -> Result<(), Error> {
         .any(|a| a.0.contains("hidden") || a.0.ends_with(".exe")));
     assert_eq!(day.favicons[group], icon);
     assert_eq!(day.app_source_color(group, Some(0xabcdef)), 0x123456);
-    let trends =
-        rt.block_on(recorder.trends(Some((start, start)), patina_recorder::SeriesKind::Web))?;
+    let trends = rt.block_on(queries.trends(
+        Some((start, start)),
+        patina_activity::SeriesKind::Web,
+        patina_activity::Locale::EnUs,
+    ))?;
     assert_eq!(trends.earliest, Some(start));
     let series = trends.series.iter().find(|s| s.key == group).unwrap();
     assert_eq!(series.name, "Example");
@@ -77,7 +88,14 @@ fn websites_preserve_sources_grouping_icons_and_privacy() -> Result<(), Error> {
         day.app_source_color("activity:anonymous", Some(0xabcdef)),
         0x8f98a8
     );
-    let detail = rt.block_on(recorder.history_source(start, Some(group.into()), true, true))?;
+    let detail = rt.block_on(queries.history_source(
+        start,
+        Some(group.into()),
+        true,
+        true,
+        patina_activity::Locale::EnUs,
+        None,
+    ))?;
     assert_eq!(
         detail.records.iter().map(|r| r.end - r.start).sum::<i64>(),
         17 * 60000
@@ -98,6 +116,5 @@ fn websites_preserve_sources_grouping_icons_and_privacy() -> Result<(), Error> {
         .records
         .iter()
         .any(|r| r.group_duration == 15 * 60000));
-    recorder.shutdown()?;
     Ok(())
 }

@@ -78,7 +78,7 @@ async fn web_impact(
     target: &Target,
     key: &str,
     group: bool,
-) -> Result<Impact, String> {
+) -> Result<Impact, crate::ActivityError> {
     if key.is_empty()
         || key.starts_with('{')
         || key.trim() != key
@@ -88,7 +88,9 @@ async fn web_impact(
     }
     let rules = web_links::load_in_tx(tx).await?;
     if rules.values().any(|rule| rule.version != 2) {
-        return Err("reload website rules before deleting".into());
+        return Err(crate::ActivityError::Conflict(
+            "reload website rules before deleting".into(),
+        ));
     }
     let owner = group_key(key);
     let mut members = BTreeSet::new();
@@ -109,7 +111,9 @@ async fn web_impact(
         );
     } else {
         if resolve_owner(key, &rules) != key {
-            return Err("website now belongs to a group; refresh before deleting".into());
+            return Err(crate::ActivityError::Conflict(
+                "website now belongs to a group; refresh before deleting".into(),
+            ));
         }
         members.insert(key.to_owned());
         if let Some(root) = registrable_domain(key)
@@ -138,9 +142,9 @@ async fn web_impact(
     })
 }
 
-async fn impact(tx: &mut Tx<'_>, target: &Target) -> Result<Impact, String> {
+async fn impact(tx: &mut Tx<'_>, target: &Target) -> Result<Impact, crate::ActivityError> {
     match target {
-        Target::App(key) => app_impact(tx, key).await,
+        Target::App(key) => Ok(app_impact(tx, key).await?),
         Target::Web(key) => web_impact(tx, target, key, false).await,
         Target::Group(key) => web_impact(tx, target, key, true).await,
     }
@@ -239,7 +243,7 @@ pub async fn run(
     pool: &SqlitePool,
     target: &Target,
     confirmed: Option<Impact>,
-) -> Result<Impact, String> {
+) -> Result<Impact, crate::ActivityError> {
     let _guard = if confirmed.is_some() && matches!(target, Target::App(_)) {
         Some(acquire_icon_cache_maintenance(pool).await)
     } else {
@@ -249,7 +253,9 @@ pub async fn run(
     let plan = impact(&mut tx, target).await?;
     if let Some(expected) = confirmed {
         if expected != plan {
-            return Err("deletion scope changed; preview again".into());
+            return Err(crate::ActivityError::Conflict(
+                "deletion scope changed; preview again".into(),
+            ));
         }
         match target {
             Target::App(_) => {

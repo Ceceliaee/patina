@@ -23,9 +23,10 @@ fn website_rules_share_atomic_drafts_and_preserve_grouping() -> Result<(), Error
         }
         Ok::<_, Error>(())
     })?;
-    let recorder = patina_recorder::Recorder::start(&db, || {})?;
+    let classification =
+        patina_activity::Classification::new(rt.block_on(patina_activity::open_database(&db))?);
     rt.block_on(async {
-        let rules = recorder.rules().await?;
+        let rules = classification.load_classification_rules().await?;
         assert!(rules.web_enabled);
         let mut restored = rules.websites.clone();
         restored.set_member("a.example.com", false, false);
@@ -74,12 +75,12 @@ fn website_rules_share_atomic_drafts_and_preserve_grouping() -> Result<(), Error
         group.category = "missing-category".into();
         let mut invalid = rules.websites.clone();
         invalid.assign(&group);
-        assert!(recorder
-            .save_rules(vec![app.clone()], Some(invalid), vec![], vec![])
+        assert!(classification
+            .save_classification_rules(vec![app.clone()], Some(invalid), vec![], vec![])
             .await
             .is_err());
-        assert!(recorder
-            .rules()
+        assert!(classification
+            .load_classification_rules()
             .await?
             .apps
             .iter()
@@ -92,10 +93,10 @@ fn website_rules_share_atomic_drafts_and_preserve_grouping() -> Result<(), Error
         let mut draft = rules.websites.clone();
         draft.assign(&group);
         draft.assign(&solo);
-        recorder
-            .save_rules(vec![app], Some(draft.clone()), vec![], vec![])
+        classification
+            .save_classification_rules(vec![app], Some(draft.clone()), vec![], vec![])
             .await?;
-        let saved = recorder.rules().await?;
+        let saved = classification.load_classification_rules().await?;
         let group_saved = saved
             .websites
             .cards()
@@ -106,8 +107,8 @@ fn website_rules_share_atomic_drafts_and_preserve_grouping() -> Result<(), Error
         assert_eq!(group_saved.color, "#123456");
         assert!(!group_saved.track);
         assert_eq!(group_saved.category, "office");
-        assert!(recorder
-            .save_rules(vec![], Some(draft), vec![], vec![])
+        assert!(classification
+            .save_classification_rules(vec![], Some(draft), vec![], vec![])
             .await
             .is_err());
         let mut c =
@@ -121,20 +122,19 @@ fn website_rules_share_atomic_drafts_and_preserve_grouping() -> Result<(), Error
         assert_eq!(raw["knownDomain"], true);
         assert_eq!(raw["linkedApps"][0], "studio.exe");
         assert_eq!(raw["captureTitle"], false);
-        let preview = recorder
+        let preview = classification
             .delete_website(group_saved.identity.clone(), None)
             .await?;
         assert_eq!(preview.members.len(), 2);
-        recorder
+        classification
             .delete_website(group_saved.identity.clone(), Some(preview))
             .await?;
-        let remaining = recorder.rules().await?;
+        let remaining = classification.load_classification_rules().await?;
         assert_eq!(remaining.websites.cards().len(), 1);
         assert_eq!(remaining.websites.cards()[0].domain, "solo.example.com");
         assert_eq!(remaining.apps.len(), saved.apps.len());
         Ok::<_, Error>(())
     })?;
-    recorder.shutdown()?;
     Ok(())
 }
 
@@ -164,9 +164,10 @@ fn member_drafts_regroup_icons_and_app_associations_are_atomic() -> Result<(), E
         }
         Ok::<_, Error>(())
     })?;
-    let recorder = patina_recorder::Recorder::start(&db, || {})?;
+    let classification =
+        patina_activity::Classification::new(rt.block_on(patina_activity::open_database(&db))?);
     rt.block_on(async {
-        let initial = recorder.rules().await?;
+        let initial = classification.load_classification_rules().await?;
         assert!(!initial.titles_enabled);
         let mut draft = initial.websites.clone();
         let card = draft.cards().remove(0);
@@ -192,11 +193,11 @@ fn member_drafts_regroup_icons_and_app_associations_are_atomic() -> Result<(), E
         assert_eq!(independent.color, "#654321");
         assert!(!independent.titles);
         assert_eq!(initial.websites.cards().len(), 1); // Discarding a draft preserves the loaded catalog.
-        recorder
-            .save_rules(
+        classification
+            .save_classification_rules(
                 vec![],
                 Some(draft.clone()),
-                vec![patina_recorder::AppLinkEdit {
+                vec![patina_activity::AppLinkEdit {
                     member: "writer.exe".into(),
                     parent: Some("studio.exe".into()),
                     original: None,
@@ -204,7 +205,7 @@ fn member_drafts_regroup_icons_and_app_associations_are_atomic() -> Result<(), E
                 vec![],
             )
             .await?;
-        let saved = recorder.rules().await?;
+        let saved = classification.load_classification_rules().await?;
         assert_eq!(
             saved.app_links.get("writer.exe").map(String::as_str),
             Some("studio.exe")
@@ -225,11 +226,11 @@ fn member_drafts_regroup_icons_and_app_associations_are_atomic() -> Result<(), E
         assert_eq!(group.name, "Group");
         assert!(group.titles_mixed && group.tracking_mixed);
         // A cycle must roll back both the regroup and member policy change.
-        assert!(recorder
-            .save_rules(
+        assert!(classification
+            .save_classification_rules(
                 vec![writer.clone()],
                 Some(merged.clone()),
-                vec![patina_recorder::AppLinkEdit {
+                vec![patina_activity::AppLinkEdit {
                     member: "studio.exe".into(),
                     parent: Some("writer.exe".into()),
                     original: None,
@@ -238,10 +239,18 @@ fn member_drafts_regroup_icons_and_app_associations_are_atomic() -> Result<(), E
             )
             .await
             .is_err());
-        assert_eq!(recorder.rules().await?.websites.cards().len(), 2);
+        assert_eq!(
+            classification
+                .load_classification_rules()
+                .await?
+                .websites
+                .cards()
+                .len(),
+            2
+        );
         assert!(
-            recorder
-                .rules()
+            classification
+                .load_classification_rules()
                 .await?
                 .apps
                 .iter()
@@ -249,12 +258,12 @@ fn member_drafts_regroup_icons_and_app_associations_are_atomic() -> Result<(), E
                 .unwrap()
                 .track
         );
-        recorder
-            .save_rules(vec![writer], Some(merged), vec![], vec![])
+        classification
+            .save_classification_rules(vec![writer], Some(merged), vec![], vec![])
             .await?;
-        let joined = recorder.rules().await?;
-        assert!(recorder
-            .save_rules(vec![], Some(stale_member), vec![], vec![])
+        let joined = classification.load_classification_rules().await?;
+        assert!(classification
+            .save_classification_rules(vec![], Some(stale_member), vec![], vec![])
             .await
             .is_err());
         assert_eq!(joined.websites.cards().len(), 1);
@@ -267,15 +276,15 @@ fn member_drafts_regroup_icons_and_app_associations_are_atomic() -> Result<(), E
                 .titles
         );
         // Stale grouping cannot restore the old member rules.
-        assert!(recorder
-            .save_rules(vec![], Some(draft), vec![], vec![])
+        assert!(classification
+            .save_classification_rules(vec![], Some(draft), vec![], vec![])
             .await
             .is_err());
-        recorder
-            .save_rules(
+        classification
+            .save_classification_rules(
                 vec![],
                 None,
-                vec![patina_recorder::AppLinkEdit {
+                vec![patina_activity::AppLinkEdit {
                     member: "writer.exe".into(),
                     parent: None,
                     original: Some("studio.exe".into()),
@@ -283,7 +292,7 @@ fn member_drafts_regroup_icons_and_app_associations_are_atomic() -> Result<(), E
                 vec![],
             )
             .await?;
-        let detached = recorder.rules().await?;
+        let detached = classification.load_classification_rules().await?;
         assert!(detached.app_links.is_empty());
         assert_eq!(detached.apps.len(), initial.apps.len());
         assert!(
@@ -301,12 +310,12 @@ fn member_drafts_regroup_icons_and_app_associations_are_atomic() -> Result<(), E
             .iter()
             .find(|(id, _)| id == "office")
             .unwrap();
-        recorder
-            .save_rules(
+        classification
+            .save_classification_rules(
                 vec![],
                 Some(split),
                 vec![],
-                vec![patina_recorder::CategoryEdit {
+                vec![patina_activity::CategoryEdit {
                     id: "office".into(),
                     previous: Some(office.1.clone()),
                     previous_color: detached.category_colors.get("office").cloned(),
@@ -316,7 +325,7 @@ fn member_drafts_regroup_icons_and_app_associations_are_atomic() -> Result<(), E
                 }],
             )
             .await?;
-        let recategorized = recorder.rules().await?;
+        let recategorized = classification.load_classification_rules().await?;
         assert_eq!(recategorized.websites.cards().len(), 2);
         assert_eq!(
             recategorized
@@ -331,6 +340,5 @@ fn member_drafts_regroup_icons_and_app_associations_are_atomic() -> Result<(), E
         assert_eq!(recategorized.apps.len(), initial.apps.len());
         Ok::<_, Error>(())
     })?;
-    recorder.shutdown()?;
     Ok(())
 }

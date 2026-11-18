@@ -55,7 +55,8 @@ pub async fn apply_change(
         .await
         .map_err(|e| SqliteOperationError::from_sqlx("read application association", e))?;
     if current != change.previous && current != change.parent {
-        return Err(invalid(
+        return Err(SqliteOperationError::conflict(
+            "save application association",
             "application association changed; reload before saving",
         ));
     }
