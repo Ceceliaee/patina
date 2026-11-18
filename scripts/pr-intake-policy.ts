@@ -33,120 +33,121 @@ export const FEATURE_STYLE_OWNER_PREFIXES = [
 export const RISK_AREAS = [
   {
     id: "window-authority",
-    label: "Tauri window authority and application permissions",
-    paths: [
-      /^src-tauri\/build\.rs$/,
-      /^src-tauri\/capabilities\/.*\.json$/,
-      /^src-tauri\/permissions\/.*\.toml$/,
-    ],
-    tests: [
-      /^tests\/tauriRuntimeSmoke\.test\.ts$/i,
-    ],
-    testExamples: "tests/tauriRuntimeSmoke.test.ts with an explicit main/mini denial matrix",
+    label: "native window process and command dispatch",
+    paths: [/^desktop\/patina\/src\/(?:window_process|windows_host|tray)\.rs$/],
+    tests: [/^desktop\/patina\/tests\/(?:today\.rs|pages\/resident\.rs)$/],
+    testExamples: "desktop/patina/tests/pages/resident.rs or desktop/patina/tests/today.rs",
   },
   {
     id: "tracking",
     label: "tracking lifecycle",
-    paths: [/^src-tauri\/src\/engine\/tracking\//],
+    paths: [/^desktop\/recorder\/src\/engine\/tracking\//],
     tests: [
       /^tests\/tracking/i,
-      /^src-tauri\/src\/engine\/tracking\/.*test/i,
-      /^src-tauri\/src\/engine\/tracking\/.*tests\.rs$/i,
+      /^desktop\/recorder\/src\/engine\/tracking\/.*test/i,
+      /^desktop\/recorder\/src\/engine\/tracking\/.*tests\.rs$/i,
     ],
-    testExamples: "tests/tracking*.test.ts or src-tauri tracking tests",
+    testExamples: "tests/tracking*.test.ts or recorder tracking tests",
   },
   {
     id: "data",
     label: "SQLite data boundary",
-    paths: [/^src-tauri\/src\/data\//],
+    paths: [/^desktop\/recorder\/src\/data\/(?!export\/|backup\/|remote_backup\/)/],
     tests: [
+      /^desktop\/recorder\/tests\/contracts\/.*\.rs$/,
       /^tests\/persistence/i,
       /^tests\/.*sqlite/i,
-      /^src-tauri\/src\/data\/.*test/i,
-      /^src-tauri\/src\/data\/.*tests\.rs$/i,
+      /^desktop\/recorder\/src\/data\/.*test/i,
+      /^desktop\/recorder\/src\/data\/.*tests\.rs$/i,
     ],
-    testExamples: "tests/persistence*.test.ts, tests/*sqlite*.test.ts, or src-tauri data tests",
+    testExamples: "tests/persistence*.test.ts, tests/*sqlite*.test.ts, or recorder data tests",
   },
   {
     id: "backup",
     label: "backup and restore",
-    paths: [/^src-tauri\/src\/commands\/backup\.rs$/],
+    paths: [/^desktop\/recorder\/src\/data\/(?:backup\/|remote_backup\/)/],
     tests: [
+      /^desktop\/recorder\/tests\/contracts\/storage\.rs$/,
       /^tests\/.*backup/i,
       /^tests\/settings/i,
-      /^src-tauri\/src\/.*backup.*test/i,
-      /^src-tauri\/src\/.*backup.*tests\.rs$/i,
+      /^desktop\/recorder\/src\/.*backup.*test/i,
+      /^desktop\/recorder\/src\/.*backup.*tests\.rs$/i,
     ],
-    testExamples: "tests/*backup*.test.ts, tests/settings*.test.ts, or src-tauri backup tests",
+    testExamples: "tests/*backup*.test.ts, tests/settings*.test.ts, or recorder backup tests",
   },
   {
     id: "export",
     label: "data export",
     paths: [
-      /^src-tauri\/src\/commands\/export\.rs$/,
-      /^src-tauri\/src\/engine\/export\//,
+      /^desktop\/patina\/src\/settings\/storage\/export\.rs$/,
+      /^desktop\/recorder\/src\/data\/export\//,
       /^src\/features\/settings\/.*export/i,
     ],
     tests: [
+      /^desktop\/recorder\/tests\/contracts\/storage\.rs$/,
       /^tests\/export/i,
       /^tests\/.*export/i,
-      /^src-tauri\/src\/.*export.*test/i,
-      /^src-tauri\/src\/.*export.*tests\.rs$/i,
+      /^desktop\/recorder\/src\/.*export.*test/i,
+      /^desktop\/recorder\/src\/.*export.*tests\.rs$/i,
     ],
-    testExamples: "tests/export*.test.ts or src-tauri export tests",
+    testExamples: "desktop/recorder/tests/contracts/storage.rs or export module tests",
   },
   {
     id: "tools-alerts",
     label: "tools alert behavior",
     paths: [
+      /^desktop\/patina\/src\/(?:tool_notice|tools)\.rs$/,
       /^src\/features\/tools\/(hooks\/useToolPresentation|services\/toolPresentationStore)\.ts$/,
       /^src\/platform\/runtime\/toolNotificationGateway\.ts$/,
       /^src\/features\/tools\/components\/(?:NotificationToastStack|ToolAlertDialog)\.tsx$/,
     ],
     tests: [
+      /^desktop\/patina\/tests\/pages\/tools\.rs$/,
       /^tests\/.*tools?.*\.test\.(ts|tsx)$/i,
       /^src\/features\/tools\/.*\.test\.(ts|tsx)$/i,
     ],
-    testExamples: "tests/*tools*.test.ts or owner-local tools alert tests",
+    testExamples: "desktop/patina/tests/pages/tools.rs",
   },
   {
     id: "data-read-model",
     label: "data read model and trend aggregation",
     paths: [
+      /^desktop\/recorder\/src\/data\/activity_read_model\//,
+      /^desktop\/patina\/src\/data_page(?:\/|\.rs)/,
       /^src\/features\/data\/services\/data.*ReadModel\.ts$/i,
       /^src\/features\/data\/services\/data(?:BootstrapSnapshot|FirstScreenPrewarm)\.ts$/i,
       /^src\/features\/data\/components\/Data(?:AppTrend|Trend|WebTrend).*\.tsx$/i,
     ],
     tests: [
+      /^desktop\/recorder\/tests\/contracts\.rs$/,
+      /^desktop\/recorder\/src\/data\/activity_read_model\/.*tests\.rs$/,
+      /^desktop\/patina\/tests\/pages\/(?:data_range|trend_chart)\.rs$/,
       /^tests\/data.*\.test\.ts$/i,
       /^tests\/.*data.*ReadModel.*\.test\.ts$/i,
       /^src\/features\/data\/.*\.test\.(ts|tsx)$/i,
     ],
-    testExamples: "tests/data*.test.ts or owner-local data read-model tests",
+    testExamples: "Recorder read-model tests or native data page tests",
   },
   {
-    id: "screenshot-capture",
-    label: "screen capture and screenshot file lifecycle",
-    paths: [
-      /^src-tauri\/src\/commands\/screenshots\.rs$/,
-      /^src-tauri\/src\/engine\/screenshots\//,
-    ],
+    id: "native-probe",
+    label: "native probe process lifecycle",
+    paths: [/^desktop\/recorder\/src\/platform\/windows\/native_probe(?:\.rs|\/)/],
     tests: [
-      /^src-tauri\/src\/commands\/screenshots.*test.*\.rs$/i,
-      /^src-tauri\/src\/commands\/screenshots.*tests\.rs$/i,
-      /^src-tauri\/src\/engine\/screenshots\/.*test.*\.rs$/i,
-      /^src-tauri\/src\/engine\/screenshots\/.*tests\.rs$/i,
+      /^desktop\/patina\/tests\/native_probe\.rs$/,
+      /^desktop\/recorder\/src\/platform\/windows\/native_probe\/.*tests\.rs$/,
     ],
-    testExamples: "src-tauri screenshot command/engine tests covering settings, retention, capture, and file path safety",
+    testExamples: "desktop/patina/tests/native_probe.rs or a registered probe regression test",
   },
   {
     id: "settings-persistence",
     label: "settings persistence",
     paths: [
+      /^desktop\/patina\/src\/settings(?:\/|\.rs)/,
       /^src\/features\/settings\//,
       /^src\/platform\/persistence\//,
     ],
     tests: [
+      /^desktop\/patina\/tests\/pages\/(?:storage|services|schemes)\.rs$/,
       /^tests\/settings/i,
       /^tests\/persistence/i,
       /^tests\/.*settings/i,
@@ -188,7 +189,7 @@ const REVIEW_MEDIA_EXTENSION = /\.(?:png|apng|jpe?g|gif|webp|avif|bmp|svg|tiff?|
 const REVIEW_MEDIA_PATH_HINT = /(?:^|[\/_.-])(?:review|evidence|before|after|demo|screenshot|screen[-_]?recording)(?=$|[\/_.-])/i;
 
 function isAllowedProductMediaPath(path: string) {
-  return /^src\/features\/[^/]+\/assets\//.test(path) || /^src-tauri\/icons\//.test(path);
+  return /^src\/features\/[^/]+\/assets\//.test(path) || /^desktop\/patina\/assets\/icons\//.test(path);
 }
 
 export function isRepositoryReviewMediaAddition(file: ChangedFile) {
@@ -223,6 +224,8 @@ function hasExternalScreenshot(section: string) {
 
 export function isUiImplementationPath(path: string) {
   return (
+    /^desktop\/patina\/src\/(?:today|classification|data_page|history|about|settings|tools|tool_notice|mini|main_window|page_controls)(?:[/.]|$)/.test(path) ||
+    /^desktop\/quietpro\/src\/(?:controls|layout|theme)(?:[/.]|$)/.test(path) ||
     /^src\/features\/.*\.(tsx|css)$/.test(path) ||
     /^src\/app\/.*\.(tsx|css)$/.test(path) ||
     /^src\/shared\/.*\.(tsx|css)$/.test(path) ||

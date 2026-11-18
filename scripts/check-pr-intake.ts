@@ -113,10 +113,10 @@ function isGeneratedOrLockPath(path: string) {
   return (
     path === "pnpm-lock.yaml" ||
     path === "Cargo.lock" ||
-    path === "src-tauri/Cargo.lock" ||
+    path === "desktop/Cargo.lock" ||
     path === "skills-lock.json" ||
     path.startsWith("dist/") ||
-    path.startsWith("src-tauri/target/") ||
+    path.startsWith("desktop/target/") ||
     /\.(png|jpg|jpeg|gif|webp|ico|icns|bmp|mp4|mov|zip|gz|7z|pdf)$/i.test(path)
   );
 }
@@ -274,7 +274,7 @@ function collectValidationGraph(scripts: Record<string, string>) {
     }
   };
 
-  ["check", "check:full", "check:frontend", "test:tauri-runtime-smoke"].forEach(visit);
+  ["check", "check:full", "check:rust"].forEach(visit);
   return {
     reachableScripts: reachable,
     registeredTypeScriptTests: registered,
@@ -296,7 +296,7 @@ function loadRegisteredRustTests(head: string | undefined, changedFiles: Changed
       continue;
     }
 
-    if (/^src-tauri\/tests\/.*\.rs$/i.test(file.path)) {
+    if (/^desktop\/[^/]+\/tests\/[^/]+\.rs$/i.test(file.path)) {
       registered.push(file.path);
       continue;
     }
@@ -308,10 +308,10 @@ function loadRegisteredRustTests(head: string | undefined, changedFiles: Changed
         "grep",
         "-l",
         "-E",
-        `(?:mod[[:space:]]+${moduleName}[[:space:]]*;|${fileName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
+        `(mod[[:space:]]+${moduleName}[[:space:]]*;|${fileName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
         head,
         "--",
-        "src-tauri/src",
+        file.path.split("/").slice(0, 3).join("/"),
       ]);
       if (references.trim()) {
         registered.push(file.path);
@@ -882,7 +882,7 @@ function runSelfTest() {
       additions: 1_200,
       deletions: 0,
     }, {
-      path: "src-tauri/src/engine/export/csv_exporter.rs",
+      path: "desktop/recorder/src/data/export/csv_exporter.rs",
       status: "M",
       additions: 20,
       deletions: 0,

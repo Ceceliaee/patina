@@ -93,7 +93,7 @@ function testRelatedValidationCanReplaceLocalAggregate() {
     "pnpm run test:ui-browser-smoke --group tools",
     "node --experimental-strip-types tests/settingsPageState.test.ts",
     "pnpm run test:rust:focused --filter settings",
-    "cargo test --manifest-path src-tauri/Cargo.toml settings",
+    "cargo test --manifest-path desktop/recorder/Cargo.toml settings",
     "pnpm run check:full",
   ]) {
     assert.deepEqual(ruleNames({
@@ -380,7 +380,7 @@ function testRiskPathRequiresTests() {
     pullRequestBody: VALID_BODY,
     requirePullRequestBody: true,
     changedFiles: [changedFile({
-      path: "src-tauri/src/engine/export/csv_exporter.rs",
+      path: "desktop/recorder/src/data/export/csv_exporter.rs",
       additions: 20,
       deletions: 0,
     })],
@@ -391,7 +391,7 @@ function testRiskPathRequiresTests() {
     requirePullRequestBody: true,
     changedFiles: [
       changedFile({
-        path: "src-tauri/src/engine/export/csv_exporter.rs",
+        path: "desktop/recorder/src/data/export/csv_exporter.rs",
         additions: 20,
         deletions: 0,
       }),
@@ -409,7 +409,7 @@ function testRiskPathRequiresTests() {
     requirePullRequestBody: true,
     changedFiles: [
       changedFile({
-        path: "src-tauri/src/engine/export/csv_exporter.rs",
+        path: "desktop/recorder/src/data/export/csv_exporter.rs",
         additions: 20,
         deletions: 0,
       }),
@@ -429,7 +429,7 @@ function testUnregisteredTypeScriptTestDoesNotSatisfyRiskCoverage() {
     requirePullRequestBody: true,
     changedFiles: [
       changedFile({
-        path: "src-tauri/src/engine/export/csv_exporter.rs",
+        path: "desktop/recorder/src/data/export/csv_exporter.rs",
         additions: 20,
         deletions: 0,
       }),
@@ -459,7 +459,7 @@ function testFocusedTestMustAddPositiveCoverage() {
     requirePullRequestBody: true,
     changedFiles: [
       changedFile({
-        path: "src-tauri/src/engine/export/csv_exporter.rs",
+        path: "desktop/recorder/src/data/export/csv_exporter.rs",
         additions: 20,
         deletions: 0,
       }),
@@ -479,7 +479,7 @@ function testToolsAlertRiskRequiresToolsTests() {
     requirePullRequestBody: true,
     changedFiles: [
       changedFile({
-        path: "src/features/tools/hooks/useToolPresentation.ts",
+        path: "desktop/patina/src/tool_notice.rs",
         additions: 20,
         deletions: 5,
       }),
@@ -496,7 +496,7 @@ function testToolsAlertRiskRequiresToolsTests() {
     requirePullRequestBody: true,
     changedFiles: [
       changedFile({
-        path: "src/features/tools/hooks/useToolPresentation.ts",
+        path: "desktop/patina/src/tool_notice.rs",
         additions: 20,
         deletions: 5,
       }),
@@ -516,7 +516,7 @@ function testDataReadModelRiskRequiresDataTests() {
     requirePullRequestBody: true,
     changedFiles: [
       changedFile({
-        path: "src/features/data/services/dataWebTrendReadModel.ts",
+        path: "desktop/patina/src/data_page.rs",
         status: "A",
         additions: 120,
         deletions: 0,
@@ -534,7 +534,7 @@ function testDataReadModelRiskRequiresDataTests() {
     requirePullRequestBody: true,
     changedFiles: [
       changedFile({
-        path: "src/features/data/services/dataWebTrendReadModel.ts",
+        path: "desktop/patina/src/data_page.rs",
         status: "A",
         additions: 120,
         deletions: 0,
@@ -554,7 +554,7 @@ function testScreenshotEngineRiskRequiresRustScreenshotTests() {
     requirePullRequestBody: true,
     changedFiles: [
       changedFile({
-        path: "src-tauri/src/engine/screenshots/capture.rs",
+        path: "desktop/recorder/src/platform/windows/native_probe/process.rs",
         status: "A",
         additions: 180,
         deletions: 0,
@@ -573,13 +573,13 @@ function testScreenshotEngineRiskRequiresRustScreenshotTests() {
     requirePullRequestBody: true,
     changedFiles: [
       changedFile({
-        path: "src-tauri/src/engine/screenshots/capture.rs",
+        path: "desktop/recorder/src/platform/windows/native_probe/process.rs",
         status: "A",
         additions: 180,
         deletions: 0,
       }),
       changedFile({
-        path: "src-tauri/src/engine/screenshots/capture_tests.rs",
+        path: "desktop/recorder/src/platform/windows/native_probe/process_tests.rs",
         status: "A",
         additions: 80,
         deletions: 0,
@@ -590,13 +590,13 @@ function testScreenshotEngineRiskRequiresRustScreenshotTests() {
 
 function testUnregisteredRustTestModuleDoesNotSatisfyRiskCoverage() {
   const source = changedFile({
-    path: "src-tauri/src/engine/screenshots/capture.rs",
+    path: "desktop/recorder/src/platform/windows/native_probe/process.rs",
     status: "M",
     additions: 20,
     deletions: 0,
   });
   const testModule = changedFile({
-    path: "src-tauri/src/engine/screenshots/capture_tests.rs",
+    path: "desktop/recorder/src/platform/windows/native_probe/process_tests.rs",
     status: "A",
     additions: 40,
     deletions: 0,
@@ -619,7 +619,7 @@ function testUnregisteredRustTestModuleDoesNotSatisfyRiskCoverage() {
 
 function testInlineRustTestSatisfiesRiskCoverage() {
   const source = changedFile({
-    path: "src-tauri/src/engine/screenshots/capture.rs",
+    path: "desktop/recorder/src/platform/windows/native_probe/process.rs",
     status: "M",
     additions: 20,
     deletions: 0,
@@ -709,12 +709,12 @@ function testQualityGateFilesAreMaintainerOwned() {
 
 function testWindowAuthorityChangesRequireRuntimeMatrixEvidence() {
   const capability = changedFile({
-    path: "src-tauri/capabilities/mini.json",
+    path: "desktop/patina/src/window_process.rs",
     additions: 1,
     deletions: 1,
   });
   const runtimeMatrix = changedFile({
-    path: "tests/tauriRuntimeSmoke.test.ts",
+    path: "desktop/patina/tests/pages/resident.rs",
     additions: 20,
     deletions: 0,
   });
@@ -729,7 +729,7 @@ function testWindowAuthorityChangesRequireRuntimeMatrixEvidence() {
     pullRequestBody: VALID_BODY,
     requirePullRequestBody: true,
     changedFiles: [capability, runtimeMatrix],
-    registeredTypeScriptTests: [runtimeMatrix.path],
+    registeredRustTests: [runtimeMatrix.path],
   }), []);
 }
 
@@ -815,20 +815,20 @@ function testVerifyRunsAfterSuccessfulIntake() {
   assert.match(workflow, /head_sha: \$\{\{ steps\.verify\.outputs\.head_sha \}\}/);
   assert.match(workflow, /node --experimental-strip-types scripts\/check-verify-candidate\.ts/);
   assert.doesNotMatch(workflow, /refs\/pull\/|cache: pnpm|cache-dependency-path|secrets\./);
-  for (const name of ["frontend", "rust-quality", "native-desktop", "tauri-runtime-smoke"]) {
+  for (const name of ["tooling", "native-desktop", "native-acceptance"]) {
     const section = workflow.split(`  ${name}:`)[1].split(/\r?\n  [a-z][\w-]*:/)[0];
-    assert.match(section, /needs: candidate/);
+    assert.match(section, name === "native-acceptance" ? /needs: \[candidate, native-desktop\]/ : /needs: candidate/);
     assert.match(section, /ref: \$\{\{ needs\.candidate\.outputs\.head_sha \}\}/);
     assert.match(section, /persist-credentials: false/);
     assert.match(section, /allow-unsafe-pr-checkout: \$\{\{ github\.event_name == 'workflow_run' && needs\.candidate\.result == 'success' \}\}/);
-    if (name !== "native-desktop") assert.match(section, /package-manager-cache: false/);
+    if (!name.startsWith("native-")) assert.match(section, /package-manager-cache: false/);
     assert.match(section, /\$actual -cne \$env:VERIFIED_HEAD_SHA/);
-    const firstSetup = name === "native-desktop" ? "Setup Rust from desktop/" : "Install pinned pnpm";
+    const firstSetup = name.startsWith("native-") ? "Setup Rust from desktop/" : "Install pinned pnpm";
     assert.ok(section.indexOf("Assert verified candidate") < section.indexOf(firstSetup));
     assert.doesNotMatch(section, /permissions:|actions: write|contents: write/);
   }
-  assert.equal(workflow.match(/allow-unsafe-pr-checkout:/g)?.length, 4);
-  const trusted = workflow.split('  candidate:')[1].split('  frontend:')[0];
+  assert.equal(workflow.match(/allow-unsafe-pr-checkout:/g)?.length, 3);
+  const trusted = workflow.split('  candidate:')[1].split('  tooling:')[0];
   assert.doesNotMatch(trusted, /allow-unsafe-pr-checkout/);
   for (const file of ['.github/workflows/pr-intake.yml', '.github/workflows/prepare-release.yml']) {
     assert.doesNotMatch(readFileSync(file, 'utf8'), /allow-unsafe-pr-checkout/);
