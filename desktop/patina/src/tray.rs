@@ -157,7 +157,7 @@ impl Tray {
                 }
             };
             let icon = match CreateIconFromResourceEx(
-                include_bytes!("../../../src-tauri/icons/32x32.png"),
+                include_bytes!("../assets/icons/32x32.png"),
                 true,
                 0x30000,
                 GetSystemMetrics(SM_CXSMICON),

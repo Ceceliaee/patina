@@ -45,8 +45,7 @@ struct Libraries {
     dark: Library,
 }
 static LIBRARIES: LazyLock<Libraries> = LazyLock::new(|| {
-    serde_json::from_str(include_str!("../../../src/shared/theme/presets.json"))
-        .expect("valid built-in theme presets")
+    serde_json::from_str(include_str!("theme/presets.json")).expect("valid built-in theme presets")
 });
 impl ThemePreset {
     fn library(dark: bool) -> &'static Library {

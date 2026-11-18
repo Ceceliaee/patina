@@ -32,8 +32,8 @@ VIAddVersionKey /LANG=1033 "CompanyName" "Ceceliaee"
 VIAddVersionKey /LANG=1033 "FileDescription" "Patina Installer"
 VIAddVersionKey /LANG=1033 "FileVersion" "${APP_VERSION}"
 VIAddVersionKey /LANG=1033 "LegalCopyright" "Ceceliaee"
-Icon "..\..\src-tauri\icons\icon.ico"
-UninstallIcon "..\..\src-tauri\icons\icon.ico"
+Icon "..\patina\assets\icons\icon.ico"
+UninstallIcon "..\patina\assets\icons\icon.ico"
 !define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${INSTALLATION_ID}"
 
 Var UpdatePid

@@ -4,9 +4,13 @@
 
 ## Use and update
 
-Run `pnpm run test:settings` from the repository root to compare the implementation with these expected colors. A failure requires checking the source or the independently obtained expectation; do not copy a failing actual value into the fixture merely to pass.
+From the desktop workspace, run the QuietPro theme unit tests with the following command.
 
-When updating the reference, bind the new version and hashes first, independently recalculate expected outputs from its loader/functions, review mapping changes, then run `pnpm run test:settings`. Do not regenerate expected colors by calling the function being tested.
+```sh
+cargo test --locked -p quietpro --lib theme::tests
+```
+
+The native tests exercise the current catalog, scheme selection and fallback. The JSON fixtures below record independent reference values and the historical CSS output. Recalculate reference data from its stated source when that source changes.
 
 ## Independent reference and provenance
 
@@ -17,7 +21,7 @@ Reference: Windows Codex package `26.901.6511.0`, internal app version `26.901.5
 
 The reference outputs were evaluated outside the repository using the original pure functions: `q_a` resolves theme colors, `J_a` merges `chromeTheme`, `mY` normalizes inputs, `l_a` shapes contrast, `m_a`/`g_a` derive light/dark colors and `p_a` maps CSS names. RGB mixing uses `vY`/`x_a`; alpha formatting uses `S_a`. Fixtures do not call Patina's implementation. The original bundle, extraction scratch files, fonts and screenshots are not test dependencies and are not stored here.
 
-All available Patina preset/mode pairs were checked against that loader. Vercel explicitly sets light 40 and dark 50; the remaining matching presets inherit light 45 or dark 60. Xcode's `chromeTheme` supplies opaque ink, overriding the translucent editor foreground. Ayu's effective background is `#10141c`. The [shared preset catalog](../../../src/shared/theme/presets.json) owns the resulting palette data. Patina's `default` retains its own surface, ink and accent with the mode defaults and is not presented as a Codex preset.
+All available Patina preset/mode pairs were checked against that loader. Vercel explicitly sets light 40 and dark 50; the remaining matching presets inherit light 45 or dark 60. Xcode's `chromeTheme` supplies opaque ink, overriding the translucent editor foreground. Ayu's effective background is `#10141c`. The [shared preset catalog](../../../desktop/quietpro/src/theme/presets.json) owns the resulting palette data. Patina's `default` retains its own surface, ink and accent with the mode defaults and is not presented as a Codex preset.
 
 The remaining direct comparisons cover surface-under, surface and panel. Named themes retain these background derivations; nested cards use a Patina mapping. Default uses the complete original Patina palette.
 
@@ -29,4 +33,4 @@ Named themes' nested cards use Patina's surface mapping: light blends surface-un
 
 `patina-borders.json` records the final CSS cascade from Patina commit `a9e4e2cc8b1f9375c70ee1e5e22327fa2d972e7c`, resolving variable references while preserving native color-mix expressions and alpha. Ordinary and strong borders retain these colors independently of Codex derivation. Primary button text stays white. These application-specific mappings are excluded from the Codex fixture comparison and covered by Patina regression assertions.
 
-`patina-controls.json` independently records the prior final CSS cascade for Default, Absolutely, Catppuccin and Vercel in both modes. The test checks each retained control color; browser tests additionally compare the rendered settings slider gradient, borders, hover geometry and white primary text. These fixtures are captured from the same Patina commit as the border fixture, never from the implementation under test.
+`patina-controls.json` independently records the prior final CSS cascade for Default, Absolutely, Catppuccin and Vercel in both modes. The retired browser suite checked each retained control color and compared the rendered settings slider gradient, borders, hover geometry and white primary text. These fixtures are captured from the same Patina commit as the border fixture, never from the implementation under test.
