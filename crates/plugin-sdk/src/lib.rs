@@ -1,7 +1,10 @@
+#[cfg(not(target_arch = "wasm32"))]
+pub mod installation;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Manifest {
     pub id: String,
@@ -109,8 +112,8 @@ pub fn page_range(
     previous: &str,
     next: &str,
 ) -> std::ops::Range<usize> {
-    const SIZE: usize = 10;
-    let last = count.saturating_sub(1) / SIZE;
+    const ROWS_PER_PAGE: usize = 10;
+    let last = count.saturating_sub(1) / ROWS_PER_PAGE;
     let prev_id = format!("previous-{key}");
     let next_id = format!("next-{key}");
     let mut index = state[key].as_u64().unwrap_or(0).min(last as u64) as usize;
@@ -136,6 +139,6 @@ pub fn page_range(
             label: next.into(),
         });
     }
-    let start = index * SIZE;
-    start..start.saturating_add(SIZE).min(count)
+    let start = index * ROWS_PER_PAGE;
+    start..start.saturating_add(ROWS_PER_PAGE).min(count)
 }

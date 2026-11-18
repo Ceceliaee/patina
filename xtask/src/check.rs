@@ -107,7 +107,8 @@ fn desktop_dependencies(root: &Path) -> Result<()> {
         for package in [
             "patina",
             "patina-ui",
-            "patina-recorder",
+            "patina-activity",
+            "patina-plugin-host",
             "patina-windows-integration",
         ] {
             let output = Command::new(env!("CARGO"))
@@ -166,13 +167,14 @@ fn forbidden_dependency(package: &str, name: &str) -> bool {
     let storage = name.starts_with("sqlx")
         || matches!(
             name,
-            "patina-recorder" | "patina-storage" | "libsqlite3-sys"
+            "patina-activity" | "patina-storage" | "libsqlite3-sys"
         );
-    let engine = matches!(name, "patina-tool-host" | "wasmi" | "wasmtime" | "wasmer");
+    let engine = matches!(name, "patina-plugin-host" | "wasmi" | "wasmtime" | "wasmer");
     name.contains("tauri")
         || match package {
             "patina-ui" => storage || engine,
-            "patina-recorder" => gui,
+            "patina-activity" => gui,
+            "patina-plugin-host" => gui || storage || name == "patina-desktop-protocol",
             "patina-windows-integration" => gui || storage || engine,
             _ => false,
         }
@@ -237,14 +239,22 @@ mod tests {
     fn role_libraries_keep_their_dependency_boundaries() {
         assert!(!forbidden_dependency("patina", "gpui-kit"));
         assert!(!forbidden_dependency("patina-ui", "gpui-kit"));
-        assert!(!forbidden_dependency("patina-recorder", "sqlx-core"));
-        for name in ["sqlx-core", "patina-recorder", "wasmtime"] {
+        assert!(!forbidden_dependency("patina-activity", "sqlx-core"));
+        assert!(!forbidden_dependency(
+            "patina-plugin-host",
+            "patina-plugin-sdk"
+        ));
+        assert!(!forbidden_dependency("patina-plugin-host", "wasmtime"));
+        for name in ["patina-desktop-protocol", "gpui-kit", "sqlx-core"] {
+            assert!(forbidden_dependency("patina-plugin-host", name));
+        }
+        for name in ["sqlx-core", "patina-activity", "wasmtime"] {
             assert!(forbidden_dependency("patina-ui", name));
             assert!(forbidden_dependency("patina-windows-integration", name));
         }
         for name in ["patina-ui", "gpui-kit"] {
             assert!(forbidden_dependency("patina-windows-integration", name));
-            assert!(forbidden_dependency("patina-recorder", name));
+            assert!(forbidden_dependency("patina-activity", name));
         }
         assert!(forbidden_dependency("patina", "tauri-runtime"));
     }

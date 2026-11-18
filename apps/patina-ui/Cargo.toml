@@ -30,5 +30,5 @@ native-tests = []
 test-support = ["gpui-kit/test-support"]
 
 [dev-dependencies]
-patina-test-desktop = { path = "../../crates/test-support" }
+patina-test-support = { path = "../../crates/test-support" }
 windows = { version = "0.62.2", features = ["Win32_System_Threading"] }

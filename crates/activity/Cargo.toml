@@ -1,5 +1,5 @@
 [package]
-name = "patina-recorder"
+name = "patina-activity"
 version.workspace = true
 edition = "2021"
 publish = false

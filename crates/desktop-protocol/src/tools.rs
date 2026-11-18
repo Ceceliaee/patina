@@ -4,19 +4,7 @@ use std::path::PathBuf;
 
 pub const BUNDLED_IDS: [&str; 2] = ["patina.focus", "patina.reminders"];
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Installed {
-    pub manifest: Manifest,
-    pub generation: String,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Preview {
-    pub manifest: Manifest,
-    pub digest: String,
-    pub replaces: Option<String>,
-    pub publisher: String,
-}
+pub use patina_plugin_sdk::installation::{Installed, Preview};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Notice {
@@ -32,13 +20,8 @@ pub struct Notice {
     pub focus_task: Option<(String, i64, i64)>,
 }
 
-pub fn now_ms() -> i64 {
-    std::time::UNIX_EPOCH
-        .elapsed()
-        .unwrap_or_default()
-        .as_millis()
-        .min(i64::MAX as u128) as i64
-}
+pub use patina_plugin_sdk::installation::now_ms;
+
 #[derive(Serialize, Deserialize)]
 pub enum ToolRequest {
     List,

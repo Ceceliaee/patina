@@ -1,11 +1,10 @@
 [package]
-name = "patina-tool-host"
+name = "patina-plugin-host"
 version = "0.1.0"
 edition = "2024"
 publish = false
 
 [dependencies]
-patina-desktop-protocol = { path = "../desktop-protocol" }
 base64 = "0.22"
 ring = "0.17"
 extism = { version = "=1.41.0", default-features = false }

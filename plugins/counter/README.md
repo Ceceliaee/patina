@@ -8,7 +8,7 @@
 
 ```powershell
 cargo build --locked --manifest-path plugins/counter/Cargo.toml --release --target wasm32-unknown-unknown --target-dir target/plugins
-cargo run --locked --manifest-path Cargo.toml -p patina-tool-host --bin pack-tool -- plugins/counter/manifest.json target/plugins/wasm32-unknown-unknown/release/patina_counter.wasm target/counter.patina-tool "$env:LOCALAPPDATA/patina-plugin-author.key"
+cargo run --locked --manifest-path Cargo.toml -p patina-plugin-host --bin pack-tool -- plugins/counter/manifest.json target/plugins/wasm32-unknown-unknown/release/patina_counter.wasm target/counter.patina-tool "$env:LOCALAPPDATA/patina-plugin-author.key"
 ```
 
 首次打包会在最后一个参数指定的位置生成作者签名密钥。请私下备份它，同一插件后续版本沿用该密钥。在 GPUI 版 Patina 的「工具 → 管理工具」选择「从文件安装」，打开生成的 `counter.patina-tool`。确认名称、文件位置、发布者公钥和所需能力后进入 Counter，点击按钮增加计数。分发时只需提供安装包。

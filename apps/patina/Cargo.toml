@@ -31,6 +31,8 @@ name = "updater"
 required-features = ["native-tests"]
 
 [dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "time"] }
+sqlx.workspace = true
 patina-ui = { path = "../patina-ui" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -39,8 +41,8 @@ patina-windows-integration = { path = "../../crates/windows-integration" }
 patina-desktop-protocol = { path = "../../crates/desktop-protocol" }
 async-executor = "1"
 blocking = "1"
-patina-tool-host = { path = "../../crates/tool-host" }
-patina-recorder = { path = "../../crates/activity" }
+patina-plugin-host = { path = "../../crates/plugin-host" }
+patina-activity = { path = "../../crates/activity" }
 patina-updater = { path = "../../crates/updater" }
 async-channel = "2"
 winreg = "0.56"
@@ -54,7 +56,7 @@ windows = { version = "0.62.2", features = [
 chrono = "0.4"
 
 [dev-dependencies]
-patina-test-desktop = { path = "../../crates/test-support" }
+patina-test-support = { path = "../../crates/test-support" }
 tungstenite = "0.28"
 windows = { version = "0.62.2", features = [
   "Win32_System_Com", "Win32_System_Ole", "Win32_System_Variant", "Win32_UI_Accessibility", "Win32_Graphics_Direct3D11",
@@ -62,9 +64,7 @@ windows = { version = "0.62.2", features = [
   "Win32_System_Diagnostics_ToolHelp", "Win32_System_ProcessStatus", "Win32_System_Threading",
     "Win32_System_SystemInformation",
 ] }
-sqlx.workspace = true
 tempfile = "3"
-tokio = { version = "1", features = ["rt", "time"] }
 
 [[example]]
 name = "windows-resource-sample"

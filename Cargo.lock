@@ -5211,10 +5211,10 @@ dependencies = [
  "blocking",
  "chrono",
  "embed-resource",
+ "patina-activity",
  "patina-desktop-protocol",
- "patina-recorder",
- "patina-test-desktop",
- "patina-tool-host",
+ "patina-plugin-host",
+ "patina-test-support",
  "patina-ui",
  "patina-updater",
  "patina-windows-integration",
@@ -5227,6 +5227,41 @@ dependencies = [
  "tungstenite",
  "windows 0.62.2",
  "winreg",
+]
+
+[[package]]
+name = "patina-activity"
+version = "1.10.0"
+dependencies = [
+ "arrow",
+ "base64 0.22.1",
+ "chrono",
+ "crc32fast",
+ "csv",
+ "futures-util",
+ "image 0.24.9",
+ "parquet",
+ "patina-activity-model",
+ "patina-i18n",
+ "patina-storage",
+ "patina-windows-integration",
+ "percent-encoding",
+ "quick-xml",
+ "reqwest",
+ "rustls",
+ "same-file",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sqlx",
+ "tempfile",
+ "tokio",
+ "tokio-tungstenite",
+ "tokio-util",
+ "url",
+ "uuid",
+ "windows 0.62.2",
+ "zip",
 ]
 
 [[package]]
@@ -5264,6 +5299,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "patina-plugin-host"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "extism",
+ "patina-plugin-sdk",
+ "ring",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "uuid",
+ "wat",
+]
+
+[[package]]
 name = "patina-plugin-sdk"
 version = "0.1.0"
 dependencies = [
@@ -5273,47 +5324,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "patina-recorder"
-version = "1.10.0"
-dependencies = [
- "arrow",
- "base64 0.22.1",
- "chrono",
- "crc32fast",
- "csv",
- "futures-util",
- "image 0.24.9",
- "parquet",
- "patina-activity-model",
- "patina-i18n",
- "patina-storage",
- "patina-windows-integration",
- "percent-encoding",
- "quick-xml",
- "reqwest",
- "rustls",
- "same-file",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "sqlx",
- "tempfile",
- "tokio",
- "tokio-tungstenite",
- "tokio-util",
- "url",
- "uuid",
- "windows 0.62.2",
- "zip",
-]
-
-[[package]]
 name = "patina-storage"
 version = "0.1.0"
 dependencies = [
  "futures-util",
  "libsqlite3-sys",
- "patina-activity-model",
  "same-file",
  "serde",
  "serde_json",
@@ -5323,28 +5338,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "patina-test-desktop"
+name = "patina-test-support"
 version = "0.1.0"
 dependencies = [
  "patina-windows-integration",
  "windows 0.62.2",
-]
-
-[[package]]
-name = "patina-tool-host"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "extism",
- "patina-desktop-protocol",
- "patina-plugin-sdk",
- "ring",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tempfile",
- "uuid",
- "wat",
 ]
 
 [[package]]
@@ -5359,7 +5357,7 @@ dependencies = [
  "patina-activity-model",
  "patina-desktop-protocol",
  "patina-i18n",
- "patina-test-desktop",
+ "patina-test-support",
  "patina-updater",
  "patina-windows-integration",
  "quietpro",
@@ -5376,7 +5374,7 @@ dependencies = [
  "base64 0.22.1",
  "flate2",
  "minisign-verify",
- "patina-test-desktop",
+ "patina-test-support",
  "semver",
  "serde",
  "serde_json",
@@ -5878,7 +5876,7 @@ name = "quietpro"
 version = "0.1.0"
 dependencies = [
  "gpui-kit",
- "patina-test-desktop",
+ "patina-test-support",
  "serde",
  "serde_json",
  "windows 0.62.2",

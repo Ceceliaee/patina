@@ -14,10 +14,43 @@ use std::{
     time::Duration,
 };
 
-pub use patina_desktop_protocol::tools::{Installed, Notice, Preview, now_ms};
+mod bindings;
+pub use bindings::CapabilityData;
+use bindings::{Binding, bound_data, candidate_data, requires_binding};
+pub use patina_plugin_sdk::installation::{Installed, Preview, now_ms};
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum InstallError {
+    StalePreview,
+    Rejected(String),
+}
+impl std::fmt::Display for InstallError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::StalePreview => f.write_str("Tool changed since preview; open the package again"),
+            Self::Rejected(reason) => f.write_str(reason),
+        }
+    }
+}
+impl std::error::Error for InstallError {}
+impl From<String> for InstallError {
+    fn from(reason: String) -> Self {
+        Self::Rejected(reason)
+    }
+}
 
 #[derive(Clone, Serialize, Deserialize)]
-struct Record {
+pub struct TimerNotice {
+    pub id: String,
+    pub generation: String,
+    pub at_ms: i64,
+    pub label: String,
+    #[serde(default, rename = "focus_task")]
+    pub task: Option<(String, i64, i64)>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+struct InstallationRecord {
     #[serde(default)]
     requires_timer_restart: bool,
     package: Option<Package>,
@@ -26,26 +59,19 @@ struct Record {
     #[serde(default)]
     timer: Option<Timer>,
     #[serde(default)]
-    notice: Option<Notice>,
+    notice: Option<TimerNotice>,
     #[serde(default)]
     retiring_at: Option<i64>,
     #[serde(default)]
     publisher: String,
 }
 
-/// The native application binds legacy tool data only to its owning installation.
-pub trait ToolData: Send {
-    fn read(&self, id: &str, locale: &str, now: i64, state: &Value) -> Result<Value, String>;
-    fn apply(&self, id: &str, command: Value, now: i64) -> Result<(), String>;
-    fn suspend(&self, id: &str, now: i64) -> Result<(), String>;
-}
-
 pub struct Host {
     root: PathBuf,
-    records: BTreeMap<String, Record>,
+    records: BTreeMap<String, InstallationRecord>,
     loaded: BTreeMap<String, Plugin>,
     retry_at: BTreeMap<String, i64>,
-    data: Option<Box<dyn ToolData>>,
+    bindings: BTreeMap<String, Binding>,
 }
 
 impl Host {
@@ -56,13 +82,25 @@ impl Host {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => BTreeMap::new(),
             Err(e) => return Err(e.to_string()),
         };
-        Ok(Self {
+        let mut host = Self {
             root,
             records,
             loaded: BTreeMap::new(),
             retry_at: BTreeMap::new(),
-            data: None,
-        })
+            bindings: BTreeMap::new(),
+        };
+        let pending: Vec<_> = host
+            .records
+            .iter()
+            .filter_map(|(id, record)| {
+                let at = record.retiring_at?;
+                (!requires_binding(&record.package.as_ref()?.manifest)).then(|| (id.clone(), at))
+            })
+            .collect();
+        for (id, at) in pending {
+            host.finish_removal(&id, at)?;
+        }
+        Ok(host)
     }
 
     pub fn list(&self) -> Vec<Installed> {
@@ -80,22 +118,24 @@ impl Host {
             .collect()
     }
 
-    /// Register packages shipped with the application once per profile. The removal
+    /// Install new bundled plugins and update existing ones. The removal
     /// record is retained across restarts, including upgrades of the application.
-    pub fn seed(&mut self, package: Package, locale: &str) -> Result<(), String> {
+    fn sync_bundled_plugin(&mut self, package: Package, locale: &str) -> Result<(), String> {
         let id = package.manifest.id.clone();
         if let Some(previous) = self.records.get(&id).and_then(|r| r.package.as_ref())
             && (previous.wasm != package.wasm
-                || previous.manifest.version != package.manifest.version)
+                || previous.manifest != package.manifest
+                || previous.publisher != package.publisher
+                || previous.signature != package.signature)
         {
             self.activate(package, locale)?;
             return Ok(());
         }
         if !self.records.contains_key(&id) {
-            package.module()?;
+            package.validated_wasm()?;
             self.save(
                 &id,
-                Record {
+                InstallationRecord {
                     package: Some(package),
                     requires_timer_restart: false,
                     state: Value::Null,
@@ -111,6 +151,9 @@ impl Host {
     }
 
     pub fn restore_bundled(&mut self, package: Package, locale: &str) -> Result<Installed, String> {
+        if candidate_data(&self.bindings, &package)?.is_none() {
+            return Err("Unknown bundled plugin".into());
+        }
         if self
             .records
             .get(&package.manifest.id)
@@ -121,21 +164,8 @@ impl Host {
         self.activate(package, locale)
     }
 
-    pub fn bind(&mut self, data: Box<dyn ToolData>) -> Result<(), String> {
-        self.data = Some(data);
-        let pending: Vec<_> = self
-            .records
-            .iter()
-            .filter_map(|(id, r)| r.retiring_at.map(|now| (id.clone(), now)))
-            .collect();
-        for (id, now) in pending {
-            self.finish_removal(&id, now)?;
-        }
-        Ok(())
-    }
-
     fn check_external(&self, package: &Package) -> Result<(), String> {
-        if package.manifest.id.starts_with("patina.") || native_owner(&package.manifest) {
+        if package.manifest.id.starts_with("patina.") || requires_binding(&package.manifest) {
             return Err("The patina namespace is reserved for bundled tools".into());
         }
         if self
@@ -149,7 +179,7 @@ impl Host {
     }
 
     pub fn inspect(&self, path: &Path) -> Result<Preview, String> {
-        let (p, digest) = Package::from_file(path)?;
+        let (p, digest) = Package::read_verified(path)?;
         self.check_external(&p)?;
         let replaces = self
             .records
@@ -168,16 +198,19 @@ impl Host {
         path: &Path,
         preview: &Preview,
         locale: &str,
-    ) -> Result<Installed, String> {
-        let (p, digest) = Package::from_file(path)?;
+    ) -> Result<Installed, InstallError> {
+        let (p, digest) = Package::read_verified(path)?;
         self.check_external(&p)?;
         let id = p.manifest.id.clone();
         let previous = self.records.get(&id);
-        if digest != preview.digest || previous.map(|r| &r.generation) != preview.replaces.as_ref()
+        if digest != preview.digest
+            || p.manifest != preview.manifest
+            || p.publisher != preview.publisher
+            || previous.map(|r| &r.generation) != preview.replaces.as_ref()
         {
-            return Err("Tool changed since preview; open the package again".into());
+            return Err(InstallError::StalePreview);
         }
-        self.activate(p, locale)
+        Ok(self.activate(p, locale)?)
     }
 
     fn activate(&mut self, p: Package, locale: &str) -> Result<Installed, String> {
@@ -199,7 +232,7 @@ impl Host {
             Event::Open,
             locale,
             now_ms(),
-            self.data.as_deref(),
+            candidate_data(&self.bindings, &p)?,
         )?;
         let installed = Installed {
             manifest: p.manifest.clone(),
@@ -211,7 +244,7 @@ impl Host {
         }
         self.save(
             &id,
-            Record {
+            InstallationRecord {
                 package: Some(p),
                 requires_timer_restart,
                 state: response.state,
@@ -223,20 +256,27 @@ impl Host {
             },
         )?;
         self.retry_at.remove(&id);
+        if let Some(binding) = self.bindings.get_mut(&id) {
+            binding.generation = Some(installed.generation.clone());
+        }
         self.loaded.insert(id, plugin);
         Ok(installed)
     }
 
-    fn current(&self, id: &str, generation: &str) -> Result<&Record, String> {
+    fn current(&self, id: &str, generation: &str) -> Result<&InstallationRecord, String> {
         self.records
             .get(id)
             .filter(|r| {
-                r.generation == generation && r.package.is_some() && r.retiring_at.is_none()
+                r.generation == generation
+                    && r.retiring_at.is_none()
+                    && r.package
+                        .as_ref()
+                        .is_some_and(|p| p.manifest.id == id && p.publisher == r.publisher)
             })
             .ok_or_else(|| "Tool installation has changed".into())
     }
 
-    pub fn panel(
+    pub fn dispatch_panel_event(
         &mut self,
         id: &str,
         generation: &str,
@@ -284,17 +324,16 @@ impl Host {
         locale: &str,
         now: i64,
     ) -> Result<Vec<Control>, String> {
-        let r = self.current(id, generation)?;
+        self.current(id, generation)?;
+        let r = &self.records[id];
         let p = r.package.as_ref().unwrap();
         let due_notice = if matches!(event, Event::Due) {
-            r.timer.as_ref().map(|timer| Notice {
+            r.timer.as_ref().map(|timer| TimerNotice {
                 id: id.into(),
                 generation: generation.into(),
                 at_ms: timer.at_ms,
                 label: timer.label.clone(),
-                source: None,
-                usage: false,
-                focus_task: timer
+                task: timer
                     .task
                     .as_ref()
                     .map(|(kind, id)| (kind.clone(), *id, now)),
@@ -303,6 +342,7 @@ impl Host {
             None
         };
         let manifest = p.manifest.clone();
+        let data = bound_data(&self.bindings, &p.manifest, generation)?;
         let state = r.state.clone();
         if !self.loaded.contains_key(id) {
             let plugin = compile(p)?;
@@ -316,7 +356,7 @@ impl Host {
             event,
             locale,
             now,
-            self.data.as_deref(),
+            data,
         );
         let mut response = match result {
             Ok(response) => response,
@@ -339,7 +379,7 @@ impl Host {
             || response.timer != current.timer
             || due_notice.is_some()
         {
-            let updated = Record {
+            let updated = InstallationRecord {
                 requires_timer_restart,
                 state: response.state,
                 timer: response.timer,
@@ -367,7 +407,7 @@ impl Host {
         let now = now_ms();
         self.save(
             id,
-            Record {
+            InstallationRecord {
                 retiring_at: Some(now),
                 timer: None,
                 notice: None,
@@ -380,15 +420,17 @@ impl Host {
     fn finish_removal(&mut self, id: &str, now: i64) -> Result<(), String> {
         let record = &self.records[id];
         let mut state = record.state.clone();
-        if record
-            .package
-            .as_ref()
-            .is_some_and(|p| native_owner(&p.manifest))
-        {
-            self.data
-                .as_deref()
-                .ok_or("Tool storage unavailable")?
-                .suspend(id, now)?;
+        let Some(package) = record.package.as_ref() else {
+            return Err("Missing retiring installation".into());
+        };
+        if package.manifest.id != id {
+            return Err("Retiring plugin identity mismatch".into());
+        }
+        let binding = self.bindings.get(id);
+        if requires_binding(&package.manifest) {
+            let binding = binding.ok_or("Plugin capability unavailable")?;
+            binding.verify_owner(package, &record.publisher)?;
+            binding.data.suspend(now)?;
         }
         if let Some(p) = record
             .package
@@ -396,7 +438,8 @@ impl Host {
             .filter(|p| p.manifest.capabilities.contains(&Capability::Timer))
         {
             // Let cooperative timers settle elapsed time. A broken guest must still be removable.
-            if let Ok(mut guest) = compile(p)
+            if let Ok(data) = candidate_data(&self.bindings, p)
+                && let Ok(mut guest) = compile(p)
                 && let Ok(response) = invoke(
                     &mut guest,
                     &p.manifest,
@@ -404,7 +447,7 @@ impl Host {
                     Event::Uninstall,
                     "en-US",
                     now,
-                    self.data.as_deref(),
+                    data,
                 )
             {
                 state = response.state;
@@ -412,7 +455,7 @@ impl Host {
         }
         self.save(
             id,
-            Record {
+            InstallationRecord {
                 package: None,
                 requires_timer_restart: true,
                 generation: uuid::Uuid::new_v4().to_string(),
@@ -423,6 +466,9 @@ impl Host {
                 publisher: record.publisher.clone(),
             },
         )?;
+        if let Some(binding) = self.bindings.get_mut(id) {
+            binding.generation = None;
+        }
         self.loaded.remove(id);
         Ok(())
     }
@@ -439,14 +485,18 @@ impl Host {
             .min()
     }
 
-    pub fn notices(&self) -> Vec<Notice> {
+    pub fn notices(&self) -> Vec<TimerNotice> {
         self.records
-            .values()
-            .filter_map(|record| record.notice.clone())
+            .iter()
+            .filter_map(|(id, record)| {
+                let notice = record.notice.as_ref()?;
+                (notice.id == *id && self.current(id, &notice.generation).is_ok())
+                    .then(|| notice.clone())
+            })
             .collect()
     }
 
-    pub fn stopping(
+    pub fn uninstall_impact_labels(
         &self,
         id: &str,
         generation: &str,
@@ -460,56 +510,23 @@ impl Host {
         if let Some(notice) = &r.notice {
             labels.push(notice.label.clone());
         }
-        if let Some(p) = &r.package
-            && native_owner(&p.manifest)
-        {
-            let data = self.data.as_ref().ok_or("Task store unavailable")?.read(
-                id,
-                locale,
-                now_ms(),
-                &Value::Null,
-            )?;
-            for (key, label) in [
-                ("free", "label"),
-                ("pomodoro", "label"),
-                ("reminders", "label"),
-                ("rules", "label_snapshot"),
-            ] {
-                for task in data[key].as_array().into_iter().flatten() {
-                    if task["status"] == "running"
-                        || task["run"]["status"] == "running"
-                        || task["status"] == "scheduled"
-                        || task["status"] == "pending_confirmation"
-                        || task["enabled"] == true
-                    {
-                        labels.push(
-                            task[label]
-                                .as_str()
-                                .filter(|s| !s.is_empty())
-                                .unwrap_or(&p.manifest.name)
-                                .to_string(),
-                        );
-                    }
-                }
-            }
+        let manifest = &r.package.as_ref().unwrap().manifest;
+        if let Some(data) = bound_data(&self.bindings, manifest, generation)? {
+            labels.extend(data.uninstall_impact(locale, now_ms(), &manifest.name)?);
         }
         labels.sort();
         labels.dedup();
         Ok(labels)
     }
 
-    pub fn acknowledge(&mut self, notice: &Notice) -> Result<(), String> {
-        let current = self.current(&notice.id, &notice.generation)?;
-        if !current
-            .notice
-            .as_ref()
-            .is_some_and(|n| n.at_ms == notice.at_ms)
-        {
+    pub fn acknowledge(&mut self, id: &str, generation: &str, at_ms: i64) -> Result<(), String> {
+        let current = self.current(id, generation)?;
+        if !current.notice.as_ref().is_some_and(|n| n.at_ms == at_ms) {
             return Err("Notification is no longer current".into());
         }
         self.save(
-            &notice.id,
-            Record {
+            id,
+            InstallationRecord {
                 notice: None,
                 ..current.clone()
             },
@@ -538,7 +555,7 @@ impl Host {
         failures
     }
 
-    fn save(&mut self, id: &str, record: Record) -> Result<(), String> {
+    fn save(&mut self, id: &str, record: InstallationRecord) -> Result<(), String> {
         let old = self.records.insert(id.to_owned(), record);
         let result = (|| -> Result<(), String> {
             let mut tmp = tempfile::NamedTempFile::new_in(&self.root).map_err(|e| e.to_string())?;
@@ -565,7 +582,7 @@ impl Host {
 }
 
 fn compile(package: &Package) -> Result<Plugin, String> {
-    let manifest = extism::Manifest::new([Wasm::data(package.module()?)])
+    let manifest = extism::Manifest::new([Wasm::data(package.validated_wasm()?)])
         .with_memory_max(256)
         .with_timeout(Duration::from_millis(250));
     PluginBuilder::new(manifest)
@@ -583,17 +600,12 @@ fn invoke(
     event: Event,
     locale: &str,
     now_ms: i64,
-    data: Option<&dyn ToolData>,
+    data: Option<&dyn CapabilityData>,
 ) -> Result<Response, String> {
-    let storage = if native_owner(manifest) {
-        Some(data.ok_or("Tool storage unavailable")?)
-    } else {
-        None
-    };
     let can_mutate = matches!(event, Event::Action(_) | Event::Submit { .. } | Event::Due);
     let request = Request {
-        data: match storage {
-            Some(store) => store.read(&manifest.id, locale, now_ms, &state)?,
+        data: match data {
+            Some(store) => store.read(locale, now_ms, &state)?,
             None => Value::Null,
         },
         state,
@@ -656,8 +668,8 @@ fn invoke(
         if !can_mutate {
             return Err("Tool reads cannot change task data".into());
         }
-        let store = storage.ok_or("Tool lacks task data access")?;
-        store.apply(&manifest.id, command, now_ms)?;
+        let store = data.ok_or("Tool lacks task data access")?;
+        store.apply(command, now_ms)?;
         return invoke(
             plugin,
             manifest,
@@ -680,13 +692,6 @@ fn invoke(
         );
     }
     Ok(response)
-}
-
-fn native_owner(manifest: &Manifest) -> bool {
-    manifest
-        .capabilities
-        .iter()
-        .any(|c| matches!(c, Capability::Focus | Capability::Reminders))
 }
 
 #[cfg(test)]

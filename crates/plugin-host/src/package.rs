@@ -24,13 +24,17 @@ impl Package {
             .map_err(|e| e.to_string())
     }
 
+    pub(super) fn bundle_digest(&self) -> Result<[u8; 32], String> {
+        Ok(Sha256::digest(self.signed_content()?).into())
+    }
+
     pub fn sign(&mut self, key: &Ed25519KeyPair) -> Result<(), String> {
         self.publisher = STANDARD.encode(key.public_key());
         self.signature = STANDARD.encode(key.sign(&self.signed_content()?).as_ref());
         Ok(())
     }
 
-    pub fn from_file(path: &Path) -> Result<(Self, String), String> {
+    pub fn read_verified(path: &Path) -> Result<(Self, String), String> {
         let mut bytes = Vec::new();
         File::open(path)
             .and_then(|f| f.take(MAX_PACKAGE as u64 + 1).read_to_end(&mut bytes))
@@ -48,11 +52,11 @@ impl Package {
         UnparsedPublicKey::new(&ED25519, key)
             .verify(&package.signed_content()?, &signature)
             .map_err(|_| "Invalid tool publisher signature")?;
-        package.module()?;
+        package.validated_wasm()?;
         Ok((package, format!("{:x}", Sha256::digest(bytes))))
     }
 
-    pub fn module(&self) -> Result<Vec<u8>, String> {
+    pub fn validated_wasm(&self) -> Result<Vec<u8>, String> {
         let m = &self.manifest;
         if m.api != 1
             || !identifier(&m.id)

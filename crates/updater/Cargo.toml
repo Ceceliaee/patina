@@ -26,7 +26,7 @@ tempfile = { version = "3", optional = true }
 windows = { version = "0.62.2", optional = true, features = ["Win32_Networking_WinHttp"] }
 
 [dev-dependencies]
-patina-test-desktop = { path = "../test-support" }
+patina-test-support = { path = "../test-support" }
 winreg = "0.56"
 
 [target.'cfg(windows)'.dev-dependencies]

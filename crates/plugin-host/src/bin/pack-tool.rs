@@ -1,5 +1,5 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
-use patina_tool_host::{Manifest, Package};
+use patina_plugin_host::{Manifest, Package};
 use ring::{rand::SystemRandom, signature::Ed25519KeyPair};
 use std::{
     env, fs,
@@ -46,7 +46,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         publisher: String::new(),
         signature: String::new(),
     };
-    package.module().map_err(io::Error::other)?;
+    package.validated_wasm().map_err(io::Error::other)?;
     package
         .sign(&signing_key(&key)?)
         .map_err(io::Error::other)?;
@@ -56,7 +56,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|| std::path::Path::new("."));
     let mut file = tempfile::NamedTempFile::new_in(dir)?;
     serde_json::to_writer(file.as_file_mut(), &package)?;
-    Package::from_file(file.path()).map_err(io::Error::other)?;
+    Package::read_verified(file.path()).map_err(io::Error::other)?;
     file.persist(output)?;
     Ok(())
 }
