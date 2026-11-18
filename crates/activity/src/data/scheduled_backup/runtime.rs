@@ -720,9 +720,11 @@ async fn execute_webdav_run(
                                 selected = Some(upload);
                                 break;
                             }
-                            Err(error) if error == "remote_name_conflict" => continue,
+                            Err(crate::ActivityError::Conflict(_)) => continue,
                             Err(error) => {
-                                return Err(RunExecutionFailure::BeforePublication(error));
+                                return Err(RunExecutionFailure::BeforePublication(
+                                    error.to_string(),
+                                ));
                             }
                         }
                     }
@@ -741,7 +743,7 @@ async fn execute_webdav_run(
                         true,
                     )
                     .await
-                    .map_err(RunExecutionFailure::BeforePublication)?
+                    .map_err(|error| RunExecutionFailure::BeforePublication(error.to_string()))?
                 };
                 created_remote_in_this_execution = upload.created_new;
                 repository::mark_uploaded(pool, &current.run_key, upload.etag.as_deref(), now_ms)

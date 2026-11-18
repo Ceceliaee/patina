@@ -60,19 +60,21 @@ impl Dav {
         username: &str,
         directory: &str,
         password: Option<String>,
-    ) -> Result<(), String> {
+    ) -> Result<(), crate::ActivityError> {
         let target = repo::normalize_config(url, username, directory)?;
         let client = match password {
             Some(password) => WebDavClient::new(&target, password)?,
             None => {
                 let (client, saved) = self.client(pool).await?;
                 if saved != target {
-                    return Err("webdav_config_changed".into());
+                    return Err(crate::ActivityError::Conflict(
+                        "webdav_config_changed".into(),
+                    ));
                 };
                 client
             }
         };
-        client.ping(&target.remote_dir).await
+        Ok(client.ping(&target.remote_dir).await?)
     }
     pub(crate) async fn list(&self, pool: &SqlitePool) -> Result<Vec<RemoteBackupEntry>, String> {
         let (client, target) = self.client(pool).await?;
@@ -88,12 +90,14 @@ impl Dav {
         url: &str,
         username: &str,
         directory: &str,
-    ) -> Result<RemoteBackupUploadResult, String> {
+    ) -> Result<RemoteBackupUploadResult, crate::ActivityError> {
         validate_upload_file_name(&file)?;
         let _transfer = REMOTE_TRANSFER_LOCK.lock().await;
         let (client, target) = self.client(pool).await?;
         if target != repo::normalize_config(url, username, directory)? {
-            return Err("webdav_config_changed".into());
+            return Err(crate::ActivityError::Conflict(
+                "webdav_config_changed".into(),
+            ));
         }
         client.ensure_dir(&target.remote_dir).await?;
         let id = remote_backup_id();
@@ -110,6 +114,7 @@ impl Dav {
             build_entry(id, file, remote, size, &preview),
         )
         .await
+        .map_err(Into::into)
     }
     pub(crate) async fn download(
         &self,

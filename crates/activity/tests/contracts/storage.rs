@@ -1,6 +1,6 @@
 use super::*;
+use patina_activity::{ExportDataRequest, StorageRequest as R};
 use patina_activity_model::views::storage::StorageReply;
-use patina_recorder::{ExportDataRequest, Recorder, StorageRequest as R};
 use serde_json::json;
 
 macro_rules! response {
@@ -20,11 +20,18 @@ fn storage_round_trip_and_migration() -> Result<(), Error> {
     let profile = profile.canonicalize()?;
     let db = profile.join("patina.db");
     seed(&db)?;
-    let recorder = Recorder::start_in_profile(&db, &profile, || {})?;
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
-    let request = |r| rt.block_on(recorder.storage(r));
+    let pool = rt.block_on(patina_activity::open_database(&db))?;
+    let storage = patina_activity::StorageOperations::new(
+        &profile,
+        &db,
+        pool.clone(),
+        patina_activity::RecordingSignals::new(|| {}),
+        rt.handle().clone(),
+    );
+    let request = |r| rt.block_on(storage.request(r));
     let preferences = json!({"format":"parquet","mode":"week","fields":{"csv":["app_name"],"parquet":["start_time","end_time"]}});
     request(R::ExportPreferences(Some(serde_json::from_value(
         preferences.clone(),
@@ -84,11 +91,13 @@ fn storage_round_trip_and_migration() -> Result<(), Error> {
         request(R::PreviewRestore(archive.to_string_lossy().into()))?,
         Restore
     );
-    assert!(request(R::Restore {
-        hash: "bad".into(),
-        replace: false
-    })
-    .is_err());
+    assert!(matches!(
+        request(R::Restore {
+            hash: "bad".into(),
+            replace: false
+        }),
+        Err(patina_activity::ActivityError::Conflict(_))
+    ));
     request(R::Restore {
         hash: preview.preview.hash,
         replace: false,
@@ -164,11 +173,11 @@ fn storage_round_trip_and_migration() -> Result<(), Error> {
     assert_eq!(fs::read(&occupied)?, b"keep");
     fs::remove_file(&occupied)?;
     request(R::Move(Some(next.clone())))?;
-    recorder.shutdown()?;
-    drop(recorder);
+    rt.block_on(pool.close());
+    drop(storage);
     // A file created by another process after confirmation must survive restart.
     fs::write(&occupied, b"keep")?;
-    assert_eq!(patina_recorder::database_for_profile(&profile)?, db);
+    assert_eq!(patina_activity::prepare_database_for_startup(&profile)?, db);
     assert_eq!(fs::read(&occupied)?, b"keep");
     let state: serde_json::Value =
         serde_json::from_slice(&fs::read(profile.join("database-location.json"))?)?;
@@ -183,19 +192,26 @@ fn storage_round_trip_and_migration() -> Result<(), Error> {
         profile.join("database-location.json"),
         serde_json::to_vec(&json!({"active":profile,"pending":next,"staged":stage}))?,
     )?;
-    let moved = patina_recorder::database_for_profile(&profile)
+    let moved = patina_activity::prepare_database_for_startup(&profile)
         .map_err(|e| format!("apply directory move: {e}"))?;
     assert_eq!(moved.canonicalize()?, occupied.canonicalize()?);
     assert_eq!(fs::read(next.join("backups/sample.zip"))?, b"saved-backup");
     assert!(!profile.join("backups/sample.zip").exists());
-    let moved_recorder = Recorder::start_in_profile(&moved, &profile, || {})?;
-    let settings = rt.block_on(moved_recorder.storage(R::Schedule { backup: true }))?;
+    let moved_pool = rt.block_on(patina_activity::open_database(&moved))?;
+    let moved_storage = patina_activity::StorageOperations::new(
+        &profile,
+        &moved,
+        moved_pool.clone(),
+        patina_activity::RecordingSignals::new(|| {}),
+        rt.handle().clone(),
+    );
+    let settings = rt.block_on(moved_storage.request(R::Schedule { backup: true }))?;
     assert_eq!(response!(settings, BackupSchedule).config.weekday, Some(2));
-    rt.block_on(moved_recorder.storage(R::Move(None)))?;
-    moved_recorder.shutdown()?;
-    drop(moved_recorder);
+    rt.block_on(moved_storage.request(R::Move(None)))?;
+    rt.block_on(moved_pool.close());
+    drop(moved_storage);
     assert_eq!(
-        patina_recorder::database_for_profile(&profile)?.canonicalize()?,
+        patina_activity::prepare_database_for_startup(&profile)?.canonicalize()?,
         db.canonicalize()?
     );
     assert_eq!(
@@ -303,11 +319,18 @@ fn storage_webdav_round_trip() -> Result<(), Error> {
         }
         Ok(())
     });
-    let recorder = Recorder::start_in_profile(&db, &profile, || {})?;
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
-    let request = |r| rt.block_on(recorder.storage(r));
+    let pool = rt.block_on(patina_activity::open_database(&db))?;
+    let storage = patina_activity::StorageOperations::new(
+        &profile,
+        &db,
+        pool.clone(),
+        patina_activity::RecordingSignals::new(|| {}),
+        rt.handle().clone(),
+    );
+    let request = |r| rt.block_on(storage.request(r));
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<(), Error> {
         request(R::DavSave {
             url: format!("http://{address}"),
@@ -327,12 +350,15 @@ fn storage_webdav_round_trip() -> Result<(), Error> {
             username: "fixture".into(),
             directory: directory.into(),
         };
-        assert!(request(upload("/different")).is_err());
+        assert!(matches!(
+            request(upload("/different")),
+            Err(patina_activity::ActivityError::Conflict(_))
+        ));
         let uploaded = response!(request(upload("/backup"))?, DavUpload);
-        assert_eq!(
-            request(upload("/backup")).err().unwrap(),
-            "remote_name_conflict"
-        );
+        assert!(matches!(
+            request(upload("/backup")),
+            Err(patina_activity::ActivityError::Conflict(_))
+        ));
         assert!(uploaded.index_updated, "{:?}", uploaded.index_message);
         let list = response!(request(R::DavList)?, DavList);
         assert_eq!(list.len(), 1);

@@ -6,7 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 mod migration;
-pub use migration::{destination, directory_size};
+pub use migration::{directory_size_bytes, resolve_destination};
 
 #[derive(Serialize, Deserialize)]
 pub struct Location {
@@ -21,11 +21,11 @@ pub struct Location {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub move_error: Option<String>,
 }
-pub fn control(profile: &Path) -> PathBuf {
+pub fn location_file_path(profile: &Path) -> PathBuf {
     profile.join("database-location.json")
 }
-pub fn location(profile: &Path) -> Result<Location, String> {
-    match fs::read(control(profile)) {
+pub fn load_location(profile: &Path) -> Result<Location, String> {
+    match fs::read(location_file_path(profile)) {
         Ok(b) => serde_json::from_slice(&b).map_err(|e| e.to_string()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Location {
             active: profile.to_owned(),
@@ -38,13 +38,14 @@ pub fn location(profile: &Path) -> Result<Location, String> {
         Err(e) => Err(e.to_string()),
     }
 }
-fn publish(profile: &Path, state: &Location) -> Result<(), String> {
+fn save_location(profile: &Path, state: &Location) -> Result<(), String> {
     let mut f = tempfile::NamedTempFile::new_in(profile).map_err(|e| e.to_string())?;
     serde_json::to_writer(f.as_file_mut(), state).map_err(|e| e.to_string())?;
     f.flush()
         .and_then(|_| f.as_file().sync_all())
         .map_err(|e| e.to_string())?;
-    f.persist(control(profile)).map_err(|e| e.to_string())?;
+    f.persist(location_file_path(profile))
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 fn check_destination(root: &Path) -> Result<(), String> {
@@ -134,7 +135,7 @@ fn publish_candidate(
             .map_err(|e| format!("flush migration candidate: {e}"))?;
         state.staged = Some(stage.clone());
         state.pending = Some(next.to_owned());
-        publish(profile, state)?;
+        save_location(profile, state)?;
         temp.keep().map_err(|e| e.to_string())?;
         stage
     };
@@ -148,10 +149,10 @@ fn publish_candidate(
     }
     Ok(stage)
 }
-pub fn database_for_profile(profile: &Path) -> Result<PathBuf, String> {
-    let mut state = location(profile)?;
+pub fn prepare_database_for_startup(profile: &Path) -> Result<PathBuf, String> {
+    let mut state = load_location(profile)?;
     let old = state.active.join("patina.db");
-    if control(profile).exists() && (!old.is_file() || !state.active.is_absolute()) {
+    if location_file_path(profile).exists() && (!old.is_file() || !state.active.is_absolute()) {
         return Err("Configured database is unavailable".into());
     }
     if let Some(next) = state.pending.take() {
@@ -163,7 +164,7 @@ pub fn database_for_profile(profile: &Path) -> Result<PathBuf, String> {
                 migration::rollback_backups(&mut state, &next);
                 let stage = state.staged.take();
                 state.move_error = Some(error);
-                publish(profile, &state)?;
+                save_location(profile, &state)?;
                 if let Some(stage) = stage.filter(|p| is_migration_stage(p, &next)) {
                     let _ = fs::remove_file(stage);
                 }
@@ -180,7 +181,7 @@ pub fn database_for_profile(profile: &Path) -> Result<PathBuf, String> {
         state.backups = Some(next.join("backups"));
         let backup_stage = state.staged_backups.take();
         state.active = next;
-        publish(profile, &state)?;
+        save_location(profile, &state)?;
         // Only remove the previous DB after the location pointer is durable.
         // Leave a closed source in place if Windows refuses to delete it.
         let _ = fs::remove_file(stage);
@@ -195,21 +196,24 @@ pub fn database_for_profile(profile: &Path) -> Result<PathBuf, String> {
     Ok(old)
 }
 
-pub fn stage_move(profile: &Path, directory: Option<&Path>) -> Result<(), String> {
-    let dest = migration::destination(profile, directory)?;
+pub fn schedule_storage_move(profile: &Path, directory: Option<&Path>) -> Result<(), String> {
+    let dest = migration::resolve_destination(profile, directory)?;
     fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
     let dest = dest.canonicalize().map_err(|e| e.to_string())?;
-    let mut state = location(profile)?;
+    let mut state = load_location(profile)?;
     if state.active != dest {
         check_destination(&dest)?;
     }
     state.pending = (state.active != dest).then_some(dest);
     state.move_error = None;
-    publish(profile, &state)?;
+    save_location(profile, &state)?;
     Ok(())
 }
 
-pub async fn replace_online(target: &SqlitePool, source: &SqlitePool) -> Result<(), String> {
+pub async fn restore_database_in_place(
+    target: &SqlitePool,
+    source: &SqlitePool,
+) -> Result<(), String> {
     let mut target = target.acquire().await.map_err(|e| e.to_string())?;
     let mut source = source.acquire().await.map_err(|e| e.to_string())?;
     let mut dst = target.lock_handle().await.map_err(|e| e.to_string())?;

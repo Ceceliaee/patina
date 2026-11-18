@@ -71,17 +71,21 @@ pub(crate) async fn upload_scheduled_snapshot(
     remote_path: &str,
     expected_size: u64,
     allow_existing: bool,
-) -> Result<ScheduledRemoteUploadOutcome, String> {
+) -> Result<ScheduledRemoteUploadOutcome, crate::ActivityError> {
     target.client.ensure_dir(&target.config.remote_dir).await?;
     if let Some(metadata) = target.client.object_metadata(remote_path).await? {
         if !allow_existing {
-            return Err("remote_name_conflict".to_string());
+            return Err(crate::ActivityError::Conflict(
+                "remote_name_conflict".into(),
+            ));
         }
         if metadata
             .size_bytes
             .is_some_and(|size| size != expected_size)
         {
-            return Err("remote_name_conflict".to_string());
+            return Err(crate::ActivityError::Conflict(
+                "remote_name_conflict".into(),
+            ));
         }
         return Ok(ScheduledRemoteUploadOutcome {
             etag: metadata.etag,
@@ -101,7 +105,7 @@ pub(crate) async fn upload_scheduled_snapshot(
         .size_bytes
         .is_some_and(|size| size != expected_size)
     {
-        return Err("remote_validation_failed".to_string());
+        return Err("remote_validation_failed".into());
     }
     Ok(ScheduledRemoteUploadOutcome {
         etag: metadata.etag,

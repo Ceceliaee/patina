@@ -402,7 +402,7 @@ impl WebDavClient {
         &self,
         local_path: &Path,
         remote_path: &str,
-    ) -> Result<(), String> {
+    ) -> Result<(), crate::ActivityError> {
         let file = tokio::fs::File::open(local_path)
             .await
             .map_err(|error| format!("failed to read local backup before upload: {error}"))?;
@@ -412,7 +412,7 @@ impl WebDavClient {
             .map_err(|error| format!("failed to read local backup metadata: {error}"))?
             .len();
         if size > MAX_TRANSFER_BYTES {
-            return Err("local backup exceeds the WebDAV transfer size limit".to_string());
+            return Err("local backup exceeds the WebDAV transfer size limit".into());
         }
         let body = Body::wrap_stream(ReaderStream::new(file));
         let response = self
@@ -427,13 +427,13 @@ impl WebDavClient {
             .map_err(|error| format!("failed to upload WebDAV backup: {error}"))?;
         let status = response.status();
         if status == StatusCode::PRECONDITION_FAILED {
-            Err("remote_name_conflict".to_string())
+            Err(crate::ActivityError::Conflict(
+                "remote_name_conflict".into(),
+            ))
         } else if status == StatusCode::CREATED {
             Ok(())
         } else {
-            Err(format!(
-                "failed to confirm new WebDAV backup: HTTP {status}"
-            ))
+            Err(format!("failed to confirm new WebDAV backup: HTTP {status}").into())
         }
     }
 
@@ -825,7 +825,7 @@ mod tests {
         let requests = captured.await.unwrap();
         let _ = std::fs::remove_file(file);
 
-        assert_eq!(error, "remote_name_conflict");
+        assert!(matches!(error, crate::ActivityError::Conflict(_)));
         let request = requests[0].to_ascii_lowercase();
         assert!(request.starts_with("put /dav/patina/automatic.zip "));
         assert!(request.contains("\r\nif-none-match: *\r\n"));

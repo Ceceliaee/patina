@@ -1,4 +1,4 @@
-use super::{Recorder, TrackingHost};
+use super::desktop::{RecordingSignals, TrackingHost};
 use crate::data::{
     backup, export, import, remote_backup::native::Dav, repositories::import_batches,
     user_data_maintenance as cleanup,
@@ -9,22 +9,24 @@ use patina_activity_model::views::storage::{
 use serde_json::{json, Value};
 use sqlx::SqlitePool;
 use std::{
-    future::Future,
     path::{Path, PathBuf},
     sync::Arc,
 };
 use tokio::sync::Mutex;
 
 pub use patina_activity_model::StorageRequest;
-pub use patina_storage::location::database_for_profile;
-use patina_storage::location::{control, destination, directory_size, location, replace_online};
+pub use patina_storage::location::prepare_database_for_startup;
+use patina_storage::location::{
+    directory_size_bytes, load_location, location_file_path, resolve_destination,
+    restore_database_in_place,
+};
 
 pub(super) struct Storage {
     profile: PathBuf,
     database: PathBuf,
     dav: Dav,
     jobs: crate::data::storage_jobs::StorageJobs,
-    operation: Mutex<()>,
+    operation: Mutex<bool>,
     install_bytes: tokio::sync::OnceCell<u64>,
     prepared: Mutex<Option<(String, PathBuf, Option<tempfile::TempDir>)>>,
 }
@@ -38,7 +40,7 @@ impl Storage {
             profile: profile.into(),
             legacy: profile.into(),
             database: database.into(),
-            backups: location(profile)
+            backups: load_location(profile)
                 .ok()
                 .and_then(|s| s.backups)
                 .unwrap_or_else(|| profile.join("backups")),
@@ -80,7 +82,10 @@ impl Storage {
     pub(super) async fn run_jobs(self: Arc<Self>) -> Result<(), String> {
         loop {
             {
-                let _op = self.operation.lock().await;
+                let stopped = self.operation.lock().await;
+                if *stopped {
+                    return Ok(());
+                }
                 if let Err(e) = crate::data::scheduled_backup::tick(&self.jobs).await {
                     eprintln!("scheduled backup: {e}");
                 }
@@ -115,7 +120,7 @@ impl Storage {
             self.database.with_extension("db-wal"),
             self.database.with_extension("db-shm"),
             self.database.with_extension("db-journal"),
-            control(&self.profile),
+            location_file_path(&self.profile),
             self.profile.join("instance.lock"),
         ] {
             if export::common::paths_refer_to_same_file(path, &p) {
@@ -125,18 +130,47 @@ impl Storage {
         Ok(())
     }
 }
-impl Recorder {
-    pub fn storage(
+#[derive(Clone)]
+pub struct StorageOperations {
+    storage: Arc<Storage>,
+    pool: SqlitePool,
+    signals: RecordingSignals,
+    runtime: tokio::runtime::Handle,
+}
+
+impl StorageOperations {
+    pub fn new(
+        profile: &Path,
+        database: &Path,
+        pool: SqlitePool,
+        signals: RecordingSignals,
+        runtime: tokio::runtime::Handle,
+    ) -> Self {
+        Self {
+            storage: Arc::new(Storage::new(profile, database, pool.clone())),
+            pool,
+            signals,
+            runtime,
+        }
+    }
+    pub async fn request(
         &self,
         request: StorageRequest,
-    ) -> impl Future<Output = Result<StorageReply, String>> + 'static {
-        let storage = Arc::clone(&self.storage);
+    ) -> Result<StorageReply, crate::ActivityError> {
+        let storage = self.storage.clone();
         let pool = self.pool.clone();
-        let host = self.host.clone();
-        let task = self
-            .runtime
-            .spawn(async move { storage.execute(&pool, &host, request).await });
-        async move { task.await.map_err(|e| e.to_string())? }
+        let host = self.signals.clone();
+        self.runtime
+            .spawn(async move { storage.execute(&pool, &host, request).await })
+            .await
+            .map_err(|error| crate::ActivityError::Rejected(error.to_string()))?
+    }
+    pub(super) async fn run_jobs(self) -> Result<(), String> {
+        self.storage.run_jobs().await
+    }
+    pub(super) async fn stop(&self) {
+        let mut stopped = self.storage.operation.lock().await;
+        *stopped = true;
     }
 }
 
@@ -144,10 +178,13 @@ impl Storage {
     async fn execute(
         &self,
         pool: &SqlitePool,
-        host: &super::Host,
+        host: &RecordingSignals,
         request: StorageRequest,
-    ) -> Result<StorageReply, String> {
-        let _op = self.operation.lock().await;
+    ) -> Result<StorageReply, crate::ActivityError> {
+        let stopped = self.operation.lock().await;
+        if *stopped {
+            return Err("storage has stopped".into());
+        }
         let s = self;
         use StorageRequest::*;
         let value = match request {
@@ -212,7 +249,7 @@ impl Storage {
                 .filter_map(|p| p.metadata().ok())
                 .map(|m| m.len())
                 .sum::<u64>();
-                let location = location(&s.profile)?;
+                let location = load_location(&s.profile)?;
                 let dav = crate::data::repositories::remote_backup_settings::load_config(pool)
                     .await?
                     .map(|config| DavAccount {
@@ -228,7 +265,7 @@ impl Storage {
                         let profile = s.profile.clone();
                         let data = s.database.parent().unwrap_or(&profile).to_owned();
                         tokio::task::spawn_blocking(move || {
-                            directory_size(&directory, &[&data, &profile])
+                            directory_size_bytes(&directory, &[&data, &profile])
                         })
                         .await
                         .map_err(|e| e.to_string())
@@ -246,14 +283,14 @@ impl Storage {
                 })
             }
             PreviewMove(directory) => {
-                let target = destination(&s.profile, directory.as_deref())?;
+                let target = resolve_destination(&s.profile, directory.as_deref())?;
                 StorageReply::Move(MovePreview {
                     from: s.database.parent().map(Path::to_owned),
                     to: target,
                 })
             }
             Move(directory) => {
-                patina_storage::location::stage_move(&s.profile, directory.as_deref())?;
+                patina_storage::location::schedule_storage_move(&s.profile, directory.as_deref())?;
                 StorageReply::Done
             }
             Export(r) => {
@@ -292,13 +329,13 @@ impl Storage {
                 let report = import::prepared::commit_in_pool(pool, parsed).await?;
                 host.titles().invalidate_app_overrides();
                 host.projection().note_tracking_policy_change();
-                (host.0.changed)();
+                host.notify();
                 StorageReply::Imported(report)
             }
             Batches => StorageReply::Batches(import_batches::list(pool).await?),
             DeleteBatch(id) => {
                 let report = import_batches::delete(pool, &id).await?;
-                (host.0.changed)();
+                host.notify();
                 StorageReply::Deleted(report)
             }
             Backup(path) => {
@@ -321,7 +358,9 @@ impl Storage {
                 let (expected, path, _temp) =
                     selected.as_ref().ok_or("Preview the backup first")?;
                 if expected != &hash {
-                    return Err("Backup preview expired".into());
+                    return Err(crate::ActivityError::Conflict(
+                        "Backup preview expired".into(),
+                    ));
                 }
                 let source = backup::prepare_snapshot_source(
                     path.to_str().ok_or("Invalid path")?,
@@ -344,14 +383,14 @@ impl Storage {
                 )
                 .await?;
                 if replace {
-                    replace_online(pool, &src).await?;
+                    restore_database_in_place(pool, &src).await?;
                     src.close().await;
                 } else {
                     backup::merge_snapshot_backup(src, pool).await?;
                 }
                 host.titles().invalidate_app_overrides();
                 host.projection().note_tracking_policy_change();
-                (host.0.changed)();
+                host.notify();
                 selected.take();
                 StorageReply::Done
             }
@@ -365,7 +404,7 @@ impl Storage {
                 cleanup::delete_sessions_before_in_pool(pool, cutoff)
                     .await
                     .map_err(|e| e.to_string())?;
-                (host.0.changed)();
+                host.notify();
                 StorageReply::Done
             }
             DavInfo => StorageReply::DavConfig(s.dav.snapshot(pool).await?),

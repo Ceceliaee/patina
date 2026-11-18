@@ -17,7 +17,7 @@ fn regular(path: &Path) -> Result<fs::Metadata, String> {
     Ok(meta)
 }
 
-pub fn destination(profile: &Path, selected: Option<&Path>) -> Result<PathBuf, String> {
+pub fn resolve_destination(profile: &Path, selected: Option<&Path>) -> Result<PathBuf, String> {
     let Some(selected) = selected else {
         return Ok(profile.to_owned());
     };
@@ -114,7 +114,7 @@ pub(super) fn publish_backups(
             .and_then(|_| proof.sync_all())
             .map_err(|e| e.to_string())?;
         state.staged_backups = Some(stage.clone());
-        publish(profile, state)?;
+        save_location(profile, state)?;
         let _ = temp.keep();
         stage
     };
@@ -194,7 +194,7 @@ pub(super) fn finish_backups(source: &Path, target: &Path, stage: Option<&Path>)
     }
 }
 
-pub fn directory_size(root: &Path, excluded: &[&Path]) -> u64 {
+pub fn directory_size_bytes(root: &Path, excluded: &[&Path]) -> u64 {
     let Ok(entries) = fs::read_dir(root) else {
         return 0;
     };
@@ -209,7 +209,7 @@ pub fn directory_size(root: &Path, excluded: &[&Path]) -> u64 {
                 return 0;
             };
             if meta.is_dir() {
-                directory_size(&path, excluded)
+                directory_size_bytes(&path, excluded)
             } else if meta.is_file() {
                 meta.len()
             } else {
