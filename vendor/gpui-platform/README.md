@@ -1,0 +1,5 @@
+# Windows platform selection
+
+The two Cargo manifests in this directory select the Windows backends of `gpui-fast-platform` 0.1.17 and `gpui-pre-platform` 0.3.12. The product uses both through gpui-kit. Cargo resolves optional Linux desktop notification dependencies into the portable upstream lock graph even for a Windows-only distribution.
+
+[windows.rs](windows.rs) contains the shared Windows entry points. The manifests retain the portable feature names accepted by gpui-kit and forward Windows renderer and testing features to the corresponding upstream Windows crate. The Windows backend and renderer are built from the original crates. Review both selectors and this entry point when upgrading GPUI. The independent repository tools build on Linux without linking a desktop platform.

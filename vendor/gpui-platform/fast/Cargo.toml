@@ -1,0 +1,30 @@
+[package]
+name = "gpui-fast-platform"
+version = "0.1.17"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[lib]
+name = "gpui_platform"
+path = "../windows.rs"
+
+[features]
+default = ["multithreaded"]
+inspector = ["gpui/inspector"]
+bench-support = ["gpui/bench-support"]
+test-support = ["gpui/test-support", "gpui_windows/test-support"]
+screen-capture = ["gpui/screen-capture", "gpui_windows/screen-capture"]
+# Upstream gpui-kit requests these portable feature names on Windows.
+multithreaded = []
+runtime_shaders = []
+font-kit = []
+wayland = []
+x11 = []
+
+[dependencies]
+anyhow = "1"
+
+[target.'cfg(windows)'.dependencies]
+gpui = { package = "gpui-fast", version = "=0.1.17", default-features = false, features = ["windows-manifest"] }
+gpui_windows = { package = "gpui-fast-windows", version = "=0.1.17", default-features = false }
