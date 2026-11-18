@@ -1,4 +1,6 @@
-use super::catalog::{Catalog, Object, Result, array, categories, hash, object, string};
+use super::catalog::{
+    Catalog, Object, Result, array, categories, json_fingerprint, object, string,
+};
 use regex::Regex;
 use serde_json::{Value, json};
 use std::{
@@ -424,10 +426,10 @@ impl Kit {
         let data = [
             ("direction", direction.to_owned()),
             ("formatVersion", "1".to_owned()),
-            ("immutableFingerprint", hash(&json!(units))),
+            ("immutableFingerprint", json_fingerprint(&json!(units))),
             ("nativeLabel", label.to_owned()),
-            ("schemaFingerprint", hash(&json!(c.schema))),
-            ("sourceFingerprint", hash(&json!(lang.messages))),
+            ("schemaFingerprint", json_fingerprint(&json!(c.schema))),
+            ("sourceFingerprint", json_fingerprint(&json!(lang.messages))),
             ("sourceLocale", src.to_owned()),
             ("targetLocale", target.to_owned()),
             ("unitCount", units.len().to_string()),

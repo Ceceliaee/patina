@@ -120,7 +120,8 @@ pub fn readback(dir: &Path, ver: &Version, repo: &str) -> Result<()> {
     }
     checked(&mut command)?;
     for file in files {
-        if assets::digest(&dir.join(&file))? != assets::digest(&temp.path().join(&file))? {
+        if assets::sha256_file(&dir.join(&file))? != assets::sha256_file(&temp.path().join(&file))?
+        {
             return Err(format!("Published readback mismatch for {file}").into());
         }
     }
@@ -180,7 +181,7 @@ impl Bucket {
         }
         checked(&mut put)?;
         checked(self.aws().args(["s3", "cp", &object]).arg(temp))?;
-        if assets::digest(path)? != assets::digest(temp)? {
+        if assets::sha256_file(path)? != assets::sha256_file(temp)? {
             return Err(format!("R2 readback mismatch for {key}").into());
         }
         Ok(())
@@ -259,7 +260,7 @@ pub(super) fn publish_mirror_files(
     let prefix = format!("desktop/releases/v{ver}/");
     for t in TARGETS {
         let path = dir.join(installer_name(&ver, t));
-        assets::signed(&path, &ver, t, &next.platforms[t.key()], config)?;
+        assets::verify_signed_installer(&path, &ver, t, &next.platforms[t.key()], config)?;
     }
     for t in TARGETS {
         let name = installer_name(&ver, t);

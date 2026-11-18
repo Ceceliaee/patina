@@ -31,7 +31,7 @@ const AREAS: &[(&str, &str, &str)] = &[
     (
         "tool alerts",
         r"^(?:apps/patina/src/tool_events\.rs|apps/patina-ui/src/(?:features/tools/|windows/notice\.rs))",
-        r"^(?:apps/patina(?:-ui)?/tests/pages/tools\.rs|crates/tool-host/.*(?:alerts|notification))",
+        r"^(?:apps/patina(?:-ui)?/tests/pages/tools\.rs|crates/plugin-host/.*(?:alerts|notification))",
     ),
     (
         "data read model",

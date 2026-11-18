@@ -75,7 +75,7 @@ fn package_target(
     makensis: &str,
     secrets: &[&str],
 ) -> Result<PathBuf> {
-    assets::pe(executable, target)?;
+    assets::verify_pe_architecture(executable, target)?;
     let path = temp.join(installer_name(version, target));
     if [version.major, version.minor, version.patch]
         .iter()
@@ -242,7 +242,7 @@ pub(super) fn package(root: &Path, args: &[&str], config: Config) -> Result<()> 
             signature: STANDARD.encode(fs::read(sig)?),
             size: fs::metadata(&installer)?.len(),
         };
-        assets::signed(&installer, &ver, target, &entry, &config)?;
+        assets::verify_signed_installer(&installer, &ver, target, &entry, &config)?;
         assets::write_manifest(
             &temp.path().join(MANIFEST),
             &Manifest {

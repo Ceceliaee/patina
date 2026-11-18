@@ -108,7 +108,8 @@ pub fn run(root: &Path, args: &[String]) -> Result<()> {
             }
             let config = patina_updater::Config::bundled();
             let notes = changelog::read(root, &ver)?.app();
-            let inputs = assets::inputs(root.join(input).as_path(), &ver, repo, &config)?;
+            let inputs =
+                assets::read_build_installers(root.join(input).as_path(), &ver, repo, &config)?;
             let output = root.join(output);
             if *operation == "prepare" {
                 assets::prepare(&output, &ver, &notes, &config, &inputs)?;

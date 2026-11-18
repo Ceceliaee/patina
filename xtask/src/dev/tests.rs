@@ -1,4 +1,4 @@
-use super::{STOP, develop, watch::DIRECTORIES};
+use super::{STOP, develop, watch::WATCHED_DIRECTORIES};
 use std::{
     fs, io,
     path::Path,
@@ -25,7 +25,7 @@ fn wait_for(path: &Path) -> io::Result<()> {
 fn failed_build_keeps_preview_until_fixed_save() -> io::Result<()> {
     let fixture = tempfile::tempdir()?;
     let root = fixture.path();
-    for &(path, _) in DIRECTORIES {
+    for &(path, _) in WATCHED_DIRECTORIES {
         fs::create_dir_all(root.join(path))?;
     }
     fs::write(

@@ -97,7 +97,7 @@ pub(super) fn run(root: &Path, mut args: Vec<String>) -> io::Result<()> {
 }
 
 fn develop(root: &Path, profile: &Path, args: &[String]) -> io::Result<()> {
-    let sources = watch::Sources::new(root)?;
+    let watcher = watch::SourceWatcher::new(root)?;
     let session = tempfile::Builder::new().prefix("patina-dev-").tempdir()?;
     let mut running_dir = None;
     let mut preview: Option<Child> = None;
@@ -151,10 +151,10 @@ fn develop(root: &Path, profile: &Path, args: &[String]) -> io::Result<()> {
                 eprintln!("GPUI preview started.");
             }
         }
-        changed = sources.changed(250)?;
+        changed = watcher.wait_for_change(250)?;
         if changed {
             while !STOP.load(Ordering::Relaxed) {
-                if !sources.changed(150)? {
+                if !watcher.wait_for_change(150)? {
                     break;
                 }
             }

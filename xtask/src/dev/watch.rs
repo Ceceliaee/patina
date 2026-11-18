@@ -8,9 +8,9 @@ use windows_sys::Win32::{
     System::Threading::WaitForMultipleObjects,
 };
 
-pub struct Sources(Vec<HANDLE>);
+pub struct SourceWatcher(Vec<HANDLE>);
 
-pub(super) const DIRECTORIES: &[(&str, bool)] = &[
+pub(super) const WATCHED_DIRECTORIES: &[(&str, bool)] = &[
     ("", false),
     (".cargo", true),
     ("apps", true),
@@ -23,10 +23,10 @@ pub(super) const DIRECTORIES: &[(&str, bool)] = &[
     ("vendor", true),
 ];
 
-impl Sources {
+impl SourceWatcher {
     pub fn new(root: &Path) -> io::Result<Self> {
-        let mut sources = Self(Vec::new());
-        for &(path, recursive) in DIRECTORIES {
+        let mut watcher = Self(Vec::new());
+        for &(path, recursive) in WATCHED_DIRECTORIES {
             let name: Vec<_> = root
                 .join(path)
                 .as_os_str()
@@ -48,12 +48,12 @@ impl Sources {
                     io::Error::last_os_error()
                 )));
             }
-            sources.0.push(handle);
+            watcher.0.push(handle);
         }
-        Ok(sources)
+        Ok(watcher)
     }
 
-    pub fn changed(&self, timeout_ms: u32) -> io::Result<bool> {
+    pub fn wait_for_change(&self, timeout_ms: u32) -> io::Result<bool> {
         match unsafe { WaitForMultipleObjects(self.0.len() as u32, self.0.as_ptr(), 0, timeout_ms) }
         {
             WAIT_TIMEOUT => Ok(false),
@@ -68,7 +68,7 @@ impl Sources {
     }
 }
 
-impl Drop for Sources {
+impl Drop for SourceWatcher {
     fn drop(&mut self) {
         for handle in self.0.drain(..) {
             unsafe { FindCloseChangeNotification(handle) };

@@ -239,8 +239,8 @@ fn registration_is_atomic_and_reviews_expire_after_source_changes() {
 
 #[test]
 fn catalog_rejects_invalid_json_keys_structures_and_argument_types() {
-    assert!(catalog::canonical("iw").is_err());
-    assert!(catalog::canonical("en-us").is_err());
+    assert!(catalog::parse_canonical_locale("iw").is_err());
+    assert!(catalog::parse_canonical_locale("en-us").is_err());
     let root = input_root();
     let c = Catalog::load(root.path()).unwrap();
     let key = "native.sentence";

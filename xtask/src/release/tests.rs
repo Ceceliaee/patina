@@ -60,7 +60,7 @@ fn signed_bundles_require_one_program_for_each_architecture() -> Result<()> {
             },
         )?;
     }
-    let original = inputs(&input, &ver, "example/patina", &config)?;
+    let original = read_build_installers(&input, &ver, "example/patina", &config)?;
     prepare(&output, &ver, "notes", &config, &original)?;
     let check = || {
         verify_assets(
@@ -68,7 +68,7 @@ fn signed_bundles_require_one_program_for_each_architecture() -> Result<()> {
             &ver,
             "notes",
             &config,
-            &inputs(&input, &ver, "example/patina", &config)?,
+            &read_build_installers(&input, &ver, "example/patina", &config)?,
         )
     };
     check()?;

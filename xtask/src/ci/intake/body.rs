@@ -9,12 +9,13 @@ const GOVERNANCE: [&str; 4] = [
     "docs/engineering-quality.md",
     ".github/pull_request_template.md",
 ];
-fn doc(p: &str) -> bool {
-    GOVERNANCE.contains(&p)
-        || matches!(p, "README.md" | "README.zh-CN.md" | "CHANGELOG.md")
-        || (p.starts_with("docs/")
-            && p.ends_with(".md")
-            && p.split('/')
+fn is_documentation_path(path: &str) -> bool {
+    GOVERNANCE.contains(&path)
+        || matches!(path, "README.md" | "README.zh-CN.md" | "CHANGELOG.md")
+        || (path.starts_with("docs/")
+            && path.ends_with(".md")
+            && path
+                .split('/')
                 .all(|s| !s.starts_with('.') && !s.is_empty() && !s.contains('\\')))
 }
 fn sections(body: &str) -> BTreeMap<String, String> {
@@ -78,7 +79,7 @@ fn test_command(s: &str, files: &[Change]) -> bool {
         Some("xtask") => match tokens.collect::<Vec<_>>().as_slice() {
             ["check", "native"] => true,
             ["check", "tools"] => files.iter().all(|f| {
-                doc(&f.path)
+                is_documentation_path(&f.path)
                     || f.path.starts_with("xtask/")
                     || f.path.starts_with("locales/")
                     || f.path.starts_with("examples/")
@@ -165,9 +166,11 @@ pub(super) fn assess(body: &str, files: &[Change], errors: &mut Vec<String>) {
         .collect();
     if !commands.contains(&"cargo xtask check") {
         let docs_only = !files.is_empty()
-            && files
-                .iter()
-                .all(|f| !f.binary && matches!(f.status, b'A' | b'D' | b'M') && doc(&f.path));
+            && files.iter().all(|f| {
+                !f.binary
+                    && matches!(f.status, b'A' | b'D' | b'M')
+                    && is_documentation_path(&f.path)
+            });
         if docs_only {
             if !commands.contains(&"cargo xtask docs check") {
                 errors.push("incomplete-pr-sections: confirm cargo xtask docs check".into())

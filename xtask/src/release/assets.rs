@@ -11,7 +11,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub struct Input {
+pub struct InstallerInput {
     pub target: Target,
     pub name: String,
     pub path: PathBuf,
@@ -56,7 +56,7 @@ pub fn write_manifest(path: &Path, manifest: &Manifest) -> Result<()> {
     Ok(())
 }
 
-pub fn digest(path: &Path) -> Result<String> {
+pub fn sha256_file(path: &Path) -> Result<String> {
     let mut file = File::open(path)?;
     let mut hash = Sha256::new();
     let mut buf = [0u8; 65536];
@@ -70,7 +70,7 @@ pub fn digest(path: &Path) -> Result<String> {
     Ok(format!("{:x}", hash.finalize()))
 }
 
-pub fn pe(path: &Path, target: Target) -> Result<()> {
+pub fn verify_pe_architecture(path: &Path, target: Target) -> Result<()> {
     let mut file = File::open(path)?;
     let mut dos = [0; 64];
     file.read_exact(&mut dos)?;
@@ -96,7 +96,7 @@ pub fn pe(path: &Path, target: Target) -> Result<()> {
     Ok(())
 }
 
-pub fn signed(
+pub fn verify_signed_installer(
     file: &Path,
     version: &Version,
     target: Target,
@@ -118,7 +118,12 @@ pub fn signed(
     Ok(())
 }
 
-pub fn inputs(dir: &Path, ver: &Version, repo: &str, config: &Config) -> Result<Vec<Input>> {
+pub fn read_build_installers(
+    dir: &Path,
+    ver: &Version,
+    repo: &str,
+    config: &Config,
+) -> Result<Vec<InstallerInput>> {
     let mut inputs = Vec::new();
     for target in TARGETS {
         let arch_dir = dir.join(arch(target));
@@ -140,8 +145,8 @@ pub fn inputs(dir: &Path, ver: &Version, repo: &str, config: &Config) -> Result<
         }
         let name = installer_name(ver, target);
         let path = arch_dir.join(&name);
-        signed(&path, ver, target, &entry, config)?;
-        pe(&arch_dir.join(EXECUTABLE), target)?;
+        verify_signed_installer(&path, ver, target, &entry, config)?;
+        verify_pe_architecture(&arch_dir.join(EXECUTABLE), target)?;
         for file in fs::read_dir(&arch_dir)? {
             let file = file?;
             if !file.file_type()?.is_file()
@@ -150,7 +155,7 @@ pub fn inputs(dir: &Path, ver: &Version, repo: &str, config: &Config) -> Result<
                 return Err(format!("Unexpected build input {}", file.path().display()).into());
             }
         }
-        inputs.push(Input {
+        inputs.push(InstallerInput {
             target,
             name,
             path,
@@ -160,7 +165,7 @@ pub fn inputs(dir: &Path, ver: &Version, repo: &str, config: &Config) -> Result<
     Ok(inputs)
 }
 
-fn combined(ver: &Version, notes: &str, config: &Config, inputs: &[Input]) -> Manifest {
+fn combined(ver: &Version, notes: &str, config: &Config, inputs: &[InstallerInput]) -> Manifest {
     Manifest {
         schema: 1,
         application: config.application.clone(),
@@ -178,7 +183,7 @@ pub fn prepare(
     ver: &Version,
     notes: &str,
     config: &Config,
-    inputs: &[Input],
+    inputs: &[InstallerInput],
 ) -> Result<()> {
     fs::create_dir_all(output)?;
     // Stage and validate every byte before publishing any final filenames.
@@ -188,9 +193,9 @@ pub fn prepare(
     for i in inputs {
         let dst = stage.path().join(&i.name);
         fs::copy(&i.path, &dst)?;
-        signed(&dst, ver, i.target, &i.entry, config)?;
-        let hash = digest(&dst)?;
-        if digest(&i.path)? != hash {
+        verify_signed_installer(&dst, ver, i.target, &i.entry, config)?;
+        let hash = sha256_file(&dst)?;
+        if sha256_file(&i.path)? != hash {
             return Err("Source bundle changed during preparation".into());
         }
         sums.push_str(&format!("{hash}  {}\n", i.name));
@@ -233,7 +238,7 @@ pub fn verify_assets(
     ver: &Version,
     notes: &str,
     config: &Config,
-    inputs: &[Input],
+    inputs: &[InstallerInput],
 ) -> Result<()> {
     if read_manifest(&output.join(MANIFEST))? != combined(ver, notes, config, inputs) {
         return Err("Published manifest differs from signed inputs and release notes".into());
@@ -245,9 +250,9 @@ pub fn verify_assets(
     let mut sums = String::new();
     for i in inputs {
         let dst = output.join(&i.name);
-        signed(&dst, ver, i.target, &i.entry, config)?;
-        let hash = digest(&dst)?;
-        if digest(&i.path)? != hash {
+        verify_signed_installer(&dst, ver, i.target, &i.entry, config)?;
+        let hash = sha256_file(&dst)?;
+        if sha256_file(&i.path)? != hash {
             return Err("Published installer differs from build input".into());
         }
         sums.push_str(&format!("{hash}  {}\n", i.name));

@@ -70,14 +70,14 @@ fn sign_product_installers_with_disposable_key() -> Result<()> {
             config.clone(),
         )?;
         let m = assets::read_manifest(&dir.join(MANIFEST))?;
-        assets::signed(
+        assets::verify_signed_installer(
             &dir.join(installer_name(&version, t)),
             &version,
             t,
             &m.platforms[t.key()],
             &config,
         )?;
-        assets::pe(&dir.join(EXECUTABLE), t)?;
+        assets::verify_pe_architecture(&dir.join(EXECUTABLE), t)?;
         println!("Verified {} {} with disposable key", t.key(), version);
     }
     if target.is_none() {
@@ -87,14 +87,14 @@ fn sign_product_installers_with_disposable_key() -> Result<()> {
             &version,
             &notes,
             &config,
-            &assets::inputs(&input, &version, "example/patina", &config)?,
+            &assets::read_build_installers(&input, &version, "example/patina", &config)?,
         )?;
         assets::verify_assets(
             &dist,
             &version,
             &notes,
             &config,
-            &assets::inputs(&input, &version, "example/patina", &config)?,
+            &assets::read_build_installers(&input, &version, "example/patina", &config)?,
         )?;
         println!("Verified both release installers, signed platform notes, manifest and checksums");
         let mirror = assets::mirror(
@@ -107,7 +107,10 @@ fn sign_product_installers_with_disposable_key() -> Result<()> {
             let destination = bucket.join(key);
             fs::create_dir_all(destination.parent().ok_or("Invalid mirror key")?)?;
             fs::copy(file, &destination)?;
-            assert_eq!(assets::digest(file)?, assets::digest(&destination)?);
+            assert_eq!(
+                assets::sha256_file(file)?,
+                assets::sha256_file(&destination)?
+            );
             Ok(())
         })?;
         let current = assets::read_manifest(&bucket.join(MANIFEST))?;
@@ -116,7 +119,7 @@ fn sign_product_installers_with_disposable_key() -> Result<()> {
         for t in TARGETS {
             let asset = &current.platforms[t.key()];
             let key = asset.url.strip_prefix("https://updates.example/").unwrap();
-            assets::signed(&bucket.join(key), &version, t, asset, &config)?;
+            assets::verify_signed_installer(&bucket.join(key), &version, t, asset, &config)?;
         }
         println!("Verified both mirrored installers and the published root manifest on local disk");
     }

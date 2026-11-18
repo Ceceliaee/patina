@@ -5,7 +5,7 @@ mod kit;
 mod tests;
 mod workbook;
 
-use catalog::{Catalog, Object, Result, canonical, hash, string};
+use catalog::{Catalog, Object, Result, json_fingerprint, parse_canonical_locale, string};
 use kit::Kit;
 use serde_json::{Value, json};
 use std::{
@@ -243,12 +243,13 @@ pub fn run(root: &Path, args: Vec<String>) -> Result<()> {
             let source = &c.langs[&c.source].messages;
             let mut meta = lang.meta.clone();
             if let Some(key) = a.opt("--key") {
-                meta["reviews"][key] = hash(source.get(key).ok_or("unknown message key")?).into();
+                meta["reviews"][key] =
+                    json_fingerprint(source.get(key).ok_or("unknown message key")?).into();
             } else {
                 meta["reviews"] = Value::Object(
                     source
                         .iter()
-                        .map(|(key, value)| (key.clone(), hash(value).into()))
+                        .map(|(key, value)| (key.clone(), json_fingerprint(value).into()))
                         .collect(),
                 );
             }
@@ -286,7 +287,7 @@ pub fn run(root: &Path, args: Vec<String>) -> Result<()> {
                 )
             };
             let label = label.trim();
-            canonical(tag)?;
+            parse_canonical_locale(tag)?;
             if label.is_empty() || !matches!(direction, "rtl" | "ltr") {
                 return Err("expected a native language label and direction ltr or rtl".into());
             }

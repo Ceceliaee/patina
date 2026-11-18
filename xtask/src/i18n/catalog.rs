@@ -82,13 +82,13 @@ pub fn array(v: &Value) -> Result<&[Value]> {
         .map(Vec::as_slice)
         .ok_or("expected array".into())
 }
-pub fn hash(value: &Value) -> String {
+pub fn json_fingerprint(value: &Value) -> String {
     let mut ordered = value.clone();
     ordered.sort_all_objects();
     format!("{:x}", Sha256::digest(ordered.to_string().as_bytes()))[..16].to_owned()
 }
 
-pub fn canonical(tag: &str) -> Result<Locale> {
+pub fn parse_canonical_locale(tag: &str) -> Result<Locale> {
     let mut locale: Locale = tag.parse()?;
     icu_locale::LocaleCanonicalizer::new_extended().canonicalize(&mut locale);
     if locale.to_string() != tag {
@@ -97,17 +97,19 @@ pub fn canonical(tag: &str) -> Result<Locale> {
     Ok(locale)
 }
 pub fn categories(tag: &str) -> Result<BTreeSet<&'static str>> {
-    Ok(PluralRules::try_new_cardinal(canonical(tag)?.into())?
-        .categories()
-        .map(|cat| match cat {
-            PluralCategory::One => "one",
-            PluralCategory::Two => "two",
-            PluralCategory::Zero => "zero",
-            PluralCategory::Few => "few",
-            PluralCategory::Many => "many",
-            PluralCategory::Other => "other",
-        })
-        .collect())
+    Ok(
+        PluralRules::try_new_cardinal(parse_canonical_locale(tag)?.into())?
+            .categories()
+            .map(|cat| match cat {
+                PluralCategory::One => "one",
+                PluralCategory::Two => "two",
+                PluralCategory::Zero => "zero",
+                PluralCategory::Few => "few",
+                PluralCategory::Many => "many",
+                PluralCategory::Other => "other",
+            })
+            .collect(),
+    )
 }
 
 pub struct Language {
@@ -146,7 +148,7 @@ impl Catalog {
             if !entry.file_type()?.is_dir() || tag == "fixtures" || tag.starts_with('.') {
                 continue;
             }
-            canonical(&tag)?;
+            parse_canonical_locale(&tag)?;
             let meta = json(&entry.path().join("metadata.json"))?;
             if !order.insert(meta["order"].as_u64().ok_or("missing display order")?) {
                 return Err(format!("{tag}: duplicate display order").into());
@@ -211,7 +213,9 @@ impl Catalog {
                 return Err(format!("{tag}: review key set differs").into());
             }
             for (key, value) in source {
-                if reviews.get(key).and_then(Value::as_str) != Some(hash(value).as_str()) {
+                if reviews.get(key).and_then(Value::as_str)
+                    != Some(json_fingerprint(value).as_str())
+                {
                     return Err(format!("{tag}: source change requires review: {key}").into());
                 }
             }
