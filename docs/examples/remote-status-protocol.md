@@ -1,6 +1,6 @@
 # 远程状态接收协议
 
-本文供接收端开发者查询 Patina 的 WebSocket 鉴权、快照、图标、心跳和重连约定。用户配置见[使用指南](./remote-status-bridge.md)，示例部署与 HTTP 路由见[Worker README](./remote-status-bridge-worker/README.md)。本协议只传当前状态；本机浏览器网页采集另由 [Web Activity 协议](../web-activity-protocol.md)定义。
+本文供接收端开发者查询 Patina 的 WebSocket 鉴权、快照、图标、心跳和重连约定。用户配置见[使用指南](./remote-status-bridge.md)，示例部署与 HTTP 路由见[Worker README](../../examples/remote-status-bridge-worker/README.md)。本协议只传当前状态；本机浏览器网页采集另由 [Web Activity 协议](../web-activity-protocol.md)定义。
 
 [鉴权](#4-worker-侧最低要求) · [快照字段](#5-快照消息) · [图标](#6-图标发送规则) · [心跳](#7-发送时机) · [离线](#8-worker-离线判定) · [重连](#9-重连行为) · [接收端状态](#10-worker-状态建议) · [安全](#11-安全边界)
 
@@ -10,7 +10,7 @@
 
 Worker 必须提供一个可升级为 `WebSocket` 的地址。这个地址可以是 Cloudflare Worker，也可以是用户自己的源站。
 
-示例部署和地址/Token 配置见[Worker README](./remote-status-bridge-worker/README.md)。
+示例部署和地址/Token 配置见[Worker README](../../examples/remote-status-bridge-worker/README.md)。
 
 连接建立后，Patina 会先发送鉴权消息：
 
@@ -183,4 +183,4 @@ Worker 是否把当前状态持久化，取决于展示链路需求。内置示�
 Patina 发送的数据只代表当前状态，但仍可能暴露正在使用的软件名称。公网展示前应确认屏幕内容符合使用者预期。
 ## 实现与示例边界
 
-发送端字段与时序由 [Rust bridge](../../desktop/recorder/src/engine/remote_status_bridge/mod.rs)实现；[示例 Worker](./remote-status-bridge-worker/src/index.js)保存最新状态。示例收到 `iconData: null` 或缺省时保留该机器先前的图标，因此无图标输入不保证清掉旧图标；自定义接收端需要按自身展示要求处理 `iconHash` 变化。部署结果仍需按[使用指南](./remote-status-bridge.md#确认连接与快照)验证，源码核对不代表远端部署已验收。
+发送端字段与时序由 [Rust bridge](../../crates/activity/src/engine/remote_status_bridge/mod.rs)实现；[示例 Worker](../../examples/remote-status-bridge-worker/src/cloudflare.rs)保存最新状态。示例收到 `iconData: null` 或缺省时保留该机器先前的图标，因此无图标输入不保证清掉旧图标；自定义接收端需要按自身展示要求处理 `iconHash` 变化。部署结果仍需按[使用指南](./remote-status-bridge.md#确认连接与快照)验证，源码核对不代表远端部署已验收。

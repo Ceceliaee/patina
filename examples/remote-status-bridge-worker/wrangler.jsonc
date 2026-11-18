@@ -1,7 +1,6 @@
 {
-  "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "patina-remote-status-bridge",
-  "main": "src/index.js",
+  "main": "build/index.js",
   "compatibility_date": "2026-06-17",
   "durable_objects": {
     "bindings": [
@@ -21,5 +20,8 @@
   ],
   "observability": {
     "enabled": true
+  },
+  "build": {
+    "command": "worker-build --release -- --locked"
   }
 }

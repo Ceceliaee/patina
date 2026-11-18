@@ -1,6 +1,6 @@
 # 远程推送使用文档
 
-本指南帮助用户把 Patina 当前状态推送到自己的接收端，并确认连接是否工作。它不传历史记录，不是数据库同步。开发接收端请查[协议参考](./remote-status-protocol.md)；部署示例请查 [Worker README](./remote-status-bridge-worker/README.md)。
+本指南帮助用户把 Patina 当前状态推送到自己的接收端，并确认连接是否工作。它不传历史记录，不是数据库同步。开发接收端请查[协议参考](./remote-status-protocol.md)；部署示例请查 [Worker README](../../examples/remote-status-bridge-worker/README.md)。
 
 [适用范围](#1-功能定位) · [公开留存](#公开展示与留存) · [部署配置](#部署示例接收端) · [确认成功](#确认连接与快照) · [排障](#13-排障)
 
@@ -61,23 +61,11 @@
 
 ## 部署示例接收端
 
-确认上述公开展示边界符合需求后，可使用一键部署；手动部署和本地开发见 [Worker README](./remote-status-bridge-worker/README.md)。
-
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Ceceliaee/patina/tree/main/docs/examples/remote-status-bridge-worker)
-
-快速部署：
-
-1. 点击 `Deploy to Cloudflare`。
-2. 在部署页填写 `REMOTE_STATUS_BRIDGE_TOKEN`。
-3. 部署完成后记下 Worker 域名。
-4. 打开 Patina `设置 -> 服务 -> 远程推送`。
-5. 填写接收地址：`wss://<your-worker-host>/ws`。
-6. 填写和 Worker 相同的 `Token`。
-7. 打开远程推送开关并保存。
+按 [Worker 部署说明](../../examples/remote-status-bridge-worker/README.md) 编译并部署接收端，配置上传 Token。打开 Patina 的「设置 → 服务 → 远程推送」，填写 `wss://<your-worker-host>/ws` 和同一 Token，打开开关并保存。
 
 ## 确认连接与快照
 
-保存设置后，从示例的 `/state` 查询本机标识，观察 `lastReceivedAtMs` 是否随新快照更新；[响应示例](./remote-status-bridge-worker/README.md#122-http-路由示例)说明字段。只看机器列表非空或 WebSocket 升级成功都不足以确认当前连接，因为远端可能保留旧状态。
+保存设置后，从示例的 `/state` 查询本机标识，观察 `lastReceivedAtMs` 是否随新快照更新；[响应示例](../../examples/remote-status-bridge-worker/README.md#122-http-路由示例)说明字段。只看机器列表非空或 WebSocket 升级成功都不足以确认当前连接，因为远端可能保留旧状态。
 
 关闭开关会停止推送，远端状态仍按[留存规则](#公开展示与留存)保存。配置完整但没有新快照时，按下节区分地址、鉴权和状态更新问题。
 
@@ -155,20 +143,20 @@ Worker 只看到机器离线：
 
 <a id="12-示例-worker-接口"></a>
 
-- [12. 示例 Worker 接口](./remote-status-bridge-worker/README.md#12-示例-worker-接口)
+- [12. 示例 Worker 接口](../../examples/remote-status-bridge-worker/README.md#12-示例-worker-接口)
 
 <a id="121-路由总览"></a>
 
-- [12.1 路由总览](./remote-status-bridge-worker/README.md#121-路由总览)
+- [12.1 路由总览](../../examples/remote-status-bridge-worker/README.md#121-路由总览)
 
 <a id="122-http-路由示例"></a>
 
-- [12.2 HTTP 路由示例](./remote-status-bridge-worker/README.md#122-http-路由示例)
+- [12.2 HTTP 路由示例](../../examples/remote-status-bridge-worker/README.md#122-http-路由示例)
 
 <a id="123-websocket-握手示例"></a>
 
-- [12.3 WebSocket 握手示例](./remote-status-bridge-worker/README.md#123-websocket-握手示例)
+- [12.3 WebSocket 握手示例](../../examples/remote-status-bridge-worker/README.md#123-websocket-握手示例)
 
 <a id="124-websocket-消息示例"></a>
 
-- [12.4 WebSocket 消息示例](./remote-status-bridge-worker/README.md#124-websocket-消息示例)
+- [12.4 WebSocket 消息示例](../../examples/remote-status-bridge-worker/README.md#124-websocket-消息示例)
