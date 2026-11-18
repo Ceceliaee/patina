@@ -28,7 +28,6 @@ pub(super) fn mark(phase: &str) {
 #[test]
 #[ignore = "real WASAPI allocation attribution experiment"]
 fn audio_resource_boundaries() {
-    // perf:helper-resources owns the process deadline and captures the evidence.
     let mode = std::env::var("PATINA_AUDIO_RESOURCE_CASE")
         .expect("explicit audio experiment case required");
     assert!([

@@ -1,4 +1,4 @@
-//! Windows-only diagnostic: `pnpm run perf:resources <PID> <new-output.jsonl> [seconds] [interval] [scenario]`
+//! Run from the workspace with `cargo run --locked -p patina --example windows-resource-sample -- <PID> <new-output.jsonl> [seconds] [interval] [scenario]`.
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 use std::{

@@ -185,7 +185,7 @@ async fn wal_reader_retains_its_snapshot_without_stopping_recording_and_releases
 }
 
 #[tokio::test]
-#[ignore = "file-backed mixed-workload performance acceptance; run perf:runtime-db"]
+#[ignore = "file-backed mixed-workload performance measurement"]
 async fn file_database_mixed_workload_capacity() {
     const DAY: i64 = 86_400_000;
     let mut reports = Vec::new();
@@ -297,8 +297,8 @@ async fn file_database_mixed_workload_capacity() {
         reports.push(serde_json::json!({"historical_rows":days*1000,"journal_mode":journal,"busy_timeout_ms":busy_ms,"database_bytes":std::fs::metadata(root.join("fixture.db")).unwrap().len(),"wal_bytes":std::fs::metadata(root.join("fixture.db-wal")).ok().map(|m|m.len()),"elapsed_ms":started.elapsed().as_millis(),"commit_median_ms":latency[30],"commit_p95_ms":latency[56],"commit_max_ms":max,"commits":60}));
         dispose(root, pool).await;
     }
-    let directory =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../artifacts/runtime-reliability");
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../artifacts/runtime-reliability");
     std::fs::create_dir_all(&directory).unwrap();
     let path = directory.join(format!("database-contention-{}.json", uuid::Uuid::new_v4()));
     std::fs::write(&path, serde_json::to_vec_pretty(&reports).unwrap()).unwrap();

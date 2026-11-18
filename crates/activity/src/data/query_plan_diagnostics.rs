@@ -481,7 +481,7 @@ fn build_measurement(
 }
 
 #[tokio::test]
-#[ignore = "run with pnpm run perf:sqlite-query-plan"]
+#[ignore = "compares SQLite query plans and records timings"]
 async fn session_range_query_plan_report() {
     let pool = create_pool().await;
     seed_sessions(&pool).await;

@@ -853,7 +853,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "run with pnpm run perf:tracking-policy"]
+    #[ignore = "measures the recording policy cache across rule and sample counts"]
     fn recording_policy_cache_capacity_report() {
         tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(async {
             let pool = setup_test_db().await;

@@ -200,7 +200,7 @@ async fn measure_capacity(
 }
 
 #[tokio::test]
-#[ignore = "run with pnpm run perf:activity-maintenance"]
+#[ignore = "measures hourly maintenance on a generated activity dataset"]
 async fn hourly_maintenance_capacity_report() {
     let dataset = std::env::var("PATINA_ACTIVITY_MAINTENANCE_DATASET")
         .unwrap_or_else(|_| "native".to_string());

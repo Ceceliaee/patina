@@ -27,7 +27,6 @@ pub(super) fn mark(phase: &str) {
 #[test]
 #[ignore = "real installed Shell resource experiment"]
 fn shell_icon_resource_boundaries() {
-    // perf:helper-resources owns the process deadline and captures the evidence.
     let mode = std::env::var("PATINA_SHELL_RESOURCE_CASE").expect("explicit Shell case required");
     assert!([
         "uncached",

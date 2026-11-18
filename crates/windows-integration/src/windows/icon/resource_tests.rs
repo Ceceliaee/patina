@@ -4,7 +4,6 @@ use crate::windows::{handles::release_checks, resource::current_process_resource
 #[test]
 #[ignore = "real installed executable icon resource experiment"]
 fn file_icon_resource_boundaries() {
-    // perf:helper-resources owns the process deadline and captures the evidence.
     let path =
         std::env::var("PATINA_ICON_RESOURCE_PATH").expect("explicit executable path required");
     assert!(std::path::Path::new(&path).is_file());
