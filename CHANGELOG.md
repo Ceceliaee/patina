@@ -22,6 +22,8 @@ App note en: TBD.
 
 ### Fixed
 
+- 修复 Windows GPUI 版在数据目录路径含空格时无法完成应用内更新的问题。更新后会从原数据目录重新启动。
+
 ### Removed
 
 ### Internal

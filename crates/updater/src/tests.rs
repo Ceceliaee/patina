@@ -29,6 +29,20 @@ fn parse(value: &Value, config: &Config, current: &str, target: Target) -> Resul
 }
 
 #[test]
+fn desktop_progress_snapshot_keeps_its_wire_fields() {
+    let existing = json!({
+        "installed_version": "1.10.0",
+        "phase": "Downloading",
+        "release": null,
+        "received": 4096,
+        "error": null,
+    });
+    let snapshot: Snapshot = serde_json::from_value(existing.clone()).unwrap();
+    assert_eq!(snapshot.received_bytes, 4096);
+    assert_eq!(serde_json::to_value(snapshot).unwrap(), existing);
+}
+
+#[test]
 fn verifies_bytes_and_binds_signed_identity() {
     let (config, mut value, payload) = fixture();
     let release = parse(&value, &config, "0.1.0", Target::X64)
@@ -178,7 +192,7 @@ fn fallback_deduplicates_and_preserves_verified_download() {
     let ready = settled(&service);
     assert_eq!(ready.phase, Phase::Ready);
     assert_eq!(ready.installed_version, "0.1.0");
-    assert_eq!(ready.received, ready.release.unwrap().size);
+    assert_eq!(ready.received_bytes, ready.release.unwrap().size);
     assert_eq!(transport.calls.load(Ordering::SeqCst), 3);
     assert_eq!(
         service.clone().request(Request::Status).unwrap().phase,

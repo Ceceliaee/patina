@@ -23,7 +23,8 @@ pub struct Snapshot {
     pub installed_version: String,
     pub phase: Phase,
     pub release: Option<Release>,
-    pub received: u64,
+    #[serde(rename = "received")]
+    pub received_bytes: u64,
     pub error: Option<String>,
 }
 
@@ -33,7 +34,7 @@ impl Snapshot {
             installed_version: installed_version.to_owned(),
             phase: Phase::Idle,
             release: None,
-            received: 0,
+            received_bytes: 0,
             error: None,
         }
     }

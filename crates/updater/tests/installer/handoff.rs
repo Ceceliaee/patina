@@ -1,5 +1,5 @@
 use super::{Cleanup, Error, run};
-use patina_test_desktop::{polling::wait_observed, process};
+use patina_test_support::{polling::wait_observed, process};
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
 use std::{
     env, fs,
@@ -26,7 +26,9 @@ fn resident(exe: &Path) -> Result<(HWND, u32), Error> {
         unsafe {
             GetWindowThreadProcessId(hwnd, Some(&mut pid));
         }
-        if process::path(pid).and_then(|p| p.canonicalize().ok()) == Some(exe.to_path_buf()) {
+        if process::executable_path(pid).and_then(|p| p.canonicalize().ok())
+            == Some(exe.to_path_buf())
+        {
             Ok((hwnd, pid))
         } else {
             Err("installed host not ready".into())
@@ -48,7 +50,7 @@ fn sample(path: &Path) -> Result<(i64, i64, String), Error> {
 #[test]
 #[ignore = "requires a native Windows application and NSIS"]
 fn published_profile_copy_survives_install_upgrade_and_uninstall() -> Result<(), Error> {
-    if !patina_test_desktop::run_case()? {
+    if !patina_test_support::run_case()? {
         return Ok(());
     }
     let root = tempfile::tempdir()?;
@@ -156,7 +158,8 @@ fn published_profile_copy_survives_install_upgrade_and_uninstall() -> Result<(),
             }
         };
         wait_observed("installed UI and sampling probe roles", || {
-            let children = process::children(pid, &application).map_err(|e| e.to_string())?;
+            let children =
+                process::children_with_executable(pid, &application).map_err(|e| e.to_string())?;
             let has = |role: &str| {
                 children.iter().any(|c| {
                     c.arguments.get(1).map(String::as_str) == Some("--role")
@@ -187,7 +190,7 @@ fn published_profile_copy_survives_install_upgrade_and_uninstall() -> Result<(),
             PostMessageW(Some(tray), WM_COMMAND, WPARAM(2), LPARAM(0))?;
         }
         wait_observed("installed host clean shutdown", || {
-            if process::path(pid).is_none() {
+            if process::executable_path(pid).is_none() {
                 Ok(())
             } else {
                 Err("active".into())

@@ -10,16 +10,16 @@ use tempfile::TempDir;
 
 use crate::{Phase, Request, Snapshot};
 
-struct Downloaded {
-    _lock: File,
+struct VerifiedDownload {
+    staging_lock: File,
     directory: TempDir,
     installer: PathBuf,
 }
 struct Inner {
     snapshot: Snapshot,
-    ready: Option<Downloaded>,
-    gate: Option<PathBuf>,
-    installation_lock: Option<File>,
+    ready: Option<VerifiedDownload>,
+    shutdown_receipt: Option<PathBuf>,
+    staging_lock: Option<File>,
 }
 
 #[derive(Clone)]
@@ -97,8 +97,8 @@ impl Service {
             inner: Arc::new(Mutex::new(Inner {
                 snapshot: Snapshot::idle(current),
                 ready: None,
-                gate: None,
-                installation_lock: None,
+                shutdown_receipt: None,
+                staging_lock: None,
             })),
             config: Arc::new(config),
             transport,
@@ -136,7 +136,7 @@ impl Service {
                 }
                 Request::Status => unreachable!(),
             }
-            state.snapshot.received = 0;
+            state.snapshot.received_bytes = 0;
             state.snapshot.error = None;
         }
         let worker = self.clone();
@@ -211,7 +211,7 @@ impl Service {
         let mut file = File::create(&installer).map_err(|e| e.to_string())?;
         self.transport
             .get(&release.url, release.size, &mut file, &mut |received| {
-                self.inner.lock().unwrap().snapshot.received = received;
+                self.inner.lock().unwrap().snapshot.received_bytes = received;
             })?;
         file.sync_all().map_err(|e| e.to_string())?;
         drop(file);
@@ -221,16 +221,16 @@ impl Service {
             &self.config,
         )?;
         let mut state = self.inner.lock().unwrap();
-        state.ready = Some(Downloaded {
+        state.ready = Some(VerifiedDownload {
             directory,
             installer,
-            _lock: lock,
+            staging_lock: lock,
         });
         state.snapshot.phase = Phase::Ready;
         Ok(())
     }
 
-    /// NSIS waits for this host to exit and for its clean-shutdown gate before replacing files.
+    /// NSIS waits for this host to exit and for its clean-shutdown receipt before replacing files.
     pub fn begin_install(&self, executable: &Path) -> Result<()> {
         self.begin_install_with(executable, |command| {
             command.spawn().map(|_| ()).map_err(|e| e.to_string())
@@ -253,11 +253,11 @@ impl Service {
             .open(&ready.installer)
             .map_err(|e| e.to_string())?;
         verify(&mut file, release, &self.config)?;
-        let gate = ready.directory.path().join("shutdown-complete");
+        let shutdown_receipt = ready.directory.path().join("shutdown-complete");
         let mut command = Command::new(&ready.installer);
         command
             .arg(format!("/UPDATEPID={}", std::process::id()))
-            .arg(format!("/UPDATEGATE={}", gate.display()));
+            .arg(format!("/UPDATEGATE={}", shutdown_receipt.display()));
         if self.root.ends_with("updates")
             && let Some(parent) = self.root.parent().and_then(Path::parent)
         {
@@ -273,14 +273,14 @@ impl Service {
         launch(&mut command)?;
         let ready = state.ready.take().unwrap();
         let _ = ready.directory.keep();
-        state.installation_lock = Some(ready._lock);
-        state.gate = Some(gate);
+        state.staging_lock = Some(ready.staging_lock);
+        state.shutdown_receipt = Some(shutdown_receipt);
         state.snapshot.phase = Phase::Installing;
         Ok(())
     }
-    pub fn complete_shutdown(&self) -> Result<()> {
-        if let Some(gate) = &self.inner.lock().unwrap().gate {
-            fs::write(gate, b"clean").map_err(|e| e.to_string())?;
+    pub fn write_shutdown_receipt(&self) -> Result<()> {
+        if let Some(shutdown_receipt) = &self.inner.lock().unwrap().shutdown_receipt {
+            fs::write(shutdown_receipt, b"clean").map_err(|e| e.to_string())?;
         }
         Ok(())
     }
@@ -301,7 +301,7 @@ mod tests {
                 .is_err()
         );
         assert_eq!(service.snapshot().phase, Phase::Ready);
-        let mut gate = PathBuf::new();
+        let mut shutdown_receipt = PathBuf::new();
         service
             .begin_install_with(Path::new("test.exe"), |command| {
                 let args: Vec<_> = command
@@ -310,8 +310,8 @@ mod tests {
                     .collect();
                 assert_eq!(args.len(), 2);
                 assert!(args[0].starts_with("/UPDATEPID="));
-                gate = PathBuf::from(args[1].strip_prefix("/UPDATEGATE=").unwrap());
-                assert!(!gate.exists());
+                shutdown_receipt = PathBuf::from(args[1].strip_prefix("/UPDATEGATE=").unwrap());
+                assert!(!shutdown_receipt.exists());
                 assert!(
                     command
                         .get_program()
@@ -322,9 +322,9 @@ mod tests {
             })
             .unwrap();
         assert_eq!(service.snapshot().phase, Phase::Installing);
-        assert!(!gate.exists());
-        service.complete_shutdown().unwrap();
-        assert_eq!(fs::read(&gate).unwrap(), b"clean");
+        assert!(!shutdown_receipt.exists());
+        service.write_shutdown_receipt().unwrap();
+        assert_eq!(fs::read(&shutdown_receipt).unwrap(), b"clean");
         assert!(
             service
                 .begin_install_with(Path::new("test.exe"), |_| panic!("duplicate installation"))

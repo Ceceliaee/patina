@@ -52,7 +52,7 @@ fn wait_file(path: &Path) {
 #[test]
 #[ignore = "isolated Win32 desktop; requires NSIS and rustc"]
 fn native_install_upgrade_shutdown_and_uninstall() -> Result<(), Error> {
-    if !patina_test_desktop::run_case()? {
+    if !patina_test_support::run_case()? {
         return Ok(());
     }
     let root = tempfile::tempdir()?;
@@ -121,7 +121,7 @@ fn main() {
     assert!(fs::read(destination.join("patina.exe"))? == expected);
     let before = b"previous resident executable";
     let mut old_host =
-        patina_test_desktop::polling::wait_observed("installed fixture exit", || {
+        patina_test_support::polling::wait_observed("installed fixture exit", || {
             fs::OpenOptions::new()
                 .write(true)
                 .open(destination.join("patina.exe"))
@@ -199,35 +199,64 @@ fn main() {
     assert_eq!(fs::read(destination.join("patina-ui.exe"))?, previous_ui);
     assert_eq!(fs::read(destination.join("patina.exe"))?, before);
     drop(held);
+    fs::remove_file(destination.join("started.txt"))?;
     run(&mut install)?;
+    wait_file(&destination.join("started.txt"));
     assert!(fs::read(destination.join("patina.exe"))? == expected);
     for name in ["patina-ui.exe", "patina-probe.exe"] {
         assert!(!destination.join(name).exists());
     }
     assert!(!prior.exists());
-    let missing_gate = root.path().join("missing-gate");
-    let bad = Command::new(&setup)
-        .arg("/S")
-        .arg("/UPDATEPID=4294967295")
-        .arg(format!("/UPDATEGATE={}", missing_gate.display()))
-        .raw_arg(format!("/D={}", destination.display()))
-        .output()?;
-    assert!(!bad.status.success());
-    assert!(fs::read(destination.join("patina.exe"))? == expected);
     fs::remove_file(destination.join("started.txt"))?;
-    let gate = root.path().join("clean-gate");
+    fs::write(
+        destination.join("patina-gpui-installation"),
+        b"previous install",
+    )?;
+    let profile_parent = root.path().join("Patina 测试资料");
+    let staging = profile_parent.join("update staging");
+    fs::create_dir_all(&staging)?;
+    let gate = staging.join("shutdown-complete");
+    for receipt in [None, Some(b"incomplete")] {
+        if let Some(contents) = receipt {
+            fs::write(&gate, contents)?;
+        }
+        let bad = Command::new(&setup)
+            .arg("/S")
+            .arg("/UPDATEPID=4294967295")
+            .arg(format!("/UPDATEGATE={}", gate.display()))
+            .arg(format!("/PROFILEPARENT={}", profile_parent.display()))
+            .raw_arg(format!("/D={}", destination.display()))
+            .output()?;
+        assert!(!bad.status.success());
+        assert!(fs::read(destination.join("patina.exe"))? == expected);
+        assert_eq!(
+            fs::read(destination.join("patina-gpui-installation"))?,
+            b"previous install"
+        );
+        assert!(!destination.join("started.txt").exists());
+    }
+    fs::remove_file(&gate)?;
     let mut host = Command::new(&binary).arg("--gate").arg(&gate).spawn()?;
+    let restart_profile = format!("{}\\", profile_parent.display());
     let mut upgrade = Command::new(&setup);
     upgrade
         .arg("/S")
         .arg(format!("/UPDATEPID={}", host.id()))
         .arg(format!("/UPDATEGATE={}", gate.display()))
-        .arg(format!("/PROFILEPARENT={}", root.path().display()))
+        .arg(format!("/PROFILEPARENT={restart_profile}"))
         .raw_arg(format!("/D={}", destination.display()));
     run(&mut upgrade)?;
     assert!(host.wait()?.success());
+    assert_eq!(
+        fs::read(destination.join("patina-gpui-installation"))?,
+        b"patina-gpui"
+    );
     wait_file(&destination.join("started.txt"));
-    assert!(fs::read_to_string(destination.join("started.txt"))?.contains("--profile-parent"));
+    let started = fs::read_to_string(destination.join("started.txt"))?;
+    assert_eq!(
+        started.lines().skip(1).collect::<Vec<_>>(),
+        ["--today", "--profile-parent", restart_profile.as_str()]
+    );
     assert!(!destination.join(".patina-previous").exists());
     let data = destination.join("user-data.db");
     fs::write(&data, "preserve")?;

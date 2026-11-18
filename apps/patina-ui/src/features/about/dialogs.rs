@@ -34,7 +34,7 @@ impl About {
         let tr = |key| text(self.client.locale.get(), key);
         let size = self.status.release.as_ref().map_or(0, |r| r.size);
         let percent = if size > 0 {
-            (self.status.received as f64 / size as f64).clamp(0., 1.) as f32
+            (self.status.received_bytes as f64 / size as f64).clamp(0., 1.) as f32
         } else {
             0.
         };
@@ -49,7 +49,7 @@ impl About {
                 format!(
                     "{:.0}% · {:.1} / {:.1} MiB",
                     percent * 100.,
-                    self.status.received as f64 / 1048576.,
+                    self.status.received_bytes as f64 / 1048576.,
                     size as f64 / 1048576.
                 )
             }))

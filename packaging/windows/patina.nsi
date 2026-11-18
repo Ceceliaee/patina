@@ -64,12 +64,37 @@ Function un.onInit
   !insertmacro SetupMutex
 FunctionEnd
 
+!macro ReadSetupOption PREFIX DESTINATION
+  StrLen $4 "${PREFIX}"
+  StrCpy $5 $3 $4
+  ${If} $5 == "${PREFIX}"
+    StrCpy ${DESTINATION} $3 "" $4
+  ${EndIf}
+!macroend
+
 Function .onInit
   !insertmacro SetupMutex
-  ${GetParameters} $0
-  ${GetOptions} $0 "/UPDATEPID=" $UpdatePid
-  ${GetOptions} $0 "/UPDATEGATE=" $UpdateGate
-  ${GetOptions} $0 "/PROFILEPARENT=" $ProfileParent
+  ; Windows callers may quote the entire /OPTION=value argument when a path contains spaces.
+  System::Call 'kernel32::GetCommandLineW() p.r0'
+  System::Call 'shell32::CommandLineToArgvW(p r0, *i .r1) p.r0'
+  ${If} $0 == 0
+    Goto shutdown_failed
+  ${EndIf}
+  StrCpy $2 $0
+  ${While} $1 > 1
+    IntOp $1 $1 - 1
+    IntPtrOp $2 $2 + ${NSIS_PTR_SIZE}
+    System::Call '*$2(w .r3)'
+    ; NSIS consumes the rest of the command line as the unquoted /D= destination.
+    StrCpy $4 $3 3
+    ${If} $4 == "/D="
+      ${Break}
+    ${EndIf}
+    !insertmacro ReadSetupOption "/UPDATEPID=" $UpdatePid
+    !insertmacro ReadSetupOption "/UPDATEGATE=" $UpdateGate
+    !insertmacro ReadSetupOption "/PROFILEPARENT=" $ProfileParent
+  ${EndWhile}
+  System::Call 'kernel32::LocalFree(p r0)'
   ${If} $UpdatePid != ""
     ${If} $UpdateGate == ""
       Goto shutdown_failed
@@ -232,6 +257,16 @@ Function .onInstSuccess
   ${If} $ProfileParent == ""
     Exec '"$INSTDIR\patina.exe" --today'
   ${Else}
+    ; Each trailing backslash must survive the closing quote in the restarted host's argv.
+    StrCpy $0 $ProfileParent
+    ${Do}
+      StrCpy $1 $0 1 -1
+      ${If} $1 != "\"
+        ${ExitDo}
+      ${EndIf}
+      StrCpy $0 $0 -1
+      StrCpy $ProfileParent "$ProfileParent\"
+    ${Loop}
     Exec '"$INSTDIR\patina.exe" --today --profile-parent "$ProfileParent"'
   ${EndIf}
 FunctionEnd
