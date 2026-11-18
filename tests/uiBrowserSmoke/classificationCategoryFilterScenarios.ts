@@ -176,8 +176,10 @@ export async function runClassificationCategoryFilterScenarios({ client, session
             const filters=document.querySelector('.qp-classification-count-filter').getBoundingClientRect();
             const mode=Array.from(document.querySelectorAll('button')).find(n=>n.textContent.trim()==='应用').getBoundingClientRect();
             const center=r=>r.top+r.height/2;
-            return Math.abs(center(search)-center(filters))<1 && Math.abs(center(search)-center(mode))<1;
-          })()`), true, `single toolbar row at ${width}`);
+            const toolbar=document.querySelector('.qp-classification-toolbar').getBoundingClientRect();
+            return Math.abs(center(search)-center(filters))<1 && (innerWidth < 1100 || Math.abs(center(search)-center(mode))<1)
+              && [search, filters, mode].every(r=>r.left>=toolbar.left && r.right<=toolbar.right);
+          })()`), true, `toolbar fits at ${width}`);
         }
         await open();
         if (width === 1024) {

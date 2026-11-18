@@ -1293,13 +1293,15 @@ async function runClassificationCases(context: BrowserSmokeContext) {
 }
 
 async function runAiClassificationScenario({ client, sessionId, runTest }: BrowserSmokeContext) {
-  const { settings, mapping } = getLocaleText("zh-CN");
+  const { settings, mapping, common } = getLocaleText("zh-CN");
   const button = (label: string) => `Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === ${jsonString(label)})`;
-  const ai = `document.querySelector(${jsonString(`button[aria-label="${settings.aiClassification}"]`)})`;
+  const ai = `(${button(settings.aiClassification)})`;
+  const pending = `document.querySelector('.qp-page-header [role="status"]')`;
   const cancel = button(mapping.cancel);
   await runTest("AI classification waits for the provider and only updates the existing draft", async () => {
     const originalSettings = await evaluate(client, sessionId, `localStorage.getItem('__time_tracker_smoke_settings')`);
     const previousDocument = await evaluate(client, sessionId, `performance.timeOrigin`);
+    const previousViewport = await evaluate(client, sessionId, `({ width: innerWidth, height: innerHeight, deviceScaleFactor: devicePixelRatio, mobile: false })`) as Record<string, unknown>;
     await evaluate(client, sessionId, `(() => {
       const fixture = JSON.parse(localStorage.getItem('__time_tracker_smoke_settings') ?? '{}');
       fixture.__browser_smoke_seeded = '1';
@@ -1318,14 +1320,24 @@ async function runAiClassificationScenario({ client, sessionId, runTest }: Brows
       await waitForExpression(client, sessionId, `Boolean(document.querySelector(
         'main[data-presented-view="mapping"][data-view-transition-state="settled"]'
       )) && ${ai}?.disabled === false`);
+      await client.command("Emulation.setDeviceMetricsOverride", { width: 1100, height: 736, deviceScaleFactor: 1, mobile: false }, sessionId);
+      assert.equal(await evaluate(client, sessionId, `(${ai}).innerText.trim()`), settings.aiClassification);
       await evaluate(client, sessionId, `${ai}.click()`);
-      await waitForExpression(client, sessionId, `typeof window.__PATINA_FINISH_AI === 'function'`);
+      await waitForExpression(client, sessionId, `typeof window.__PATINA_FINISH_AI === 'function' &&
+        ${pending}?.textContent.trim() === ${jsonString(common.processing)}`);
       assert.equal(await evaluate(client, sessionId, `${ai}.disabled`), true);
       await evaluate(client, sessionId, `window.__PATINA_FINISH_AI()`);
-      await waitForExpression(client, sessionId, `document.body.textContent.includes(${jsonString(mapping.unsaved)})`);
+      await waitForExpression(client, sessionId, `document.body.textContent.includes(${jsonString(mapping.unsaved)}) &&
+        ${pending}?.textContent === ''`);
       await evaluate(client, sessionId, `${cancel}.click()`);
       await waitForExpression(client, sessionId, `!document.body.textContent.includes(${jsonString(mapping.unsaved)})`);
+      await evaluate(client, sessionId, `window.__PATINA_FINISH_AI = undefined; ${ai}.click()`);
+      await waitForExpression(client, sessionId, `typeof window.__PATINA_FINISH_AI === 'function' && ${pending}?.textContent !== ''`);
+      await evaluate(client, sessionId, `${cancel}.click(); window.__PATINA_FINISH_AI()`);
+      await waitForExpression(client, sessionId, `${pending}?.textContent === '' && !${ai}.disabled`);
+      assert.equal(await evaluate(client, sessionId, `document.body.textContent.includes(${jsonString(mapping.unsaved)})`), false);
     } finally {
+      await client.command("Emulation.setDeviceMetricsOverride", previousViewport, sessionId);
       await evaluate(client, sessionId, `(() => {
         const original = ${JSON.stringify(originalSettings)};
         if (original === null) localStorage.removeItem('__time_tracker_smoke_settings');

@@ -181,6 +181,16 @@ export default function AppMapping(props: Props) {
       <QuietPageHeader
         icon={<Sparkles size={18} />}
         title={UI_TEXT.mapping.title}
+        statusSlot={
+          <div role="status" className="flex items-center justify-center gap-1.5 qp-text-caption text-[var(--qp-text-secondary)]">
+            {aiRunning && (
+              <>
+                <RefreshCw size={12} className="shrink-0 motion-safe:animate-spin" aria-hidden />
+                {UI_TEXT.common.processing}
+              </>
+            )}
+          </div>
+        }
         rightSlot={(
           <div className="flex items-center gap-2.5">
             <div
@@ -233,8 +243,8 @@ export default function AppMapping(props: Props) {
       {actionError && <p role="alert" className="qp-app-mapping-error">{actionError === "refresh" ? <>{UI_TEXT.common.refreshFailed} <QuietButton onClick={retryLoading}>{UI_TEXT.common.retry}</QuietButton></> : actionError === "save" ? UI_TEXT.mapping.saveFailed : UI_TEXT.mapping.deleteFailed}</p>}
       {!titleRecordingEnabled && <p id="classification-global-title-disabled" className="qp-app-mapping-notice">{UI_TEXT.mapping.globalTitleDisabled}</p>}
       <section className="qp-panel p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-3">
+        <div className="qp-classification-toolbar flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <QuietSegmentedFilter<CandidateFilter>
               className="qp-classification-count-filter"
               value={filter}
@@ -263,14 +273,12 @@ export default function AppMapping(props: Props) {
               disabled={!activeCatalogReady}
             />
             {effectiveObjectMode === "app" && (
-              <QuietTooltip label={aiConfigured ? UI_TEXT.settings.aiClassification : UI_TEXT.mapping.aiNotConfigured}>
+              <QuietTooltip label={aiConfigured ? undefined : UI_TEXT.mapping.aiNotConfigured}>
                 <span tabIndex={aiConfigured ? undefined : 0}>
                   <QuietButton busy={aiRunning} disabled={!aiConfigured || !activeCatalogReady || saving || deletingSessionsExe !== null}
-                    aria-label={UI_TEXT.settings.aiClassification}
-                    className="lg:max-xl:px-2"
                     onClick={() => void handleAiClassification()}>
                     <Sparkles size={14} aria-hidden />
-                    <span className="lg:max-xl:hidden">{UI_TEXT.settings.aiClassification}</span>
+                    {UI_TEXT.settings.aiClassification}
                   </QuietButton>
                 </span>
               </QuietTooltip>
@@ -278,7 +286,7 @@ export default function AppMapping(props: Props) {
             {effectiveObjectMode === "app" && aiStatus === "failed" && <span role="alert">{UI_TEXT.mapping.aiFailed}</span>}
             {effectiveObjectMode === "app" && aiStatus === "empty" && <span role="status">{UI_TEXT.mapping.aiEmpty}</span>}
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             {effectiveObjectMode === "app" && appCatalogRefreshError && (
               <QuietButton
                 size="compact"
