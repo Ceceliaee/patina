@@ -505,7 +505,7 @@ fn main_window_lifecycle() -> Result<(), Error> {
     );
     let pid = child.0.id();
     let tray = wait("tray", || window(pid, w!("Patina GPUI")))?;
-    let main = || children::find(pid, |p| window(p, w!("Patina")));
+    let main = || children::find(pid, |p| window(p, w!("Patina UI")));
     let sample = |state: &str| -> Result<u64, Error> {
         let sampler = repo.join("target/debug/examples/windows-resource-sample.exe");
         let status = Command::new(sampler)
@@ -664,7 +664,7 @@ fn main_window_lifecycle() -> Result<(), Error> {
 
     command(tray, 1)?;
     let mini = wait("Mini", || {
-        children::find(pid, |p| window(p, w!("Patina GPUI Mini")))
+        children::find(pid, |p| window(p, w!("Patina Mini")))
     })?;
     let pin = wait("Mini pin control", || named(mini, "Keep expanded"))?;
     let pin: IUIAutomationTogglePattern = unsafe { pin.GetCurrentPatternAs(UIA_TogglePatternId)? };
@@ -700,9 +700,8 @@ fn main_window_lifecycle() -> Result<(), Error> {
         PostMessageW(Some(hwnd), WM_CLOSE, WPARAM(0), LPARAM(0))?;
     }
     wait("returned to Mini", || {
-        (main().is_none()
-            && children::find(pid, |p| window(p, w!("Patina GPUI Mini"))) == Some(mini))
-        .then_some(())
+        (main().is_none() && children::find(pid, |p| window(p, w!("Patina Mini"))) == Some(mini))
+            .then_some(())
     })?;
     sample("mini-after")?;
     let after = progress().ok_or("recording stopped in Mini")?;
@@ -748,7 +747,7 @@ fn ranked_app_actions() -> Result<(), Error> {
             .spawn()?,
     );
     let hwnd = wait("Today", || {
-        children::find(child.0.id(), |p| window(p, w!("Patina")))
+        children::find(child.0.id(), |p| window(p, w!("Patina UI")))
     })?;
     presentation::check(hwnd, &profile.join("patina.db"))?;
     let toggle = wait("chart toggle", || named(hwnd, "Show by category"))?;

@@ -20,7 +20,9 @@ fn settings_storage_card() -> Result<(), Error> {
             .spawn()?,
     );
     let pid = child.0.id();
-    let hwnd = wait("main", || children::find(pid, |p| window(p, w!("Patina"))))?;
+    let hwnd = wait("main", || {
+        children::find(pid, |p| window(p, w!("Patina UI")))
+    })?;
     click(hwnd, "Settings")?;
     wait("storage", || named(hwnd, "Storage"))?;
     let dialog = |title: &str| {
@@ -422,7 +424,9 @@ fn settings_webdav_layout() -> Result<(), Error> {
             .spawn()?,
     );
     let pid = child.0.id();
-    let hwnd = wait("main", || children::find(pid, |p| window(p, w!("Patina"))))?;
+    let hwnd = wait("main", || {
+        children::find(pid, |p| window(p, w!("Patina UI")))
+    })?;
     click(hwnd, "Settings")?;
     wait("storage", || named(hwnd, "Storage"))?;
     let edit = wait("WebDAV edit", || {

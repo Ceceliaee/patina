@@ -93,7 +93,7 @@ fn resident_preferences() -> Result<(), Error> {
     };
     let mut host = TestChild(launch().spawn()?);
     let pid = host.0.id();
-    let main = || children::find(pid, |p| window(p, w!("Patina")));
+    let main = || children::find(pid, |p| window(p, w!("Patina UI")));
     let tray = wait("silent startup", || window(pid, w!("Patina GPUI")))?;
     let icon = NOTIFYICONIDENTIFIER {
         cbSize: std::mem::size_of::<NOTIFYICONIDENTIFIER>() as u32,
@@ -178,7 +178,7 @@ fn resident_preferences() -> Result<(), Error> {
     let mut next = TestChild(registered.spawn()?);
     let next_pid = next.0.id();
     let hwnd = wait("foreground startup", || {
-        children::find(next_pid, |p| window(p, w!("Patina")))
+        children::find(next_pid, |p| window(p, w!("Patina UI")))
     })?;
     click(hwnd, "Settings")?;
     assert_eq!(

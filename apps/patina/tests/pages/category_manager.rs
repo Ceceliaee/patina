@@ -170,7 +170,7 @@ fn category_manager_content_width_and_narrow_layout() -> Result<(), Error> {
                 .spawn()?,
         );
         let hwnd = wait("Today", || {
-            children::find(host.0.id(), |p| window(p, w!("Patina")))
+            children::find(host.0.id(), |p| window(p, w!("Patina UI")))
         })?;
         let locale = patina_recorder::Locale::from_tag(Some(tag));
         navigate_sidebar(hwnd, locale, "mapping.title")?;
@@ -302,7 +302,9 @@ fn category_manager_drafts_and_persistence() -> Result<(), Error> {
             .spawn()?,
     );
     let pid = host.0.id();
-    let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
+    let hwnd = wait("Today", || {
+        children::find(pid, |p| window(p, w!("Patina UI")))
+    })?;
     click(hwnd, "Classification")?;
     click(hwnd, "Manage")?;
     wait("learning category rendered", || {

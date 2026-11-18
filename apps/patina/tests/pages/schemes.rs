@@ -21,7 +21,7 @@ fn settings_color_schemes() -> Result<(), Error> {
                 .spawn()?,
         );
         let hwnd = wait("main", || {
-            children::find(host.0.id(), |p| window(p, w!("Patina")))
+            children::find(host.0.id(), |p| window(p, w!("Patina UI")))
         })?;
         click(hwnd, "Settings")?;
         wait("color scheme row", || named(hwnd, "Color scheme"))?;

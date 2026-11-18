@@ -141,7 +141,7 @@ fn profile(fixture: &Path, out: &Path, uia: bool) -> Result<(), Error> {
         command(tray, 4)?;
         let (worker, hwnd) = wait("visible Today", || {
             children::find(pid, |p| {
-                window(p, w!("Patina"))
+                window(p, w!("Patina UI"))
                     .filter(|&w| unsafe { IsWindowVisible(w).as_bool() })
                     .map(|w| (p, w))
             })
@@ -235,7 +235,7 @@ fn renderer_recovery() -> Result<(), Error> {
     let tray = wait("tray", || window(pid, w!("Patina GPUI")))?;
     let ready = || {
         children::find(pid, |p| {
-            let hwnd = window(p, w!("Patina"))?;
+            let hwnd = window(p, w!("Patina UI"))?;
             named(hwnd, "Top 3").map(|_| (p, hwnd))
         })
     };
@@ -249,7 +249,7 @@ fn renderer_recovery() -> Result<(), Error> {
     };
     select_tray_icon(NIN_SELECT)?;
     let (_, first) = wait("first Today", ready)?;
-    assert!(children::find(pid, |p| window(p, w!("Patina GPUI Mini"))).is_none());
+    assert!(children::find(pid, |p| window(p, w!("Patina Mini"))).is_none());
     unsafe {
         PostMessageW(Some(first), WM_CLOSE, WPARAM(0), LPARAM(0))?;
     }
@@ -317,7 +317,7 @@ fn mini_window_handles() -> Result<(), Error> {
     let pid = host.0.id();
     let tray = wait("tray", || window(pid, w!("Patina GPUI")))?;
     let (renderer, mini) = wait("Mini", || {
-        children::find(pid, |p| window(p, w!("Patina GPUI Mini")).map(|w| (p, w)))
+        children::find(pid, |p| window(p, w!("Patina Mini")).map(|w| (p, w)))
     })?;
     let pin = wait("pin", || named(mini, "Keep expanded"))?;
     let pin: IUIAutomationTogglePattern = unsafe { pin.GetCurrentPatternAs(UIA_TogglePatternId)? };
@@ -357,12 +357,14 @@ fn mini_window_handles() -> Result<(), Error> {
     let baseline = measure(0)?;
     for cycle in 1..=15 {
         command(tray, 4)?;
-        let today = wait("Today on Mini renderer", || window(renderer, w!("Patina")))?;
+        let today = wait("Today on Mini renderer", || {
+            window(renderer, w!("Patina UI"))
+        })?;
         wait("populated Today", || named(today, "Top 3"))?;
         unsafe { PostMessageW(Some(today), WM_CLOSE, WPARAM(0), LPARAM(0))? };
         wait("back to Mini", || {
-            (window(renderer, w!("Patina")).is_none()
-                && window(renderer, w!("Patina GPUI Mini")) == Some(mini))
+            (window(renderer, w!("Patina UI")).is_none()
+                && window(renderer, w!("Patina Mini")) == Some(mini))
             .then_some(())
         })?;
         thread::sleep(Duration::from_millis(300));

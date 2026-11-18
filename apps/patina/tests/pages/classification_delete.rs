@@ -86,7 +86,9 @@ fn classification_delete_records() -> Result<(), Error> {
             .spawn()?,
     );
     let pid = host.0.id();
-    let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
+    let hwnd = wait("Today", || {
+        children::find(pid, |p| window(p, w!("Patina UI")))
+    })?;
     click(hwnd, "Classification")?;
     let search = wait("search", || {
         controls(hwnd).ok()?.into_iter().find(|e| unsafe {

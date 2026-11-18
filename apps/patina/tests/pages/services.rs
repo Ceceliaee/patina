@@ -73,7 +73,7 @@ fn settings_services() -> Result<(), Error> {
     };
     let mut app = launch()?;
     let pid = app.0.id();
-    let main = || children::find(pid, |p| window(p, w!("Patina")));
+    let main = || children::find(pid, |p| window(p, w!("Patina UI")));
     let hwnd = wait("main window", main)?;
     click(hwnd, "Settings")?;
     let switch = |hwnd, name: &str| -> Result<(), Error> {
@@ -352,7 +352,7 @@ fn settings_services() -> Result<(), Error> {
     let pid = app.0.id();
     let tray = wait("new host", || window(pid, w!("Patina GPUI")))?;
     let reopened = wait("reopened", || {
-        children::find(pid, |p| window(p, w!("Patina")))
+        children::find(pid, |p| window(p, w!("Patina UI")))
     })?;
     assert_eq!(wait("restored web listener", || post(port, &token))?.0, 200);
     assert_eq!(

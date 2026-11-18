@@ -63,7 +63,7 @@ fn classification_app_web_switch_preserves_drafts() -> Result<(), Error> {
                 .spawn()?,
         );
         let hwnd = wait("Today", || {
-            children::find(host.0.id(), |p| window(p, w!("Patina")))
+            children::find(host.0.id(), |p| window(p, w!("Patina UI")))
         })?;
         click(hwnd, "Classification")?;
         Ok((host, hwnd))

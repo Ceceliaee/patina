@@ -64,7 +64,7 @@ fn range_draft_apply_and_dismiss() -> Result<(), Error> {
             .spawn()?,
     );
     let hwnd = wait("main", || {
-        children::find(host.0.id(), |p| window(p, w!("Patina")))
+        children::find(host.0.id(), |p| window(p, w!("Patina UI")))
     })?;
     click(hwnd, "Data")?;
     wait("data loaded", || named(hwnd, "Total · 1h 40m"))?;
@@ -419,7 +419,7 @@ fn destination_heatmap_year_range() -> Result<(), Error> {
             .spawn()?,
     );
     let hwnd = wait("main", || {
-        children::find(host.0.id(), |p| window(p, w!("Patina")))
+        children::find(host.0.id(), |p| window(p, w!("Patina UI")))
     })?;
     click(hwnd, "Data")?;
     wait("overview loaded", || named(hwnd, "Total · 1h 40m"))?;

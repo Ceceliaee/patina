@@ -147,7 +147,9 @@ fn website_history_navigation() -> Result<(), Error> {
             .spawn()?,
     );
     let pid = child.0.id();
-    let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
+    let hwnd = wait("Today", || {
+        children::find(pid, |p| window(p, w!("Patina UI")))
+    })?;
     let tray = wait("tray", || window(pid, w!("Patina GPUI")))?;
     click(hwnd, "History")?;
     assert!(

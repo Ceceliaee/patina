@@ -210,7 +210,9 @@ fn sidebar_opens_empty_history() -> Result<(), Error> {
             .spawn()?,
     );
     let pid = host.0.id();
-    let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
+    let hwnd = wait("Today", || {
+        children::find(pid, |p| window(p, w!("Patina UI")))
+    })?;
     click(hwnd, "数据")?;
     wait("data ready", || named(hwnd, "活动趋势"))?;
     click(hwnd, "历史")?;
@@ -285,7 +287,9 @@ fn navigate_in_locale(tag: &str) -> Result<(), Error> {
     );
     let pid = host.0.id();
     let outcome = (|| -> Result<(), Error> {
-        let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
+        let hwnd = wait("Today", || {
+            children::find(pid, |p| window(p, w!("Patina UI")))
+        })?;
         for (width, height) in [(1200, 800), (810, 540)] {
             let dpi = unsafe { GetDpiForWindow(hwnd) } as i32;
             unsafe {
@@ -497,7 +501,9 @@ fn history_navigation() -> Result<(), Error> {
             .spawn()?,
     );
     let pid = child.0.id();
-    let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
+    let hwnd = wait("Today", || {
+        children::find(pid, |p| window(p, w!("Patina UI")))
+    })?;
     let tray = wait("tray", || window(pid, w!("Patina GPUI")))?;
     let out = std::env::var_os("PATINA_MEASURE_HISTORY").map(|_| {
         Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -614,7 +620,9 @@ fn data_navigation() -> Result<(), Error> {
             .spawn()?,
     );
     let pid = host.0.id();
-    let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
+    let hwnd = wait("Today", || {
+        children::find(pid, |p| window(p, w!("Patina UI")))
+    })?;
     press(hwnd, "Data")?;
     wait("seven day cross-midnight total", || {
         named(hwnd, "Total · 1h 40m")
@@ -783,7 +791,9 @@ fn classification_navigation() -> Result<(), Error> {
             .spawn()?,
     );
     let pid = host.0.id();
-    let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
+    let hwnd = wait("Today", || {
+        children::find(pid, |p| window(p, w!("Patina UI")))
+    })?;
     click(hwnd, "Classification")?;
     wait("one card for Studio", || {
         (names(hwnd)
@@ -1290,7 +1300,9 @@ fn classification_totals() -> Result<(), Error> {
             .spawn()?,
     );
     let pid = host.0.id();
-    let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
+    let hwnd = wait("Today", || {
+        children::find(pid, |p| window(p, w!("Patina UI")))
+    })?;
     click(hwnd, "Classification")?;
     let totals = |expected| -> Result<(), Error> {
         wait("classification counts match current records", || {
@@ -1359,7 +1371,9 @@ fn settings_navigation() -> Result<(), Error> {
             .spawn()?,
     );
     let pid = host.0.id();
-    let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
+    let hwnd = wait("Today", || {
+        children::find(pid, |p| window(p, w!("Patina UI")))
+    })?;
     // Keep the first two settings groups visible regardless of the app's default window size.
     let dpi = unsafe { GetDpiForWindow(hwnd) } as i32;
     unsafe {
@@ -1524,7 +1538,9 @@ fn about_navigation() -> Result<(), Error> {
             .spawn()?,
     );
     let pid = host.0.id();
-    let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
+    let hwnd = wait("Today", || {
+        children::find(pid, |p| window(p, w!("Patina UI")))
+    })?;
     click(hwnd, "About")?;
     wait("binary version", || {
         named(hwnd, concat!("v", env!("CARGO_PKG_VERSION")))
@@ -1564,7 +1580,9 @@ fn page_header_layout() -> Result<(), Error> {
             .spawn()?,
     );
     let pid = host.0.id();
-    let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
+    let hwnd = wait("Today", || {
+        children::find(pid, |p| window(p, w!("Patina UI")))
+    })?;
     let title_bounds = |page: &str| {
         wait(page, || {
             controls(hwnd).ok()?.into_iter().find_map(|el| unsafe {

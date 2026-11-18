@@ -34,7 +34,7 @@ fn anchored_calendar() -> Result<(), Error> {
             .spawn()?,
     );
     let hwnd = wait("main window", || {
-        children::find(app.0.id(), |pid| window(pid, w!("Patina")))
+        children::find(app.0.id(), |pid| window(pid, w!("Patina UI")))
     })?;
     click(hwnd, "History")?;
     wait("loaded history", || named(hwnd, "Day Timeline"))?;
