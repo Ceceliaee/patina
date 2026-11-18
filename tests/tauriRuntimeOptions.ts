@@ -3,6 +3,11 @@ import assert from "node:assert/strict";
 export const runtimeGroups = ["contracts", "data-recovery", "storage-restart", "tools-startup", "webview-recovery", "window-lifecycle", "mini-input", "resources"] as const;
 export type RuntimeGroup = typeof runtimeGroups[number];
 
+export const aiClassificationMainCommands = [
+  "cmd_get_ai_classification_config", "cmd_save_ai_classification_config",
+  "cmd_list_ai_classification_models", "cmd_suggest_ai_categories",
+] as const;
+
 export function parseRuntimeOptions(args: string[]) {
   let group: RuntimeGroup | null = null;
   let resourceCycles = false;

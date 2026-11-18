@@ -1,4 +1,5 @@
 pub mod activity_read_model;
+pub mod ai_classification;
 pub mod backup;
 pub mod diagnostics;
 pub mod error;
