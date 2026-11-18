@@ -9,29 +9,65 @@ use std::{
         Arc,
     },
 };
+pub(super) use tracking::host::TrackingHost;
 use tracking::{
-    host::TrackingHost, pause_state::TrackingPauseRuntimeState, ports::SharedTrackingDataStore,
+    pause_state::TrackingPauseRuntimeState, ports::SharedTrackingDataStore,
     runtime_snapshot::TrackingRuntimeSnapshotState, title_state::TitleRecordingRuntimeState,
     watchdog::RuntimeHealthState,
 };
 
-#[path = "services.rs"]
-mod services;
-#[path = "storage.rs"]
-pub(crate) mod storage;
+type RecordingTask = tokio::task::JoinHandle<Result<(), String>>;
+
+#[derive(Default)]
+struct PowerEvents {
+    tasks: tokio::task::JoinSet<Result<(), String>>,
+    failure: Option<String>,
+}
+
+impl PowerEvents {
+    fn record(&mut self, result: Result<Result<(), String>, tokio::task::JoinError>) {
+        if let Err(error) = result
+            .map_err(|error| error.to_string())
+            .and_then(|outcome| outcome)
+        {
+            eprintln!("recording power event: {error}");
+            self.failure.get_or_insert(error);
+        }
+    }
+}
 
 struct State {
-    remote: crate::engine::remote_status_bridge::RemoteStatusBridgeRuntimeState,
+    snapshot_changed: tokio::sync::watch::Sender<u64>,
     pause: TrackingPauseRuntimeState,
     titles: TitleRecordingRuntimeState,
     projection: TrackingRuntimeSnapshotState,
     stopped: AtomicBool,
     changed: Box<dyn Fn() + Send + Sync>,
+    power_tasks: std::sync::Mutex<Option<PowerEvents>>,
 }
 
 #[derive(Clone)]
-struct Host(Arc<State>);
-impl TrackingHost for Host {
+pub struct RecordingSignals(Arc<State>);
+impl RecordingSignals {
+    pub fn new(changed: impl Fn() + Send + Sync + 'static) -> Self {
+        Self(Arc::new(State {
+            snapshot_changed: tokio::sync::watch::channel(0).0,
+            pause: Default::default(),
+            titles: Default::default(),
+            projection: Default::default(),
+            stopped: AtomicBool::new(false),
+            changed: Box::new(changed),
+            power_tasks: std::sync::Mutex::new(Some(PowerEvents::default())),
+        }))
+    }
+    pub(super) fn notify(&self) {
+        (self.0.changed)();
+    }
+    pub(super) fn snapshot_changes(&self) -> tokio::sync::watch::Receiver<u64> {
+        self.0.snapshot_changed.subscribe()
+    }
+}
+impl TrackingHost for RecordingSignals {
     fn pause(&self) -> &TrackingPauseRuntimeState {
         &self.0.pause
     }
@@ -42,79 +78,53 @@ impl TrackingHost for Host {
         &self.0.projection
     }
     fn active_window_changed(&self, _: &platform::windows::foreground::WindowInfo) {
-        self.0.remote.notify_snapshot_change();
-        (self.0.changed)();
+        self.0
+            .snapshot_changed
+            .send_modify(|revision| *revision = revision.wrapping_add(1));
+        self.notify();
     }
     fn data_changed(&self, _: &str, _: u64) -> Result<(), String> {
-        self.0.remote.notify_snapshot_change();
-        (self.0.changed)();
+        self.0
+            .snapshot_changed
+            .send_modify(|revision| *revision = revision.wrapping_add(1));
+        self.notify();
         Ok(())
     }
 }
 
-pub use patina_activity_model::views::tracking::Activity;
+pub use patina_activity_model::views::tracking::CurrentActivity;
 
-pub struct Recorder {
-    storage: Arc<storage::Storage>,
-    services: Arc<services::Services>,
-
-    pub locale: std::rc::Rc<std::cell::Cell<crate::Locale>>,
-
-    runtime: tokio::runtime::Runtime,
-    host: Host,
+#[derive(Clone)]
+pub struct RecordingControl {
+    host: RecordingSignals,
+    runtime: tokio::runtime::Handle,
     pool: SqlitePool,
     data: SharedTrackingDataStore,
     health: Arc<RuntimeHealthState>,
-    tasks: std::cell::Cell<Vec<tokio::task::JoinHandle<Result<(), String>>>>,
+}
+
+pub struct Recorder<'runtime> {
+    runtime: &'runtime tokio::runtime::Runtime,
+    control: RecordingControl,
+    tasks: std::cell::Cell<Vec<RecordingTask>>,
 }
 
 pub async fn open_database(path: &Path) -> Result<SqlitePool, String> {
     let pool = data::sqlite_pool::bootstrap::open_single_connection_sqlite_pool(path, true).await?;
-    data::sqlite_pool::prepare_pool_schema(&pool, path).await?;
+    if let Err(error) = data::sqlite_pool::prepare_pool_schema(&pool, path).await {
+        pool.close().await;
+        return Err(error);
+    }
     Ok(pool)
 }
 
-impl Recorder {
-    pub fn tools(&self) -> crate::NativeToolData {
-        crate::NativeToolData::new(self.pool.clone(), self.runtime.handle().clone())
-    }
+impl<'runtime> Recorder<'runtime> {
     pub fn start(
-        database: &Path,
-        changed: impl Fn() + Send + Sync + 'static,
+        runtime: &'runtime tokio::runtime::Runtime,
+        pool: SqlitePool,
+        host: RecordingSignals,
     ) -> Result<Self, String> {
-        Self::start_in_profile(
-            database,
-            database.parent().ok_or("missing database directory")?,
-            changed,
-        )
-    }
-    pub fn start_in_profile(
-        database: &Path,
-        profile: &Path,
-        changed: impl Fn() + Send + Sync + 'static,
-    ) -> Result<Self, String> {
-        Self::start_with_preferences(database, profile, changed).map(|(recorder, _)| recorder)
-    }
-    pub fn start_with_preferences(
-        database: &Path,
-        profile: &Path,
-        changed: impl Fn() + Send + Sync + 'static,
-    ) -> Result<(Self, crate::TrackingPreferences), String> {
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(2)
-            .enable_all()
-            .build()
-            .map_err(|e| e.to_string())?;
-        let host = Host(Arc::new(State {
-            remote: Default::default(),
-            pause: Default::default(),
-            titles: Default::default(),
-            projection: Default::default(),
-            stopped: AtomicBool::new(false),
-            changed: Box::new(changed),
-        }));
-        let (pool, data, prefs) = runtime.block_on(async {
-            let pool = open_database(database).await?;
+        let data = runtime.block_on(async {
             let fixed = pool.clone();
             let data = data::tracking_runtime::shared_from_provider(
                 Arc::new(move || {
@@ -128,14 +138,12 @@ impl Recorder {
             tracking::startup::initialize_tracker(&host, data.as_ref())
                 .await
                 .map_err(|e| e.to_string())?;
-            services::ensure_machine_id(&pool).await?;
-            let prefs = crate::manage::preferences(pool.clone()).await?;
-            Ok::<_, String>((pool, data, prefs))
+            Ok::<_, String>(data)
         })?;
         platform::windows::audio::start_signal_source(runtime.handle(), host.pause().subscribe());
         platform::windows::media::start_signal_source(runtime.handle(), host.pause().subscribe());
         let health = Arc::new(RuntimeHealthState::default());
-        let mut tasks = vec![
+        let tasks = vec![
             runtime.spawn(observe_recorder_task(
                 "tracking",
                 host.clone(),
@@ -147,31 +155,27 @@ impl Recorder {
                 tracking::watchdog::watch(host.clone(), health.clone(), data.clone()),
             )),
         ];
-        tasks.push(runtime.spawn(data::activity_read_model::maintain(pool.clone())));
-        let services = Arc::new(services::Services::new(pool.clone(), host.clone()));
-        tasks.push(runtime.spawn(services.clone().expire()));
-        runtime.block_on(async {
-            services.apply(&prefs);
-        });
-        let storage = Arc::new(storage::Storage::new(profile, database, pool.clone()));
-        tasks.push(runtime.spawn(storage.clone().run_jobs()));
-        Ok((
-            Self {
-                storage,
-                services,
-
-                runtime,
-                host,
+        Ok(Self {
+            runtime,
+            control: RecordingControl {
+                runtime: runtime.handle().clone(),
                 pool,
-                data,
+                host,
                 health,
-                tasks: std::cell::Cell::new(tasks),
-                locale: std::rc::Rc::new(std::cell::Cell::new(prefs.locale)),
+                data,
             },
-            prefs,
-        ))
+            tasks: std::cell::Cell::new(tasks),
+        })
     }
+    pub fn control(&self) -> RecordingControl {
+        self.control.clone()
+    }
+}
 
+impl RecordingControl {
+    pub fn last_successful_sample_ms(&self) -> Option<i64> {
+        self.health.snapshot().last_successful_sample_ms
+    }
     pub fn paused(&self) -> bool {
         self.host
             .pause()
@@ -179,373 +183,34 @@ impl Recorder {
             .is_none_or(|s| s.tracking_paused)
     }
 
-    pub fn activity(&self) -> Activity {
+    pub fn current_activity(&self) -> CurrentActivity {
         if self.host.0.stopped.load(Ordering::Acquire) {
-            return Activity::Unavailable;
+            return CurrentActivity::Unavailable;
         }
         if self.paused() {
-            return Activity::Paused;
+            return CurrentActivity::Paused;
         }
         let Some(snapshot) = self.host.projection().snapshot() else {
-            return Activity::Waiting;
+            return CurrentActivity::Waiting;
         };
         if snapshot.probe_status != tracking::runtime_snapshot::TrackingRuntimeProbeStatus::Ok {
-            return Activity::Unavailable;
+            return CurrentActivity::Unavailable;
         }
         if !snapshot.status.is_tracking_active {
-            return Activity::Inactive;
+            return CurrentActivity::Inactive;
         }
         if snapshot.anonymous {
-            return Activity::Anonymous;
+            return CurrentActivity::Anonymous;
         }
-        snapshot.active_session.map_or(Activity::Waiting, |s| {
-            Activity::Application(if s.app_name.is_empty() {
-                s.exe_name
-            } else {
-                s.app_name
+        snapshot
+            .active_session
+            .map_or(CurrentActivity::Waiting, |s| {
+                CurrentActivity::Application(if s.app_name.is_empty() {
+                    s.exe_name
+                } else {
+                    s.app_name
+                })
             })
-        })
-    }
-
-    pub fn today(
-        &self,
-    ) -> impl std::future::Future<Output = Result<crate::DaySummary, String>> + 'static {
-        let read = self.runtime.spawn(super::today::load(
-            self.pool.clone(),
-            platform::clock::unix_timestamp_millis_i64(),
-            self.locale.get(),
-        ));
-        async move { read.await.map_err(|e| e.to_string())? }
-    }
-
-    pub fn icons(
-        &self,
-        keys: Vec<String>,
-    ) -> impl std::future::Future<Output = Result<Vec<(String, Vec<u8>)>, String>> + 'static {
-        let read = self
-            .runtime
-            .spawn(super::today::icons(self.pool.clone(), keys));
-        async move { read.await.map_err(|e| e.to_string())? }
-    }
-
-    pub fn set_chart_mode(
-        &self,
-        category: bool,
-    ) -> impl std::future::Future<Output = Result<(), String>> + 'static {
-        let pool = self.pool.clone();
-        let write = self.runtime.spawn(async move {
-            commit_app_setting_mutations(
-                &pool,
-                &[AppSettingMutation {
-                    key: "hourly_activity_chart_mode".into(),
-                    value: if category { "category" } else { "total" }.into(),
-                }],
-            )
-            .await
-            .map_err(|e| e.to_string())
-        });
-        async move { write.await.map_err(|e| e.to_string())? }
-    }
-
-    pub fn edit_app(
-        &self,
-        exe: String,
-        edit: crate::AppEdit,
-    ) -> impl std::future::Future<Output = Result<(), String>> + 'static {
-        let write = self
-            .runtime
-            .spawn(super::today::edit_app(self.pool.clone(), exe, edit));
-        async move { write.await.map_err(|e| e.to_string())? }
-    }
-
-    pub fn rules(
-        &self,
-    ) -> impl std::future::Future<Output = Result<crate::Rules, String>> + 'static {
-        let task = self.runtime.spawn(crate::manage::rules(self.pool.clone()));
-        async move { task.await.map_err(|e| e.to_string())? }
-    }
-    pub fn save_rules(
-        &self,
-        rules: Vec<crate::AppRule>,
-        websites: Option<crate::WebDraft>,
-        links: Vec<crate::AppLinkEdit>,
-        categories: Vec<crate::CategoryEdit>,
-    ) -> impl std::future::Future<Output = Result<(), String>> + 'static {
-        let pool = self.pool.clone();
-        let host = self.host.clone();
-        let task = self.runtime.spawn(async move {
-            let _guard = host.projection().transition.lock().await;
-            crate::manage::save_rules(&pool, &rules, websites.as_ref(), &links, &categories)
-                .await?;
-            host.titles().invalidate_app_overrides();
-            host.projection().note_tracking_policy_change();
-            (host.0.changed)();
-            Ok(())
-        });
-        async move { task.await.map_err(|e| e.to_string())? }
-    }
-    pub fn delete_application(
-        &self,
-        exe: String,
-        confirmed: Option<crate::DeletionImpact>,
-    ) -> impl std::future::Future<Output = Result<crate::DeletionImpact, String>> + 'static {
-        let pool = self.pool.clone();
-        let host = self.host.clone();
-        let task = self.runtime.spawn(async move {
-            use crate::data::classification_deletion::{run, Target};
-            use crate::domain::tracking::resolve_app_override_executable;
-            let key =
-                resolve_app_override_executable(&exe).ok_or("Invalid application identity")?;
-            if exe == "activity:anonymous" {
-                return Err("Invalid application identity".into());
-            }
-            let apply = confirmed.is_some();
-            let _guard = if apply {
-                Some(host.projection().transition.lock().await)
-            } else {
-                None
-            };
-            let result = run(&pool, &Target::App(key.clone()), confirmed).await?;
-            if apply {
-                if host
-                    .projection()
-                    .snapshot()
-                    .and_then(|s| s.active_session)
-                    .is_some_and(|s| {
-                        resolve_app_override_executable(&s.exe_name).as_deref() == Some(&key)
-                    })
-                {
-                    host.projection().replace_active_session(None);
-                }
-                host.titles().invalidate_app_overrides();
-                host.projection().note_tracking_policy_change();
-                (host.0.changed)();
-            }
-            Ok(result)
-        });
-        async move { task.await.map_err(|e| e.to_string())? }
-    }
-    pub fn remember_classification_mode(
-        &self,
-        web: bool,
-    ) -> impl std::future::Future<Output = Result<(), String>> + 'static {
-        let pool = self.pool.clone();
-        let task = self.runtime.spawn(async move {
-            commit_app_setting_mutations(
-                &pool,
-                &[AppSettingMutation {
-                    key: "classification_object_mode".into(),
-                    value: if web { "web" } else { "app" }.into(),
-                }],
-            )
-            .await
-            .map_err(|e| e.to_string())?;
-            Ok(())
-        });
-        async move { task.await.map_err(|e| e.to_string())? }
-    }
-    pub fn delete_website(
-        &self,
-        identity: String,
-        confirmed: Option<crate::DeletionImpact>,
-    ) -> impl std::future::Future<Output = Result<crate::DeletionImpact, String>> + 'static {
-        let pool = self.pool.clone();
-        let host = self.host.clone();
-        let task = self.runtime.spawn(async move {
-            use crate::data::classification_deletion::{run, Target};
-            let target = if let Some(root) = crate::domain::web_links::group_domain(&identity) {
-                Target::Group(root)
-            } else {
-                let domain = crate::domain::web_activity::normalize_domain(&identity)
-                    .ok_or("invalid website identity")?;
-                if domain != identity {
-                    return Err("invalid website identity".into());
-                }
-                Target::Web(domain)
-            };
-            let apply = confirmed.is_some();
-            let _guard = host.projection().transition.lock().await;
-            let result = run(&pool, &target, confirmed).await?;
-            if apply {
-                host.projection().note_tracking_policy_change();
-                (host.0.changed)();
-            }
-            Ok(result)
-        });
-        async move { task.await.map_err(|e| e.to_string())? }
-    }
-    pub fn preferences(
-        &self,
-    ) -> impl std::future::Future<Output = Result<crate::TrackingPreferences, String>> + 'static
-    {
-        let task = self
-            .runtime
-            .spawn(crate::manage::preferences(self.pool.clone()));
-        async move { task.await.map_err(|e| e.to_string())? }
-    }
-    pub fn save_preferences(
-        &self,
-        old: crate::TrackingPreferences,
-        p: crate::TrackingPreferences,
-    ) -> impl std::future::Future<Output = Result<(), String>> + 'static {
-        let services = self.services.clone();
-        let next_locale = p.locale;
-        let locale = self.locale.clone();
-        let host = self.host.clone();
-        let pool = self.pool.clone();
-        let task = self.runtime.spawn(async move {
-            let _guard = host.projection().transition.lock().await;
-            crate::manage::save_preferences(pool.clone(), &old, &p).await?;
-            if old.web != p.web {
-                host.titles().clear_browser_title();
-                host.titles().clear_anonymous_web();
-            }
-            if old.web != p.web || old.remote != p.remote {
-                services.apply(&p);
-            }
-            let time = crate::platform::clock::unix_timestamp_millis_i64();
-            if p.paused != old.paused {
-                host.pause().set_after_write(p.paused, time);
-                host.titles().clear_browser_title();
-                host.titles().clear_anonymous_web();
-            }
-            if p.titles != old.titles {
-                host.titles().set_enabled(p.titles);
-            }
-            host.projection().note_tracking_policy_change();
-            (host.0.changed)();
-            Ok::<(), String>(())
-        });
-        async move {
-            task.await.map_err(|e| e.to_string())??;
-            locale.set(next_locale);
-            Ok(())
-        }
-    }
-    pub fn trends(
-        &self,
-        range: Option<(i64, i64)>,
-        kind: crate::SeriesKind,
-    ) -> impl std::future::Future<Output = Result<crate::Trends, String>> + 'static {
-        let read = self.runtime.spawn(crate::analysis::load(
-            self.pool.clone(),
-            range,
-            kind,
-            self.locale.get(),
-        ));
-        async move { read.await.map_err(|e| e.to_string())? }
-    }
-    pub fn detail_zoom(
-        &self,
-        hours: Option<f32>,
-    ) -> impl std::future::Future<Output = Result<f32, String>> + 'static {
-        self.zoom_preference("__gpui_detail_zoom_hours", 24., hours)
-    }
-
-    pub fn history_modes(
-        &self,
-        modes: Option<[u8; 3]>,
-    ) -> impl std::future::Future<Output = Result<([u8; 3], bool), String>> + 'static {
-        let pool = self.pool.clone();
-        let task = self.runtime.spawn(async move {
-            if let Some(modes) = modes {
-                if modes[0] > 2 || modes[1] > 2 || modes[2] > 1 { return Err("invalid history modes".into()); }
-                sqlx::query("INSERT INTO settings(key,value) VALUES('__gpui_history_modes',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
-                    .bind(serde_json::to_string(&modes).map_err(|e| e.to_string())?).execute(&pool).await.map_err(|e| e.to_string())?;
-            }
-            let modes = sqlx::query_scalar::<_, String>("SELECT value FROM settings WHERE key='__gpui_history_modes'").fetch_optional(&pool).await.map_err(|e|e.to_string())?
-                .and_then(|v| serde_json::from_str::<[u8;3]>(&v).ok()).filter(|v| v[0]<=2 && v[1]<=2 && v[2]<=1).unwrap_or_default();
-            let enabled = super::manage::preferences(pool).await?.web.enabled;
-            Ok((modes, enabled))
-        });
-        async move { task.await.map_err(|e| e.to_string())? }
-    }
-
-    pub fn history_zoom(
-        &self,
-        hours: Option<f32>,
-    ) -> impl std::future::Future<Output = Result<f32, String>> + 'static {
-        self.zoom_preference("__gpui_history_zoom_hours", 4., hours)
-    }
-
-    fn zoom_preference(
-        &self,
-        key: &'static str,
-        default: f32,
-        hours: Option<f32>,
-    ) -> impl std::future::Future<Output = Result<f32, String>> + 'static {
-        let pool = self.pool.clone();
-        let task = self.runtime.spawn(async move {
-            if let Some(hours) = hours {
-                if !hours.is_finite() || !(1.0..=24.0).contains(&hours) {
-                    return Err("invalid detail zoom".to_owned());
-                }
-                sqlx::query("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
-                    .bind(key).bind(hours.to_string()).execute(&pool).await.map_err(|e| e.to_string())?;
-                Ok(hours)
-            } else {
-                Ok(sqlx::query_scalar::<_, String>("SELECT value FROM settings WHERE key=?").bind(key)
-                    .fetch_optional(&pool).await.map_err(|e| e.to_string())?
-                    .and_then(|value| value.parse::<f32>().ok())
-                    .filter(|value| value.is_finite() && (1.0..=24.0).contains(value))
-                    .unwrap_or(default))
-            }
-        });
-        async move { task.await.map_err(|e| e.to_string())? }
-    }
-
-    pub fn set_history_minimum(
-        &self,
-        detail: bool,
-        secs: i64,
-    ) -> impl std::future::Future<Output = Result<(), String>> + 'static {
-        let pool = self.pool.clone();
-        let task=self.runtime.spawn(async move{
-            if !(0..=600).contains(&secs)||secs%60!=0{return Err("invalid history minimum".into());}
-            if detail{sqlx::query("INSERT INTO settings(key,value) VALUES('__gpui_detail_min_secs',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(secs.to_string()).execute(&pool).await.map_err(|e|e.to_string())?;}
-            else{commit_app_setting_mutations(&pool,&[AppSettingMutation{key:"min_session_secs".into(),value:secs.to_string()}]).await.map_err(|e|e.to_string())?;}
-            Ok(())
-        });
-        async move { task.await.map_err(|e| e.to_string())? }
-    }
-    pub fn history(
-        &self,
-        day: i64,
-        app: Option<String>,
-        titles: bool,
-    ) -> impl std::future::Future<Output = Result<crate::HistoryDay, String>> + 'static {
-        self.history_source(day, app, titles, false)
-    }
-
-    pub fn history_source(
-        &self,
-        day: i64,
-        app: Option<String>,
-        titles: bool,
-        web: bool,
-    ) -> impl std::future::Future<Output = Result<crate::HistoryDay, String>> + 'static {
-        let read = self.runtime.spawn(super::history::load(
-            self.pool.clone(),
-            day,
-            app,
-            titles,
-            self.health.snapshot().last_successful_sample_ms,
-            self.locale.get(),
-            web,
-        ));
-        async move { read.await.map_err(|e| e.to_string())? }
-    }
-
-    pub fn recent(
-        &self,
-    ) -> impl std::future::Future<Output = Result<crate::Recent, String>> + 'static {
-        let read = self.runtime.spawn(super::recent::load(
-            self.pool.clone(),
-            platform::clock::unix_timestamp_millis_i64(),
-            self.health.snapshot().last_successful_sample_ms,
-            self.locale.get(),
-        ));
-        async move { read.await.map_err(|e| e.to_string())? }
     }
 
     pub fn set_paused(
@@ -556,6 +221,15 @@ impl Recorder {
         let pool = self.pool.clone();
         let write = self.runtime.spawn(async move {
             let _guard = host.projection().transition.lock().await;
+            if host
+                .0
+                .power_tasks
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .is_none()
+            {
+                return Err("recorder has stopped".into());
+            }
             commit_app_setting_mutations(
                 &pool,
                 &[AppSettingMutation {
@@ -570,31 +244,39 @@ impl Recorder {
             host.titles().clear_browser_title();
             host.titles().clear_anonymous_web();
             host.projection().note_tracking_policy_change();
-            (host.0.changed)();
+            host.notify();
             Ok(())
         });
         async move { write.await.map_err(|e| e.to_string())? }
     }
 
     pub fn power(&self, event: &str) {
+        let mut pending = self
+            .host
+            .0
+            .power_tasks
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        let Some(tasks) = pending.as_mut() else {
+            return;
+        };
         self.host
             .projection()
             .note_power_event(event, platform::clock::unix_timestamp_millis_i64());
         let host = self.host.clone();
         let data = self.data.clone();
-        self.runtime.spawn(async move {
-            if let Err(e) =
-                tracking::runtime::handle_power_lifecycle_event(host, data.as_ref()).await
-            {
-                eprintln!("recording power event: {e}");
-            }
-        });
+        while let Some(result) = tasks.tasks.try_join_next() {
+            tasks.record(result);
+        }
+        tasks.tasks.spawn_on(async move {
+            tracking::runtime::handle_power_lifecycle_event(host, data.as_ref()).await
+        }, &self.runtime);
     }
 }
 
 async fn observe_recorder_task(
     name: &str,
-    host: Host,
+    host: RecordingSignals,
     run: impl std::future::Future<Output = Result<(), String>>,
 ) -> Result<(), String> {
     let result = std::panic::AssertUnwindSafe(run)
@@ -605,51 +287,120 @@ async fn observe_recorder_task(
         eprintln!("{name}: {error}");
     }
     host.0.stopped.store(true, Ordering::Release);
-    (host.0.changed)();
+    host.notify();
     result
 }
 
-impl Recorder {
+impl Recorder<'_> {
     pub fn shutdown(&self) -> Result<(), String> {
         let tasks = self.tasks.take();
         if tasks.is_empty() {
             return Ok(());
         }
+        let mut pending = self
+            .control
+            .host
+            .0
+            .power_tasks
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .take()
+            .unwrap_or_default();
         let result = self.runtime.block_on(async {
-            // Let a transaction reach its boundary before stopping the producer.
-            let _guard = self.host.projection().transition.lock().await;
-            self.services.stop();
+            while let Some(result) = pending.tasks.join_next().await {
+                pending.record(result);
+            }
+            let mut stopped = pending.failure.map_or(Ok(()), Err);
+            let _guard = self.control.host.projection().transition.lock().await;
             for task in tasks {
                 task.abort();
-                let _ = task.await;
-            }
-            self.host.pause().pause_until_verified();
-            let sealed = async {
-                if let Some(t) = self.health.snapshot().last_successful_sample_ms {
-                    self.data
-                        .end_active_sessions(t)
-                        .await
-                        .map_err(|e| e.to_string())?;
-                    self.data
-                        .seal_anonymous_activity(t)
-                        .await
-                        .map_err(|e| e.to_string())?;
+                match task.await {
+                    Ok(outcome) => stopped = stopped.and(outcome),
+                    Err(error) if !error.is_cancelled() => {
+                        stopped = stopped.and(Err(error.to_string()))
+                    }
+                    Err(_) => {}
                 }
-                Ok(())
             }
-            .await;
-            self.pool.close().await;
-            sealed
+            self.control.host.pause().pause_until_verified();
+            self.control.host.0.stopped.store(true, Ordering::Release);
+            if let Some(t) = self.control.health.snapshot().last_successful_sample_ms {
+                self.control
+                    .data
+                    .end_active_sessions(t)
+                    .await
+                    .map_err(|error| error.to_string())?;
+                self.control
+                    .data
+                    .seal_anonymous_activity(t)
+                    .await
+                    .map_err(|error| error.to_string())?;
+            }
+            stopped
         });
         platform::windows::native_probe::shutdown();
         result
     }
 }
 
-impl Drop for Recorder {
+impl Drop for Recorder<'_> {
     fn drop(&mut self) {
         if let Err(error) = self.shutdown() {
             eprintln!("stop recorder: {error}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shutdown_seals_at_the_last_sample_and_rejects_later_pause_requests() {
+        let root = tempfile::tempdir().unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let pool = runtime
+            .block_on(open_database(&root.path().join("patina.db")))
+            .unwrap();
+        runtime
+            .block_on(
+                sqlx::query(
+                    "INSERT OR REPLACE INTO settings(key,value) VALUES('tracking_paused','1')",
+                )
+                .execute(&pool),
+            )
+            .unwrap();
+        let recorder =
+            Recorder::start(&runtime, pool.clone(), RecordingSignals::new(|| {})).unwrap();
+        let control = recorder.control();
+        let start_ms = platform::clock::unix_timestamp_millis_i64() - 30_000;
+        let last_sample_ms = start_ms + 4000;
+        runtime.block_on(async {
+            let _guard = control.host.projection().transition.lock().await;
+            sqlx::query("INSERT INTO sessions(exe_name,app_name,start_time) VALUES('shutdown.exe','Shutdown',?)")
+                .bind(start_ms).execute(&pool).await.unwrap();
+            control.health.note_successful_sample(last_sample_ms);
+        });
+        recorder.shutdown().unwrap();
+        recorder.shutdown().unwrap();
+        control.power("resume");
+        assert!(runtime.block_on(control.set_paused(false)).is_err());
+        assert!(matches!(
+            control.current_activity(),
+            CurrentActivity::Unavailable
+        ));
+        let row: (i64, i64) = runtime
+            .block_on(
+                sqlx::query_as(
+                    "SELECT end_time,duration FROM sessions WHERE exe_name='shutdown.exe'",
+                )
+                .fetch_one(&pool),
+            )
+            .unwrap();
+        assert_eq!(row, (last_sample_ms, 4000));
+        runtime.block_on(pool.close());
     }
 }

@@ -1,4 +1,4 @@
-use super::{Host, TrackingHost};
+use super::desktop::{RecordingSignals, TrackingHost};
 use crate::{
     data::{repositories::icon_cache, web_activity_store::SqliteWebActivityStore},
     domain::settings::WebActivitySettings,
@@ -10,29 +10,36 @@ use crate::{
         web_activity::{self, WebActivityContext, WebActivityRuntimeState},
     },
     platform::{clock::unix_timestamp_millis_i64, web_activity_bridge::*, web_activity_request},
-    TrackingPreferences,
+    AppPreferences,
 };
 use sqlx::SqlitePool;
 use std::{sync::Arc, time::Duration};
 
-pub(super) struct Services {
-    host: Host,
+pub struct ActivityBridges {
+    accepting_requests: tokio::sync::RwLock<bool>,
+    remote: crate::engine::remote_status_bridge::RemoteStatusBridgeRuntimeState,
+    host: RecordingSignals,
     pool: SqlitePool,
     listener: WebActivityBridgeRuntimeState,
     web: WebActivityRuntimeState,
 }
 
-impl Services {
-    pub(super) fn new(pool: SqlitePool, host: Host) -> Self {
+impl ActivityBridges {
+    pub fn new(pool: SqlitePool, host: RecordingSignals) -> Self {
+        let remote = crate::engine::remote_status_bridge::RemoteStatusBridgeRuntimeState::new(
+            host.snapshot_changes(),
+        );
         Self {
+            accepting_requests: tokio::sync::RwLock::new(true),
             pool,
+            remote,
             host,
             listener: Default::default(),
             web: Default::default(),
         }
     }
 
-    pub(super) fn apply(self: &Arc<Self>, prefs: &TrackingPreferences) {
+    pub fn apply(self: &Arc<Self>, prefs: &AppPreferences) {
         if self.listener.update(
             self.clone(),
             prefs.web.clone(),
@@ -42,13 +49,10 @@ impl Services {
         ) {
             self.web.expiry_changed.notify_one();
         }
-        self.host
-            .0
-            .remote
-            .update(self.clone(), prefs.remote.clone());
+        self.remote.update(self.clone(), prefs.remote.clone());
     }
 
-    pub(super) fn stop(self: &Arc<Self>) {
+    pub(super) async fn stop(self: &Arc<Self>) {
         self.listener.update(
             self.clone(),
             Default::default(),
@@ -56,7 +60,8 @@ impl Services {
                 handle_http_request: Self::request,
             },
         );
-        self.host.0.remote.update(self.clone(), Default::default());
+        self.remote.update(self.clone(), Default::default());
+        *self.accepting_requests.write().await = false;
     }
 
     fn request(
@@ -64,19 +69,20 @@ impl Services {
         request: WebActivityBridgeHttpRequest,
     ) -> WebActivityBridgeHttpFuture {
         Box::pin(async move {
+            let accepting = this.accepting_requests.read().await;
             let now = unix_timestamp_millis_i64();
             let tracking = this.host.projection();
             let generation = tracking.lifecycle_generation();
             let current = this.listener.current_settings();
             let settings = WebActivitySettings {
-                enabled: current.enabled,
+                enabled: current.enabled && *accepting,
                 token: current.token,
             };
-            let (settings, payload) = match web_activity_request::parse(request, Ok(settings), now)
-            {
-                Ok(parsed) => parsed,
-                Err(response) => return response,
-            };
+            let (settings, payload) =
+                match web_activity_request::authorize_and_parse(request, Ok(settings), now) {
+                    Ok(parsed) => parsed,
+                    Err(response) => return response,
+                };
             let store = SqliteWebActivityStore::new(this.pool.clone());
             let context = WebActivityContext {
                 runtime: &this.web,
@@ -91,13 +97,12 @@ impl Services {
                 Ok(change) => {
                     if change.changed() {
                         this.web.expiry_changed.notify_one();
-                        (this.host.0.changed)();
+                        this.host.notify();
                     }
-                    web_activity_request::recorded(change.changed(), now)
+                    web_activity_request::recording_response(change.changed(), now)
                 }
-                Err(_) => web_activity_request::web_activity_http_response(
+                Err(_) => web_activity_request::error_response(
                     400,
-                    false,
                     "record-failed",
                     "failed to record active tab",
                 ),
@@ -117,7 +122,7 @@ impl Services {
                         .await
                         .unwrap_or(false)
                     {
-                        (self.host.0.changed)();
+                        self.host.notify();
                         Duration::ZERO
                     } else {
                         Duration::from_secs(3)
@@ -134,7 +139,7 @@ impl Services {
     }
 }
 
-pub(super) async fn ensure_machine_id(pool: &SqlitePool) -> Result<(), String> {
+pub async fn ensure_machine_id(pool: &SqlitePool) -> Result<(), String> {
     sqlx::query(
         "INSERT INTO settings(key,value) VALUES('remote_status_bridge_machine_id',?)
         ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE trim(settings.value)=''",
@@ -146,7 +151,7 @@ pub(super) async fn ensure_machine_id(pool: &SqlitePool) -> Result<(), String> {
     Ok(())
 }
 
-impl RemoteStatusBridgeStore for Services {
+impl RemoteStatusBridgeStore for ActivityBridges {
     fn snapshot(&self) -> Option<TrackingRuntimeSnapshot> {
         self.host.projection().snapshot()
     }

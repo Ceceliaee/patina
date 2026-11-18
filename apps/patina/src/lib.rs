@@ -3,12 +3,16 @@ mod bundled_tools;
 mod dev_preview;
 mod login;
 mod message_loop;
+mod requests;
 mod tool_events;
 mod tool_service;
 mod tray;
 mod window_process;
 
-use patina_recorder::Recorder;
+use patina_activity::{
+    ActivityBridges, ActivityMaintenance, ActivityQueries, Classification, NativeToolData,
+    Preferences, Recorder, RecordingSignals, StorageOperations,
+};
 use std::{
     env, fs, io,
     os::windows::fs::OpenOptionsExt,
@@ -24,7 +28,6 @@ use std::{
 pub use tray::Action;
 
 pub use patina_desktop_protocol::APP_ID;
-static RESTART_AFTER_STORAGE: AtomicBool = AtomicBool::new(false);
 
 /// Select a child role before acquiring the profile lock or starting the recorder.
 pub fn run_child_if_requested() -> Option<Result<(), Box<dyn std::error::Error>>> {
@@ -99,8 +102,14 @@ pub fn launch(
     let windows_open = Arc::new(AtomicBool::new(false));
     let revision = Arc::new(AtomicU64::new(0));
     let usage_active = Arc::new(AtomicBool::new(false));
-    let database = patina_recorder::database_for_profile(&root)?;
-    let (recorder, preferences) = Recorder::start_with_preferences(&database, &root, {
+    let database = patina_activity::prepare_database_for_startup(&root)?;
+    let database_runtime = DesktopDatabase::open(&database)?;
+    let runtime = &database_runtime.runtime;
+    let pool = &database_runtime.pool;
+    runtime.block_on(patina_activity::ensure_machine_id(pool))?;
+    let initial = runtime.block_on(patina_activity::load_app_preferences(pool.clone()))?;
+    let locale = Rc::new(std::cell::Cell::new(initial.locale));
+    let signals = RecordingSignals::new({
         let send = send.clone();
         let windows_open = windows_open.clone();
         let usage_active = usage_active.clone();
@@ -114,16 +123,40 @@ pub fn launch(
                 let _ = send.try_send(Action::Refresh);
             }
         }
-    })?;
-    let recorder = Rc::new(recorder);
-    let behavior = preferences.desktop;
+    });
+    let recorder = Recorder::start(runtime, pool.clone(), signals.clone())?;
+    let recording = recorder.control();
+    let bridges = Arc::new(ActivityBridges::new(pool.clone(), signals.clone()));
+    let storage = StorageOperations::new(
+        &root,
+        &database,
+        pool.clone(),
+        signals.clone(),
+        runtime.handle().clone(),
+    );
+    let mut maintenance = ActivityMaintenance::start(
+        runtime,
+        pool.clone(),
+        bridges.clone(),
+        storage.clone(),
+        &initial,
+    );
+    let preferences =
+        Preferences::with_recording(pool.clone(), locale.clone(), signals.clone(), bridges);
+    let queries = requests::BackgroundQueries::new(
+        runtime.handle().clone(),
+        ActivityQueries::new(pool.clone()),
+    );
+    let classification = Classification::with_recording(pool.clone(), signals);
+    let behavior = initial.desktop;
     let silent = actions.is_empty() && behavior.start_minimized;
     if actions.is_empty() && !silent {
         send.try_send(Action::Today)?;
     }
     let tray = tray::Tray::new(
         send.clone(),
-        recorder.clone(),
+        recording.clone(),
+        locale.clone(),
         behavior,
         &profile_id,
         silent,
@@ -132,38 +165,50 @@ pub fn launch(
     if let Err(e) = login.apply(behavior.launch_at_login) {
         eprintln!("restore login entry: {e}");
     }
-    let shutdown = recorder.clone();
+    let updater = make_updater(&root).map_err(io::Error::other)?;
+    let update_shutdown = updater.clone();
     let (tools, worker) = tool_service::ToolService::start(
         root.join("tools"),
-        recorder.tools(),
-        recorder.locale.get().tag().into(),
+        NativeToolData::new(pool.clone(), runtime.handle().clone()),
+        locale.get().tag().into(),
         send,
         usage_active,
     )?;
-    let updater = make_updater(&root).map_err(io::Error::other)?;
-    let update_shutdown = updater.clone();
-    let executor = async_executor::LocalExecutor::new();
-    let loop_result = message_loop::run(executor.run(window_process::serve(
-        &executor,
-        actions,
-        recorder,
-        windows_open,
-        revision,
-        window_process::Services {
-            tools,
-            tray,
-            login,
-            updater,
-        },
-    )));
+    let loop_result = {
+        let executor = async_executor::LocalExecutor::new();
+        let _runtime_context = runtime.enter();
+        message_loop::run(executor.run(window_process::serve(
+            &executor,
+            actions,
+            windows_open,
+            revision,
+            requests::DesktopRequests {
+                queries,
+                classification,
+                preferences,
+                storage,
+                recording,
+                tools,
+                tray,
+                login,
+                updater,
+            },
+        )))
+    };
     let tools_stopped = worker.stop();
-    shutdown.shutdown()?;
+    let maintenance_stopped = maintenance.shutdown();
+    let sealed = recorder.shutdown();
+    drop(maintenance);
+    drop(recorder);
+    drop(database_runtime);
     tools_stopped?;
-    loop_result?;
+    maintenance_stopped?;
+    sealed?;
+    let exit = loop_result?;
     update_shutdown
-        .complete_shutdown()
+        .write_shutdown_receipt()
         .map_err(io::Error::other)?;
-    if RESTART_AFTER_STORAGE.swap(false, Ordering::AcqRel) {
+    if matches!(exit, requests::ExitAction::Restart) {
         drop(_profile_lock);
         #[cfg(debug_assertions)]
         if env::var_os("PATINA_GPUI_DEV_SESSION").is_some() {
@@ -177,6 +222,29 @@ pub fn launch(
         command.spawn()?;
     }
     Ok(())
+}
+
+struct DesktopDatabase {
+    runtime: tokio::runtime::Runtime,
+    pool: sqlx::SqlitePool,
+}
+
+impl DesktopDatabase {
+    fn open(path: &Path) -> Result<Self, String> {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .map_err(|error| error.to_string())?;
+        let pool = runtime.block_on(patina_activity::open_database(path))?;
+        Ok(Self { runtime, pool })
+    }
+}
+
+impl Drop for DesktopDatabase {
+    fn drop(&mut self) {
+        self.runtime.block_on(self.pool.close());
+    }
 }
 
 fn make_updater(root: &Path) -> Result<patina_updater::Service, String> {

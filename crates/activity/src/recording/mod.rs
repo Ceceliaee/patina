@@ -1,7 +1,14 @@
 pub(crate) mod analysis;
+pub(crate) mod classification;
+pub(crate) mod classification_rules;
 pub(crate) mod desktop;
+pub(crate) mod error;
 pub(crate) mod history;
-pub(crate) mod manage;
+pub(crate) mod maintenance;
+pub(crate) mod preferences;
+pub(crate) mod queries;
 pub(crate) mod recent;
+pub(crate) mod services;
+pub(crate) mod storage;
 pub(crate) mod today;
 pub(crate) mod tools;
