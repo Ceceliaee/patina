@@ -1,0 +1,34 @@
+[package]
+name = "patina-ui"
+version.workspace = true
+edition = "2024"
+publish = false
+
+[dependencies]
+patina-activity-model = { path = "../../crates/activity-model" }
+patina-desktop-protocol = { path = "../../crates/desktop-protocol" }
+patina-windows-integration = { path = "../../crates/windows-integration", default-features = false }
+patina-i18n = { path = "../../crates/i18n" }
+patina-updater = { path = "../../crates/updater", default-features = false }
+gpui-kit.workspace = true
+quietpro = { path = "../../crates/quietpro" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+async-channel = "2"
+raw-window-handle = "0.6"
+chrono = "0.4"
+getrandom = "0.3"
+windows = { version = "0.62.2", features = [
+ "Foundation", "Storage_Streams", "Web_Http",
+ "Win32_Foundation", "Win32_Globalization", "Win32_Graphics_Gdi", "Win32_UI_Shell",
+ "Win32_UI_WindowsAndMessaging", "Win32_UI_HiDpi", "Win32_System_LibraryLoader",
+] }
+
+[features]
+native-tests = []
+test-support = ["gpui-kit/test-support"]
+
+[dev-dependencies]
+patina-test-desktop = { path = "../../crates/test-support" }
+windows = { version = "0.62.2", features = ["Win32_System_Threading"] }
