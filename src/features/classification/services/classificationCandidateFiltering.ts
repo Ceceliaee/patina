@@ -1,6 +1,7 @@
 import type { Locale } from "../../../shared/i18n/index.ts";
 import type { UserAssignableAppCategory } from "../../../shared/classification/categoryTokens.ts";
 import type { CandidateFilter, ObservedAppCandidate } from "../types.ts";
+import type { ClassificationAppSort } from "./classificationLayoutPreferenceStorage.ts";
 
 interface FilterAndSortCandidatesParams {
   candidates: ObservedAppCandidate[];
@@ -11,6 +12,7 @@ interface FilterAndSortCandidatesParams {
   resolveEffectiveDisplayName: (candidate: ObservedAppCandidate) => string;
   resolveCategoryLabel?: (category: UserAssignableAppCategory) => string;
   locale: Locale;
+  sort?: ClassificationAppSort;
 }
 
 export function filterAndSortCandidates({
@@ -22,6 +24,7 @@ export function filterAndSortCandidates({
   resolveEffectiveDisplayName,
   resolveCategoryLabel,
   locale,
+  sort = "default",
 }: FilterAndSortCandidatesParams): ObservedAppCandidate[] {
   const collator = new Intl.Collator(locale, { numeric: true, sensitivity: "base" });
   const normalizedQuery = searchQuery?.trim().toLocaleLowerCase(locale) ?? "";
@@ -47,7 +50,9 @@ export function filterAndSortCandidates({
       ].join(" ").toLocaleLowerCase(locale).includes(normalizedQuery);
     })
     .sort((left, right) => (
-      collator.compare(resolveEffectiveDisplayName(left), resolveEffectiveDisplayName(right))
+      (sort === "default"
+        ? collator.compare(resolveEffectiveDisplayName(left), resolveEffectiveDisplayName(right))
+        : sort === "recent" ? right.lastSeenMs - left.lastSeenMs : 0)
       || collator.compare(left.exeName, right.exeName)
     ));
 }

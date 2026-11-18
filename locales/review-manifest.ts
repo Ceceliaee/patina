@@ -1016,7 +1016,19 @@ export const LOCALE_SOURCE_REVIEWS = {
     "tools.focusHistoryEmpty": "c637e27239c198db",
     "tools.focusHistoryError": "ee8509e191f98aae",
     "tools.focusHistoryOpen": "e4f73c35da043ee9",
-    "tools.focusHistoryEnded": "5f5887c7e4471247"
+    "tools.focusHistoryEnded": "5f5887c7e4471247",
+    "settings.aiClassification": "826fb5e4e2a44fa8",
+    "settings.aiApiUrl": "02ab489c79cd1226",
+    "settings.aiApiKey": "42cd9eac5c0f6e93",
+    "settings.aiFetchModels": "e94a85542e317e9f",
+    "settings.aiModel": "e11907a2ae6ab5c8",
+    "settings.aiConfigFailed": "b868531bd1668e0e",
+    "mapping.aiNotConfigured": "23aca08e7ea46321",
+    "mapping.aiFailed": "8e69a2b14bfd4f6d",
+    "mapping.aiEmpty": "8626e3870320582e",
+    "mapping.appSort": "53c961e6cc4c00e8",
+    "mapping.appSortRecent": "b204fb5b9fcc3bb9",
+    "mapping.appSortFilename": "a84cff1f0462582c"
   },
   "es": {
     "about.description": "9e6291ff14b79ed3",
@@ -2034,7 +2046,19 @@ export const LOCALE_SOURCE_REVIEWS = {
     "tools.focusHistoryEmpty": "c637e27239c198db",
     "tools.focusHistoryError": "ee8509e191f98aae",
     "tools.focusHistoryOpen": "e4f73c35da043ee9",
-    "tools.focusHistoryEnded": "5f5887c7e4471247"
+    "tools.focusHistoryEnded": "5f5887c7e4471247",
+    "settings.aiClassification": "826fb5e4e2a44fa8",
+    "settings.aiApiUrl": "02ab489c79cd1226",
+    "settings.aiApiKey": "42cd9eac5c0f6e93",
+    "settings.aiFetchModels": "e94a85542e317e9f",
+    "settings.aiModel": "e11907a2ae6ab5c8",
+    "settings.aiConfigFailed": "b868531bd1668e0e",
+    "mapping.aiNotConfigured": "23aca08e7ea46321",
+    "mapping.aiFailed": "8e69a2b14bfd4f6d",
+    "mapping.aiEmpty": "8626e3870320582e",
+    "mapping.appSort": "53c961e6cc4c00e8",
+    "mapping.appSortRecent": "b204fb5b9fcc3bb9",
+    "mapping.appSortFilename": "a84cff1f0462582c"
   },
   "ru-RU": {
     "about.description": "9e6291ff14b79ed3",
@@ -3052,6 +3076,18 @@ export const LOCALE_SOURCE_REVIEWS = {
     "tools.focusHistoryEmpty": "c637e27239c198db",
     "tools.focusHistoryError": "ee8509e191f98aae",
     "tools.focusHistoryOpen": "e4f73c35da043ee9",
-    "tools.focusHistoryEnded": "5f5887c7e4471247"
+    "tools.focusHistoryEnded": "5f5887c7e4471247",
+    "settings.aiClassification": "826fb5e4e2a44fa8",
+    "settings.aiApiUrl": "02ab489c79cd1226",
+    "settings.aiApiKey": "42cd9eac5c0f6e93",
+    "settings.aiFetchModels": "e94a85542e317e9f",
+    "settings.aiModel": "e11907a2ae6ab5c8",
+    "settings.aiConfigFailed": "b868531bd1668e0e",
+    "mapping.aiNotConfigured": "23aca08e7ea46321",
+    "mapping.aiFailed": "8e69a2b14bfd4f6d",
+    "mapping.aiEmpty": "8626e3870320582e",
+    "mapping.appSort": "53c961e6cc4c00e8",
+    "mapping.appSortRecent": "b204fb5b9fcc3bb9",
+    "mapping.appSortFilename": "a84cff1f0462582c"
   }
 } as const;

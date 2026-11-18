@@ -1,5 +1,11 @@
 // en-US settings locale resource. Pure data only.
 export const MESSAGES = {
+  "settings.aiClassification": "AI auto-classify",
+  "settings.aiApiUrl": "API base URL",
+  "settings.aiApiKey": "API key",
+  "settings.aiFetchModels": "Fetch models",
+  "settings.aiModel": "Select model",
+  "settings.aiConfigFailed": "Could not load or save AI settings, or fetch models. Check the configuration and retry.",
   "settings.timeRulesTitle": "Time rules",
   "settings.recordingOptionsTitle": "Recording options",
   "settings.themeGroupTitle": "Theme",

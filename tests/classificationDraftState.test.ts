@@ -1118,6 +1118,30 @@ await runTest("filterAndSortCandidates filters by category and sorts by resolved
   );
 });
 
+await runTest("application sort modes reorder the same filtered results", () => {
+  const candidates = [
+    buildCandidate("b.exe", "First", 600, 0),
+    buildCandidate("a.exe", "Third", 600, 100),
+    buildCandidate("d.exe", "Second", 600, 200),
+    buildCandidate("c.exe", "Fourth", 600, 100),
+    buildCandidate("excluded.exe", "Fifth", 600, 300),
+    buildCandidate("hidden.exe", "Hidden", 600, 400),
+  ];
+  const visible = (sort: "default" | "recent" | "filename") => filterAndSortCandidates({
+    candidates,
+    sort,
+    filter: "classified",
+    searchQuery: ".exe",
+    resolveMappedCategory: (candidate) => candidate.exeName === "hidden.exe" ? "other" : "development",
+    resolveTrackingEnabled: (candidate) => candidate.exeName !== "excluded.exe",
+    resolveEffectiveDisplayName: (candidate) => candidate.appName,
+  }).map((candidate) => candidate.exeName);
+
+  assert.deepEqual(visible("default"), ["b.exe", "c.exe", "d.exe", "a.exe"]);
+  assert.deepEqual(visible("recent"), ["d.exe", "a.exe", "c.exe", "b.exe"]);
+  assert.deepEqual(visible("filename"), ["a.exe", "b.exe", "c.exe", "d.exe"]);
+});
+
 await runTest("filterAndSortCandidates filters excluded apps by tracking state", () => {
   const candidates = [
     buildCandidate("active.exe", "Active"),

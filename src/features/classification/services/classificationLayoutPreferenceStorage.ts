@@ -1,8 +1,27 @@
 import { getBrowserLocalStorage } from "../../../platform/browser/browserStorageGateway.ts";
 
 export type MappingObjectMode = "app" | "web";
+export type ClassificationAppSort = "default" | "recent" | "filename";
 
 const CLASSIFICATION_OBJECT_MODE_KEY = "patina:classification-object-mode";
+const CLASSIFICATION_APP_SORT_KEY = "patina:classification-app-sort";
+
+export function readClassificationAppSort(): ClassificationAppSort {
+  try {
+    const value = getBrowserLocalStorage()?.getItem(CLASSIFICATION_APP_SORT_KEY);
+    return value === "recent" || value === "filename" ? value : "default";
+  } catch {
+    return "default";
+  }
+}
+
+export function rememberClassificationAppSort(sort: ClassificationAppSort) {
+  try {
+    getBrowserLocalStorage()?.setItem(CLASSIFICATION_APP_SORT_KEY, sort);
+  } catch {
+    // View preferences are best-effort.
+  }
+}
 
 function isMappingObjectMode(value: string | null): value is MappingObjectMode {
   return value === "app" || value === "web";

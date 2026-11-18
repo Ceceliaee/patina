@@ -8,6 +8,7 @@ import { runClassificationWebLayoutScenarios } from "./classificationWebLayoutSc
 import { runClassificationAppLayoutScenarios } from "./classificationAppLayoutScenarios.ts";
 import { runClassificationCategoryFilterScenarios } from "./classificationCategoryFilterScenarios.ts";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
+import { getLocaleText } from "../../src/shared/i18n/runtime.ts";
 import { delay, evaluate, jsonString, waitForExpression, waitForStableExpression, withFixedBrowserClock } from "./browserHarness.ts";
 
 export async function runClassificationScenarios(context: BrowserSmokeContext) {
@@ -15,6 +16,7 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
 }
 
 async function runClassificationCases(context: BrowserSmokeContext) {
+  await runAiClassificationScenario(context);
   await runClassificationLinkLayoutScenarios(context);
   await runClassificationLinkLayoutMatrix(context);
   await runWebLinkLayoutScenario(context);
@@ -574,11 +576,11 @@ async function runClassificationCases(context: BrowserSmokeContext) {
       `),
       true,
     );
-    await waitForExpression(client!, sessionId, `Boolean(document.querySelector(".qp-select-trigger"))`);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector("[data-classification-app] .qp-select-trigger"))`);
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const triggers = Array.from(document.querySelectorAll('.qp-select-trigger'));
+          const triggers = Array.from(document.querySelectorAll('[data-classification-app] .qp-select-trigger'));
           return triggers.length > 0
             && triggers.every((trigger) => {
               const label = trigger.getAttribute('aria-label');
@@ -734,7 +736,7 @@ async function runClassificationCases(context: BrowserSmokeContext) {
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const trigger = document.querySelector(".qp-select-trigger");
+          const trigger = document.querySelector("[data-classification-app] .qp-select-trigger");
           if (!trigger) return false;
           trigger.click();
           return true;
@@ -763,14 +765,14 @@ async function runClassificationCases(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `document.activeElement?.classList.contains('qp-select-trigger')`,
+      `document.activeElement?.matches('[data-classification-app] .qp-select-trigger')`,
       undefined,
       "select trigger should regain focus before reopening",
     );
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const trigger = document.querySelector('.qp-select-trigger');
+          const trigger = document.querySelector('[data-classification-app] .qp-select-trigger');
           if (!trigger) return false;
           trigger.focus();
           return true;
@@ -840,14 +842,14 @@ async function runClassificationCases(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `document.activeElement?.classList.contains('qp-select-trigger')`,
+      `document.activeElement?.matches('[data-classification-app] .qp-select-trigger')`,
       undefined,
       "select trigger focus restoration",
     );
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const trigger = document.querySelector('.qp-select-trigger');
+          const trigger = document.querySelector('[data-classification-app] .qp-select-trigger');
           if (!(trigger instanceof HTMLElement)) return false;
           const controls = Array.from(document.querySelectorAll(
             "a[href], button:not([disabled]), input:not([disabled]):not([type='hidden']), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
@@ -919,7 +921,7 @@ async function runClassificationCases(context: BrowserSmokeContext) {
       true,
     );
     await waitForExpression(client!, sessionId, `Boolean(document.querySelector(
-      'main[data-presented-view="mapping"][data-view-transition-state="settled"] .qp-select-trigger'))`);
+      'main[data-presented-view="mapping"][data-view-transition-state="settled"] [data-classification-app] .qp-select-trigger'))`);
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
@@ -1286,6 +1288,66 @@ async function runClassificationCases(context: BrowserSmokeContext) {
       })()`);
       await waitForExpression(client!, sessionId, `performance.timeOrigin !== ${origin} && Boolean(document.querySelector('main'))`,
         15_000, "restore the original classification fixture and its runtime caches");
+    }
+  });
+}
+
+async function runAiClassificationScenario({ client, sessionId, runTest }: BrowserSmokeContext) {
+  const { settings, mapping, common } = getLocaleText("zh-CN");
+  const button = (label: string) => `Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === ${jsonString(label)})`;
+  const ai = `(${button(settings.aiClassification)})`;
+  const pending = `document.querySelector('.qp-page-header [role="status"]')`;
+  const cancel = button(mapping.cancel);
+  await runTest("AI classification waits for the provider and only updates the existing draft", async () => {
+    const originalSettings = await evaluate(client, sessionId, `localStorage.getItem('__time_tracker_smoke_settings')`);
+    const previousDocument = await evaluate(client, sessionId, `performance.timeOrigin`);
+    const previousViewport = await evaluate(client, sessionId, `({ width: innerWidth, height: innerHeight, deviceScaleFactor: devicePixelRatio, mobile: false })`) as Record<string, unknown>;
+    await evaluate(client, sessionId, `(() => {
+      const fixture = JSON.parse(localStorage.getItem('__time_tracker_smoke_settings') ?? '{}');
+      fixture.__browser_smoke_seeded = '1';
+      delete fixture['__app_override::deep-research-workbench.exe'];
+      localStorage.setItem('__time_tracker_smoke_settings', JSON.stringify(fixture));
+      localStorage.setItem('patina:last-active-view', 'dashboard');
+      location.reload();
+    })()`);
+    try {
+      await waitForExpression(client, sessionId, `performance.timeOrigin !== ${previousDocument} &&
+        Boolean(document.querySelector('[aria-label="分类"]'))`);
+      await evaluate(client, sessionId, `(() => {
+        window.__PATINA_AI_CONFIG = { url: 'https://example.invalid/v1', model: 'fixture-model' };
+        document.querySelector('[aria-label="分类"]').click();
+      })()`);
+      await waitForExpression(client, sessionId, `Boolean(document.querySelector(
+        'main[data-presented-view="mapping"][data-view-transition-state="settled"]'
+      )) && ${ai}?.disabled === false`);
+      await client.command("Emulation.setDeviceMetricsOverride", { width: 1100, height: 736, deviceScaleFactor: 1, mobile: false }, sessionId);
+      assert.equal(await evaluate(client, sessionId, `(${ai}).innerText.trim()`), settings.aiClassification);
+      await evaluate(client, sessionId, `${ai}.click()`);
+      await waitForExpression(client, sessionId, `typeof window.__PATINA_FINISH_AI === 'function' &&
+        ${pending}?.textContent.trim() === ${jsonString(common.processing)}`);
+      assert.equal(await evaluate(client, sessionId, `${ai}.disabled`), true);
+      await evaluate(client, sessionId, `window.__PATINA_FINISH_AI()`);
+      await waitForExpression(client, sessionId, `document.body.textContent.includes(${jsonString(mapping.unsaved)}) &&
+        ${pending}?.textContent === ''`);
+      await evaluate(client, sessionId, `${cancel}.click()`);
+      await waitForExpression(client, sessionId, `!document.body.textContent.includes(${jsonString(mapping.unsaved)})`);
+      await evaluate(client, sessionId, `window.__PATINA_FINISH_AI = undefined; ${ai}.click()`);
+      await waitForExpression(client, sessionId, `typeof window.__PATINA_FINISH_AI === 'function' && ${pending}?.textContent !== ''`);
+      await evaluate(client, sessionId, `${cancel}.click(); window.__PATINA_FINISH_AI()`);
+      await waitForExpression(client, sessionId, `${pending}?.textContent === '' && !${ai}.disabled`);
+      assert.equal(await evaluate(client, sessionId, `document.body.textContent.includes(${jsonString(mapping.unsaved)})`), false);
+    } finally {
+      await client.command("Emulation.setDeviceMetricsOverride", previousViewport, sessionId);
+      await evaluate(client, sessionId, `(() => {
+        const original = ${JSON.stringify(originalSettings)};
+        if (original === null) localStorage.removeItem('__time_tracker_smoke_settings');
+        else localStorage.setItem('__time_tracker_smoke_settings', original);
+        localStorage.setItem('patina:last-active-view', 'dashboard');
+        location.reload();
+      })()`);
+      await waitForExpression(client, sessionId, `Boolean(document.querySelector(
+        'main[data-presented-view="dashboard"][data-view-transition-state="settled"]'
+      ))`);
     }
   });
 }

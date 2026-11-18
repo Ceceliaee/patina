@@ -1,5 +1,8 @@
 // ru-RU locale resource. Pure data only.
 export const MESSAGES = {
+  "mapping.aiNotConfigured": "В настройках не выбрана модель",
+  "mapping.aiFailed": "Не удалось выполнить классификацию с ИИ. Текущие категории не изменились.",
+  "mapping.aiEmpty": "Нет подходящих рекомендаций ИИ.",
   "mapping.webIndependent": "Показывать отдельно",
   "mapping.mergeWebDomain": {"$type": "message", "body": {"$op": "concat", "parts": ["Объединить в ", {"$op": "arg", "name": "domain"}]}},
   "mapping.deletionMembers": "Объекты для удаления",
@@ -30,6 +33,9 @@ export const MESSAGES = {
   "mapping.cancel": "Отмена",
   "mapping.categoryFilter": "Фильтр по категории",
   "mapping.categoryControl": "Управление категориями",
+  "mapping.appSort": "Порядок сортировки приложений",
+  "mapping.appSortRecent": "Недавние",
+  "mapping.appSortFilename": "Имя файла A-Z",
   "mapping.categoryDialogTitle": "Управление категориями",
   "mapping.categorySelectLabel": {
     "$type": "message",

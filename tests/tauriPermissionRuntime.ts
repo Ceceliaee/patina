@@ -10,6 +10,7 @@ import {
 import { assertMiniHasNoNativeCaption, verifyMiniContentRuntime } from "./tauriMiniContentRuntime.ts";
 import { connectMini } from "./tauriMiniWindowRuntime.ts";
 import { RuntimeSession, evaluate } from "./tauriRuntimeHarness.ts";
+import { aiClassificationMainCommands } from "./tauriRuntimeOptions.ts";
 async function occupyPort(port = 0) {
   return new Promise<NetServer>((resolve, reject) => {
     const server = createNetServer();
@@ -31,6 +32,8 @@ export async function run(session: RuntimeSession) {
   let client = session.client!;
   try {
     await session.show();
+    assert.equal(await evaluate(client,
+      'window.__TAURI_INTERNALS__.invoke("cmd_get_ai_classification_config")'), null);
     const expiryObservation = () => evaluate(client,
       `window.__TAURI_INTERNALS__.invoke("cmd_get_resource_diagnostics").then(d => ({
         samples: d.native_probes.find(p => p.kind === "foreground").succeeded,
@@ -51,6 +54,10 @@ export async function run(session: RuntimeSession) {
     try {
       await waitFor("permission mini ready", () => evaluate(mini, "Boolean(document.querySelector('[data-mini-page],.mini-tools'))"));
       await verifyMiniContentRuntime(client, mini);
+      for (const command of aiClassificationMainCommands) {
+        const denied = await evaluate(mini, `window.__TAURI_INTERNALS__.invoke(${JSON.stringify(command)},{}).then(()=>null,e=>String(e))`);
+        assert.match(String(denied), /not allowed|permission|denied/i, `${command} must be rejected before argument parsing`);
+      }
       for (const command of ["cmd_get_tool_presentation", "cmd_save_tool_notification_preferences", "cmd_tool_presentation_action", "cmd_tool_presentation_ready", "cmd_commit_app_settings", "cmd_get_setting_rows", "cmd_install_update", "cmd_restore_backup", "cmd_classification_object_deletion", "cmd_extend_activity_reminder", "cmd_set_activity_reminder_enabled", "cmd_update_reminder", "cmd_resolve_reminder_alert", "cmd_update_activity_reminder_limit", "cmd_show_desktop", "cmd_open_mini_window"]) {
         const denied = await evaluate(mini, `window.__TAURI_INTERNALS__.invoke(${JSON.stringify(command)},{}).then(()=>null,e=>String(e))`);
         assert.match(String(denied), /not allowed|permission|denied/i, `${command} must be rejected before argument parsing`);

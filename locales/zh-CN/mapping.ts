@@ -1,5 +1,8 @@
 // zh-CN mapping locale resource. Pure data only.
 export const MESSAGES = {
+  "mapping.aiNotConfigured": "尚未在设置中配置模型",
+  "mapping.aiFailed": "AI 分类失败，现有分类没有变化。",
+  "mapping.aiEmpty": "没有可应用的 AI 分类建议。",
 
   "mapping.webIndependent": "独立显示",
   "mapping.mergeWebDomain": {"$type": "message", "body": {"$op": "concat", "parts": ["合并到 ", {"$op": "arg", "name": "domain"}]}},
@@ -33,6 +36,9 @@ export const MESSAGES = {
   "mapping.cancel": "取消",
   "mapping.categoryFilter": "筛选分类",
   "mapping.categoryControl": "管理分类",
+  "mapping.appSort": "应用排序方式",
+  "mapping.appSortRecent": "最近使用",
+  "mapping.appSortFilename": "文件名 A-Z",
   "mapping.categoryDialogTitle": "管理分类",
   "mapping.categorySelectLabel": {
     "$type": "message",

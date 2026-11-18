@@ -112,6 +112,45 @@ async function dispatchSelectKey(
 
 export async function runSettingsScenarios(context: BrowserSmokeContext) {
   const { appUrl, client, sessionId, runTest } = context;
+  await runTest("AI settings load a model list and save a keyboard-selected model", async () => {
+    const { settings } = getLocaleText("zh-CN");
+    const section = `Array.from(document.querySelectorAll('section')).find(node =>
+      node.querySelector('h2')?.textContent === ${jsonString(settings.aiClassification)} && node.querySelector('input[type="url"]'))`;
+    const button = (label: string) => `Array.from((${section})?.querySelectorAll('button') ?? [])
+      .find(node => node.textContent.trim() === ${jsonString(label)})`;
+    const fetch = button(settings.aiFetchModels);
+    const save = button(settings.save);
+    const model = `(${section})?.querySelector('button[aria-haspopup="listbox"]')`;
+    await evaluate(client, sessionId, `document.querySelector('[data-sidebar-nav-item="settings"]').click()`);
+    await waitForExpression(client, sessionId, `(${section})?.querySelector('input[type="url"]')?.disabled === false`);
+    try {
+      await evaluate(client, sessionId, `(() => {
+        const panel = ${section};
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+        for (const [type, value] of [['url', 'https://example.invalid/v1'], ['password', 'fixture-key']]) {
+          const input = panel.querySelector('input[type=' + type + ']');
+          setter.call(input, value);
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      })()`);
+      await waitForExpression(client, sessionId, `(${fetch})?.disabled === false`);
+      await evaluate(client, sessionId, `(${fetch}).click()`);
+      await waitForExpression(client, sessionId, `(${model})?.disabled === false`);
+      await evaluate(client, sessionId, `(${model}).focus()`);
+      for (const [key, code] of [["ArrowDown", 40], ["Enter", 13]] as const) {
+        for (const type of ["keyDown", "keyUp"]) {
+          await client.command("Input.dispatchKeyEvent", { type, key, windowsVirtualKeyCode: code }, sessionId);
+        }
+        if (code === 40) await waitForExpression(client, sessionId, `document.querySelector('[role="option"]')?.textContent.trim() === 'fixture-model'`);
+      }
+      await waitForExpression(client, sessionId, `(${save})?.disabled === false`);
+      await evaluate(client, sessionId, `(${save}).click()`);
+      await waitForExpression(client, sessionId, `window.__PATINA_AI_CONFIG?.model === 'fixture-model'`);
+      await waitForExpression(client, sessionId, `(${section}).querySelector('input[type="password"]').value === ''`);
+    } finally {
+      await evaluate(client, sessionId, `delete window.__PATINA_AI_CONFIG`);
+    }
+  });
   const assertTextRole = async (selector: string, role: string, weight: string) => {
     assert.equal(await evaluate(client, sessionId, `(() => {
       const elements = [...document.querySelectorAll(${jsonString(selector)})];

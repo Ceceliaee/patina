@@ -5,6 +5,7 @@ interface Props {
   title: string;
   titleSuffix?: ReactNode;
   subtitle?: ReactNode;
+  statusSlot?: ReactNode;
   rightSlot?: ReactNode;
 }
 
@@ -13,6 +14,7 @@ export default function QuietPageHeader({
   title,
   titleSuffix,
   subtitle,
+  statusSlot,
   rightSlot,
 }: Props) {
   return (
@@ -33,6 +35,7 @@ export default function QuietPageHeader({
           ) : null}
         </div>
       </div>
+      {statusSlot}
       {rightSlot ? (
         <div className="qp-page-header-right">
           {rightSlot}

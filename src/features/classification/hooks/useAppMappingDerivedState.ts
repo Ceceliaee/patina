@@ -24,6 +24,7 @@ import {
   type AppOverride,
   type ClassificationDraftState,
 } from "../services/classificationService";
+import type { ClassificationAppSort } from "../services/classificationLayoutPreferenceStorage.ts";
 
 const USER_ASSIGNABLE_CATEGORY_SET = new Set<string>(USER_ASSIGNABLE_CATEGORIES);
 interface UseAppMappingDerivedStateParams {
@@ -41,6 +42,7 @@ interface UseAppMappingDerivedStateParams {
   editingWebDomain: string | null;
   webNameEditSnapshots: Record<string, WebDomainOverride | null>;
   filter: CandidateFilter;
+  appSort: ClassificationAppSort;
   searchQuery: string;
   webActivityEnabled: boolean;
 }
@@ -79,6 +81,7 @@ export function useAppMappingDerivedState({
   editingWebDomain,
   webNameEditSnapshots,
   filter,
+  appSort,
   searchQuery,
   webActivityEnabled,
 }: UseAppMappingDerivedStateParams) {
@@ -210,6 +213,7 @@ export function useAppMappingDerivedState({
     () => filterAndSortCandidates({
       candidates,
       filter,
+      sort: appSort,
       searchQuery,
       resolveMappedCategory,
       resolveTrackingEnabled: resolveGroupTrackingEnabled,
@@ -220,6 +224,7 @@ export function useAppMappingDerivedState({
     [
       candidates,
       filter,
+      appSort,
       searchQuery,
       resolveCategoryLabel,
       resolveMappedCategory,

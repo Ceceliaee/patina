@@ -1,5 +1,11 @@
 // zh-CN settings locale resource. Pure data only.
 export const MESSAGES = {
+  "settings.aiClassification": "AI 自动分类",
+  "settings.aiApiUrl": "API 地址",
+  "settings.aiApiKey": "API 密钥",
+  "settings.aiFetchModels": "拉取模型",
+  "settings.aiModel": "选择模型",
+  "settings.aiConfigFailed": "无法读取或保存 AI 设置，或未能获取模型。请检查配置后重试。",
   "settings.timeRulesTitle": "时间规则",
   "settings.recordingOptionsTitle": "记录选项",
   "settings.themeGroupTitle": "主题",

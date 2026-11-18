@@ -32,6 +32,12 @@
   padding-right: 36px;
 }
 
+@media (1024px <= width < 1280px) {
+  .qp-classification-toolbar .qp-category-search {
+    width: 128px;
+  }
+}
+
 .qp-category-search > .qp-category-filter-trigger {
   position: absolute;
   right: 4px;

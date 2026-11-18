@@ -4,7 +4,9 @@ import { ListX, RefreshCw, Save, Sparkles, SlidersHorizontal } from "lucide-reac
 
 import QuietDialog from "../../../shared/components/QuietDialog";
 import QuietButton from "../../../shared/components/QuietButton";
+import QuietTooltip from "../../../shared/components/QuietTooltip";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader";
+import QuietSelect from "../../../shared/components/QuietSelect";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter";
 import CategoryColorControls from "./CategoryColorControls";
 import CategorySearchField from "./CategorySearchField.tsx";
@@ -15,8 +17,11 @@ import { useAppMappingState } from "../hooks/useAppMappingState";
 import { useMappingLinkLayout } from "../hooks/useMappingLinkLayout.ts";
 import type { CandidateFilter } from "../types";
 import {
+  readClassificationAppSort,
   readClassificationObjectMode,
+  rememberClassificationAppSort,
   rememberClassificationObjectMode,
+  type ClassificationAppSort,
   type MappingObjectMode,
 } from "../services/classificationLayoutPreferenceStorage.ts";
 
@@ -35,6 +40,7 @@ export default function AppMapping(props: Props) {
   const mappingRoot = useRef<HTMLDivElement>(null);
   const { webActivityEnabled = false, titleRecordingEnabled = true } = props;
   const [objectMode, setObjectMode] = useState<MappingObjectMode>(readClassificationObjectMode);
+  const [appSort, setAppSort] = useState(readClassificationAppSort);
   const filterOptions: Array<{ value: CandidateFilter; label: ReactNode; showCount?: boolean; ariaLabel?: string }> = [
     { value: "all", label: UI_TEXT.mapping.filters.all },
     { value: "classified", label: UI_TEXT.mapping.filters.classified },
@@ -49,6 +55,10 @@ export default function AppMapping(props: Props) {
   const {
     allAppCandidates,
     handleAppLink,
+    aiConfigured,
+    aiRunning,
+    aiStatus,
+    handleAiClassification,
     dialogs,
     icons,
     loading,
@@ -120,7 +130,7 @@ export default function AppMapping(props: Props) {
     handleDeleteAllSessions,
     handleDeleteWebDomainHistory,
     applyCategoryColor,
-  } = useAppMappingState({ ...props, objectMode: webActivityEnabled ? objectMode : "app" });
+  } = useAppMappingState({ ...props, appSort, objectMode: webActivityEnabled ? objectMode : "app" });
 
   useEffect(() => {
     if (webActivityEnabled || objectMode !== "web") return;
@@ -150,7 +160,7 @@ export default function AppMapping(props: Props) {
   };
   const contentPaneKey = `${effectiveObjectMode}:${filter}`;
   const layoutView = `${contentPaneKey}:${searchQuery}:${deletingSessionsExe}`;
-  const appLayout = useMappingLinkLayout(filteredCandidates, candidate => candidate.exeName, mappingRoot, "app", layoutView, saving);
+  const appLayout = useMappingLinkLayout(filteredCandidates, candidate => candidate.exeName, mappingRoot, "app", `${layoutView}:${appSort}`, saving);
   const webLayout = useMappingLinkLayout(filteredWebDomainCandidates, candidate => candidate.normalizedDomain, mappingRoot, "web", layoutView, saving);
   const webLinksIdentity = webLayout.openIdentity;
   const setWebLinksIdentity = webLayout.open;
@@ -171,6 +181,16 @@ export default function AppMapping(props: Props) {
       <QuietPageHeader
         icon={<Sparkles size={18} />}
         title={UI_TEXT.mapping.title}
+        statusSlot={
+          <div role="status" className="flex items-center justify-center gap-1.5 qp-text-caption text-[var(--qp-text-secondary)]">
+            {aiRunning && (
+              <>
+                <RefreshCw size={12} className="shrink-0 motion-safe:animate-spin" aria-hidden />
+                {UI_TEXT.common.processing}
+              </>
+            )}
+          </div>
+        }
         rightSlot={(
           <div className="flex items-center gap-2.5">
             <div
@@ -201,7 +221,7 @@ export default function AppMapping(props: Props) {
             <QuietButton
               size="large"
               onClick={() => { appLayout.reset(); webLayout.reset(); handleCancel(); }}
-              disabled={!bootstrapReady || !hasUnsavedChanges || saving}
+              disabled={!bootstrapReady || (!hasUnsavedChanges && !aiRunning) || saving}
               className="rounded-[8px]"
             >
               {UI_TEXT.mapping.cancel}
@@ -223,8 +243,8 @@ export default function AppMapping(props: Props) {
       {actionError && <p role="alert" className="qp-app-mapping-error">{actionError === "refresh" ? <>{UI_TEXT.common.refreshFailed} <QuietButton onClick={retryLoading}>{UI_TEXT.common.retry}</QuietButton></> : actionError === "save" ? UI_TEXT.mapping.saveFailed : UI_TEXT.mapping.deleteFailed}</p>}
       {!titleRecordingEnabled && <p id="classification-global-title-disabled" className="qp-app-mapping-notice">{UI_TEXT.mapping.globalTitleDisabled}</p>}
       <section className="qp-panel p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-3">
+        <div className="qp-classification-toolbar flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <QuietSegmentedFilter<CandidateFilter>
               className="qp-classification-count-filter"
               value={filter}
@@ -252,8 +272,21 @@ export default function AppMapping(props: Props) {
               placeholder={searchPlaceholder}
               disabled={!activeCatalogReady}
             />
+            {effectiveObjectMode === "app" && (
+              <QuietTooltip label={aiConfigured ? undefined : UI_TEXT.mapping.aiNotConfigured}>
+                <span tabIndex={aiConfigured ? undefined : 0}>
+                  <QuietButton busy={aiRunning} disabled={!aiConfigured || !activeCatalogReady || saving || deletingSessionsExe !== null}
+                    onClick={() => void handleAiClassification()}>
+                    <Sparkles size={14} aria-hidden />
+                    {UI_TEXT.settings.aiClassification}
+                  </QuietButton>
+                </span>
+              </QuietTooltip>
+            )}
+            {effectiveObjectMode === "app" && aiStatus === "failed" && <span role="alert">{UI_TEXT.mapping.aiFailed}</span>}
+            {effectiveObjectMode === "app" && aiStatus === "empty" && <span role="status">{UI_TEXT.mapping.aiEmpty}</span>}
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             {effectiveObjectMode === "app" && appCatalogRefreshError && (
               <QuietButton
                 size="compact"
@@ -270,6 +303,22 @@ export default function AppMapping(props: Props) {
                 value={effectiveObjectMode}
                 onChange={handleObjectModeChange}
                 options={objectModeOptions}
+              />
+            )}
+            {effectiveObjectMode === "app" && (
+              <QuietSelect<ClassificationAppSort>
+                density="compact"
+                ariaLabel={UI_TEXT.mapping.appSort}
+                value={appSort}
+                options={[
+                  { value: "default", label: UI_TEXT.common.default },
+                  { value: "recent", label: UI_TEXT.mapping.appSortRecent },
+                  { value: "filename", label: UI_TEXT.mapping.appSortFilename },
+                ]}
+                onChange={(sort) => {
+                  setAppSort(sort);
+                  rememberClassificationAppSort(sort);
+                }}
               />
             )}
             <QuietButton
