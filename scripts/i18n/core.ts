@@ -18,8 +18,7 @@ export type Expression = string | number | boolean | null | readonly Expression[
 
 export const REPO_ROOT = resolve(import.meta.dirname, "../..");
 export const LOCALES_ROOT = join(REPO_ROOT, "locales");
-export const FRONTEND_GENERATED_ROOT = join(REPO_ROOT, "src", "shared", "i18n", "generated");
-export const RUST_GENERATED_PATH = join(REPO_ROOT, "src-tauri", "src", "domain", "localization", "generated.rs");
+export const RUST_GENERATED_PATH = join(REPO_ROOT, "desktop", "recorder", "src", "domain", "localization", "generated.rs");
 export const PENDING_REVIEW = "PENDING";
 
 export function sourceLocale(): ProductionLocale {

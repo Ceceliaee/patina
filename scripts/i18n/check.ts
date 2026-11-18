@@ -7,7 +7,7 @@ import {
   type MessageDescriptor,
   type MessageValue,
 } from "./core.ts";
-import { compactFrontendValue, generateI18n } from "./generate.ts";
+import { generateI18n } from "./generate.ts";
 
 function expectFailure(label: string, run: () => void): void {
   try {
@@ -19,10 +19,6 @@ function expectFailure(label: string, run: () => void): void {
 }
 
 async function runSelfTest(): Promise<void> {
-  const compactConcat = compactFrontendValue({ $op: "concat", parts: ["", 1, ""] }) as { $op?: string; parts?: unknown[] };
-  if (compactConcat.$op !== "concat" || compactConcat.parts?.length !== 1 || compactConcat.parts[0] !== 1) {
-    throw new Error("i18n generator must preserve concat string coercion while removing empty literals");
-  }
   const locales = await loadAndValidateProductionLocales();
   const valid = locales["zh-CN"];
 
