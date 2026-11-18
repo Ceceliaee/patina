@@ -67,7 +67,7 @@ fn windows_for(pid: u32, title: &str) -> Vec<HWND> {
 
 fn mini_windows() -> Vec<HWND> {
     children::find(process::id(), |pid| {
-        let windows = windows_for(pid, "Patina GPUI Mini");
+        let windows = windows_for(pid, "Patina Mini");
         (!windows.is_empty()).then_some(windows)
     })
     .unwrap_or_default()
@@ -400,32 +400,10 @@ fn exercise(
 }
 
 fn main() -> Outcome {
-    patina_test_desktop::dedicated_session()?;
-    // Cargo places examples below the directory containing the two desktop companions.
-    let executable = env::current_exe()?;
-    let example_dir = executable.parent().ok_or("example directory missing")?;
-    if example_dir
-        .file_name()
-        .is_some_and(|name| name == "examples")
-    {
-        let binaries = example_dir.parent().ok_or("target directory missing")?;
-        let group = tempfile::tempdir()?;
-        for (from, name) in [
-            (executable.as_path(), "patina.exe"),
-            (&binaries.join("patina-ui.exe"), "patina-ui.exe"),
-            (&binaries.join("patina-probe.exe"), "patina-probe.exe"),
-        ] {
-            std::fs::copy(from, group.path().join(name))?;
-        }
-        let status = process::Command::new(group.path().join("patina.exe"))
-            .args(env::args_os().skip(1))
-            .status()?;
-        return if status.success() {
-            Ok(())
-        } else {
-            Err(format!("lifecycle worker exited with {status}").into())
-        };
+    if let Some(result) = patina::run_child_if_requested() {
+        return result.map_err(|error| error.to_string().into());
     }
+    patina_test_desktop::dedicated_session()?;
 
     if env::args().any(|a| a == "--invalid-root") {
         let (tx, rx) = async_channel::unbounded();

@@ -5,9 +5,10 @@ use std::{
 
 #[test]
 fn mismatched_host_is_rejected_before_creating_windows() {
-    let mut ui = Command::new(env!("CARGO_BIN_EXE_patina-ui"))
+    let mut ui = Command::new(env!("CARGO_BIN_EXE_patina"))
         .args([
-            "--window-process",
+            "--role",
+            "Patina UI",
             patina_desktop_protocol::WIRE_VERSION,
             "en-US",
         ])

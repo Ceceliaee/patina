@@ -1,5 +1,6 @@
 //! Run a libtest case and its GUI descendants on a temporary Win32 desktop.
 pub mod polling;
+pub mod process;
 use std::{
     env, fs,
     io::{self, Read, Seek},

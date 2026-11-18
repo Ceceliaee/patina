@@ -5,16 +5,23 @@ mod desktop;
 
 use desktop::{ComApartment, Error, TestChild, controls, wait, window};
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
-use std::{fs, os::windows::fs::OpenOptionsExt, path::Path, process::Command};
+use std::{
+    collections::BTreeMap, fs, os::windows::fs::OpenOptionsExt, path::Path, process::Command,
+};
 use windows::{
     Win32::{
-        Foundation::{HWND, LPARAM, WPARAM},
-        System::Threading::{OpenProcess, PROCESS_TERMINATE, TerminateProcess},
+        Foundation::{HANDLE, HWND, LPARAM, WAIT_OBJECT_0, WPARAM},
+        System::Threading::{
+            GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+            PROCESS_SYNCHRONIZE, PROCESS_TERMINATE, TerminateProcess, WaitForSingleObject,
+        },
         UI::{
             Accessibility::{
                 IUIAutomationElement, IUIAutomationTogglePattern, UIA_TogglePatternId,
             },
-            WindowsAndMessaging::{GetWindowThreadProcessId, PostMessageW, WM_COMMAND},
+            WindowsAndMessaging::{
+                FindWindowExW, GetWindowThreadProcessId, PostMessageW, WM_COMMAND,
+            },
         },
     },
     core::{Owned, w},
@@ -43,6 +50,88 @@ fn window_pid(hwnd: HWND) -> u32 {
     let mut pid = 0;
     unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
     pid
+}
+
+fn gpui_platform_window(pid: u32) -> bool {
+    for class in [w!("Zed::PlatformWindow"), w!("GpuiFast::PlatformWindow")] {
+        let mut previous = None;
+        while let Ok(hwnd) = unsafe { FindWindowExW(None, previous, class, None) } {
+            if window_pid(hwnd) == pid {
+                return true;
+            }
+            previous = Some(hwnd);
+        }
+    }
+    false
+}
+
+fn probes(owner: u32) -> Result<BTreeMap<String, u32>, Error> {
+    let image = Path::new(env!("CARGO_BIN_EXE_patina"));
+    let mut workers = BTreeMap::new();
+    for child in patina_test_desktop::process::children(owner, image)? {
+        match &child.arguments[1..] {
+            [flag, role, kind] if flag == "--role" && role == "Patina Probe" => {
+                assert!(
+                    workers.insert(kind.clone(), child.pid).is_none(),
+                    "duplicate probe role"
+                );
+            }
+            [flag, role, ..] if flag == "--role" && role == "Patina UI" => {}
+            args => panic!("unexpected same-image child arguments {args:?}"),
+        }
+    }
+    Ok(workers)
+}
+
+fn verify_probe_recovery(owner: u32, renderer: u32) -> Result<(), Error> {
+    let workers = wait(
+        "foreground and name are direct children using the resident image",
+        || {
+            let workers = probes(owner).ok()?;
+            (workers.contains_key("foreground") && workers.contains_key("name")).then_some(workers)
+        },
+    )?;
+    assert!(gpui_platform_window(renderer));
+    assert!(!gpui_platform_window(owner));
+    for pid in workers.values() {
+        assert!(!gpui_platform_window(*pid));
+    }
+    let original = workers["foreground"];
+    let foreground = unsafe {
+        Owned::new(OpenProcess(
+            PROCESS_TERMINATE | PROCESS_SYNCHRONIZE,
+            false,
+            original,
+        )?)
+    };
+    unsafe { TerminateProcess(*foreground, 7)? };
+    assert_eq!(
+        unsafe { WaitForSingleObject(*foreground, 5000) },
+        WAIT_OBJECT_0
+    );
+    let replacement = wait("only the crashed foreground probe is replaced", || {
+        let current = probes(owner).ok()?;
+        let pid = *current.get("foreground")?;
+        (pid != original && current.get("name") == workers.get("name")).then_some(pid)
+    })?;
+    assert!(!gpui_platform_window(replacement));
+    Ok(())
+}
+
+fn probe_handles(owner: u32) -> Result<Vec<(String, Owned<HANDLE>)>, Error> {
+    probes(owner)?
+        .into_iter()
+        .map(|(role, pid)| unsafe {
+            Ok((
+                role,
+                Owned::new(OpenProcess(
+                    PROCESS_SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
+                    false,
+                    pid,
+                )?),
+            ))
+        })
+        .collect()
 }
 
 async fn recording(db: &mut SqliteConnection) -> sqlx::Result<Option<(i64, i64)>> {
@@ -117,7 +206,7 @@ fn concurrent_launch_and_renderer_crash_reopen_the_committed_snapshot() -> Resul
             .open(profile.join("instance.lock"))
     };
     assert_eq!(lock().unwrap_err().raw_os_error(), Some(32));
-    let main = || children::find(owner, |pid| window(pid, w!("Patina")));
+    let main = || children::find(owner, |pid| window(pid, w!("Patina UI")));
     let initial = wait("first renderer", main)?;
     let initial_pid = window_pid(initial);
     let toggle = wait("initial chart snapshot", || {
@@ -129,6 +218,7 @@ fn concurrent_launch_and_renderer_crash_reopen_the_committed_snapshot() -> Resul
     let (session, before) = wait("initial recording", || {
         rt.block_on(recording(&mut db)).ok().flatten()
     })?;
+    verify_probe_recovery(owner, initial_pid)?;
 
     // A competing transaction holds the product write until its requesting window is gone.
     rt.block_on(sqlx::query("BEGIN IMMEDIATE").execute(&mut db))?;
@@ -179,6 +269,8 @@ fn concurrent_launch_and_renderer_crash_reopen_the_committed_snapshot() -> Resul
     wait("replacement reads live tracked activity", || {
         named(replacement, "View details for Fixture")
     })?;
+    let workers = probe_handles(owner)?;
+    assert!(workers.iter().any(|(role, _)| role == "foreground"));
     unsafe { PostMessageW(Some(tray), WM_COMMAND, WPARAM(2), LPARAM(0))? };
     assert!(
         wait("host flushed and exited", || host
@@ -197,6 +289,15 @@ fn concurrent_launch_and_renderer_crash_reopen_the_committed_snapshot() -> Resul
     wait("all owned subprocesses exited", || {
         children::children(owner).ok()?.is_empty().then_some(())
     })?;
+    for (role, process) in workers {
+        assert_eq!(
+            unsafe { WaitForSingleObject(*process, 5000) },
+            WAIT_OBJECT_0
+        );
+        let mut code = 0;
+        unsafe { GetExitCodeProcess(*process, &mut code)? };
+        assert_eq!(code, 0, "{role} did not exit cleanly");
+    }
     let writes = rt.block_on(
         sqlx::query_scalar::<_, String>("SELECT mode FROM lifecycle_chart_writes")
             .fetch_all(&mut db),

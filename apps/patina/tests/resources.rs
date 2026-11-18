@@ -65,6 +65,7 @@ async fn recording(conn: &mut SqliteConnection) -> sqlx::Result<Option<(i64, i64
 
 struct Run<'a> {
     binary: &'a Path,
+    previous: bool,
     sampler: &'a Path,
     output: &'a Path,
     seconds: u64,
@@ -118,7 +119,15 @@ impl Run<'_> {
         wait("fixture recording", || {
             rt.block_on(recording(&mut conn)).ok().flatten()
         })?;
-        let mini = || children::find(pid, |p| window(p, w!("Patina GPUI Mini")));
+        let mini = || {
+            children::find(pid, |p| {
+                window(p, w!("Patina Mini")).or_else(|| {
+                    self.previous
+                        .then(|| window(p, w!("Patina GPUI Mini")))
+                        .flatten()
+                })
+            })
+        };
         let expected = if scenario == "tray" {
             None
         } else {
@@ -212,7 +221,12 @@ impl Run<'_> {
                 }
                 wait("closed Mini", || mini().is_none().then_some(()))?;
             }
-            let main = || children::find(pid, |child| window(child, w!("Patina")));
+            let main = || {
+                children::find(pid, |child| {
+                    window(child, w!("Patina UI"))
+                        .or_else(|| self.previous.then(|| window(child, w!("Patina"))).flatten())
+                })
+            };
             if let Some(hwnd) = main() {
                 unsafe {
                     PostMessageW(Some(hwnd), WM_CLOSE, WPARAM(0), LPARAM(0))?;
@@ -234,10 +248,17 @@ impl Run<'_> {
                     (!controls(hwnd).ok()?.is_empty()).then_some(())
                 })?;
                 reopen_ms.push(started.elapsed().as_millis() as u64);
+                let mut renderer = 0;
+                unsafe {
+                    GetWindowThreadProcessId(hwnd, Some(&mut renderer));
+                }
                 unsafe {
                     PostMessageW(Some(hwnd), WM_CLOSE, WPARAM(0), LPARAM(0))?;
                 }
                 wait("last window closed", || main().is_none().then_some(()))?;
+                wait("idle renderer exited", || {
+                    (!children::children(pid).ok()?.contains(&renderer)).then_some(())
+                })?;
             }
             let recorded_after_close = after.1;
             wait("sampling after last window closes", || {
@@ -246,6 +267,17 @@ impl Run<'_> {
                     .flatten()
                     .filter(|row| row.1 > recorded_after_close)
             })?;
+            if scenario == "tray" {
+                let path = self.output.join(format!("after-close-{round}.jsonl"));
+                let status = Command::new(self.sampler)
+                    .arg(pid.to_string())
+                    .arg(path)
+                    .args(["5", "5", "after-close"])
+                    .status()?;
+                if !status.success() {
+                    return Err(format!("after-close sampler exited with {status}").into());
+                }
+            }
         }
         rt.block_on(conn.close())?;
         unsafe {
@@ -290,8 +322,14 @@ fn run(smoke: bool, isolated: bool) -> Result<(), Error> {
         .unwrap_or_else(|| repo.join("target/debug/examples/windows-resource-sample.exe"));
     // Keep each trial on the same build even if Cargo produces another test target.
     let mut group = vec![binary.to_owned()];
-    if baseline.is_none() {
-        group.extend(["patina-ui.exe", "patina-probe.exe"].map(|name| binary.with_file_name(name)));
+    if baseline.is_some() {
+        // Historical split builds need their matching executables beside the host.
+        group.extend(
+            ["patina-ui.exe", "patina-probe.exe"]
+                .map(|name| binary.with_file_name(name))
+                .into_iter()
+                .filter(|path| path.exists()),
+        );
     }
     let stage = tempfile::tempdir()?;
     for file in &group {
@@ -332,6 +370,7 @@ fn run(smoke: bool, isolated: bool) -> Result<(), Error> {
     println!("Writing {label} to {}", output.display());
     let run = Run {
         binary: &binary,
+        previous: baseline.is_some(),
         sampler: &sampler,
         output: &output,
         seconds: if smoke { 15 } else { 600 },
