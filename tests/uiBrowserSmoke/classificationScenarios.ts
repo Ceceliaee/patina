@@ -1295,7 +1295,7 @@ async function runClassificationCases(context: BrowserSmokeContext) {
 async function runAiClassificationScenario({ client, sessionId, runTest }: BrowserSmokeContext) {
   const { settings, mapping } = getLocaleText("zh-CN");
   const button = (label: string) => `Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === ${jsonString(label)})`;
-  const ai = button(settings.aiClassification);
+  const ai = `document.querySelector(${jsonString(`button[aria-label="${settings.aiClassification}"]`)})`;
   const cancel = button(mapping.cancel);
   await runTest("AI classification waits for the provider and only updates the existing draft", async () => {
     const originalSettings = await evaluate(client, sessionId, `localStorage.getItem('__time_tracker_smoke_settings')`);

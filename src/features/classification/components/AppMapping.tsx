@@ -263,11 +263,14 @@ export default function AppMapping(props: Props) {
               disabled={!activeCatalogReady}
             />
             {effectiveObjectMode === "app" && (
-              <QuietTooltip label={aiConfigured ? null : UI_TEXT.mapping.aiNotConfigured}>
+              <QuietTooltip label={aiConfigured ? UI_TEXT.settings.aiClassification : UI_TEXT.mapping.aiNotConfigured}>
                 <span tabIndex={aiConfigured ? undefined : 0}>
                   <QuietButton busy={aiRunning} disabled={!aiConfigured || !activeCatalogReady || saving || deletingSessionsExe !== null}
+                    aria-label={UI_TEXT.settings.aiClassification}
+                    className="lg:max-xl:px-2"
                     onClick={() => void handleAiClassification()}>
-                    <Sparkles size={14} aria-hidden />{UI_TEXT.settings.aiClassification}
+                    <Sparkles size={14} aria-hidden />
+                    <span className="lg:max-xl:hidden">{UI_TEXT.settings.aiClassification}</span>
                   </QuietButton>
                 </span>
               </QuietTooltip>
