@@ -1,0 +1,11 @@
+[package]
+name = "patina-probe"
+version.workspace = true
+edition = "2024"
+publish = false
+
+[dependencies]
+patina-windows-integration = { path = "../../crates/windows-integration", default-features = false, features = ["sampling"] }
+
+[dev-dependencies]
+patina-recorder = { path = "../../crates/activity" }

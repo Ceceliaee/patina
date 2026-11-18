@@ -1,0 +1,53 @@
+[package]
+name = "patina-windows-integration"
+version.workspace = true
+edition = "2021"
+publish = false
+
+[dependencies]
+patina-activity-model = { path = "../activity-model", optional = true }
+base64 = { version = "0.22", optional = true }
+chrono = { version = "0.4", optional = true }
+image = { version = "0.24", optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+tokio = { version = "1", features = ["time", "rt", "sync", "macros"], optional = true }
+uuid = { version = "1", features = ["v4"], optional = true }
+windows-core = { version = "0.62.2", optional = true }
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_UI_HiDpi", "Win32_System_JobObjects", "Win32_Security", "Win32_System_Threading"] }
+
+[features]
+default = ["sampling", "credentials"]
+credentials = ["dep:uuid","windows/Win32_Security_Credentials"]
+sampling = [
+  "dep:patina-activity-model",
+  "dep:base64",
+  "dep:chrono",
+  "dep:image",
+  "dep:serde",
+  "dep:serde_json",
+  "dep:tokio",
+  "dep:uuid",
+  "dep:windows-core",
+  "windows/Media",
+  "windows/Media_Control",
+  "windows/Win32_Graphics_Gdi",
+  "windows/Win32_Media_Audio",
+  "windows/Win32_Storage_FileSystem",
+  "windows/Win32_Storage_Packaging_Appx",
+  "windows/Win32_System_Com",
+  "windows/Win32_System_Com_StructuredStorage",
+  "windows/Win32_System_Diagnostics_Debug",
+  "windows/Win32_System_Diagnostics_ToolHelp",
+  "windows/Win32_System_Kernel",
+  "windows/Win32_System_LibraryLoader",
+  "windows/Win32_System_Memory",
+  "windows/Win32_System_ProcessStatus",
+  "windows/Win32_System_SystemInformation",
+  "windows/Win32_System_Variant",
+  "windows/Win32_System_WinRT",
+  "windows/Win32_UI_Input_KeyboardAndMouse",
+  "windows/Win32_UI_Shell",
+  "windows/Win32_UI_Shell_PropertiesSystem",
+  "windows/Win32_UI_WindowsAndMessaging",
+]
