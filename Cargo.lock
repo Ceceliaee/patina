@@ -5210,10 +5210,12 @@ dependencies = [
  "base64 0.22.1",
  "blocking",
  "chrono",
+ "embed-resource",
  "patina-desktop-protocol",
  "patina-recorder",
  "patina-test-desktop",
  "patina-tool-host",
+ "patina-ui",
  "patina-updater",
  "patina-windows-integration",
  "serde",
@@ -5268,14 +5270,6 @@ dependencies = [
  "extism-pdk",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "patina-probe"
-version = "1.10.0"
-dependencies = [
- "patina-recorder",
- "patina-windows-integration",
 ]
 
 [[package]]

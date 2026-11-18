@@ -8,6 +8,7 @@ resolver = "3"
 version = "1.10.0"
 
 [workspace.dependencies]
+embed-resource = "3.0.12"
 gpui-kit = { version = "=0.9.1", default-features = false }
 sqlx = { git = "https://github.com/transact-rs/sqlx", rev = "10462fa4414c6c7f1ed1d39bb31678e3b726878c", default-features = false, features = ["sqlite", "runtime-tokio", "derive", "migrate"] }
 

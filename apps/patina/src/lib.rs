@@ -26,6 +26,14 @@ pub use tray::Action;
 pub use patina_desktop_protocol::APP_ID;
 static RESTART_AFTER_STORAGE: AtomicBool = AtomicBool::new(false);
 
+/// Select a child role before acquiring the profile lock or starting the recorder.
+pub fn run_child_if_requested() -> Option<Result<(), Box<dyn std::error::Error>>> {
+    if let Some(code) = patina_windows_integration::windows::native_probe::run_if_requested() {
+        std::process::exit(code);
+    }
+    patina_ui::run_if_requested()
+}
+
 fn profile_root(parent: Option<&Path>) -> io::Result<PathBuf> {
     let parent = parent
         .map(Path::to_owned)

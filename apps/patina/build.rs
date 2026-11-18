@@ -1,6 +1,25 @@
 use std::{env, path::PathBuf, process::Command};
+#[path = "../../packaging/windows/executable.rs"]
+mod executable;
 
 fn main() {
+    executable::main();
+    if env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") {
+        println!("cargo:rustc-link-arg-bin=patina=delayimp.lib");
+        for dll in [
+            "d3d11.dll",
+            "d3dcompiler_47.dll",
+            "dcomp.dll",
+            "dwrite.dll",
+            "dwmapi.dll",
+            "dxgi.dll",
+            "icuuc.dll",
+            "uiautomationcore.dll",
+            "winmm.dll",
+        ] {
+            println!("cargo:rustc-link-arg-bin=patina=/DELAYLOAD:{dll}");
+        }
+    }
     let desktop = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap()).join("../..");
     let manifest = desktop.join("plugins/official/Cargo.toml");
     println!("cargo:rerun-if-changed=../../plugins/official");

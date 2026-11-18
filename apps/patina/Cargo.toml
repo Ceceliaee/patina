@@ -7,6 +7,9 @@ publish = false
 [features]
 native-tests = []
 
+[build-dependencies]
+embed-resource.workspace = true
+
 [[test]]
 name = "pages"
 required-features = ["native-tests"]
@@ -28,6 +31,7 @@ name = "updater"
 required-features = ["native-tests"]
 
 [dependencies]
+patina-ui = { path = "../patina-ui" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 base64 = "0.22"
@@ -44,7 +48,7 @@ sha2 = "0.10"
 windows = { version = "0.62.2", features = [
   "Win32_Security", "Win32_System_Threading", "Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_Shell", "Win32_Globalization",
   "Win32_System_JobObjects",
-  "Win32_UI_WindowsAndMessaging", "Win32_UI_HiDpi", "Win32_System_LibraryLoader", "Win32_System_RemoteDesktop",
+  "Win32_UI_WindowsAndMessaging", "Win32_UI_HiDpi", "Win32_System_LibraryLoader", "Win32_System_RemoteDesktop", "Win32_System_WindowsProgramming",
 ] }
 
 chrono = "0.4"

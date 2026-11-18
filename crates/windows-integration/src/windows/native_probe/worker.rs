@@ -2,12 +2,13 @@ use super::protocol::{self, ProbeKind, Request, RequestBody, Response};
 use super::ForegroundResponse;
 use crate::windows::{app_metadata, audio, foreground, media};
 use serde_json::Value;
+use std::io::BufRead;
 
-pub(super) const ARGUMENT: &str = "--patina-native-probe";
+pub(super) const ROLE: &str = "Patina Probe";
 
 pub fn run_if_requested() -> Option<i32> {
     let mut args = std::env::args_os().skip(1);
-    if args.next().as_deref() != Some(std::ffi::OsStr::new(ARGUMENT)) {
+    if args.next()? != "--role" || args.next()? != ROLE {
         return None;
     }
     let kind = match args
@@ -39,6 +40,17 @@ fn run(kind: ProbeKind) -> Result<(), String> {
     loop {
         // The parent assigns this process to its kill-on-close Job before sending
         // the first frame. No platform call or application bootstrap precedes it.
+        if input
+            .fill_buf()
+            .map_err(|_| "probe input unreadable")?
+            .is_empty()
+        {
+            return if last_id == 0 {
+                Err("probe closed before its first request".into())
+            } else {
+                Ok(())
+            };
+        }
         let request: Request = protocol::read_frame(&mut input, protocol::REQUEST_LIMIT)?;
         if request.version != protocol::VERSION
             || request.build != protocol::BUILD

@@ -261,7 +261,9 @@ impl Client {
 
 pub fn run_if_requested() -> Option<Result<(), Box<dyn std::error::Error>>> {
     let mut args = std::env::args_os().skip(1);
-    if args.next().as_deref() != Some(std::ffi::OsStr::new("--window-process")) {
+    if args.next().as_deref() != Some(std::ffi::OsStr::new("--role"))
+        || args.next().as_deref() != Some(std::ffi::OsStr::new("Patina UI"))
+    {
         return None;
     }
     if args.next().as_deref() != Some(std::ffi::OsStr::new(patina_desktop_protocol::WIRE_VERSION)) {

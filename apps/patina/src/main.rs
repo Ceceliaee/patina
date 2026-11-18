@@ -1,6 +1,12 @@
 #![windows_subsystem = "windows"]
 
+#[cfg(target_env = "msvc")]
+mod delay_load;
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(result) = patina::run_child_if_requested() {
+        return result;
+    }
     let (send, actions) = async_channel::unbounded();
     let mut args = std::env::args_os().skip(1);
     let mut parent = None;

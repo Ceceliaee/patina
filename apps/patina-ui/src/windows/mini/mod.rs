@@ -85,7 +85,7 @@ impl Mini {
             ..Default::default()
         };
         let (handle, view) = gpui_kit::open_window(options, cx, |window, cx| {
-            window.set_window_title("Patina GPUI Mini");
+            window.set_window_title("Patina Mini");
             crate::windows::handle_close(window, cx);
             cx.new(|cx: &mut Context<Self>| {
                 cx.observe_window_appearance(window, |_, _, cx| cx.notify())

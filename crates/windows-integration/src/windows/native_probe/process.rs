@@ -51,14 +51,14 @@ impl ProbeProcess {
         let job = crate::windows::job::kill_on_close().map_err(|e| format!("probe {e}"))?;
         let fault = super::fault::FaultSlot::create()?;
         let child = Command::new(executable)
-            .args([super::worker::ARGUMENT, kind.argument()])
+            .args(["--role", super::worker::ROLE, kind.argument()])
             .env(super::fault::ENVIRONMENT, fault.name())
             .creation_flags(CREATE_NO_WINDOW.0)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()
-            .map_err(|_| "probe process start failed".to_owned())?;
+            .map_err(|_| "probe process start failed")?;
         let process = Self {
             kind,
             observer: Arc::new(ExitObserver::new(child, kind, fault)),

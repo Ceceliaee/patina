@@ -48,9 +48,10 @@ impl WindowProcess {
     ) -> io::Result<Self> {
         let job =
             patina_windows_integration::windows::job::kill_on_close().map_err(io::Error::other)?;
-        let mut child = Command::new(std::env::current_exe()?.with_file_name("patina-ui.exe"))
+        let mut child = Command::new(std::env::current_exe()?)
             .args([
-                "--window-process",
+                "--role",
+                "Patina UI",
                 WIRE_VERSION,
                 preferences.locale.tag(),
                 preferences.theme.tag(),

@@ -14,8 +14,7 @@ struct ExitState {
     termination_requested: bool,
 }
 
-// The retained Child handle identifies one generation even after its PID is reused.
-// Only startup mutates Child; observation never owns request admission or joins IO.
+// The retained process handle identifies one generation even after its PID is reused.
 pub(in super::super) struct ExitObserver {
     pub(super) child: Child,
     kind: ProbeKind,

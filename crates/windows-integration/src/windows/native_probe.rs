@@ -367,9 +367,7 @@ fn lanes() -> &'static [Mutex<Lane>; 6] {
 }
 
 fn call<T: DeserializeOwned>(kind: ProbeKind, body: RequestBody) -> Result<T, String> {
-    let executable = std::env::current_exe()
-        .map_err(|_| "probe executable unavailable")?
-        .with_file_name("patina-probe.exe");
+    let executable = std::env::current_exe().map_err(|_| "probe executable unavailable")?;
     // Name/icon callers already run in bounded blocking slots. Serialize those
     // slots within their own lane so ordinary overlap is not negative-cached as
     // missing metadata. Required facts never queue behind optional work.
@@ -490,7 +488,9 @@ pub fn shutdown() {
         if let Ok(mut lane) = lane.try_lock() {
             lane.retired = true;
             if let Some(process) = lane.process.as_mut() {
-                process.stop(CLEANUP_BUDGET);
+                if !process.finish(Duration::from_millis(250)) {
+                    process.stop(CLEANUP_BUDGET);
+                }
             }
         }
     }

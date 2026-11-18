@@ -16,6 +16,9 @@ uuid = { version = "1", features = ["v4"], optional = true }
 windows-core = { version = "0.62.2", optional = true }
 windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_UI_HiDpi", "Win32_System_JobObjects", "Win32_Security", "Win32_System_Threading"] }
 
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread"] }
+
 [features]
 default = ["sampling", "credentials"]
 credentials = ["dep:uuid","windows/Win32_Security_Credentials"]
