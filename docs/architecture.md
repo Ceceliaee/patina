@@ -15,7 +15,7 @@
 
 ## 2. 系统现实
 
-Patina 是使用 GPUI、Rust 和 SQLite 的 Windows 桌面应用。常驻进程持有 Recorder、托盘、工具与更新服务。独立窗口进程绘制主窗口、Mini 和工具通知。关闭窗口后，常驻进程继续采样和调度到期任务。
+Patina 是使用 Rust、GPUI 和 SQLite 的 Windows 桌面应用。`patina` 持有每个 profile 的写锁、Recorder、托盘、工具与更新服务。`patina-ui` 通过桌面协议读取状态、提交操作。`patina-probe` 运行有时限的原生观察，宿主负责回收其 Windows Job。独立窗口进程绘制主窗口、Mini 和工具通知。关闭窗口后，常驻进程继续采样和调度到期任务。
 
 Windows 前台观察经过 tracking 决策，在同一事务中提交活动事实和派生状态的修订。窗口通过宿主读取数据并发出操作请求。浏览器扩展经本机协议提供网页观察，有效活动区间由 Recorder 决定。
 
@@ -25,9 +25,9 @@ Windows 前台观察经过 tracking 决策，在同一事务中提交活动事�
 
 代码应该落在真正拥有该能力的层，而不是“当前最顺手改”的层。
 
-### 3.2 运行时写侧和持久化派生状态归 Rust，界面读模型归前端
+### 3.2 宿主提交活动事实，窗口持有交互状态
 
-Rust 拥有运行时主链、写侧副作用，以及需要跨启动维护一致性的持久化派生状态；前端拥有 UI、交互编排和页面读模型组织。前端可以组合页面视图，但不应为了页面方便长期装载全部事实并在 窗口进程内维护第二份持久化索引。
+宿主通过 Recorder 写入采样事实及对应的汇总修订。窗口按可见页面请求具名结果，在 GPUI 实体上保存选择、草稿、焦点和待处理的请求。关闭窗口时这些交互状态可以一起释放。
 
 ### 3.3 平台细节必须显式收口
 
@@ -35,11 +35,11 @@ Rust 拥有运行时主链、写侧副作用，以及需要跨启动维护一致
 
 ### 3.4 共享层只承接稳定共享能力
 
-`shared/*` 不是“多个地方都可能会用”的暂存区，只容纳稳定、低上下文依赖、跨 feature 的能力。
+跨页面复用的控件放在 QuietPro。宿主与窗口共享的活动类型由 `crates/activity-model` 提供，跨进程请求与事件由 `crates/desktop-protocol` 定义。
 
 ### 3.5 入口层保持薄
 
-前端 `app/*`、Rust `lib.rs` 与 `commands/*` 都属于高吸力层。它们可以编排，但不应沉淀厚业务实现。
+三个程序的入口负责装配和退出。业务规则跟随活动、存储、工具或更新模块，窗口将用户操作转换为相应的请求。
 
 ### 3.6 渐进重构优先于大爆炸
 
@@ -85,11 +85,11 @@ Rust 负责：
 
 ### 4.2 窗口与常驻进程
 
-[窗口消息](../desktop/patina/src/window_process.rs)定义请求、事件和响应，常驻进程持有录制、工具与更新服务。主窗口、Mini 和通知窗口通过客户端提交操作。涉及工具身份、过期提醒或安装交接的请求，由持有对应状态的服务再次校验。
+[桌面协议](../crates/desktop-protocol/src/lib.rs)定义请求、事件和响应，[窗口进程管理](../apps/patina/src/window_process.rs)负责启动、握手和退出，常驻进程持有录制、工具与更新服务。主窗口、Mini 和通知窗口通过客户端提交操作。涉及工具身份、过期提醒或安装交接的请求，由持有对应状态的服务再次校验。
 
 ### 4.3 本地数据读取通道
 
-[Recorder](../desktop/recorder/src/lib.rs) 提供公开读写接口，SQLite 查询与事务由数据模块实现。
+[Recorder](../crates/activity/src/lib.rs) 提供公开读写接口，SQLite 查询与事务由数据模块实现。
 
 #### 活动派生状态与应用关联
 
@@ -116,7 +116,7 @@ Rust 负责：
 
 #### 网页关联与历史清理
 
-网页由 Rust `domain/web_links.rs` 使用锁定的公共后缀数据解析可注册主域名，包含私有托管后缀。缺省自动归组，完整域名例外优先；IP、本地主机及未知后缀不猜测归属。组目标带独立类型和无前缀域名，在字符串索引中序列化为对象，与实际根域名互不覆盖。版本 2 规则仅保存独立例外及组展示设置；分类事务保留预期旧值检查、幂等重放及冲突拒绝。后缀数据随依赖升级，升级需复测租户边界，不在运行时联网获取规则。
+[网页域名规则](../crates/activity-model/src/web_links.rs)使用锁定的公共后缀数据解析可注册主域名，包含私有托管后缀。缺省自动归组，完整域名例外优先；IP、本地主机及未知后缀不猜测归属。组目标带独立类型和无前缀域名，在字符串索引中序列化为对象，与实际根域名互不覆盖。版本 2 规则仅保存独立例外及组展示设置；分类事务保留预期旧值检查、幂等重放及冲突拒绝。后缀数据随依赖升级，升级需复测租户边界，不在运行时联网获取规则。
 
 `data/repositories/web_links.rs` 在同一数据库快照中提供规则、原域名设置、主域名映射、全历史时长及图标，范围读取同时返回原始事实；聚合修订包含规则快照摘要。分类页消费该映射。图标使用具名且允许记录的成员，同源重叠区间去重，时长相同时按完整域名排序。原域名匿名策略先于展示归属，精确明细和导出保留原始身份。
 
@@ -133,20 +133,20 @@ SQL、参数绑定及跨表一致性归 Recorder。页面消费具名的查询�
 备份与恢复沿用同一 owner 规则：
 
 - SQLite 快照容器、manifest、摘要、格式识别和恢复编排归 `data/backup/*`
-- 数据库文件切换、WAL checkpoint、pool 重开和中断恢复归 `data/sqlite_pool/*`
+- [存储层](../crates/storage/src/lib.rs)负责数据库文件切换、WAL checkpoint、连接池重开和位置迁移的中断恢复
 - 合并去重由各数据域 repository 持有，不能把表级 SQL 上提到 command、app 或前端
 - 原生存储服务协调备份、恢复及运行中任务。
 - 恢复只接受 SQLite 数据快照；旧结构化 JSON ZIP 读取器已退役。源文件身份、容器和候选库校验先于恢复引起的计时封口，执行消费同一准备副本。历史 SQLite 快照仍按受支持的 migration 契约升级
 - 合并恢复按快照导出时刻结算运行中的自由专注和番茄时钟，导入的任务保持暂停，目标库的活动任务继续运行。定时提醒以持久化身份判重，已推进、改名或暂停的目标提醒保留当前状态。缺少该身份的旧快照按源数据库摘要和源行号识别重复导入；不同旧快照里的提醒可能重复，优先保留无法确认同源的记录。
 - WebDAV 下载先校验归档；索引含归档摘要时，下载文件还须匹配该摘要才能进入恢复确认。旧条目和手动备份可沿用无摘要的预览校验。
 - WebDAV 仅将明确声明当前格式的有效索引条目提供给恢复操作；未知条目及额外字段原样保留。上传与轮换不能用过滤后的列表覆盖完整索引，也不能删除被其他条目引用的对象
-- 自动备份的时间声明、重试与调和决策归备份专用 `engine/backup_scheduler.rs`；目标执行、运行账本和保留策略分别归 `data/scheduled_backup.rs` 与其 repository，不为未来定时导出提前建立通用任务框架
+- 自动备份的时间声明、重试与调和决策归备份专用 `engine/backup_scheduler.rs`；目标执行、运行账本和保留策略分别归 `data/scheduled_backup/` 与其 repository，不为未来定时导出提前建立通用任务框架
 - WebDAV 自动备份只有在本地快照校验、不可覆盖上传、远端全量回读校验和索引发布全部完成后才可记为成功；旧自动对象必须在新备份成立后，凭精确路径、来源、目标身份与 ETag 等所有权证据清理，证据不足时保留对象并记录警告
 
 #### WebDAV 凭据与跨资源保存
 
 - WebDAV 地址、用户名和远端目录可作为非秘密配置持久化；密码不得进入 SQLite、事件载荷、远端索引或日志。返回密码的请求限于主窗口用户明确点击“显示密码”触发的 `DavReveal`：handler 必须执行真实窗口 caller guard，前端不得在打开弹窗时预取，隐藏或关闭弹窗后必须清除已读取的明文预览；mini 和其他窗口不得获得该命令
-- WebDAV 配置保存由 `data/remote_backup_config.rs` 协调。完整校验后先创建不可变候选凭据，SQLite 事务原子提交配置、凭据引用和保存标识，再清理旧凭据。`platform/credentials/store.rs` 在 profile 私有目录记录不含秘密的归属凭证；凭据只按本机归属和配置身份读取。保存、删除和网络快照取得共用锁，网络请求持有已取得的完整配对；清理失败不改变已提交结果，可在后续读取中重试。备份不授予本机凭据访问权：覆盖恢复解绑，合并保留已有配对或将新增配置标为待配置。旧凭据只为无引用的现存配置读取，首次保存转换后退役；回退到不支持引用协议的旧程序需要重新配置密码
+- WebDAV 配置保存由 `data/remote_backup_config.rs` 协调。完整校验后先创建不可变候选凭据，SQLite 事务原子提交配置、凭据引用和保存标识，再清理旧凭据。[Windows 凭据存储](../crates/windows-integration/src/credentials/store.rs) 在 profile 私有目录记录不含秘密的归属凭证；凭据只按本机归属和配置身份读取。保存、删除和网络快照取得共用锁，网络请求持有已取得的完整配对；清理失败不改变已提交结果，可在后续读取中重试。备份不授予本机凭据访问权：覆盖恢复解绑，合并保留已有配对或将新增配置标为待配置。旧凭据只为无引用的现存配置读取，首次保存转换后退役；回退到不支持引用协议的旧程序需要重新配置密码
 
 #### 追踪快照一致性
 
@@ -154,8 +154,8 @@ SQL、参数绑定及跨表一致性归 Recorder。页面消费具名的查询�
 
 #### 自动任务的共享边界
 
-- 自动导出的日历周期、到期槽位、补跑与重试决策归导出专用 `engine/export_scheduler.rs`；配置与运行账本归 `data/repositories/scheduled_export.rs`，文件生成、格式校验、不可覆盖发布和崩溃对账归 `data/scheduled_export.rs`，不得与自动备份合并成通用任务框架
-- `app/scheduled_task_runtime.rs` 只共享目录选择、唤醒/轮询和状态事件发送这些无业务语义的运行机制；备份与导出的 state 类型、锁边界、错误分类、调度策略和数据动作必须继续分离
+- 自动导出的日历周期、到期槽位、补跑与重试决策归导出专用 `engine/export_scheduler.rs`；配置与运行账本归 `data/repositories/scheduled_export.rs`，文件生成、格式校验、不可覆盖发布和崩溃对账归 `data/scheduled_export/`，不得与自动备份合并成通用任务框架
+- [存储服务](../crates/activity/src/recording/storage.rs)定期唤醒已配置的备份和导出任务。各任务管理自己的配置、运行账本、重试和数据动作。
 
 ### 4.4 浏览器扩展伴生边界
 
@@ -175,54 +175,43 @@ Rust 模块、函数与字段使用 snake_case，类型使用 PascalCase。数�
 
 ### 4.6 GPUI 实验版工具插件
 
-GPUI 主窗口在「分类」与「设置」之间提供「工具」入口。窗口负责绘制插件声明的面板、收集表单值和呈现安装确认。常驻宿主登记插件身份、运行 Wasm、调度到期任务并保存状态。关闭最后一个窗口后，已有计时继续推进。Mini 与主窗口读取同一份计时和提醒投影，点击状态时由主窗口完成导航和未保存编辑确认。[主窗口](../desktop/patina/src/main_window.rs) · [常驻工具服务](../desktop/patina/src/tool_service.rs)
+GPUI 主窗口在「分类」与「设置」之间提供「工具」入口。窗口负责绘制插件声明的面板、收集表单值和呈现安装确认。常驻宿主登记插件身份、运行 Wasm、调度到期任务并保存状态。关闭最后一个窗口后，已有计时继续推进。Mini 与主窗口读取同一份计时和提醒投影，点击状态时由主窗口完成导航和未保存编辑确认。[主窗口](../apps/patina-ui/src/windows/main/mod.rs) · [常驻工具服务](../apps/patina/src/tool_service.rs)
 
-外部插件以单个签名包分发。宿主在预览和确认时校验内容摘要、API 版本和发布者。更新及重装须符合原 ID 的发布者绑定。新模块成功返回合规面板后，宿主才原子替换已有安装；实例代次用于拒绝旧动作。工具无法自行取得文件、网络或数据库访问。插件所需的通用能力在安装时展示，Rust 作者可用同一入口发布文本、表单、按钮和后台计时。[包校验与运行时](../desktop/tool-host/src/lib.rs) · [插件作者指南](../desktop/plugins/counter/README.md)
+外部插件以单个签名包分发。宿主在预览和确认时校验内容摘要、API 版本和发布者。更新及重装须符合原 ID 的发布者绑定。新模块成功返回合规面板后，宿主才原子替换已有安装；实例代次用于拒绝旧动作。工具无法自行取得文件、网络或数据库访问。插件所需的通用能力在安装时展示，Rust 作者可用同一入口发布文本、表单、按钮和后台计时。[包校验与运行时](../crates/tool-host/src/lib.rs) · [插件作者指南](../plugins/counter/README.md)
 
-专注和提醒随程序分发为两个独立 Wasm 包。两者各自拥有面板及任务动作，绑定的原生数据适配器复用已有 SQLite 任务、阶段转换、专注历史和日程事务。旧任务沿用原 ID、历史关系和备份身份。卸载专注会结算活动区间，卸载提醒会暂停日程与使用规则。宿主保留数据和卸载选择；重启会完成中断的撤销，主动重装后由用户重新启动任务。通知确认还校验当前事件及其来源任务。[随附插件](../desktop/plugins/official) · [原生数据适配器](../desktop/recorder/src/recording/tools.rs) · [通知与使用提醒](../desktop/patina/src/tool_events.rs)
+专注和提醒随程序分发为两个独立 Wasm 包。两者各自拥有面板及任务动作，绑定的原生数据适配器复用已有 SQLite 任务、阶段转换、专注历史和日程事务。旧任务沿用原 ID、历史关系和备份身份。卸载专注会结算活动区间，卸载提醒会暂停日程与使用规则。宿主保留数据和卸载选择；重启会完成中断的撤销，主动重装后由用户重新启动任务。通知确认还校验当前事件及其来源任务。[随附插件](../plugins/official) · [原生数据适配器](../crates/activity/src/recording/tools.rs) · [通知与使用提醒](../apps/patina/src/tool_events.rs)
 
 ### 4.7 GPUI 原生更新
 
-[`desktop/updater`](../desktop/updater/src/lib.rs) 拥有更新清单、版本比较、HTTPS 下载、Minisign 验签和安装交接。常驻宿主持有更新服务，窗口只请求操作并读取状态；关闭窗口或切换导航不会取消下载。[关于页](../desktop/patina/src/about.rs) 展示版本差异、更新说明、下载进度和失败后的重试与手动下载入口，在下载完成后提供独立安装确认。安装前保存返回页面，新窗口启动时一次性消费该记录。
+[`crates/updater`](../crates/updater/src/lib.rs) 拥有更新清单、版本比较、HTTPS 下载、Minisign 验签和安装交接。常驻宿主持有更新服务，窗口只请求操作并读取状态；关闭窗口或切换导航不会取消下载。[关于页](../apps/patina-ui/src/features/about/mod.rs) 展示版本差异、更新说明、下载进度和失败后的重试与手动下载入口，在下载完成后提供独立安装确认。安装前保存返回页面，新窗口启动时一次性消费该记录。
 
-安装请求由[宿主消息循环](../desktop/patina/src/window_process.rs)串行处理，只能执行服务持有并再次验签的安装包。启动安装器后，宿主关闭窗口进程、停止工具任务并结算录制，成功后写入退出凭据。[NSIS 安装器](../desktop/installer/patina.nsi)等待宿主退出并检查该凭据，之后替换程序文件。安装器不清理用户数据；包格式、签名与分发规则见[发布规范](versioning-and-release-policy.md#96-gpui-原生更新包)。
+安装请求由[宿主消息循环](../apps/patina/src/window_process.rs)串行处理，只能执行服务持有并再次验签的安装包。启动安装器后，宿主关闭窗口进程、停止工具任务并结算录制，成功后写入退出凭据。[NSIS 安装器](../packaging/windows/patina.nsi)等待宿主退出并检查该凭据，之后替换程序文件。安装器不清理用户数据；包格式、签名与分发规则见[发布规范](versioning-and-release-policy.md#96-gpui-原生更新包)。
 
 ### 4.8 原生设置与存储
 
-[设置窗口](../desktop/patina/src/settings.rs) 拥有主题和语言预览，取消或离开页面时还原未保存的预览。[存储界面](../desktop/patina/src/settings/storage.rs) 拥有导出、导入、备份、恢复和定时配置弹窗；[存储服务](../desktop/recorder/src/recording/storage.rs) 复用共享数据协议与事务，持久保存按格式区分的导出偏好。
+[设置窗口](../apps/patina-ui/src/features/settings/mod.rs) 拥有主题和语言预览，取消或离开页面时还原未保存的预览。[存储界面](../apps/patina-ui/src/features/settings/storage.rs) 拥有导出、导入、备份、恢复和定时配置弹窗；[存储服务](../crates/activity/src/recording/storage.rs) 复用共享数据协议与事务，持久保存按格式区分的导出偏好。
 
-原生数据目录迁移在所选目录下使用 `Patina` 子目录，所选目录本身已名为 `Patina` 时直接使用它。数据库和本地备份在重启时一起迁移；[迁移实现](../desktop/recorder/src/recording/storage/migration.rs) 拒绝覆盖已有目标，用暂存目录确认发布归属，持久保存新位置后才清理已确认复制的源文件。共享的数据库、导入导出和备份模块仍由原有 data owner 维护。
+原生数据目录迁移在所选目录下使用 `Patina` 子目录，所选目录本身已名为 `Patina` 时直接使用它。数据库和本地备份在重启时一起迁移；[迁移实现](../crates/storage/src/location/migration.rs) 拒绝覆盖已有目标，用暂存目录确认发布归属，持久保存新位置后才清理已确认复制的源文件。共享的数据库、导入导出和备份模块仍由原有 data owner 维护。
 
 ## 5. 前端长期结构
 
-主窗口持有页面导航和未保存编辑的确认。工具页的左侧分区显示已安装工具，跟随主导航的图标或图文模式。首次打开优先显示提醒，重开时恢复此 profile 上次选择的已安装工具。Mini 指定的工具优先于保存的选择。面板动作交给常驻工具服务。共享布局、输入、选择控件、键盘焦点、主题与色板归 [QuietPro](../desktop/quietpro/src/lib.rs)。
+[主窗口](../apps/patina-ui/src/windows/main/mod.rs)持有页面导航和未保存编辑的确认。[页面实体](../apps/patina-ui/src/features)管理各自的选择、查询与草稿。[宿主客户端](../apps/patina-ui/src/client/mod.rs)按请求编号分派回复，连接结束时通知等待者。工具页的左侧分区显示已安装工具，跟随主导航的图标或图文模式。首次打开优先显示提醒，重开时恢复此 profile 上次选择的已安装工具。Mini 指定的工具优先于保存的选择。面板动作交给常驻工具服务。共享布局、输入、选择控件、键盘焦点、主题与色板归 [QuietPro](../crates/quietpro/src/lib.rs)。
 
 #### Mini 生命周期
 
-[Mini](../desktop/patina/src/mini.rs)读取当前活动和工具状态，点击工具时由主窗口导航。隐藏和重开由窗口生命周期管理，录制继续运行。
+[Mini](../apps/patina-ui/src/windows/mini/mod.rs)读取当前活动和工具状态，点击工具时由主窗口导航。隐藏和重开由窗口生命周期管理，录制继续运行。
 
 ## 6. Rust 长期结构
 
-[桌面工作区](../desktop/Cargo.toml)分别维护应用、录制与存储、控件、工具宿主、插件 SDK、更新及原生测试支持。桌面入口负责装配和退出顺序。以下模块路径相对 Recorder 源码目录。
+[桌面工作区](../Cargo.toml)分别维护应用、录制与存储、控件、工具宿主、插件 SDK、更新及原生测试支持。桌面入口负责装配和退出顺序。以下模块路径相对 Recorder 源码目录。
 
 ### 6.4 `platform/`
 
-`platform/*` 负责：
-
-- Windows API 细节
-- 前台窗口、图标、电源事件等平台能力
-- 系统 wall clock 等外部环境事实；领域决策需要确定性时应接收注入时间，而不是在 domain 内直接读取时钟
-- 未来其他平台的隔离落点
-
-目标是：
-
-- 隔离平台实现
-- 避免平台细节泄漏到 `engine`
-- 避免平台语义污染 `domain`
+[Windows 适配](../crates/windows-integration/src/lib.rs)提供前台观察、图标、系统凭据、Job 和平台时钟。窗口输入与焦点留在 GPUI 窗口进程，活动规则接收时钟和采样事实。
 
 #### 原生探测的隔离与回收
 
-不可可靠取消的 Windows 前台、名称、图标、媒体和音频探测由 `platform/windows/native_probe` 隔离。各类探测使用固定、独立的子进程通道；主程序的受限子模式先于常驻宿主初始化分派，不创建窗口、数据库或单实例注册。父进程通过有长度上限的匿名管道传递数据，以请求序号校验响应，并用 Windows Job 管理进程归属。期限到达后须确认旧进程及通信线程结束，才允许替换；无法确认退出时停止该通道的重建。
+不可可靠取消的 Windows 前台、名称、图标、媒体和音频探测由独立的 [patina-probe](../apps/patina-probe/src/main.rs) 执行。各类探测使用固定、独立的子进程通道。宿主以协议和产品版本完成握手，探测程序只接收该通道的请求。父进程通过有长度上限的匿名管道传递数据，以请求序号校验响应，并用 Windows Job 管理进程归属。期限到达后须确认旧进程及通信线程结束，才允许替换；无法确认退出时停止该通道的重建。
 
 helper 的存活由现有诊断观察线程通过该世代持有的进程句柄非等待检查，不获取请求通道的准入锁，也不新增轮询线程。进程仍存活时不读取异常记录或访问请求发送器。确认退出后，进程 owner 保存唯一退出事实并关闭发送器，使空闲通信线程能够结束；只有仍为当前世代的观察器才能清除当前 PID 与上次响应缓存、发布退出计数，晚到的旧观察不能覆盖替代进程。退出码、创建 / 退出 FILETIME、已取得的清理耗时及历史异常分别保留，未知耗时不记零。下一次请求先确认旧进程和通信线程已回收，再创建新世代；已经发送的失败请求不自动重放。退出码与本进程是否请求过终止属于观察事实，不能单独确定故障 API 或外部终止来源。
 
@@ -238,7 +227,7 @@ helper 的未处理异常使用预留的固定大小共享记录保存异常码�
 
 #### 诊断边界
 
-`platform/runtime_diagnostics` 在独立线程读取不可阻塞的进度快照，以有限队列交给轮转日志线程。诊断不等待 tracking 锁、SQLite 或窗口线程；日志不可写时计数并舍弃输出。诊断阶段可以定位停顿边界，不能代替原生线程栈证明具体 API 根因。
+[录制运行快照](../crates/activity/src/engine/tracking/runtime_snapshot.rs)保存采样和提交进度，探测子进程另行记录退出和原生异常。用快照定位停顿阶段，判断具体系统调用的故障仍需要相应的原生证据。
 
 ### 6.5 `engine/`
 
@@ -246,10 +235,10 @@ helper 的未处理异常使用预留的固定大小共享记录保存异常码�
 
 - tracking 主链
 - session 生命周期与时序
-- watchdog / self-heal / updater 等核心流程
+- 采样健康检查与会话恢复
 - 与平台事件、数据边界对接的行为编排
 
-tracking 相关逻辑在 [`engine/tracking/`](../desktop/recorder/src/engine/tracking/) 内按职责演进，不回流到单个超厚文件或入口层。`runtime.rs` 保持主循环编排；持续参与、连续性、封口、轮询、电源生命周期等细节优先留在相邻 owner 模块。当前模块清单由源码目录持有。
+tracking 相关逻辑在 [`engine/tracking/`](../crates/activity/src/engine/tracking/) 内按职责演进，不回流到单个超厚文件或入口层。`runtime.rs` 保持主循环编排；持续参与、连续性、封口、轮询、电源生命周期等细节优先留在相邻 owner 模块。当前模块清单由源码目录持有。
 
 `engine/tracking` 统一决定应用的有效活动区间，协调转换、暂停、排除、电源、watchdog 和恢复边界。转换失败不得推进已提交状态；失效资格必须先反映到快照，旧采样、请求和持续参与状态不得跨停止边界复用。中断恢复使用最后成功采样，普通心跳不证明活动；证据缺失或无效时以会话起点结束，不补记停机时间。
 
@@ -265,7 +254,7 @@ tracking 相关逻辑在 [`engine/tracking/`](../desktop/recorder/src/engine/tra
 
 ### 6.6 `domain/`
 
-`domain/*` 负责：
+[活动领域类型](../crates/activity-model/src/lib.rs)负责：
 
 - 领域名词
 - 共享实体
@@ -281,19 +270,7 @@ tracking 相关逻辑在 [`engine/tracking/`](../desktop/recorder/src/engine/tra
 
 ### 6.7 `data/`
 
-`data/*` 负责：
-
-- sqlite pool
-- migrations
-- repositories
-- backup / restore 数据读写
-- 数据边界与仓储实现
-
-它必须持续拦住这些细节回流到：
-
-- `commands/*`
-- `app/*`
-- `engine/*`
+活动查询、表级变更及备份合并属于 `crates/activity/src/data`。SQLite 连接池、迁移、文件位置和可恢复切换属于 `crates/storage`。窗口只通过具名协议请求读取或写入。
 
 `data/repositories/web_activity` 维护网页事实及其原生会话关联 `web_activity_native_sessions`，不推测关联旧历史。原生结束与关联网页裁剪、网页停用与当前网页结束，均须原子提交并更新修订。删除原生记录只清除关联，网页历史仍由其清理入口管理。
 
@@ -311,12 +288,17 @@ tracking 相关逻辑在 [`engine/tracking/`](../desktop/recorder/src/engine/tra
 
 | 能力 | 实现位置 |
 | --- | --- |
-| 页面、Mini、通知、托盘与窗口进程 | desktop/patina |
-| 调色板、预设、布局、可复用控件 | desktop/quietpro |
-| SQLite、迁移、活动采集、备份恢复与统计 | desktop/recorder |
-| 工具包验证、执行与作者接口 | desktop/tool-host、desktop/plugin-sdk |
-| 更新清单、下载、签名及安装 | desktop/updater、desktop/installer |
-| Win32 隔离桌面和跨 crate 测试辅助 | desktop/test-support |
+| 托盘、单实例、任务调度与退出 | `apps/patina` |
+| 主窗口、Mini、通知、页面状态与 GPUI 输入 | `apps/patina-ui` |
+| 窗口请求、结果和事件 | `crates/desktop-protocol` |
+| 活动计算、专用 SQL、统计和备份合并 | `crates/activity`；共享领域类型由 `crates/activity-model` 拥有 |
+| SQLite 连接、schema、WAL、数据库位置与迁移 | `crates/storage` |
+| 原生采样和故障隔离 | `apps/patina-probe`、`crates/windows-integration` |
+| 调色板、布局和可复用控件 | `crates/quietpro` |
+| 翻译、运行时消息与工作簿 | `locales`、`crates/i18n`、`xtask/src/i18n` |
+| 工具包校验与执行、作者接口和官方工具 | `crates/tool-host`、`crates/plugin-sdk`、`plugins/` |
+| 更新清单、下载、签名、安装与分发 | `crates/updater`、`packaging/windows`、`xtask/src/release` |
+| 隔离桌面与跨 crate 测试辅助 | `crates/test-support` |
 
 ## 10. 如何判断架构在健康落地
 
@@ -334,7 +316,7 @@ tracking 相关逻辑在 [`engine/tracking/`](../desktop/recorder/src/engine/tra
 
 ### 本地化 owner 边界
 
-本地化的人工源、生成边界、前端与 Rust runtime owner 统一由 [`localization.md`](./localization.md) 定义。架构层只要求 locale 作为显示派生和缓存的显式输入，语言无关 read model 不携带本地化字符串，generated 文件不成为人工 owner。
+本地化的人工源、生成边界、GPUI 页面与 Rust 消息运行时的职责统一由 [`localization.md`](./localization.md) 定义。架构层只要求 locale 作为显示派生和缓存的显式输入，语言无关 read model 不携带本地化字符串，generated 文件不成为人工 owner。
 
 ## 13. 执行约束
 

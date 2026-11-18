@@ -9,7 +9,7 @@ Apply this file in every repository task. Read the following owners when the tas
 - Product direction and scope must follow [product principles and scope](docs/product-principles-and-scope.md).
 - Roadmap and priority decisions must follow [roadmap and prioritization](docs/roadmap-and-prioritization.md).
 - Private GitHub Project maintenance must follow [Project maintenance](docs/github-project-maintenance.md); never copy its live contents into repository docs.
-- Engineering quality and validation follow [engineering quality](docs/engineering-quality.md#5-默认验证门槛); `package.json` owns the pnpm command graph, and Cargo manifests and module trees own GPUI test entry points. Preserve required architecture, runtime and release evidence.
+- Engineering quality and validation follow [engineering quality](docs/engineering-quality.md#5-默认验证门槛); `xtask/src/check.rs` owns the repository check sequence, and Cargo manifests and module trees own GPUI test entry points. Preserve required architecture, runtime and release evidence.
 - UI work must follow [Quiet Pro](docs/quiet-pro-component-guidelines.md) and preserve behavior within the task; a new visual direction requires an explicit user decision.
 - Architecture refactors, boundary decisions, and new modules must align with [architecture](docs/architecture.md). Decide the real owner before implementation using its [placement map](docs/architecture.md#7-新增代码-owner-与落点); its boundary and compatibility rules apply to the change.
 - Stable-period issue fixes and boundary triage must follow [issue-fix boundary guardrails](docs/issue-fix-boundary-guardrails.md).
@@ -67,4 +67,4 @@ Apply the [contributor intake gate](CONTRIBUTING.md#33-pull-request-intake-gate)
 
 ## Encoding Rules
 
-Save documentation as readable UTF-8. Use normal code edits for Chinese Markdown, TypeScript and Rust; never rewrite files through PowerShell text-output commands or redirection (`>`, `>>`, `Set-Content`, `Out-File`). Verify bytes before treating garbled terminal output as corruption; repair actual encoding damage before continuing affected edits.
+Save documentation as readable UTF-8. Use normal code edits for Chinese Markdown, JSON and Rust; never rewrite files through PowerShell text-output commands or redirection (`>`, `>>`, `Set-Content`, `Out-File`). Verify bytes before treating garbled terminal output as corruption; repair actual encoding damage before continuing affected edits.

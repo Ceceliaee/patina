@@ -31,7 +31,7 @@
 
 ## 4.5 外部 PR 准入门禁
 
-外部 PR 先判断是否降低维护者安全落地一个已接受问题的成本，再进入逐行 review。完整贡献者政策由 [`../CONTRIBUTING.md`](../CONTRIBUTING.md) 拥有，PR 模板负责采集，`scripts/pr-intake-policy.ts` 与 `scripts/check-pr-intake.ts` 负责执行，`tests/prIntakeGate.test.ts` 负责门禁反例；本文只拥有风险模型。
+外部 PR 先判断是否降低维护者安全落地一个已接受问题的成本，再进入逐行 review。完整贡献者政策由 [`../CONTRIBUTING.md`](../CONTRIBUTING.md) 拥有，PR 模板负责采集，`xtask/src/ci/` 实施准入并用合成 Git 记录和工作流事件验证拒绝条件；本文只拥有风险模型。
 
 范围、体量、owner、UI 与表单门禁按[CONTRIBUTING 的准入要求](../CONTRIBUTING.md#33-pull-request-intake-gate)判断。任一门禁失败即停止完整 review；可信 base 的自动判定不能被作者声明或 label 绕过。本文要求验证匹配真实风险，不能只看 diff 大小：
 
@@ -43,7 +43,7 @@
 
 审查结果分为 `Mergeable`、`Needs Author Changes`、`Not Accepted` 或 `Declined`，由实际准入和审查结果决定。
 
-测试必须真正覆盖命中的风险域并能被默认测试图或 Cargo module tree 到达。未注册测试、无关 smoke、只删除断言或只写“已测试”都不是正向证据。capability、permission set 或 application command manifest 变化还必须提供已登记的真实 Tauri main/Mini denial matrix。
+测试必须真正覆盖命中的风险域并能被默认测试图或 Cargo module tree 到达。未注册测试、无关 smoke、只删除断言或只写“已测试”都不是正向证据。插件能力、窗口消息或安装交接的授权边界变化须验证允许和拒绝路径，涵盖过期的工具实例、错版对端或无效安装凭据等实际受影响情形。
 
 ## 4.6 Prose 质量
 
@@ -68,23 +68,21 @@
 
 | 实际改动 | 本地验收范围 |
 | --- | --- |
-| 纯文档 | `pnpm run check:docs`，核对事实、UTF-8、链接和义务；治理或验证政策变化追加 `pnpm run check:docs:self-test` 及受影响规则的正反场景 |
+| 纯文档 | `cargo xtask docs check`，核对事实、UTF-8、链接和义务；治理或验证政策变化追加 `cargo test -p xtask docs::` 及受影响规则的正反场景 |
 | 局部 GPUI/QuietPro 界面或选项持久化 | 所属 Rust 模块或 Recorder 契约、受影响的具名原生交互用例，以及相关格式、编译或本地化检查；不运行无关页面与资源长测 |
 | 局部 Rust、tracking、SQLite 或桌面 runtime 行为 | 受影响模块及真实消费者的测试、相关 Rust 静态检查和命中风险的原生/数据专项；不因涉及 Rust 或持久化就运行全仓测试 |
-| 跨模块改动 | GPUI workspace 运行 `cargo test-headless --locked` 及受影响 crate 的格式、编译和 Clippy 检查，并补命中风险的原生专项；仓库工具或公共构建链变化追加 pnpm 工具检查。 |
-| 正式发布 | `pnpm run release:check`，并遵循[发布验收](versioning-and-release-policy.md#10-发布前的最低验证门槛) |
+| 跨模块改动 | GPUI workspace 运行 `cargo test-headless --locked` 及受影响 crate 的格式、编译和 Clippy 检查，并补命中风险的原生专项；仓库工具或公共构建链变化追加 `cargo xtask check tools`。 |
+| 正式发布 | `cargo xtask check` 和 `cargo xtask release validate-changelog`，并遵循[发布验收](versioning-and-release-policy.md#10-发布前的最低验证门槛) |
 
 按行为影响判断跨模块，不按文件数量判断：一个功能的组件、存储 helper 和测试可以属于局部改动；公共 API、共享状态、全局样式、schema、权限或依赖变化若影响多个消费者，则覆盖这些消费者并使用跨模块门槛。影响范围不明时先追踪调用与数据流，再扩大到能覆盖影响的范围。
 
-检查器、模板或操作说明变化还须验证真实使用路径，扩展名不能豁免风险。纯文档不默认运行应用构建、browser 或 Rust 全套。`package.json` 拥有 pnpm 命令图，`desktop/Cargo.toml` 与各 crate manifest、Cargo module tree 拥有 GPUI 测试入口；长期 prose 不复制执行图。顶层门禁不得静默移除既有检查、测试、coverage include 或阈值。
+检查器、模板或操作说明变化还须验证真实使用路径，扩展名不能豁免风险。纯文档不默认运行应用构建、browser 或 Rust 全套。[仓库检查入口](../xtask/src/check.rs)定义命令的执行顺序，`Cargo.toml` 与各 crate manifest、Cargo module tree 拥有 GPUI 测试入口；长期 prose 不复制执行图。顶层门禁不得静默移除既有检查、测试、coverage include 或阈值。
 
-`check:full` 覆盖仓库工具、原生 Rust、格式、编译、测试、clippy 与依赖安全。依赖审计只允许经 Windows target 依赖树证明不可达的精确 advisory；受控离线模式仍须运行本地快照和例外可达性校验，但不能替代发布 CI 的联网新鲜度。
+`cargo xtask check` 覆盖仓库工具、原生 Rust、格式、编译、测试、clippy 与依赖安全。依赖审计只允许经 Windows target 依赖树证明不可达的精确 advisory；受控离线模式仍须运行本地快照和例外可达性校验，但不能替代发布 CI 的联网新鲜度。
 
-Node 与开发启动器的 Rust 工具链版本分别由根 `.node-version` 与 `rust-toolchain.toml` 拥有；GPUI 使用 `desktop/rust-toolchain.toml`，Cargo 命令从 `desktop/` 执行以选中该工具链。pnpm 版本由 `package.json#packageManager` 拥有。CI 读取对应来源，`engines` 保持受测试的精确镜像。安装布局、依赖构建脚本许可和 override 由 `pnpm-workspace.yaml` 拥有；冻结安装消费唯一 JS 锁文件 `pnpm-lock.yaml`，仓库仍使用 npm registry。第三方 GitHub Actions 固定到完整 commit SHA，并保留对应主版本注释；可移动 tag 不能成为长期执行引用。
+根 [rust-toolchain.toml](../rust-toolchain.toml) 固定 Rust 工具链。从仓库根目录运行 Cargo。官方工具包、插件示例和 Worker 分别消费自身锁文件，Wasm 构建显式指定目标。第三方 GitHub Actions 固定到完整提交 SHA。
 
-JS 离线审计只接受最近 24 小时内成功联网审计生成、且 SHA-256 与当前 pnpm 锁文件一致的本地报告。报告缺失、过期、损坏或锁文件变化均失败；Rust 离线快照及例外可达性校验继续执行。
-
-风险追加验证、当前命令名与其组合关系由下面的风险路由和 `package.json` 共同决定，不能用文档中的旧叶子清单覆盖机器事实。
+`cargo xtask audit` 刷新公告并检查参与构建的锁文件。`--offline` 使用本地公告库，适用于开发复核；发布验收采用联网结果。
 
 验证证据绑定受影响的输入、环境和风险。同一任务中相关输入未变化、证据仍有效时，不因接下来提交、推送或补写执行记录而重复检查；代码、配置、依赖、base 或验证规则变化后重新判断受影响范围，只重跑失效的证据。无法运行的相关检查应明确原因和残余风险，不得记为通过。
 
@@ -97,24 +95,25 @@ GPUI 桌面版和 QuietPro 的自动化测试统一用 Rust 编写，包括控�
 按被测行为放置测试：
 
 - 纯计算、状态转换和控件模型的单元测试留在所属生产模块。
-- Recorder 公开接口的数据、事务、恢复与本地化契约放在 [`desktop/recorder/tests/contracts.rs`](../desktop/recorder/tests/contracts.rs) 及其领域子模块；这些用例不启动 GPUI。Recorder 内部单元测试由该 crate 的 lib target 执行。
-- QuietPro 无头控件交互放在 `desktop/quietpro/tests/headless.rs`，启用 `test-support` 后运行；复用生产控件，断言指针、键盘、禁用状态与回调行为。
-- 页面窗口交互放在 `desktop/patina/tests/pages/`，由 `pages.rs` 注册；Today 交互由 `today.rs` 注册，QuietPro 控件交互放在 `desktop/quietpro/tests/`。布局用例直接进入对应页面或弹窗，不以导入、备份等无关长流程作为前置步骤。
-- 专用会话资源采样与基线对照保留具名 ignored 用例；普通页面布局修改不自动触发资源长测。跨 target 复用的环境与 fixture 放在 `desktop/test-support/`，页面私有断言留在页面测试模块。
+- Recorder 公开接口的数据、事务、恢复与本地化契约放在 [`crates/activity/tests/contracts.rs`](../crates/activity/tests/contracts.rs) 及其领域子模块；这些用例不启动 GPUI。Recorder 内部单元测试由该 crate 的 lib target 执行。
+- QuietPro 无头控件交互放在 `crates/quietpro/tests/headless.rs`，启用 `test-support` 后运行；复用生产控件，断言指针、键盘、禁用状态与回调行为。
+- 页面窗口交互放在 `apps/patina/tests/pages/`，由 `pages.rs` 注册；Today 交互由 `today.rs` 注册，QuietPro 控件交互放在 `crates/quietpro/tests/`。布局用例直接进入对应页面或弹窗，不以导入、备份等无关长流程作为前置步骤。
+- 专用会话资源采样与基线对照保留具名 ignored 用例；普通页面布局修改不自动触发资源长测。跨 target 复用的环境与 fixture 放在 `crates/test-support/`，页面私有断言留在页面测试模块。
 
-以下命令从 `desktop/` 执行；依赖已缓存时可加 `--offline`。名称不确定时，用 `cargo test --locked -p <crate> --test <target> -- --list` 核对完整名称（原生目标另加 `--features native-tests`，无头交互目标另加 `--features test-support`），再执行所需用例。例如：
+以下命令从仓库根目录执行；依赖已缓存时可加 `--offline`。名称不确定时，用 `cargo test --locked -p <crate> --test <target> -- --list` 核对完整名称（原生目标另加 `--features native-tests`，无头交互目标另加 `--features test-support`），再执行所需用例。例如：
 
 ```sh
 cargo test-headless --locked
 cargo test --locked -p quietpro --features test-support --test headless
 cargo test --locked -p patina-recorder --test contracts services::web_sync_guide_data_is_localized_and_preserves_actions -- --exact
-cargo test --locked -p patina-gpui --features native-tests --test pages storage::settings_webdav_layout -- --ignored --exact --test-threads=1
+cargo test --locked -p patina --features native-tests --test pages storage::settings_webdav_layout -- --ignored --exact --test-threads=1
+cargo test --locked -p patina --features native-tests --test lifecycle -- --ignored --test-threads=1
 cargo test --locked -p quietpro --features native-tests --test controls accessible_controls -- --ignored --exact --test-threads=1
 ```
 
 一次执行同一领域时可使用模块过滤器；不能用 `--include-ignored` 无差别执行带资源、凭据或专用会话前提的用例。Cargo 零匹配可能返回成功退出码，验收还须核对实际执行数非零；`--no-run` 只证明编译。移动测试时核对新旧清单、断言与 ignore 理由，保持默认聚合可达。
 
-显式启用的原生 GPUI 窗口用例从 Cargo 入口自动进入[临时 Win32 测试桌面](../desktop/test-support/src/lib.rs)，驱动、Patina 和渲染进程在同一非输入桌面完成交互，退出后释放。纯数据和控件模型用例直接运行。
+显式启用的原生 GPUI 窗口用例从 Cargo 入口自动进入[临时 Win32 测试桌面](../crates/test-support/src/lib.rs)，驱动、Patina 和渲染进程在同一非输入桌面完成交互，退出后释放。纯数据和控件模型用例直接运行。
 
 验收真实前台焦点、系统托盘、物理鼠标或交互会话资源基线时，使用专用 Windows 虚拟机或独立交互登录会话。在该环境的 PowerShell 中设置进程级 `$env:PATINA_DEDICATED_TEST_SESSION = '1'`，再运行对应的具名用例或 `native-lifecycle` 示例。这个变量声明运行环境已经专用，设置它本身不会创建会话。日常桌面保持未设置；显式选中这类用例时，测试会在启动窗口前报告缺少专用会话。
 
@@ -145,7 +144,7 @@ cargo test --locked -p quietpro --features native-tests --test controls accessib
 - 高频平台查询应优先考虑短 TTL 缓存、negative cache、in-flight 合并和退避，避免后台采样对同一资源重复开销
 - 窗口资源策略变更时验证后台资源、重开延迟与状态恢复。须区分常驻录制进程和可释放的窗口进程，并复核可见性与窗口世代。
 
-性能入口与场景清单由 `package.json` 和 benchmark 脚本拥有。长期口径是固定场景后比较 average、p50、p95 与 max，以子进程失败、预算超限或不允许的 SQLite table scan 为失败；不得并发运行制造虚假吞吐，也不得把 stub browser 路径描述成真实 SQLite I/O。生命周期测量必须等待可信 read model 与实际内容提交，不能通过删除加载工作或轮询过早 DOM 节点改善数字。
+性能场景在 `apps/patina/tests/resources.rs` 注册，采样器在 `apps/patina/examples/windows-resource-sample.rs`。长期口径是固定场景后比较 average、p50、p95 与 max，以子进程失败、预算超限或不允许的 SQLite table scan 为失败；不得并发运行制造虚假吞吐，也不得把 stub browser 路径描述成真实 SQLite I/O。生命周期测量必须等待可信 read model 与实际内容提交，不能通过删除加载工作或轮询过早 DOM 节点改善数字。
 
 ---
 

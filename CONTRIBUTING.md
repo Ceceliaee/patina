@@ -117,14 +117,14 @@ Before requesting review, confirm:
 - the change does not add standalone CSS, hardcoded visual styles, or a new
   visual direction outside the design system;
 - user-facing labels, placeholders, titles, and accessibility text are added to
-  the relevant copy owner instead of inline JSX literals;
+  the relevant copy owner instead of inline GPUI text literals;
 - tracking, SQLite, backup, restore, cleanup, export, migration, settings
   persistence, screen capture, and local or network interface changes include
   focused tests;
 - quality gate scripts, CI workflows, bundle budgets, and hotspot budgets are
   not changed inside a feature pull request unless the maintainer explicitly
   asked for that maintenance work;
-- existing tests and checks remain reachable from the normal `pnpm run check`
+- existing tests and checks remain reachable from the normal `cargo xtask check`
   validation chain; new focused tests may extend that chain but must not replace
   or remove existing validation;
 - the diff is small enough to review, or has been split by behavior, owner, or
@@ -164,8 +164,8 @@ executing contributor-modified gate code or package scripts. Normal `Verify`
 checks run for pull requests only after `PR Intake` succeeds. Focused tests
 are matched by risk area. For example, export implementation changes need
 `tests/export*` or Rust export tests; settings persistence changes need
-settings or persistence tests. A TypeScript test counts only when it is reachable
-from the repository's normal `pnpm run check` validation chain. An unrelated or
+settings or persistence tests. A Rust test counts only when it is reachable
+from the repository's normal `cargo xtask check` validation chain. An unrelated or
 unregistered test file does not satisfy the risk gate. A separate Rust test file
 must be Cargo-discoverable or referenced by the crate's module tree; inline Rust
 tests must add an actual test function. Deleting old assertions or
@@ -181,13 +181,12 @@ scope approval before marking the pull request ready for review.
 
 ### 3.4 Install Dependencies
 
-Install Microsoft C++ Build Tools with Desktop development with C++ and Rust for the Windows MSVC host. The [desktop toolchain](desktop/rust-toolchain.toml) pins Rust. Use the Node and pnpm versions from .node-version and package.json.
+Install Microsoft C++ Build Tools with Desktop development with C++ and Rust for the Windows MSVC host. The [desktop toolchain](rust-toolchain.toml) pins Rust.
 
-From the repository root, install the tooling dependencies and start the development app.
+From the repository root, start the development app. Cargo builds the host, window and probe programs together.
 
 ```sh
-pnpm install --frozen-lockfile
-pnpm run dev
+cargo xtask dev
 ```
 
 The development launcher uses a separate profile under LOCALAPPDATA. Use the [native build and release policy](docs/versioning-and-release-policy.md#96-gpui-原生更新包) when preparing an installer.
@@ -338,8 +337,8 @@ For prose-only work, go directly to [documentation checks](#64-documentation-onl
 Run focused checks while implementing, then run the required validation before
 requesting review. Validation requirements are owned by
 [`docs/engineering-quality.md`](docs/engineering-quality.md#5-默认验证门槛);
-[`package.json`](package.json) defines pnpm checks and execution order; the
-[`desktop` workspace](desktop/Cargo.toml) and its crate manifests and module trees
+[xtask](xtask/src/check.rs) defines repository checks and execution order. The
+[root workspace](Cargo.toml) and its crate manifests and module trees
 define GPUI test entry points.
 
 For validation stages, evidence reuse and local/CI responsibilities, follow the
@@ -352,17 +351,17 @@ For local changes, run the related tests and static checks selected under
 For repository tooling:
 
 ```bash
-pnpm run check
+cargo xtask check tools
 ```
 
 ### 6.2 Rust And Architecture Validation
 
-For GPUI, run Cargo from `desktop/` to use its pinned toolchain. Choose the crate,
+For GPUI, run Cargo from the repository root to use its pinned toolchain. Choose the crate,
 test target and named case through the
 [GPUI test guide](docs/engineering-quality.md#gpui-测试文件与定向入口).
 Recorder data contracts do not require launching a GPUI window.
 
-From desktop/, run cargo test-headless --locked for the native workspace. Use pnpm run check:full from the root when the change also affects shared tooling or the build chain. Select additional native and performance checks through the [desktop validation guide](docs/engineering-quality.md#gpui-测试文件与定向入口).
+From the repository root, run `cargo test-headless --locked` for the native workspace. Use cargo xtask check from the root when the change also affects shared tooling or the build chain. Select additional native and performance checks through the [desktop validation guide](docs/engineering-quality.md#gpui-测试文件与定向入口).
 
 ### 6.3 Release Validation
 
@@ -371,13 +370,14 @@ risk-based validation required by
 [engineering quality](docs/engineering-quality.md#5-默认验证门槛):
 
 ```bash
-pnpm run release:validate-changelog
+cargo xtask release validate-changelog
 ```
 
 When preparing a formal release, run:
 
 ```bash
-pnpm run release:check
+cargo xtask check
+cargo xtask release validate-changelog
 ```
 
 Follow the [release policy](docs/versioning-and-release-policy.md) and its
@@ -405,7 +405,7 @@ Add tests that match the behavior you changed.
 | SQLite schema or migration | Cover upgrades, preserved data, defaults, and legacy databases |
 | Backup or restore | Cover preview, compatibility, data preservation, and runtime refresh |
 | Settings | Cover persistence normalization, save behavior, and runtime synchronization |
-| UI interaction | Cover primary interaction states and relevant browser smoke behavior |
+| UI interaction | Cover primary interaction states with GPUI or Windows accessibility tests |
 | Local or network interface | Cover authentication, credential rotation, shutdown, active clients, in-progress clients, bind failures, and initial synchronization |
 
 Passing existing tests does not replace coverage for newly introduced risk.
@@ -743,12 +743,12 @@ Pull Request 只有先通过项目准入门禁，才算准备好进入维护者 
 - UI 改动符合 Quiet Pro，并提供托管在仓库外的截图；
 - 没有新增独立 CSS、硬编码视觉样式，或设计系统之外的新视觉方向；
 - 用户可见文案、placeholder、title 和 accessibility 文案放在对应 copy owner 中，
-  而不是写成 JSX 内联字面量；
+  而不是写成 GPUI 内联文案；
 - 涉及 tracking、SQLite、备份、恢复、清理、导出、migration、settings persistence、
   截屏采集、本机或网络接口的改动，包含对应风险的专项测试；
 - 功能 PR 不改质量门禁脚本、CI workflow、bundle budget 或 hotspot budget，除非维护者
   明确要求做这类维护工作；
-- 既有测试和检查仍然能从正常的 `pnpm run check` 链路到达；新增专项测试可以扩展该链路，
+- 既有测试和检查仍然能从正常的 `cargo xtask check` 链路到达；新增专项测试可以扩展该链路，
   但不能替换或移除既有验证；
 - diff 足够小，便于 review；否则已经按行为、owner 或可独立验证阶段拆分。
 
@@ -776,7 +776,7 @@ contributor checklist 等仍然是硬失败。
 head，不执行贡献者修改过的门禁代码或 package scripts。普通 `Verify` workflow 只在
 `PR Intake` 成功后验证外部 PR。专项测试按风险域匹配。例如导出实现改动需要
 `tests/export*` 或 Rust export 测试；settings persistence 改动需要 settings 或
-persistence 测试。TypeScript 测试只有接入仓库正常的 `pnpm run check` 验证链才算覆盖。
+persistence 测试。Rust 测试只有接入仓库正常的 `cargo xtask check` 验证链才算覆盖。
 独立 Rust 测试文件必须能被 Cargo 自动发现或被 crate module tree 引用；内联 Rust 测试
 必须实际新增测试函数。无关或未注册的测试文件不能满足风险门禁。只删除旧断言，或只修改宽泛 smoke 测试而没有
 为对应风险域增加正向覆盖，也不能算通过。
@@ -788,13 +788,12 @@ Draft PR 不运行准入 job。请先完成模板并获得范围批准，再将 
 
 #### 3.4 安装依赖
 
-在 Windows 安装含“使用 C++ 的桌面开发”的 Microsoft C++ Build Tools 与 MSVC Rust 工具链。桌面工具链由 [desktop/rust-toolchain.toml](desktop/rust-toolchain.toml) 固定。Node 与 pnpm 版本分别见 .node-version 和 package.json。
+在 Windows 安装含“使用 C++ 的桌面开发”的 Microsoft C++ Build Tools 与 MSVC Rust 工具链。桌面工具链由 [rust-toolchain.toml](rust-toolchain.toml) 固定。
 
-从仓库根目录安装工具依赖并启动开发版。
+从仓库根目录启动开发版。Cargo 一起构建宿主、窗口与探测程序。
 
 ```sh
-pnpm install --frozen-lockfile
-pnpm run dev
+cargo xtask dev
 ```
 
 启动器在 LOCALAPPDATA 下使用开发专用资料目录。安装包按[原生发布规范](docs/versioning-and-release-policy.md#96-gpui-原生更新包)准备。
@@ -931,7 +930,7 @@ Refs #4
 
 实现和请求 review 时，按实际影响范围运行相关验证。验证要求由
 [`docs/engineering-quality.md`](docs/engineering-quality.md#5-默认验证门槛) 拥有；
-各命令的检查组成和执行顺序以 [`package.json`](package.json) 为准。
+各命令的检查组成和执行顺序以 [xtask](xtask/src/check.rs) 为准。
 
 验证阶段、证据复用和本地/CI 职责遵循
 [分层入口指引](docs/engineering-quality.md#51-测试分层与稳定性治理)。
@@ -942,7 +941,7 @@ Refs #4
 仓库工具发生跨模块变化时运行：
 
 ```bash
-pnpm run check
+cargo xtask check tools
 ```
 
 #### 6.2 Rust 与架构验证
@@ -951,7 +950,7 @@ pnpm run check
 要求本次实际改动运行完整验证时，执行：
 
 ```bash
-pnpm run check:full
+cargo xtask check
 ```
 
 原生与性能追加检查按[风险追加与桌面验收](docs/engineering-quality.md#风险追加与桌面验收)选择。
@@ -962,13 +961,14 @@ pnpm run check:full
 [工程质量](docs/engineering-quality.md#5-默认验证门槛) 要求的默认门槛和风险追加验证之外运行：
 
 ```bash
-pnpm run release:validate-changelog
+cargo xtask release validate-changelog
 ```
 
 准备正式发布时运行：
 
 ```bash
-pnpm run release:check
+cargo xtask check
+cargo xtask release validate-changelog
 ```
 
 遵循[发布规范](docs/versioning-and-release-policy.md)及其
@@ -994,7 +994,7 @@ pnpm run release:check
 | SQLite schema 或 migration | 覆盖升级、数据保留、默认值和旧数据库 |
 | 备份或恢复 | 覆盖预览、兼容性、数据保留和 runtime 刷新 |
 | 设置 | 覆盖持久化归一化、保存行为和 runtime 同步 |
-| UI 交互 | 覆盖主要交互状态和相关浏览器 smoke 行为 |
+| UI 交互 | 用 GPUI 或 Windows 辅助功能测试覆盖主要交互状态 |
 | 本机或网络接口 | 覆盖鉴权、凭据轮换、关闭服务、已连接客户端、连接中客户端、绑定失败和初始同步 |
 
 已有测试通过不能代替新增风险的对应覆盖。
