@@ -48,10 +48,9 @@ Patina 自己维护 Windows 桌面入口。平台层通过现有的 `windows` cr
 
 在 Windows 仓库根目录运行 `cargo run` 启动 GPUI 开发预览，默认打开主窗口。用 `cargo run -- --mini` 预览 Mini。启动器按原生工作区的工具链编译，监听 Rust 源码和内嵌资源。保存后编译成功会重启预览，主窗口回到上次浏览的页面。页面草稿和弹窗随重启关闭。编译报错时可以继续操作上一次成功的预览，修正并保存后会再次编译。按 Ctrl+C 或从预览托盘退出即可结束。开发预览使用 `%LOCALAPPDATA%/Patina.GPUI.Dev/Patina.GPUI.Experimental/`，也可通过 `PATINA_GPUI_PROFILE_PARENT` 指定已有的绝对目录。
 
-需要单次运行时，从仓库根目录构建三个桌面程序，再启动 Mini。
+需要单次打开 Mini 时，在仓库根目录运行下列命令。
 
 ```powershell
-cargo build --locked --bins -p patina -p patina-ui -p patina-probe
 cargo run --locked -p patina --bin patina -- --mini
 ```
 
