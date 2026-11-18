@@ -26,59 +26,44 @@ unsafe extern "system" fn interrupt(event: u32) -> i32 {
     0
 }
 
-fn desktop_toolchain(desktop: &Path) -> io::Result<String> {
-    let output = Command::new("rustup")
-        .args(["show", "active-toolchain"])
-        .env_remove("RUSTUP_TOOLCHAIN")
-        .current_dir(desktop)
-        .output()?;
-    if output.status.success()
-        && let Some(name) = String::from_utf8_lossy(&output.stdout)
-            .split_whitespace()
-            .next()
-    {
-        return Ok(name.to_owned());
-    }
-    Err(io::Error::other(format!(
-        "desktop toolchain: {}",
-        String::from_utf8_lossy(&output.stderr)
-    )))
-}
+const BINARIES: [&str; 3] = ["patina", "patina-ui", "patina-probe"];
 
-fn build(desktop: &Path, toolchain: &str) -> io::Result<Option<PathBuf>> {
-    let mut cargo = Command::new("rustup")
-        .args([
-            "run",
-            toolchain,
-            "cargo",
-            "build",
-            "--locked",
-            "--package",
-            "patina-gpui",
-            "--bin",
-            "patina-gpui",
-            "--message-format=json-render-diagnostics",
-        ])
-        .current_dir(desktop)
-        .stdout(Stdio::piped())
-        .spawn()?;
-    let mut binary = None;
+fn build(root: &Path) -> io::Result<Option<Vec<PathBuf>>> {
+    let mut command = Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into()));
+    command.current_dir(root).args([
+        "build",
+        "--locked",
+        "--bins",
+        "--message-format=json-render-diagnostics",
+    ]);
+    for package in BINARIES {
+        command.args(["--package", package]);
+    }
+    let mut cargo = command.stdout(Stdio::piped()).spawn()?;
+    let mut binaries = std::collections::HashMap::new();
     for line in BufReader::new(cargo.stdout.take().unwrap()).lines() {
         let message: serde_json::Value = serde_json::from_str(&line?)?;
         if message["reason"] == "compiler-artifact"
-            && message["target"]["name"] == "patina-gpui"
+            && let Some(name) = message["target"]["name"].as_str()
+            && BINARIES.contains(&name)
             && let Some(path) = message["executable"].as_str()
         {
-            binary = Some(PathBuf::from(path));
+            binaries.insert(name.to_owned(), PathBuf::from(path));
         }
     }
     if !cargo.wait()?.success() {
         eprintln!("Build failed. Save a source file to retry.");
         return Ok(None);
     }
-    binary
+    BINARIES
+        .iter()
+        .map(|name| {
+            binaries.remove(*name).ok_or_else(|| {
+                io::Error::other(format!("Cargo did not report the {name} executable"))
+            })
+        })
+        .collect::<io::Result<Vec<_>>>()
         .map(Some)
-        .ok_or_else(|| io::Error::other("Cargo did not report the GPUI executable"))
 }
 
 fn stop(preview: &mut Option<Child>) -> io::Result<()> {
@@ -90,8 +75,7 @@ fn stop(preview: &mut Option<Child>) -> io::Result<()> {
     Ok(())
 }
 
-fn main() -> io::Result<()> {
-    let mut args = env::args().skip(1).collect::<Vec<_>>();
+pub(super) fn run(root: &Path, mut args: Vec<String>) -> io::Result<()> {
     if args.is_empty() {
         args.push("--today".into());
     }
@@ -113,28 +97,22 @@ fn main() -> io::Result<()> {
     if unsafe { SetConsoleCtrlHandler(Some(interrupt), 1) } == 0 {
         return Err(io::Error::last_os_error());
     }
-    develop(Path::new(env!("CARGO_MANIFEST_DIR")), &profile, &args)
+    develop(root, &profile, &args)
 }
 
 fn develop(root: &Path, profile: &Path, args: &[String]) -> io::Result<()> {
-    let desktop = root.join("desktop");
-    let toolchain = desktop_toolchain(&desktop)?;
     let sources = watch::Sources::new(root)?;
     let session = tempfile::Builder::new().prefix("patina-dev-").tempdir()?;
-    let executable = session.path().join("patina-gpui.exe");
+    let mut running_dir = None;
     let mut preview: Option<Child> = None;
-    let mut running_build: Option<SystemTime> = None;
+    let mut running_build: Option<Vec<SystemTime>> = None;
     let mut changed = true;
     eprintln!(
         "Watching GPUI sources. Ctrl+C to exit. Profile: {}",
         profile.display()
     );
     while !STOP.load(Ordering::Relaxed) {
-        let build = if changed {
-            build(&desktop, &toolchain)?
-        } else {
-            None
-        };
+        let build = if changed { build(root)? } else { None };
         if let Some(child) = &mut preview
             && let Some(status) = child.try_wait()?
         {
@@ -152,24 +130,32 @@ fn develop(root: &Path, profile: &Path, args: &[String]) -> io::Result<()> {
             }
             break;
         }
-        if let Some(binary) = build {
-            let version = fs::metadata(&binary)?.modified()?;
-            if running_build != Some(version) && !STOP.load(Ordering::Relaxed) {
+        if let Some(binaries) = build {
+            let version = binaries
+                .iter()
+                .map(|p| fs::metadata(p)?.modified())
+                .collect::<io::Result<Vec<_>>>()?;
+            if running_build.as_ref() != Some(&version) && !STOP.load(Ordering::Relaxed) {
                 // Windows locks running executables. Keep Cargo's output free for the next build.
-                let staged = session.path().join("build.exe");
-                fs::copy(&binary, &staged)?;
+                let staged = tempfile::Builder::new()
+                    .prefix("bin-")
+                    .tempdir_in(session.path())?;
+                for binary in &binaries {
+                    fs::copy(binary, staged.path().join(binary.file_name().unwrap()))?;
+                }
                 stop(&mut preview)?;
-                fs::rename(staged, &executable)?;
+                let executable = staged.path().join("patina.exe");
                 preview = Some(
                     Command::new(&executable)
                         .args(args)
                         .env("PATINA_GPUI_PROFILE_PARENT", profile)
                         .env("PATINA_GPUI_DEV_SESSION", session.path())
-                        .env("PATINA_GPUI_DEV_BINARY", &binary)
+                        .env("PATINA_GPUI_DEV_BINARY", &binaries[0])
                         .creation_flags(CREATE_NO_WINDOW)
                         .stdin(Stdio::piped())
                         .spawn()?,
                 );
+                running_dir.replace(staged);
                 running_build = Some(version);
                 eprintln!("GPUI preview started.");
             }

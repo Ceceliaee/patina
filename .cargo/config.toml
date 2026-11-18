@@ -1,0 +1,3 @@
+[alias]
+xtask = "run --locked -p xtask --"
+test-headless = "test --workspace --features quietpro/test-support,patina-ui/test-support"

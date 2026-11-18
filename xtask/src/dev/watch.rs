@@ -11,17 +11,15 @@ use windows_sys::Win32::{
 pub struct Sources(Vec<HANDLE>);
 
 pub(super) const DIRECTORIES: &[(&str, bool)] = &[
-    ("desktop", false),
-    ("desktop/patina", true),
-    ("desktop/quietpro", true),
-    ("desktop/recorder", true),
-    ("desktop/tool-host", true),
-    ("desktop/plugin-sdk", true),
-    ("desktop/plugins/official", false),
-    ("desktop/plugins/official/focus", true),
-    ("desktop/plugins/official/reminders", true),
-    ("desktop/vendor", true),
-    ("desktop/patina/assets", true),
+    ("", false),
+    (".cargo", true),
+    ("apps", true),
+    ("crates", true),
+    ("locales", true),
+    ("plugins/official", false),
+    ("plugins/official/focus", true),
+    ("plugins/official/reminders", true),
+    ("vendor", true),
 ];
 
 impl Sources {

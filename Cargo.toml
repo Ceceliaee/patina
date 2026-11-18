@@ -1,18 +1,22 @@
-[package]
-name = "patina-dev"
-version = "0.1.0"
-edition = "2024"
-publish = false
-autobins = false
-
-[[bin]]
-name = "patina-dev"
-path = "scripts/gpui-dev/main.rs"
-
 [workspace]
-exclude = ["desktop"]
+members = ["xtask", "apps/*", "crates/*"]
+default-members = ["xtask"]
+exclude = ["vendor/accesskit_windows", "vendor/gpui-platform/fast", "vendor/gpui-platform/pre", "plugins/official", "plugins/counter", "examples/remote-status-bridge-worker"]
+resolver = "3"
 
-[dependencies]
-serde_json = "1"
-tempfile = "3"
-windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem", "Win32_System_Console", "Win32_System_Threading"] }
+[workspace.package]
+version = "1.10.0"
+
+[workspace.dependencies]
+gpui-kit = { version = "=0.9.1", default-features = false }
+sqlx = { git = "https://github.com/transact-rs/sqlx", rev = "10462fa4414c6c7f1ed1d39bb31678e3b726878c", default-features = false, features = ["sqlite", "runtime-tokio", "derive", "migrate"] }
+
+# Return UIA_E_ELEMENTNOTAVAILABLE when a geometry request outlives its HWND.
+[patch.crates-io]
+accesskit_windows = { path = "vendor/accesskit_windows" }
+gpui-fast-platform = { path = "vendor/gpui-platform/fast" }
+gpui-pre-platform = { path = "vendor/gpui-platform/pre" }
+
+[profile.dev]
+debug = "line-tables-only"
+incremental = false

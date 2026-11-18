@@ -1,5 +1,6 @@
 # Generated i18n outputs are byte-compared by the quality gate.
-desktop/recorder/src/domain/localization/generated*.rs text eol=lf
+crates/i18n/src/generated*.rs text eol=lf
+crates/i18n/src/messages.rs text eol=lf
 
 # Release policy tests inspect workflow source contracts byte-for-byte.
 .github/workflows/*.yml text eol=lf

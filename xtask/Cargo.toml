@@ -1,0 +1,27 @@
+[package]
+name = "xtask"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+syn = { version = "2", features = ["full", "visit"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+semver = "1"
+toml = "1"
+regex = "1"
+sha2 = "0.10"
+base64 = "0.22"
+patina-updater = { path = "../crates/updater", default-features = false }
+url = "2"
+tempfile = "3"
+toml_edit = "0.25"
+icu_locale = "2.4"
+icu_datetime = "2.4"
+icu_plurals = "2.4"
+zip = { version = "9.5.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+roxmltree = "0.21"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem", "Win32_System_Console", "Win32_System_Threading"] }

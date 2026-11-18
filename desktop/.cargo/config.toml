@@ -1,2 +1,0 @@
-[alias]
-test-headless = "test --workspace --features quietpro/test-support"

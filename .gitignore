@@ -35,3 +35,8 @@ skills-lock.json
 timetracker.db
 timetracker.db-shm
 timetracker.db-wal
+
+# Local Cloudflare build and credentials
+/examples/remote-status-bridge-worker/build/
+/examples/remote-status-bridge-worker/.wrangler/
+/examples/remote-status-bridge-worker/.dev.vars
