@@ -1,0 +1,275 @@
+mod generated;
+#[rustfmt::skip]
+pub mod messages;
+mod generated_data;
+pub use generated::Locale;
+
+use icu_locale::Locale as IcuLocale;
+use icu_plurals::{PluralCategory, PluralRules};
+use std::collections::BTreeMap;
+
+#[derive(Clone, Copy, Debug)]
+enum NativeExpr {
+    Literal(&'static str),
+    Arg(&'static str),
+    Concat(&'static [NativeExpr]),
+    IfEqual(
+        &'static str,
+        &'static str,
+        &'static NativeExpr,
+        &'static NativeExpr,
+    ),
+    Plural {
+        arg: &'static str,
+        cases: &'static [(&'static str, NativeExpr)],
+    },
+}
+
+pub fn text(locale: Locale, key: &str) -> String {
+    format_text(locale, key, &[])
+}
+
+pub fn format_text(locale: Locale, key: &str, args: &[(&str, String)]) -> String {
+    let values = args.iter().cloned().collect::<BTreeMap<_, _>>();
+    if let Some(expression) = generated::lookup(locale, key) {
+        match evaluate(expression, locale.tag(), &values) {
+            Ok(output) => return output,
+            Err(error) => eprintln!(
+                "[i18n] failed to format {key:?} for {}: {error}",
+                locale.tag()
+            ),
+        }
+    }
+    if locale != generated::SOURCE_LOCALE
+        && let Some(expression) = generated::lookup(generated::SOURCE_LOCALE, key)
+        && let Ok(output) = evaluate(expression, generated::SOURCE_LOCALE.tag(), &values)
+    {
+        return output;
+    }
+    eprintln!("[i18n] missing or invalid native message key {key:?}");
+    key.to_owned()
+}
+
+pub fn cardinal_category(locale_tag: &str, value: i64) -> Result<&'static str, String> {
+    let locale: IcuLocale = locale_tag
+        .parse()
+        .map_err(|error| format!("invalid locale {locale_tag:?}: {error}"))?;
+    let rules = PluralRules::try_new_cardinal(locale.into())
+        .map_err(|error| format!("plural rules unavailable for {locale_tag:?}: {error}"))?;
+    Ok(match rules.category_for(value) {
+        PluralCategory::Zero => "zero",
+        PluralCategory::One => "one",
+        PluralCategory::Two => "two",
+        PluralCategory::Few => "few",
+        PluralCategory::Many => "many",
+        PluralCategory::Other => "other",
+    })
+}
+
+fn evaluate(
+    expression: NativeExpr,
+    locale_tag: &str,
+    values: &BTreeMap<&str, String>,
+) -> Result<String, String> {
+    match expression {
+        NativeExpr::Literal(value) => Ok(value.to_owned()),
+        NativeExpr::Arg(name) => values
+            .get(name)
+            .cloned()
+            .ok_or_else(|| format!("missing argument {name:?}")),
+        NativeExpr::Concat(parts) => {
+            let mut output = String::new();
+            for part in parts {
+                output.push_str(&evaluate(*part, locale_tag, values)?);
+            }
+            Ok(output)
+        }
+        NativeExpr::IfEqual(arg, expected, yes, no) => {
+            let value = values
+                .get(arg)
+                .ok_or_else(|| format!("missing argument {arg:?}"))?;
+            evaluate(
+                if value == expected { *yes } else { *no },
+                locale_tag,
+                values,
+            )
+        }
+        NativeExpr::Plural { arg, cases } => {
+            let raw = values
+                .get(arg)
+                .ok_or_else(|| format!("missing plural argument {arg:?}"))?;
+            let value = raw
+                .parse::<i64>()
+                .map_err(|error| format!("plural argument {arg:?} is not an integer: {error}"))?;
+            let category = cardinal_category(locale_tag, value)?;
+            let selected = cases
+                .iter()
+                .find(|(candidate, _)| *candidate == category)
+                .or_else(|| cases.iter().find(|(candidate, _)| *candidate == "other"))
+                .ok_or_else(|| format!("plural expression has no {category:?} or other case"))?;
+            evaluate(selected.1, locale_tag, values)
+        }
+    }
+}
+
+pub fn has_message(locale: Locale, key: &str) -> bool {
+    generated::lookup(locale, key).is_some()
+}
+
+pub fn localized_data(locale: Locale, key: &str) -> Option<serde_json::Value> {
+    generated_data::lookup_data(locale, key)
+        .and_then(|value| serde_json::from_str(value).ok())
+        .or_else(|| {
+            generated_data::lookup_data(Locale::default(), key)
+                .and_then(|value| serde_json::from_str(value).ok())
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn typed_messages_and_locale_choices_follow_the_catalog() {
+        use messages::DashboardComparedWithYesterdayDirection::Increase;
+        assert_eq!(
+            messages::native_export_records(Locale::EnUs, 3),
+            "Records: 3"
+        );
+        assert_eq!(
+            messages::dashboard_compared_with_yesterday(Locale::EnUs, "15 min", Increase),
+            format_text(
+                Locale::EnUs,
+                "dashboard.comparedWithYesterday",
+                &[
+                    ("deltaLabel", "15 min".into()),
+                    ("direction", "increase".into())
+                ]
+            )
+        );
+        for &locale in Locale::ALL {
+            assert_eq!(Locale::from_tag(Some(locale.tag())), locale);
+            assert!(!locale.label().is_empty());
+            assert!(matches!(locale.direction(), "rtl" | "ltr"));
+        }
+    }
+
+    #[test]
+    fn russian_cardinal_categories_follow_cldr() {
+        for &(value, expected) in generated::RUSSIAN_CARDINAL_CASES {
+            assert_eq!(cardinal_category("ru-RU", value).unwrap(), expected);
+            assert_eq!(
+                evaluate(
+                    generated::RUSSIAN_CARDINAL_MESSAGE,
+                    "ru-RU",
+                    &BTreeMap::from([("count", value.to_string())]),
+                )
+                .unwrap(),
+                format!("{value}:{expected}")
+            );
+        }
+    }
+
+    #[test]
+    fn spanish_native_messages_and_cardinals_are_available() {
+        let locale = Locale::from_tag(Some("es"));
+        assert_eq!(locale.tag(), "es");
+        assert_eq!(text(locale, "native.tray.quit"), "Salir de Patina");
+        assert_eq!(
+            format_text(
+                locale,
+                "native.tools.activityReminderDefaultBody",
+                &[
+                    ("targetName", "Patina".into()),
+                    ("usageMinutes", "1".into()),
+                    ("limitMinutes", "1".into())
+                ]
+            ),
+            "Patina ha estado activo durante 1 minuto, alcanzando el límite diario de 1 minuto"
+        );
+        for (count, category) in [
+            (0, "other"),
+            (1, "one"),
+            (2, "other"),
+            (21, "other"),
+            (1_000_000, "many"),
+        ] {
+            assert_eq!(cardinal_category("es", count).unwrap(), category);
+            let prefix = if count == 1 { "Registro" } else { "Registros" };
+            assert_eq!(
+                format_text(
+                    locale,
+                    "native.export.records",
+                    &[("count", count.to_string())]
+                ),
+                format!("{prefix}: {count}")
+            );
+        }
+    }
+
+    #[test]
+    fn russian_production_messages_preserve_cardinals_and_user_names() {
+        let locale = Locale::from_tag(Some("ru-RU"));
+        assert_eq!(locale.tag(), "ru-RU");
+        assert_eq!(text(locale, "native.tray.quit"), "Выйти из Patina");
+        for (count, noun, minute) in [
+            (0, "записей", "минут"),
+            (1, "запись", "минута"),
+            (2, "записи", "минуты"),
+            (4, "записи", "минуты"),
+            (5, "записей", "минут"),
+            (11, "записей", "минут"),
+            (12, "записей", "минут"),
+            (14, "записей", "минут"),
+            (21, "запись", "минута"),
+            (22, "записи", "минуты"),
+            (25, "записей", "минут"),
+            (101, "запись", "минута"),
+            (111, "записей", "минут"),
+            (1_000_000, "записей", "минут"),
+        ] {
+            assert_eq!(
+                format_text(
+                    locale,
+                    "native.export.records",
+                    &[("count", count.to_string())]
+                ),
+                format!("{count} {noun}")
+            );
+            assert_eq!(
+                format_text(
+                    locale,
+                    "native.tools.activityReminderDefaultBody",
+                    &[
+                        ("targetName", "Code / 文档".into()),
+                        ("usageMinutes", count.to_string()),
+                        ("limitMinutes", count.to_string()),
+                    ]
+                ),
+                format!(
+                    "Активность «Code / 文档» за сегодня: {count} {minute}. Достигнут дневной лимит: {count} {minute}."
+                )
+            );
+        }
+        assert_eq!(
+            format_text(
+                locale,
+                "native.export.duration",
+                &[("hours", "0".into()), ("minutes", "0".into())]
+            ),
+            "0 ч 0 мин"
+        );
+    }
+
+    #[test]
+    fn formatter_substitutes_named_arguments_and_preserves_missing_ones() {
+        assert_eq!(
+            format_text(
+                Locale::EnUs,
+                "native.export.records",
+                &[("count", "3".into())]
+            ),
+            "Records: 3"
+        );
+    }
+}

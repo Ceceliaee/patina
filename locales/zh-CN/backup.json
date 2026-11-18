@@ -1,0 +1,9 @@
+{
+  "backup.appVersion": {"$type":"message","body":{"$op":"concat","parts":["应用版本：",{"$op":"arg","name":"version"},""]}},
+  "backup.exportedAt": {"$type":"message","body":{"$op":"concat","parts":["导出时间：",{"$op":"arg","name":"value"},""]}},
+  "backup.formatLabel": "备份类型：SQLite 数据快照",
+  "backup.importItemCounts": {"$type":"message","body":{"$op":"concat","parts":["外部导入：",{"$op":"arg","name":"batchCount"}," 批，精确记录：",{"$op":"arg","name":"exactCount"},"，小时汇总：",{"$op":"arg","name":"bucketCount"},""]}},
+  "backup.itemCounts": {"$type":"message","body":{"$op":"concat","parts":["Patina 原生活动：",{"$op":"arg","name":"sessionCount"},"，设置：",{"$op":"arg","name":"settingCount"},"，图标缓存：",{"$op":"arg","name":"iconCacheCount"},""]}},
+  "backup.restoreMessage": {"$type":"message","body":{"$op":"if","when":{"$op":"eq","left":{"$op":"arg","name":"key"},"right":"backup.restore.supported"},"then":"当前版本可以安全恢复此备份。","else":{"$op":"if","when":{"$op":"eq","left":{"$op":"arg","name":"key"},"right":"backup.restore.schemaTooNew"},"then":"此备份来自更新的数据库结构，请先升级应用。","else":{"$op":"arg","name":"fallback"}}}},
+  "backup.restoreSafety": {"$type":"message","body":{"$op":"concat","parts":["恢复状态：",{"$op":"arg","name":"message"},""]}}
+}

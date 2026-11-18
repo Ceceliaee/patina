@@ -1,0 +1,12 @@
+{
+  "date.compactPattern": "d MMM",
+  "date.calendarMonth": {"$type":"message","body":{"$op":"concat","parts":[{"$op":"arg","name":"month"}," / ",{"$op":"arg","name":"year"}]}},
+  "date.calendarWeekday": {"$type":"message","body":{"$op":"if","when":{"$op":"eq","left":{"$op":"arg","name":"day"},"right":"0"},"then":"пн","else":{"$op":"if","when":{"$op":"eq","left":{"$op":"arg","name":"day"},"right":"1"},"then":"вт","else":{"$op":"if","when":{"$op":"eq","left":{"$op":"arg","name":"day"},"right":"2"},"then":"ср","else":{"$op":"if","when":{"$op":"eq","left":{"$op":"arg","name":"day"},"right":"3"},"then":"чт","else":{"$op":"if","when":{"$op":"eq","left":{"$op":"arg","name":"day"},"right":"4"},"then":"пт","else":{"$op":"if","when":{"$op":"eq","left":{"$op":"arg","name":"day"},"right":"5"},"then":"сб","else":"вс"}}}}}}},
+  "date.heatmapWeekdays": ["пн","","ср","","пт","","вс"],
+  "date.monthLabel": {"$type":"message","body":{"$op":"monthName","year":2020,"zeroBasedMonth":{"$op":"subtract","left":{"$op":"arg","name":"month"},"right":1},"style":"short"}},
+  "date.pickDate": "Выбрать дату",
+  "date.today": "Сегодня",
+  "date.weekdaysShort": ["пн","вт","ср","чт","пт","сб","вс"],
+  "date.yearMonthLabel": {"$type":"message","body":{"$op":"concat","parts":["",{"$op":"monthName","year":{"$op":"arg","name":"year"},"zeroBasedMonth":{"$op":"subtract","left":{"$op":"arg","name":"month"},"right":1},"style":"long"}," ",{"$op":"arg","name":"year"},""]}},
+  "date.yesterday": "Вчера"
+}

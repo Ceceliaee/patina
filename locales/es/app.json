@@ -1,0 +1,8 @@
+{
+  "app.historyDeleted": "Registros de la app eliminados.",
+  "app.loadingView": "Cargando vista...",
+  "app.mappingUpdated": "Reglas de clasificación actualizadas.",
+  "app.unsavedConfirmBody": "Esta página tiene cambios sin guardar. Guarda antes de cambiar de página.",
+  "app.unsavedConfirmSave": "Guardar",
+  "app.unsavedConfirmTitle": "Guardar cambios"
+}
