@@ -14,19 +14,7 @@ use std::{
     time::Duration,
 };
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Installed {
-    pub manifest: Manifest,
-    pub generation: String,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Preview {
-    pub manifest: Manifest,
-    pub digest: String,
-    pub replaces: Option<String>,
-    pub publisher: String,
-}
+pub use patina_desktop_protocol::tools::{Installed, Notice, Preview, now_ms};
 
 #[derive(Clone, Serialize, Deserialize)]
 struct Record {
@@ -50,20 +38,6 @@ pub trait ToolData: Send {
     fn read(&self, id: &str, locale: &str, now: i64, state: &Value) -> Result<Value, String>;
     fn apply(&self, id: &str, command: Value, now: i64) -> Result<(), String>;
     fn suspend(&self, id: &str, now: i64) -> Result<(), String>;
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Notice {
-    pub id: String,
-    pub generation: String,
-    pub at_ms: i64,
-    pub label: String,
-    #[serde(default)]
-    pub source: Option<i64>,
-    #[serde(default)]
-    pub usage: bool,
-    #[serde(default)]
-    pub focus_task: Option<(String, i64, i64)>,
 }
 
 pub struct Host {
@@ -717,11 +691,3 @@ fn native_owner(manifest: &Manifest) -> bool {
 
 #[cfg(test)]
 mod limits;
-
-pub fn now_ms() -> i64 {
-    std::time::UNIX_EPOCH
-        .elapsed()
-        .unwrap_or_default()
-        .as_millis()
-        .min(i64::MAX as u128) as i64
-}

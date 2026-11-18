@@ -11,4 +11,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 extism-pdk = "1"
-patina-plugin-sdk = { path = "../../plugin-sdk" }
+patina-plugin-sdk = { path = "../../crates/plugin-sdk" }
