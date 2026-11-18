@@ -140,7 +140,7 @@ impl Today {
         let pointer_focus = trigger.clone();
         let keyboard_focus = trigger.clone();
         let keyboard_bounds = bounds.clone();
-        let share = (100. * app.duration as f64 / total as f64).round();
+        let share = (100. * app.duration_ms as f64 / total as f64).round();
         let face = quietpro::app_icon_frame(rgb(source_color), colors).child(if app.anonymous {
             super::anonymous::icon(rgb(source_color), app.name.clone(), 24.).into_any_element()
         } else {
@@ -229,7 +229,7 @@ impl Today {
                     .flex_col()
                     .items_end()
                     .gap(px(8.))
-                    .child(value(format!("{} · {share}%", duration(app.duration))))
+                    .child(value(format!("{} · {share}%", duration(app.duration_ms))))
                     .child(
                         div()
                             .w(px(100.))

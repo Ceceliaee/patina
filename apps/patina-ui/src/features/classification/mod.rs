@@ -16,7 +16,7 @@ use gpui_kit::{
     prelude::*,
     *,
 };
-use patina_activity_model::{Rules, text};
+use patina_activity_model::{ClassificationRules, text};
 use quietpro::{Icon, text_button};
 use std::{collections::BTreeMap, rc::Rc, sync::Arc};
 #[derive(Clone)]
@@ -27,7 +27,7 @@ struct AppIcon {
 pub(crate) struct Classification {
     focus: FocusHandle,
     client: Rc<Client>,
-    rules: Option<Rules>,
+    rules: Option<ClassificationRules>,
     read: Option<Task<()>>,
     icons: BTreeMap<String, AppIcon>,
     icons_loading: bool,
@@ -54,7 +54,7 @@ pub(crate) struct Classification {
 
     name: Entity<InputState>,
     web: bool,
-    web_draft: Option<patina_activity_model::WebDraft>,
+    web_draft: Option<patina_activity_model::WebsiteRuleDraft>,
     web_group: Option<String>,
     web_group_focus: BTreeMap<String, FocusHandle>,
     web_icons: BTreeMap<String, Option<AppIcon>>,
@@ -197,7 +197,7 @@ impl Classification {
     }
     fn reload(&mut self, discard_saved_draft: bool, cx: &mut Context<Self>) {
         self.icons_loading = true;
-        let read = self.client.rules();
+        let read = self.client.load_classification_rules();
         let client = self.client.clone();
         self.read = Some(cx.spawn(async move |view, cx| {
             let res = read.await;
@@ -362,7 +362,7 @@ impl Classification {
         self.finish_name(cx);
         self.color_picker = None;
         self.busy = true;
-        let write = self.client.save_rules(
+        let write = self.client.save_classification_rules(
             self.pending
                 .values()
                 .map(|a| self.effective_rule(a))

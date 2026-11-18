@@ -1,9 +1,9 @@
-use patina_activity_model::{AppRule, WebRule};
+use patina_activity_model::{AppRule, WebsiteRule};
 
 #[derive(Clone)]
 pub(super) enum Source {
     App(AppRule),
-    Web(WebRule),
+    Web(WebsiteRule),
 }
 
 #[derive(Clone)]
@@ -32,8 +32,8 @@ impl From<AppRule> for Card {
         }
     }
 }
-impl From<WebRule> for Card {
-    fn from(rule: WebRule) -> Self {
+impl From<WebsiteRule> for Card {
+    fn from(rule: WebsiteRule) -> Self {
         Self {
             key: format!("web:{}", rule.identity),
             identity: rule.domain.clone(),
@@ -72,7 +72,7 @@ impl Card {
         rule.titles = self.titles;
         Some(rule)
     }
-    pub fn web_rule(&self) -> Option<WebRule> {
+    pub fn web_rule(&self) -> Option<WebsiteRule> {
         let Source::Web(mut rule) = self.source.clone() else {
             return None;
         };

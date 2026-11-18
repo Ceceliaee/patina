@@ -639,8 +639,8 @@ impl History {
                 let b = r.end.min(end);
                 quietpro::TimelineSegment {
                     anonymous: r.key == "activity:anonymous",
-                    start: (a - start) as f32 / (end - start) as f32,
-                    end: (b - start) as f32 / (end - start) as f32,
+                    start_fraction: (a - start) as f32 / (end - start) as f32,
+                    end_fraction: (b - start) as f32 / (end - start) as f32,
                     color: color_for(if self.timeline_categories {
                         &r.category
                     } else {

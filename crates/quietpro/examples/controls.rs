@@ -63,7 +63,7 @@ impl Render for Controls {
 
 fn main() {
     if std::env::args_os().any(|arg| arg == "--verify")
-        && !patina_test_desktop::run_verify_example().expect("isolated controls desktop")
+        && !patina_test_support::run_verify_example().expect("isolated controls desktop")
     {
         return;
     }

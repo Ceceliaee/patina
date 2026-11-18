@@ -2,8 +2,8 @@ use crate::{Palette, content_card, continuous_frame, heading};
 use gpui_kit::{prelude::*, *};
 
 pub struct TimelineSegment {
-    pub start: f32,
-    pub end: f32,
+    pub start_fraction: f32,
+    pub end_fraction: f32,
     pub color: Rgba,
     pub description: String,
     pub anonymous: bool,
@@ -183,8 +183,8 @@ impl RenderOnce for TimelineOverview {
                     .bg(c.border),
             )
             .children(self.segments.into_iter().enumerate().filter_map(|(i, s)| {
-                let start = s.start.clamp(0., 1.);
-                let end = s.end.clamp(0., 1.);
+                let start = s.start_fraction.clamp(0., 1.);
+                let end = s.end_fraction.clamp(0., 1.);
                 if end <= start {
                     return None;
                 }

@@ -6,14 +6,14 @@ use std::collections::{BTreeMap, BTreeSet};
 const DOMAIN_PREFIX: &str = "__web_domain_override::";
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct WebMember {
+pub struct WebsiteMemberRule {
     pub domain: String,
     pub track: bool,
     pub titles: bool,
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct WebRule {
+pub struct WebsiteRule {
     pub identity: String,
     pub domain: String,
     pub root: Option<String>,
@@ -25,14 +25,14 @@ pub struct WebRule {
     pub tracking_mixed: bool,
     pub titles_mixed: bool,
     pub members: Vec<String>,
-    pub member_rules: Vec<WebMember>,
+    pub member_rules: Vec<WebsiteMemberRule>,
     pub favicon: Option<String>,
 }
 
 /// A website draft retains independent and group settings when members move.
 /// Only changed settings are persisted; observed metadata is read-only.
 #[derive(Clone, Default, Serialize, Deserialize)]
-pub struct WebDraft {
+pub struct WebsiteRuleDraft {
     pub original: BTreeMap<String, Option<String>>,
     pub values: BTreeMap<String, Map<String, Value>>,
     pub domains: BTreeSet<String>,
@@ -40,7 +40,7 @@ pub struct WebDraft {
     pub favicons: BTreeMap<String, String>,
 }
 
-impl WebDraft {
+impl WebsiteRuleDraft {
     fn value(&self, key: &str) -> Map<String, Value> {
         self.values.get(key).cloned().unwrap_or_else(|| {
             self.original
@@ -51,8 +51,8 @@ impl WebDraft {
         })
     }
 
-    pub fn cards(&self) -> Vec<WebRule> {
-        let mut groups = BTreeMap::<String, Vec<WebMember>>::new();
+    pub fn cards(&self) -> Vec<WebsiteRule> {
+        let mut groups = BTreeMap::<String, Vec<WebsiteMemberRule>>::new();
         for domain in &self.domains {
             let root = registrable_domain(domain);
             let independent = root.as_ref().is_some_and(|root| {
@@ -66,7 +66,7 @@ impl WebDraft {
                 .map(|root| group_key(&root))
                 .unwrap_or_else(|| domain.clone());
             let raw = self.value(&format!("{DOMAIN_PREFIX}{domain}"));
-            groups.entry(identity).or_default().push(WebMember {
+            groups.entry(identity).or_default().push(WebsiteMemberRule {
                 domain: domain.clone(),
                 track: raw.get("enabled").and_then(Value::as_bool).unwrap_or(true),
                 titles: raw
@@ -114,7 +114,7 @@ impl WebDraft {
                     })
                     .and_then(|m| self.favicons.get(&m.domain))
                     .cloned();
-                WebRule {
+                WebsiteRule {
                     root: registrable_domain(&domain),
                     identity,
                     domain: domain.clone(),
@@ -133,7 +133,7 @@ impl WebDraft {
             .collect()
     }
 
-    pub fn assign(&mut self, edit: &WebRule) {
+    pub fn assign(&mut self, edit: &WebsiteRule) {
         let Some(old) = self
             .cards()
             .into_iter()

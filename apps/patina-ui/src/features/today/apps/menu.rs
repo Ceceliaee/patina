@@ -76,7 +76,11 @@ impl Today {
             return;
         }
         let Some(popup) = &self.popup else { return };
-        let Some((id, _)) = self.data.as_ref().and_then(|d| d.choices.get(index)) else {
+        let Some((id, _)) = self
+            .data
+            .as_ref()
+            .and_then(|d| d.category_choices.get(index))
+        else {
             return;
         };
         let write = self
@@ -93,14 +97,14 @@ impl Today {
         menu.category = self
             .data
             .as_ref()
-            .filter(|d| !d.choices.is_empty())
+            .filter(|d| !d.category_choices.is_empty())
             .map(|d| {
                 let category = d
                     .apps
                     .iter()
                     .find(|a| a.key == popup.key)
                     .map(|a| &a.category);
-                d.choices
+                d.category_choices
                     .iter()
                     .position(|(id, _)| Some(id) == category)
                     .unwrap_or(0)
@@ -116,7 +120,7 @@ impl Today {
         let key = event.keystroke.key.as_str();
         let category = menu.category;
         let count = if category.is_some() {
-            self.data.as_ref().map_or(0, |d| d.choices.len())
+            self.data.as_ref().map_or(0, |d| d.category_choices.len())
         } else {
             2
         };
@@ -180,7 +184,7 @@ impl Today {
             true,
         ));
         let submenu_width = data
-            .choices
+            .category_choices
             .iter()
             .map(|(_, name)| quietpro::menu_width(win, name, false))
             .max()
@@ -302,7 +306,7 @@ impl Today {
                 submenu_width,
                 colors,
             );
-            for (i, (id, name)) in data.choices.iter().enumerate() {
+            for (i, (id, name)) in data.category_choices.iter().enumerate() {
                 let selected = app.category == *id;
                 submenu = submenu.child(
                     quietpro::menu_item(

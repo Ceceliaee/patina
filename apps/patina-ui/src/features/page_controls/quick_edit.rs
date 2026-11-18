@@ -1,6 +1,6 @@
 use crate::client::Client;
 use gpui_kit::{base::input::InputState, prelude::*, *};
-use patina_activity_model::{Rules, text};
+use patina_activity_model::{ClassificationRules, text};
 use std::rc::Rc;
 
 pub(crate) struct Closed(pub bool);
@@ -10,7 +10,7 @@ pub(crate) struct QuickEdit {
     web: bool,
     position: Point<Pixels>,
     focus: FocusHandle,
-    rules: Option<Rules>,
+    rules: Option<ClassificationRules>,
     input: Entity<InputState>,
     rename: bool,
     categories: bool,
@@ -35,7 +35,7 @@ impl QuickEdit {
                 .default_value(name)
                 .validate(|s, _| s.encode_utf16().count() <= 80)
         });
-        let read = client.rules();
+        let read = client.load_classification_rules();
         cx.spawn(async move |view, cx| {
             let result = read.await;
             let _ = view.update(cx, |this, cx| {
@@ -99,7 +99,9 @@ impl QuickEdit {
         };
         self.busy = true;
         self.error = false;
-        let write = self.client.save_rules(apps, web, Vec::new(), Vec::new());
+        let write = self
+            .client
+            .save_classification_rules(apps, web, Vec::new(), Vec::new());
         cx.spawn(async move |view, cx| {
             let result = write.await;
             let _ = view.update(cx, |this, cx| {

@@ -29,13 +29,18 @@ pub(super) fn focus(
         .map(|c| {
             (
                 c.label.clone(),
-                c.duration,
+                c.duration_ms,
                 activity_display_color(c.color, colors.panel, dark),
                 c.id == "anonymous",
             )
         })
         .collect();
-    let rest: i64 = data.categories.iter().skip(limit).map(|c| c.duration).sum();
+    let rest: i64 = data
+        .categories
+        .iter()
+        .skip(limit)
+        .map(|c| c.duration_ms)
+        .sum();
     if rest > 0 {
         slices.push((
             text(locale, "hourlyActivityChart.remainingCategories"),
@@ -71,7 +76,7 @@ pub(super) fn focus(
     if slices.is_empty() {
         legend = legend.child(caption(text(locale, "dashboard.emptyState"), colors));
     }
-    let total = data.total;
+    let total = data.total_duration_ms;
     let donut = quietpro::DonutChart {
         id: "today-focus-donut".into(),
         compact,
@@ -93,7 +98,7 @@ pub(super) fn focus(
             })
             .collect(),
     };
-    let delta = total - data.yesterday;
+    let delta = total - data.yesterday_duration_ms;
     let direction = match delta.cmp(&0) {
         std::cmp::Ordering::Greater => "increase",
         std::cmp::Ordering::Less => "decrease",
@@ -200,7 +205,7 @@ impl Today {
         dark: bool,
         cx: &mut Context<Self>,
     ) -> Div {
-        let grouped = data.category_mode;
+        let grouped = data.chart_by_category;
         let locale = self.client.locale.get();
         let category_colors: Vec<_> = data
             .categories
@@ -227,7 +232,14 @@ impl Today {
         for hour in 0..24 {
             let mut segments: Vec<_> = category_colors
                 .iter()
-                .map(|(c, color)| (c.hours[hour], c.label.clone(), *color, c.id == "anonymous"))
+                .map(|(c, color)| {
+                    (
+                        c.hourly_duration_ms[hour],
+                        c.label.clone(),
+                        *color,
+                        c.id == "anonymous",
+                    )
+                })
                 .filter(|(ms, _, _, _)| *ms > 0)
                 .collect();
             segments.sort_by_key(|s| s.0);

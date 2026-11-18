@@ -112,7 +112,7 @@ impl Today {
             let mut checked = HashSet::new();
             let mut checked_at = Instant::now();
             loop {
-                let result = client.today().await;
+                let result = client.load_today_summary().await;
                 let mut images = Vec::new();
                 if let Ok(data) = &result {
                     if checked_at.elapsed() >= Duration::from_secs(60) {
@@ -154,7 +154,7 @@ impl Today {
                         }
                         this.error = None;
                         let delay = if client.paused() {
-                            ((data.day_end - chrono::Local::now().timestamp_millis()).max(1000)
+                            ((data.day_end_ms - chrono::Local::now().timestamp_millis()).max(1000)
                                 as u64)
                                 .div_ceil(1000)
                         } else {
@@ -166,11 +166,9 @@ impl Today {
                     }
                     Err(e) => {
                         eprintln!("read Today: {e}");
-                        if this
-                            .data
-                            .as_ref()
-                            .is_some_and(|d| d.day_end <= chrono::Local::now().timestamp_millis())
-                        {
+                        if this.data.as_ref().is_some_and(|d| {
+                            d.day_end_ms <= chrono::Local::now().timestamp_millis()
+                        }) {
                             this.data = None;
                             this.icons.clear();
                         }
@@ -198,7 +196,7 @@ impl Today {
 
     fn save(
         &mut self,
-        write: impl Future<Output = Result<(), String>> + 'static,
+        write: impl Future<Output = Result<(), patina_desktop_protocol::RequestError>> + 'static,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -246,7 +244,7 @@ impl Render for Today {
             let width = ((f32::from(page_width) - horizontal_insets - quietpro::CARD_GAP) * 0.45)
                 .max(OVERVIEW_MIN_WIDTH)
                 - horizontal_insets;
-            let mode = data.category_mode;
+            let mode = data.chart_by_category;
             let toggle = IconControl::new(
                 "chart-mode",
                 self.label(if mode {
@@ -310,7 +308,7 @@ impl Render for Today {
                 .children(
                     data.apps
                         .iter()
-                        .map(|app| self.row(app, data.total, colors, window, cx)),
+                        .map(|app| self.row(app, data.total_duration_ms, colors, window, cx)),
                 )
                 .when(data.apps.is_empty(), |s| {
                     s.items_center()

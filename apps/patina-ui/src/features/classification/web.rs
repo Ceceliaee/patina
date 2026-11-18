@@ -1,9 +1,9 @@
 use super::*;
 use gpui_kit::base::Button;
-use patina_activity_model::{WebDraft, WebRule};
+use patina_activity_model::{WebsiteRule, WebsiteRuleDraft};
 
 impl Classification {
-    pub(super) fn website_draft(&self) -> Option<WebDraft> {
+    pub(super) fn website_draft(&self) -> Option<WebsiteRuleDraft> {
         let mut draft = self
             .web_draft
             .clone()
@@ -16,11 +16,11 @@ impl Classification {
         Some(draft)
     }
 
-    pub(super) fn websites(&self) -> Vec<WebRule> {
+    pub(super) fn websites(&self) -> Vec<WebsiteRule> {
         self.website_draft().map(|d| d.cards()).unwrap_or_default()
     }
 
-    fn edit_website(&mut self, edit: impl FnOnce(&mut WebDraft), cx: &mut Context<Self>) {
+    fn edit_website(&mut self, edit: impl FnOnce(&mut WebsiteRuleDraft), cx: &mut Context<Self>) {
         if self.busy {
             return;
         }
@@ -156,7 +156,7 @@ impl Classification {
 
     fn web_members(
         &self,
-        site: &WebRule,
+        site: &WebsiteRule,
         titles_enabled: bool,
         c: quietpro::Palette,
         cx: &mut Context<Self>,

@@ -18,26 +18,37 @@ use chrono::{Local, TimeZone, Timelike};
 use sqlx::SqlitePool;
 use std::collections::BTreeMap;
 
-pub use patina_activity_model::views::today::{AppUsage, Category, DaySummary};
+pub use patina_activity_model::views::today::{AppUsage, CategoryUsage, DaySummary};
 
 pub(super) fn parse_color(raw: &str) -> Option<u32> {
     u32::from_str_radix(raw.trim_start_matches('#'), 16).ok()
 }
 
-pub async fn load(pool: SqlitePool, now: i64, locale: crate::Locale) -> Result<DaySummary, String> {
-    let (day_start, day_end) = local_day_range_at(now)?;
-    let (yesterday_start, _) = local_day_range_at(day_start - 1)?;
+pub async fn load_day_summary_at(
+    pool: SqlitePool,
+    as_of_ms: i64,
+    locale: crate::Locale,
+) -> Result<DaySummary, String> {
+    let (day_start_ms, day_end_ms) = local_day_range_at(as_of_ms)?;
+    let (yesterday_start_ms, _) = local_day_range_at(day_start_ms - 1)?;
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
     let mapping = load_classification_snapshot_in_tx(&mut tx).await?;
     let prefs: Vec<(String, String)> = sqlx::query_as("SELECT key,value FROM settings WHERE key IN ('hourly_activity_chart_mode','refresh_interval_secs') OR key GLOB '__category_default_color_assignment::*'")
         .fetch_all(&mut *tx).await.map_err(|e| e.to_string())?;
     let prefs: BTreeMap<_, _> = prefs.into_iter().collect();
-    let ranges = load_range_in_tx(&mut tx, yesterday_start, now, &[day_start], now).await?;
+    let ranges = load_range_in_tx(
+        &mut tx,
+        yesterday_start_ms,
+        as_of_ms,
+        &[day_start_ms],
+        as_of_ms,
+    )
+    .await?;
     tx.commit().await.map_err(|e| e.to_string())?;
     let mut apps = BTreeMap::new();
     let mut categories = BTreeMap::new();
-    let mut total = 0;
-    let mut yesterday = 0;
+    let mut total_duration_ms = 0;
+    let mut yesterday_duration_ms = 0;
     for record in ranges.records {
         let key = if record.anonymous {
             ANONYMOUS_ACTIVITY_KEY.to_owned()
@@ -52,10 +63,10 @@ pub async fn load(pool: SqlitePool, now: i64, locale: crate::Locale) -> Result<D
         {
             continue;
         }
-        yesterday +=
-            (record.end_time.min(day_start) - record.start_time.max(yesterday_start)).max(0);
-        let mut start = record.start_time.max(day_start);
-        let end = record.end_time.min(now);
+        yesterday_duration_ms +=
+            (record.end_time.min(day_start_ms) - record.start_time.max(yesterday_start_ms)).max(0);
+        let mut start = record.start_time.max(day_start_ms);
+        let end = record.end_time.min(as_of_ms);
         if end <= start {
             continue;
         }
@@ -68,19 +79,19 @@ pub async fn load(pool: SqlitePool, now: i64, locale: crate::Locale) -> Result<D
         } else {
             mapping.display_category(&key, &prefs)
         };
-        let cat = categories
+        let category = categories
             .entry(resolved.id.clone())
-            .or_insert_with(|| Category {
+            .or_insert_with(|| CategoryUsage {
                 color: parse_color(&resolved.color).unwrap_or(0x8f98a8),
                 id: resolved.id.clone(),
                 label: resolved.label.clone(),
-                hours: [0; 24],
-                duration: 0,
+                hourly_duration_ms: [0; 24],
+                duration_ms: 0,
             });
         let (custom_name, color) = mapping.app_appearance(&key);
         let app = apps.entry(key.clone()).or_insert_with(|| AppUsage {
             name: if record.anonymous {
-                cat.label.clone()
+                category.label.clone()
             } else {
                 custom_name
                     .unwrap_or_else(|| {
@@ -95,53 +106,53 @@ pub async fn load(pool: SqlitePool, now: i64, locale: crate::Locale) -> Result<D
                     .into()
             },
             color: color.and_then(parse_color).unwrap_or_else(|| {
-                if cat.id == "other" {
+                if category.id == "other" {
                     crate::color::app_color(&key)
                 } else {
-                    cat.color
+                    category.color
                 }
             }),
             custom_color: color.and_then(parse_color),
             key,
-            category: cat.id.clone(),
+            category: category.id.clone(),
             anonymous: record.anonymous,
-            hours: [0; 24],
-            duration: 0,
+            hourly_duration_ms: [0; 24],
+            duration_ms: 0,
         });
-        let duration = end - start;
-        cat.duration += duration;
-        app.duration += duration;
-        total += duration;
+        let duration_ms = end - start;
+        category.duration_ms += duration_ms;
+        app.duration_ms += duration_ms;
+        total_duration_ms += duration_ms;
         while start < end {
             let local = Local
                 .timestamp_millis_opt(start)
                 .single()
                 .ok_or("invalid activity timestamp")?;
             let hour = local.hour() as usize;
-            let within_hour = i64::from(local.minute() * 60 + local.second()) * 1000
+            let within_hour_ms = i64::from(local.minute() * 60 + local.second()) * 1000
                 + i64::from(local.timestamp_subsec_millis());
-            let next = (start + 3_600_000 - within_hour).min(end);
-            app.hours[hour] += next - start;
-            cat.hours[hour] += next - start;
-            start = next;
+            let next_hour_or_end_ms = (start + 3_600_000 - within_hour_ms).min(end);
+            app.hourly_duration_ms[hour] += next_hour_or_end_ms - start;
+            category.hourly_duration_ms[hour] += next_hour_or_end_ms - start;
+            start = next_hour_or_end_ms;
         }
     }
     let mut apps: Vec<_> = apps.into_values().collect();
-    apps.sort_by_key(|app| std::cmp::Reverse(app.duration));
+    apps.sort_by_key(|app| std::cmp::Reverse(app.duration_ms));
     let mut categories: Vec<_> = categories.into_values().collect();
-    categories.sort_by_key(|cat| std::cmp::Reverse(cat.duration));
+    categories.sort_by_key(|category| std::cmp::Reverse(category.duration_ms));
     Ok(DaySummary {
-        day_end,
+        day_end_ms,
         apps,
         categories,
-        total,
-        yesterday,
-        choices: mapping
+        total_duration_ms,
+        yesterday_duration_ms,
+        category_choices: mapping
             .available_categories()
             .into_iter()
             .map(|c| (c.id, c.label))
             .collect(),
-        category_mode: prefs
+        chart_by_category: prefs
             .get("hourly_activity_chart_mode")
             .is_some_and(|m| m == "category"),
         refresh_seconds: prefs

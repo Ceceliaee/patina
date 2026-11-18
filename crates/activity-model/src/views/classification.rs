@@ -1,4 +1,4 @@
-use super::draft::WebDraft;
+use super::website_rules::WebsiteRuleDraft;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -18,10 +18,10 @@ pub struct AppLinkEdit {
     pub original: Option<String>,
 }
 #[derive(Serialize, Deserialize)]
-pub struct Rules {
+pub struct ClassificationRules {
     pub web_enabled: bool,
     pub web_mode: bool,
-    pub websites: WebDraft,
+    pub websites: WebsiteRuleDraft,
     pub titles_enabled: bool,
     pub category_default_colors: BTreeMap<String, String>,
     pub category_color_overrides: BTreeMap<String, String>,

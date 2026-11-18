@@ -1,5 +1,5 @@
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
-pub enum Activity {
+pub enum CurrentActivity {
     Waiting,
     Unavailable,
     Paused,

@@ -1,6 +1,6 @@
 use super::{Client, History, HistoryDay};
 use gpui_kit::{AppContext, TestAppContext, WindowOptions};
-use patina_desktop_protocol::{FromWindow, Query, Reply};
+use patina_desktop_protocol::{FromWindow, Reply, WindowRequest};
 use std::sync::mpsc::Receiver;
 
 fn day(start: i64) -> HistoryDay {
@@ -29,15 +29,15 @@ fn wait_for_day(
     for _ in 0..8 {
         cx.run_until_parked();
         for msg in requests.try_iter() {
-            if let FromWindow::Query(id, query) = msg {
-                match *query {
-                    Query::HistoryModes(None) => {
+            if let FromWindow::Request(id, request) = msg {
+                match *request {
+                    WindowRequest::HistoryModes(None) => {
                         client.test_answer(id, Reply::HistoryModes(([0; 3], false)))
                     }
-                    Query::HistoryZoom(None) | Query::DetailZoom(None) => {
+                    WindowRequest::HistoryZoom(None) | WindowRequest::DetailZoom(None) => {
                         client.test_answer(id, Reply::Zoom(4.))
                     }
-                    Query::History { day, .. } if day == expected => return id,
+                    WindowRequest::History { day, .. } if day == expected => return id,
                     _ => panic!("unexpected request during history load"),
                 }
             }
