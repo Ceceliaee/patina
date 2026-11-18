@@ -15,8 +15,6 @@ const require = createRequire(import.meta.url);
 const excelRequire = createRequire(require.resolve("exceljs"));
 const archiverRequire = createRequire(excelRequire.resolve("archiver"));
 const archiveUtilsRequire = createRequire(archiverRequire.resolve("archiver-utils"));
-const coverageRequire = createRequire(require.resolve("c8"));
-const excludeRequire = createRequire(coverageRequire.resolve("test-exclude"));
 const globFixture = mkdtempSync(path.join(os.tmpdir(), "patina-glob-compat-"));
 try {
   mkdirSync(path.join(globFixture, "nested"));
@@ -26,9 +24,6 @@ try {
   const normalizedMatches = (matches: string[]) => matches.map(name => name.replaceAll("\\", "/")).sort();
   const archiveGlob = archiveUtilsRequire("glob");
   assert.deepEqual(normalizedMatches(archiveGlob.globSync("**/*.{ts,tsx,txt}", options)), expected);
-  const modernGlob = excludeRequire("glob");
-  assert.deepEqual(normalizedMatches(await modernGlob.glob("**/*.{ts,tsx,txt}", options)), expected);
-  await assert.rejects(modernGlob.glob("**/*", { ...options, signal: AbortSignal.abort() }));
   const ExcelJS = require("exceljs");
   const workbook = new ExcelJS.Workbook();
   workbook.addWorksheet("Compatibility").addRow(["Focus", 25]);
@@ -43,19 +38,13 @@ try {
   await streamingWorkbook.commit();
   await restored.xlsx.load(Buffer.concat(chunks));
   assert.equal(restored.getWorksheet("Streaming").getCell("B1").value, 5);
-  console.log("PASS patched glob dependencies preserve archive matching, coverage traversal, cancellation and XLSX round trips");
+  console.log("PASS patched glob dependencies preserve archive matching and XLSX round trips");
 } finally {
   rmSync(globFixture, { recursive: true, force: true });
 }
 
 const cleanRustReport = { vulnerabilities: { list: [] }, warnings: {} };
 const crateLock = (name: string, version: string) => `[[package]]\nname = "${name}"\nversion = "${version}"\n`;
-for (const version of ["2.0.0", "2.10.3", "2.11.0"]) {
-  assert.equal(collectRustAuditFindings(cleanRustReport, crateLock("tauri", version))[0]?.advisory?.id, "GHSA-7gmj-67g7-phm9");
-}
-for (const version of ["2.11.1", "2.11.5", "2.12.0"]) {
-  assert.deepEqual(collectRustAuditFindings(cleanRustReport, crateLock("tauri", version)), []);
-}
 assert.equal(collectRustAuditFindings(cleanRustReport, crateLock("thrift", "0.17.0")).length, 1);
 assert.equal(collectRustAuditFindings(cleanRustReport, crateLock("thrift", "0.22.0")).length, 1);
 assert.deepEqual(collectRustAuditFindings(cleanRustReport, crateLock("thrift", "0.23.0")), []);
@@ -69,7 +58,7 @@ const unsound = { advisory: { id: "RUSTSEC-example" }, package: { name: "example
 assert.deepEqual(collectRustAuditFindings({ ...cleanRustReport, warnings: { unsound: [unsound] } }, ""), [unsound]);
 assert.deepEqual(collectRustAuditFindings({ vulnerabilities: { list: [unsound] }, warnings: {} }, ""), [unsound]);
 assert.throws(() => collectRustAuditFindings({}, ""), /Incomplete/);
-assert.throws(() => collectRustAuditFindings(cleanRustReport, crateLock("tauri", "2.11.1-rc.1")), /Unsupported/);
+assert.throws(() => collectRustAuditFindings(cleanRustReport, crateLock("thrift", "0.23.0-rc.1")), /Unsupported/);
 console.log("PASS Rust audit: GitHub-only version ranges, unsound findings and incomplete reports");
 
 const failure = (report: unknown) => ({ status: 1, stdout: JSON.stringify(report), stderr: "" });

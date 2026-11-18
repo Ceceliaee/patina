@@ -21,10 +21,7 @@ pub(super) const DIRECTORIES: &[(&str, bool)] = &[
     ("desktop/plugins/official/focus", true),
     ("desktop/plugins/official/reminders", true),
     ("desktop/vendor", true),
-    ("src-tauri/src", true),
-    ("src-tauri/icons", true),
     ("desktop/patina/assets", true),
-    ("src/shared/theme", false),
 ];
 
 impl Sources {

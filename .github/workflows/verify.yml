@@ -57,8 +57,8 @@ jobs:
           VERIFY_WORKFLOW_REF: ${{ github.workflow_ref }}
         run: node --experimental-strip-types scripts/check-verify-candidate.ts
 
-  frontend:
-    name: Frontend checks
+  tooling:
+    name: Repository tooling checks
     needs: candidate
     runs-on: windows-latest
 
@@ -96,84 +96,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run frontend quality gate
+      - name: Check repository tooling
         run: pnpm run check
 
-      - name: Upload core risk coverage
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: core-risk-coverage
-          path: artifacts/coverage
-          if-no-files-found: error
-
-  rust-quality:
-    name: Rust checks (${{ matrix.arch }})
-    needs: candidate
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: x64
-            runner: windows-latest
-            target: x86_64-pc-windows-msvc
-          - arch: arm64
-            runner: windows-11-arm
-            target: aarch64-pc-windows-msvc
-
-    steps:
-      - name: Checkout verified candidate
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: ${{ needs.candidate.outputs.head_sha }}
-          # Fork code requires the trusted candidate gate; jobs retain fixed SHA and read-only permissions.
-          allow-unsafe-pr-checkout: ${{ github.event_name == 'workflow_run' && needs.candidate.result == 'success' }}
-          persist-credentials: false
-
-      - name: Assert verified candidate before executing repository code
-        shell: pwsh
-        env:
-          VERIFIED_HEAD_SHA: ${{ needs.candidate.outputs.head_sha }}
-        run: |
-          $actual = git rev-parse HEAD
-          if ($LASTEXITCODE -ne 0 -or $actual -cne $env:VERIFIED_HEAD_SHA) { throw "Verified candidate HEAD mismatch" }
-          Write-Output "Executing verified candidate $actual"
-
-      - name: Install pinned pnpm
+      - name: Verify dependency advisories
         shell: pwsh
         run: |
-          $packageManager = (Get-Content package.json -Raw | ConvertFrom-Json).packageManager
-          npm install --global $packageManager
-          if ($LASTEXITCODE -ne 0) { throw "pnpm installation failed" }
-
-      - name: Setup Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version-file: .node-version
-          package-manager-cache: false
-
-      - name: Setup Rust from rust-toolchain.toml
-        shell: pwsh
-        run: |
-          rustup set default-host ${{ matrix.target }}
-          if ($LASTEXITCODE -ne 0) { throw "Rust host configuration failed" }
-          rustup toolchain install --no-self-update
-          if ($LASTEXITCODE -ne 0) { throw "Rust installation failed" }
-          $hostInfo = rustc -vV
-          if ($hostInfo -notcontains "host: ${{ matrix.target }}") { throw "Rust host architecture mismatch" }
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run Rust quality gate
-        run: pnpm run check:rust
-
-      - name: Install RustSec audit tool
-        run: cargo install cargo-audit --version 0.22.2 --locked
-
-      - name: Audit JavaScript and Rust dependencies
-        run: pnpm run check:dependencies
+          cargo install cargo-audit --version 0.22.2 --locked
+          if ($LASTEXITCODE -ne 0) { throw "Audit tool installation failed" }
+          pnpm run check:dependencies
 
   native-desktop:
     name: Native desktop checks (${{ matrix.arch }})
@@ -219,48 +150,33 @@ jobs:
           $hostInfo = rustc -vV
           if ($hostInfo -notcontains "host: ${{ matrix.target }}") { throw "Rust host architecture mismatch" }
 
-      - name: Check native workspace
+      - name: Check headless workspace
         shell: pwsh
         working-directory: desktop
         run: |
           cargo fmt --all -- --check
           if ($LASTEXITCODE -ne 0) { throw "Native format check failed" }
-          cargo test --locked --workspace
+          cargo test-headless --locked
           if ($LASTEXITCODE -ne 0) { throw "Native workspace tests failed" }
-          cargo clippy --locked --workspace --all-targets -- -D warnings
+          cargo clippy --locked --workspace --exclude patina-recorder --all-targets --features quietpro/test-support,quietpro/native-tests,patina-gpui/native-tests,patina-updater/native-tests -- -D warnings
           if ($LASTEXITCODE -ne 0) { throw "Native Clippy failed" }
+          cargo clippy --locked -p patina-recorder --all-targets -- -D warnings
+          if ($LASTEXITCODE -ne 0) { throw "Recorder Clippy failed" }
 
-      - name: Install NSIS for lifecycle tests
-        shell: pwsh
-        run: |
-          choco install nsis --version=3.11.0 -y --no-progress
-          if ($LASTEXITCODE -ne 0) { throw "NSIS installation failed" }
-
-      - name: Verify update interactions and installer lifecycle
-        shell: pwsh
-        working-directory: desktop
-        run: |
-          $env:PATINA_TEST_MAKENSIS = "${env:ProgramFiles(x86)}/NSIS/makensis.exe"
-          cargo test --locked -p patina-gpui --test updater native_update_download_confirmation_and_navigation -- --ignored --exact --test-threads=1
-          if ($LASTEXITCODE -ne 0) { throw "Native update interaction test failed" }
-          cargo test --locked -p patina-updater --test installer native_install_upgrade_shutdown_and_uninstall -- --ignored --exact --test-threads=1
-          if ($LASTEXITCODE -ne 0) { throw "Installer lifecycle test failed" }
-
-      - name: Audit native dependencies
-        working-directory: desktop
-        shell: pwsh
-        run: |
-          cargo install cargo-audit --version 0.22.2 --locked
-          if ($LASTEXITCODE -ne 0) { throw "Audit tool installation failed" }
-          cargo audit --file Cargo.lock
-          if ($LASTEXITCODE -ne 0) { throw "Native dependency audit failed" }
-
-  tauri-runtime-smoke:
-    name: Tauri runtime smoke
-    needs: candidate
-    runs-on: windows-latest
-    # Include runner setup and dependency installation before the runtime step.
-    timeout-minutes: 30
+  native-acceptance:
+    name: Native Windows acceptance (${{ matrix.arch }})
+    needs: [candidate, native-desktop]
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+          - arch: arm64
+            runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
 
     steps:
       - name: Checkout verified candidate
@@ -280,40 +196,33 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or $actual -cne $env:VERIFIED_HEAD_SHA) { throw "Verified candidate HEAD mismatch" }
           Write-Output "Executing verified candidate $actual"
 
-      - name: Install pinned pnpm
+      - name: Setup Rust from desktop/rust-toolchain.toml
+        shell: pwsh
+        working-directory: desktop
+        run: |
+          rustup set default-host ${{ matrix.target }}
+          if ($LASTEXITCODE -ne 0) { throw "Rust host configuration failed" }
+          rustup toolchain install --no-self-update --component rustfmt --component clippy
+          if ($LASTEXITCODE -ne 0) { throw "Rust installation failed" }
+          $hostInfo = rustc -vV
+          if ($hostInfo -notcontains "host: ${{ matrix.target }}") { throw "Rust host architecture mismatch" }
+
+      - name: Install NSIS for lifecycle tests
         shell: pwsh
         run: |
-          $packageManager = (Get-Content package.json -Raw | ConvertFrom-Json).packageManager
-          npm install --global $packageManager
-          if ($LASTEXITCODE -ne 0) { throw "pnpm installation failed" }
+          choco install nsis --version=3.11.0 -y --no-progress
+          if ($LASTEXITCODE -ne 0) { throw "NSIS installation failed" }
 
-      - name: Setup Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version-file: .node-version
-          package-manager-cache: false
-
-      - name: Setup Rust from rust-toolchain.toml
-        run: rustup toolchain install --no-self-update
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Fetch locked runtime build dependencies
-        run: cargo fetch --manifest-path src-tauri/Cargo.toml --locked
-
-      - name: Run isolated runtime smoke
-        # Allow the eight-minute cold build plus the measured ordinary runtime
-        # union (~eight minutes), startup and cleanup. Resource cycles stay separate.
-        timeout-minutes: 20
-        run: pnpm run test:tauri-runtime-smoke
-
-      - name: Upload runtime phase results
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: runtime-results-${{ needs.candidate.outputs.head_sha }}
-          path: |
-            artifacts/runtime-smoke/**/result.json
-            artifacts/runtime-smoke/**/*.log
-          if-no-files-found: warn
+      - name: Verify update interactions and installer lifecycle
+        shell: pwsh
+        working-directory: desktop
+        run: |
+          $env:PATINA_TEST_MAKENSIS = "${env:ProgramFiles(x86)}/NSIS/makensis.exe"
+          foreach ($case in @("tools::preference_segments_persist_and_support_keyboard", "tools::mini_opens_the_selected_tool_and_keeps_dirty_settings", "tools::in_window_reminder_uses_the_selected_delivery")) {
+            cargo test --locked -p patina-gpui --features native-tests --test pages $case -- --ignored --exact --test-threads=1
+            if ($LASTEXITCODE -ne 0) { throw "Native tool interaction failed: $case" }
+          }
+          cargo test --locked -p patina-gpui --features native-tests --test updater native_update_download_confirmation_and_navigation -- --ignored --exact --test-threads=1
+          if ($LASTEXITCODE -ne 0) { throw "Native update interaction test failed" }
+          cargo test --locked -p patina-updater --features native-tests --test installer native_install_upgrade_shutdown_and_uninstall -- --ignored --exact --test-threads=1
+          if ($LASTEXITCODE -ne 0) { throw "Installer lifecycle test failed" }
