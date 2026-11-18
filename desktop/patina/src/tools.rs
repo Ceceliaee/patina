@@ -37,6 +37,8 @@ pub(super) struct Tools {
     target: Option<patina_recorder::ToolTarget>,
     pending: Option<Confirm>,
     modal_focus: Option<FocusHandle>,
+    section_focus: Vec<FocusHandle>,
+    pub(super) labels: bool,
     manager_focus: FocusHandle,
     confirm_focus: FocusHandle,
     cancel_focus: FocusHandle,
@@ -50,6 +52,7 @@ impl Tools {
     pub fn new(
         client: Rc<Client>,
         target: Option<patina_recorder::ToolTarget>,
+        labels: bool,
         cx: &mut Context<Self>,
     ) -> Self {
         let mut page = Self {
@@ -66,6 +69,8 @@ impl Tools {
             target,
             pending: None,
             modal_focus: None,
+            section_focus: Vec::new(),
+            labels,
             manager_focus: cx.focus_handle(),
             confirm_focus: cx.focus_handle(),
             cancel_focus: cx.focus_handle(),
@@ -111,12 +116,18 @@ impl Tools {
     fn list(&mut self, cx: &mut Context<Self>) {
         self.run(
             ToolRequest::List,
-            |this, (tools, failed): (Vec<Installed>, bool), cx| {
+            |this, (mut tools, failed, last): (Vec<Installed>, bool, Option<String>), cx| {
+                tools.sort_by_key(|tool| match tool.manifest.id.as_str() {
+                    "patina.reminders" => 0,
+                    "patina.focus" => 1,
+                    _ => 2,
+                });
                 this.display_failed = failed;
                 let target = this.target.take();
                 let preferred = target
                     .map(|t| t.id())
-                    .or_else(|| this.selected.as_ref().map(|p| p.manifest.id.as_str()));
+                    .or_else(|| this.selected.as_ref().map(|p| p.manifest.id.as_str()))
+                    .or(last.as_deref());
                 if target.is_some()
                     && !tools
                         .iter()
@@ -129,6 +140,8 @@ impl Tools {
                     .find(|p| Some(p.manifest.id.as_str()) == preferred)
                     .or_else(|| tools.first())
                     .cloned();
+                this.section_focus
+                    .resize_with(tools.len(), || cx.focus_handle());
                 this.tools = tools;
                 if !this.manager {
                     this.load(None, cx);
@@ -154,6 +167,7 @@ impl Tools {
                 id: t.manifest.id.clone(),
                 generation: t.generation.clone(),
                 action: None,
+                remember: false,
             },
             |t, controls, _| {
                 t.controls = controls;
@@ -170,6 +184,7 @@ impl Tools {
         let request = ToolRequest::Panel {
             id: tool.manifest.id.clone(),
             generation: tool.generation.clone(),
+            remember: action.is_none(),
             action,
         };
         self.run(
@@ -279,18 +294,26 @@ impl Render for Tools {
                 .position(|tool| tool.manifest.id == selected.manifest.id)
         });
         let view = cx.weak_entity();
-        let tools = self.tools.clone();
-        let selector = quietpro::Dropdown::new(
-            "tool-select",
-            tr("tools.title"),
+        let selector = quietpro::section_rail(
+            ("tool-select", tr("tools.title")),
             self.tools.iter().enumerate().map(|(index, tool)| {
                 (
                     index,
                     tool_name(&tool.manifest.id, &tool.manifest.name, locale),
+                    Some(match tool.manifest.id.as_str() {
+                        "patina.reminders" => quietpro::Icon::Bell,
+                        "patina.focus" => quietpro::Icon::Clock,
+                        _ => quietpro::Icon::ToolCase,
+                    }),
+                    self.section_focus[index].clone(),
                 )
             }),
-            selected.unwrap_or(0),
+            selected
+                .filter(|_| !self.manager && self.preferences.is_none())
+                .unwrap_or(usize::MAX),
+            ready,
             colors,
+            self.labels,
             move |index, _, cx| {
                 let _ = view.update(cx, |this, cx| {
                     if this.busy || this.pending.is_some() {
@@ -298,19 +321,17 @@ impl Render for Tools {
                     }
                     this.manager = false;
                     this.preferences = None;
-                    this.selected = Some(tools[index].clone());
+                    let Some(tool) = this.tools.get(index) else {
+                        return;
+                    };
+                    this.selected = Some(tool.clone());
                     this.controls.clear();
                     this.load(None, cx);
                 });
             },
-        )
-        .disabled(!ready);
-        let top = page_title_row(tr("tools.title"), quietpro::Icon::ToolCase, colors).child(
-            page_actions()
-                .when(!self.tools.is_empty(), |actions| actions.child(selector))
-                .child(manager)
-                .child(preferences),
         );
+        let top = page_title_row(tr("tools.title"), quietpro::Icon::ToolCase, colors)
+            .child(page_actions().child(manager).child(preferences));
         if let Some(p) = &self.preferences {
             use patina_recorder::{
                 NoticeDelivery as D, NoticePreferencesPatch as Patch, NoticeSound as S,
@@ -629,14 +650,30 @@ impl Render for Tools {
                         }))
                 });
         }
-        let shell = page(colors).child(top).child(
-            div()
-                .id("tool-panel")
-                .flex_1()
-                .min_h_0()
-                .overflow_y_scroll()
-                .child(content),
-        );
+        let panel = div()
+            .id("tool-panel")
+            .flex_1()
+            .min_w_0()
+            .min_h_0()
+            .overflow_y_scroll()
+            .child(content);
+        let workspace = div()
+            .flex()
+            .flex_1()
+            .min_h_0()
+            .gap(px(quietpro::APP_CARD_GAP))
+            .when(!self.tools.is_empty(), |this| {
+                this.child(
+                    div()
+                        .id("tool-sections")
+                        .flex_none()
+                        .min_h_0()
+                        .overflow_y_scroll()
+                        .child(selector),
+                )
+            })
+            .child(panel);
+        let shell = page(colors).child(top).child(workspace);
         if let Some(confirm) = &self.pending {
             let mut content = div()
                 .id("tool-consent-body")

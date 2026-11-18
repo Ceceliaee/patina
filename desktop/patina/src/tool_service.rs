@@ -32,6 +32,7 @@ pub(super) enum ToolRequest {
         id: String,
         generation: String,
         action: Option<String>,
+        remember: bool,
     },
     Uninstall {
         id: String,
@@ -200,6 +201,7 @@ impl ToolService {
                             ToolRequest::List => to_value((
                                 host.list(),
                                 display_failures > 0 && !events.list(host, &storage)?.is_empty(),
+                                storage.last_section()?,
                             )),
                             ToolRequest::DisplayFailed => {
                                 display_failures = display_failures.saturating_add(1);
@@ -265,7 +267,14 @@ impl ToolService {
                                 id,
                                 generation,
                                 action,
-                            } => to_value(host.panel(&id, &generation, action, &locale)?),
+                                remember,
+                            } => {
+                                let panel = host.panel(&id, &generation, action, &locale)?;
+                                if remember && let Err(error) = storage.remember_section(&id) {
+                                    eprintln!("Save selected tool: {error}");
+                                }
+                                to_value(panel)
+                            }
                             ToolRequest::Uninstall { id, generation } => {
                                 to_value(host.uninstall(&id, &generation)?)
                             }

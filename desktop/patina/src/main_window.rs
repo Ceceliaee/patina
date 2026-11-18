@@ -116,7 +116,12 @@ impl MainWindow {
     fn switch(&mut self, section: Section, win: &mut Window, cx: &mut Context<Self>) {
         self.page = match section {
             Section::Tools => Page::Tools(cx.new(|cx| {
-                crate::tools::Tools::new(self.client.clone(), self.tool_target.take(), cx)
+                crate::tools::Tools::new(
+                    self.client.clone(),
+                    self.tool_target.take(),
+                    self.labels,
+                    cx,
+                )
             })),
             Section::About => {
                 Page::About(cx.new(|cx| crate::about::About::new(self.client.clone(), cx)))
@@ -224,16 +229,22 @@ impl MainWindow {
                 labels: false,
                 client,
             });
-            let resume = view.read(cx).client.request::<Option<String>>(crate::window_process::Query::Storage(
-                patina_recorder::StorageRequest::ResumeAfterUpdate(None),
-            ));
+            let resume = view.read(cx).client.request::<Option<String>>(
+                crate::window_process::Query::Storage(
+                    patina_recorder::StorageRequest::ResumeAfterUpdate(None),
+                ),
+            );
             let weak = view.downgrade();
-            window.spawn(cx, async move |cx| {
-                if let Ok(Some(page)) = resume.await
-                    && let Ok(section) = serde_json::from_value(serde_json::Value::String(page)) {
-                    let _ = weak.update_in(cx, |main, window, cx| main.switch(section, window, cx));
-                }
-            }).detach();
+            window
+                .spawn(cx, async move |cx| {
+                    if let Ok(Some(page)) = resume.await
+                        && let Ok(section) = serde_json::from_value(serde_json::Value::String(page))
+                    {
+                        let _ =
+                            weak.update_in(cx, |main, window, cx| main.switch(section, window, cx));
+                    }
+                })
+                .detach();
             #[cfg(debug_assertions)]
             if let Some(section) = crate::dev_preview::page().filter(|s| *s != Section::Today) {
                 view.update(cx, |main, cx| main.switch(section, window, cx));
@@ -365,6 +376,12 @@ impl Render for MainWindow {
                     move |next, _, _, cx| {
                         let _ = view.update(cx, |this, cx| {
                             this.labels = next;
+                            if let Page::Tools(tools) = &this.page {
+                                tools.update(cx, |t, cx| {
+                                    t.labels = next;
+                                    cx.notify();
+                                });
+                            }
                             cx.notify();
                         });
                     }

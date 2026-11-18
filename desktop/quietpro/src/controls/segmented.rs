@@ -23,6 +23,54 @@ pub fn segmented<T: Copy + Eq + 'static>(
     colors: Palette,
     select: impl Fn(T, &mut Window, &mut App) + 'static,
 ) -> RadioGroup {
+    choice_group(
+        (id, label),
+        options,
+        selected,
+        enabled,
+        colors,
+        Layout::Row,
+        select,
+    )
+}
+
+#[derive(Clone, Copy)]
+enum Layout {
+    Row,
+    Rail { labels: bool },
+}
+
+pub fn section_rail<T: Copy + Eq + 'static>(
+    identity: (impl Into<ElementId>, String),
+    options: impl IntoIterator<Item = (T, String, Option<Icon>, FocusHandle)>,
+    selected: T,
+    enabled: bool,
+    colors: Palette,
+    labels: bool,
+    select: impl Fn(T, &mut Window, &mut App) + 'static,
+) -> RadioGroup {
+    choice_group(
+        identity,
+        options,
+        selected,
+        enabled,
+        colors,
+        Layout::Rail { labels },
+        select,
+    )
+}
+
+fn choice_group<T: Copy + Eq + 'static>(
+    (id, label): (impl Into<ElementId>, String),
+    options: impl IntoIterator<Item = (T, String, Option<Icon>, FocusHandle)>,
+    selected: T,
+    enabled: bool,
+    colors: Palette,
+    layout: Layout,
+    select: impl Fn(T, &mut Window, &mut App) + 'static,
+) -> RadioGroup {
+    let vertical = matches!(layout, Layout::Rail { .. });
+    let labels = matches!(layout, Layout::Rail { labels: true });
     let surface = |radius, inset, color| {
         div()
             .absolute()
@@ -34,10 +82,15 @@ pub fn segmented<T: Copy + Eq + 'static>(
     let option_hover = track_fill.blend(colors.track.opacity(0.35));
     let mut group = RadioGroup::new(id)
         .aria_label(label)
-        .axis(Axis::Horizontal)
+        .axis(if vertical {
+            Axis::Vertical
+        } else {
+            Axis::Horizontal
+        })
         .relative()
         .flex()
         .flex_none()
+        .when(vertical, |this| this.flex_col().gap(px(4.)))
         .items_center()
         .p(px(4.))
         .child(surface(TRACK_RADIUS, 0., colors.border))
@@ -45,6 +98,10 @@ pub fn segmented<T: Copy + Eq + 'static>(
     let select = Rc::new(select);
     let options = Rc::new(options.into_iter().collect::<Vec<_>>());
     let count = options.len();
+    let tab_index = options
+        .iter()
+        .position(|(value, ..)| *value == selected)
+        .unwrap_or(0);
     for (index, (value, label, icon, focus)) in options.iter().enumerate() {
         let value = *value;
         let checked = value == selected;
@@ -63,15 +120,24 @@ pub fn segmented<T: Copy + Eq + 'static>(
         } else {
             colors.secondary
         };
+        let caption = div()
+            .text_color(ink)
+            .text_size(px(12.))
+            .line_height(px(18.))
+            .font_weight(FontWeight::SEMIBOLD)
+            .max_w_full()
+            .truncate()
+            .child(label.clone());
         let content = match icon {
-            Some(icon) => glyph(*icon, ink).size(px(16.)).into_any_element(),
-            None => div()
-                .text_color(ink)
-                .text_size(px(12.))
-                .line_height(px(18.))
-                .font_weight(FontWeight::SEMIBOLD)
-                .child(label.clone())
+            Some(icon) => div()
+                .flex()
+                .flex_col()
+                .items_center()
+                .gap(px(2.))
+                .child(glyph(*icon, ink).size(px(if vertical && !labels { 20. } else { 16. })))
+                .when(labels, |this| this.child(caption))
                 .into_any_element(),
+            None => caption.into_any_element(),
         };
         let radio = Radio::new(("segment", index))
             .accessibility_label(label.clone())
@@ -79,13 +145,14 @@ pub fn segmented<T: Copy + Eq + 'static>(
             .checked(checked)
             .disabled(!enabled)
             .track_focus(focus)
-            .tab_stop(checked)
+            .tab_stop(index == tab_index)
             .relative()
             .flex()
             .flex_none()
             .items_center()
             .justify_center()
-            .h(px(24.))
+            .h(px(if vertical { 40. } else { 24. }))
+            .when(vertical, |s| s.w(px(if labels { 88. } else { 40. })))
             .px(px(OPTION_PADDING))
             .whitespace_nowrap()
             .group("segment")
@@ -114,8 +181,10 @@ pub fn segmented<T: Copy + Eq + 'static>(
                         return;
                     }
                     let next = match event.keystroke.key.as_str() {
-                        "left" => (index + count - 1) % count,
-                        "right" => (index + 1) % count,
+                        "left" if !vertical => (index + count - 1) % count,
+                        "right" if !vertical => (index + 1) % count,
+                        "up" if vertical => (index + count - 1) % count,
+                        "down" if vertical => (index + 1) % count,
                         _ => return,
                     };
                     let (next_value, _, _, handle) = &keyboard_options[next];

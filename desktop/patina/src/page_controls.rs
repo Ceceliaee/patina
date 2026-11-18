@@ -29,7 +29,7 @@ pub(super) fn logo() -> Img {
     static IMAGE: std::sync::LazyLock<std::sync::Arc<Image>> = std::sync::LazyLock::new(|| {
         std::sync::Arc::new(Image::from_bytes(
             ImageFormat::Png,
-            include_bytes!("../../../src-tauri/icons/128x128.png").to_vec(),
+            include_bytes!("../assets/icons/128x128.png").to_vec(),
         ))
     });
     img(IMAGE.clone())

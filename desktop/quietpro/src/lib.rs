@@ -23,7 +23,7 @@ pub use controls::heatmap::{HeatmapCell, heatmap_layout};
 pub use controls::icon_control::{ICON_CONTROL_SIZE, IconControl};
 pub use controls::metric_group::MetricGroup;
 pub use controls::search_input::search_input;
-pub use controls::segmented::segmented;
+pub use controls::segmented::{section_rail, segmented};
 pub use controls::slide_switch::{slide_switch, switch_control};
 pub use controls::slider::value_slider;
 pub use controls::text_button::text_button;
