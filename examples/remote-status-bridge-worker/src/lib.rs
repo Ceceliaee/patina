@@ -17,7 +17,7 @@ enum Presence {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-struct Machine {
+struct MachineStatus {
     machine_id: String,
     sampled_at_ms: i64,
     presence: Presence,
@@ -27,9 +27,9 @@ struct Machine {
     last_received_at_ms: i64,
 }
 
-type Machines = BTreeMap<String, Machine>;
+type MachineStates = BTreeMap<String, MachineStatus>;
 
-fn snapshot(message: &Value, received: i64) -> Option<Machine> {
+fn parse_snapshot(message: &Value, received_at_ms: i64) -> Option<MachineStatus> {
     if message.get("version")?.as_f64()? != 1.0 {
         return None;
     }
@@ -41,7 +41,7 @@ fn snapshot(message: &Value, received: i64) -> Option<Machine> {
         None | Some(Value::Null) => None,
         Some(value) => Some(value.as_str()?.to_owned()),
     };
-    Some(Machine {
+    Some(MachineStatus {
         machine_id: machine_id.into(),
         sampled_at_ms: message.get("sampledAtMs")?.as_f64()?.trunc() as i64,
         presence: match message.get("presence")?.as_str()? {
@@ -52,11 +52,11 @@ fn snapshot(message: &Value, received: i64) -> Option<Machine> {
         app_name: message.get("appName")?.as_str()?.into(),
         icon_hash: message.get("iconHash")?.as_str()?.into(),
         icon_data,
-        last_received_at_ms: received,
+        last_received_at_ms: received_at_ms,
     })
 }
 
-fn merge(machines: &mut Machines, mut incoming: Machine) {
+fn merge_snapshot(machines: &mut MachineStates, mut incoming: MachineStatus) {
     if incoming.icon_data.is_none()
         && let Some(old) = machines.get(&incoming.machine_id)
     {
@@ -65,11 +65,11 @@ fn merge(machines: &mut Machines, mut incoming: Machine) {
     machines.insert(incoming.machine_id.clone(), incoming);
 }
 
-fn visible(machines: Machines, now: i64) -> Vec<Machine> {
+fn public_machine_states(machines: MachineStates, now_ms: i64) -> Vec<MachineStatus> {
     machines
         .into_values()
         .map(|mut m| {
-            if now.saturating_sub(m.last_received_at_ms) > 180_000 {
+            if now_ms.saturating_sub(m.last_received_at_ms) > 180_000 {
                 m.presence = Presence::Offline;
             }
             m
@@ -88,38 +88,39 @@ fn authenticated(expected: &str, message: &Value) -> bool {
 }
 
 #[derive(Debug, PartialEq)]
-enum Packet {
-    Authenticated,
+enum SocketAction {
+    AcceptAuth,
     RejectAuth,
     Close(u16, &'static str),
-    Pong,
+    SendPong,
     Ignore,
-    Snapshot(Machine),
+    StoreSnapshot(MachineStatus),
 }
 
-fn handle(authorized: bool, token: &str, bytes: &[u8], now: i64) -> Packet {
+fn handle_socket_message(authorized: bool, token: &str, bytes: &[u8], now_ms: i64) -> SocketAction {
     let Ok(value) = serde_json::from_slice::<Value>(bytes) else {
-        return Packet::Close(1003, "invalid json");
+        return SocketAction::Close(1003, "invalid json");
     };
     let Some(kind) = value.get("type").and_then(Value::as_str) else {
-        return Packet::Close(1003, "invalid json");
+        return SocketAction::Close(1003, "invalid json");
     };
     if !authorized {
         if kind != "auth" {
-            return Packet::Close(1008, "auth required");
+            return SocketAction::Close(1008, "auth required");
         }
         return if authenticated(token, &value) {
-            Packet::Authenticated
+            SocketAction::AcceptAuth
         } else {
-            Packet::RejectAuth
+            SocketAction::RejectAuth
         };
     }
     match kind {
-        "ping" => Packet::Pong,
-        "snapshot" => {
-            snapshot(&value, now).map_or(Packet::Close(1003, "invalid snapshot"), Packet::Snapshot)
-        }
-        _ => Packet::Ignore,
+        "ping" => SocketAction::SendPong,
+        "snapshot" => parse_snapshot(&value, now_ms).map_or(
+            SocketAction::Close(1003, "invalid snapshot"),
+            SocketAction::StoreSnapshot,
+        ),
+        _ => SocketAction::Ignore,
     }
 }
 
@@ -131,25 +132,28 @@ mod tests {
     #[test]
     fn socket_protocol_requires_auth_before_writing_or_ping() {
         assert_eq!(
-            handle(false, "sample", br#"{"type":"ping"}"#, 0),
-            Packet::Close(1008, "auth required")
+            handle_socket_message(false, "sample", br#"{"type":"ping"}"#, 0),
+            SocketAction::Close(1008, "auth required")
         );
         assert_eq!(
-            handle(false, "sample", br#"{"type":"auth","token":"invalid"}"#, 0),
-            Packet::RejectAuth
+            handle_socket_message(false, "sample", br#"{"type":"auth","token":"invalid"}"#, 0),
+            SocketAction::RejectAuth
         );
         assert_eq!(
-            handle(false, "sample", br#"{"type":"auth","token":"sample"}"#, 0),
-            Packet::Authenticated
-        );
-        assert_eq!(handle(true, "", br#"{"type":"ping"}"#, 0), Packet::Pong);
-        assert_eq!(
-            handle(true, "", br#"{"type":"snapshot"}"#, 0),
-            Packet::Close(1003, "invalid snapshot")
+            handle_socket_message(false, "sample", br#"{"type":"auth","token":"sample"}"#, 0),
+            SocketAction::AcceptAuth
         );
         assert_eq!(
-            handle(true, "", &[255], 0),
-            Packet::Close(1003, "invalid json")
+            handle_socket_message(true, "", br#"{"type":"ping"}"#, 0),
+            SocketAction::SendPong
+        );
+        assert_eq!(
+            handle_socket_message(true, "", br#"{"type":"snapshot"}"#, 0),
+            SocketAction::Close(1003, "invalid snapshot")
+        );
+        assert_eq!(
+            handle_socket_message(true, "", &[255], 0),
+            SocketAction::Close(1003, "invalid json")
         );
     }
 
@@ -162,21 +166,27 @@ mod tests {
             "sample",
             &json!({"type":"snapshot","token":"sample"})
         ));
-        assert!(snapshot(&json!({"version":2}), 0).is_none());
+        assert!(parse_snapshot(&json!({"version":2}), 0).is_none());
     }
     #[test]
     fn persisted_state_survives_reconnect_and_expires_from_receipt_time() {
-        let mut machines = Machines::new();
+        let mut machines = MachineStates::new();
         let mut m = json!({"type":"snapshot","version":1,"machineId":" b ","sampledAtMs":10.9,"presence":"active","appName":"Demo","iconHash":"hash","iconData":"image"});
-        merge(&mut machines, snapshot(&m, 1000).unwrap());
-        let mut restored: Machines =
+        merge_snapshot(&mut machines, parse_snapshot(&m, 1000).unwrap());
+        let mut restored: MachineStates =
             serde_json::from_slice(&serde_json::to_vec(&machines).unwrap()).unwrap();
         m["iconData"] = Value::Null;
         m["presence"] = json!("afk");
-        merge(&mut restored, snapshot(&m, 2000).unwrap());
+        merge_snapshot(&mut restored, parse_snapshot(&m, 2000).unwrap());
         assert_eq!(restored["b"].icon_data.as_deref(), Some("image"));
         assert_eq!(restored["b"].sampled_at_ms, 10);
-        assert_eq!(visible(restored.clone(), 182000)[0].presence, Presence::Afk);
-        assert_eq!(visible(restored, 182001)[0].presence, Presence::Offline);
+        assert_eq!(
+            public_machine_states(restored.clone(), 182000)[0].presence,
+            Presence::Afk
+        );
+        assert_eq!(
+            public_machine_states(restored, 182001)[0].presence,
+            Presence::Offline
+        );
     }
 }

@@ -1,4 +1,6 @@
-use super::{Machines, Packet, handle, merge, visible};
+use super::{
+    MachineStates, SocketAction, handle_socket_message, merge_snapshot, public_machine_states,
+};
 use worker::*;
 
 #[event(fetch)]
@@ -38,15 +40,15 @@ impl DurableObject for RemoteStatusBridge {
                 let mut response = if request.method() == Method::Options {
                     Response::empty()?.with_status(204)
                 } else {
-                    let now = Date::now().as_millis() as i64;
+                    let now_ms = Date::now().as_millis() as i64;
                     let machines = self
                         .state
                         .storage()
-                        .get::<Machines>("machines")
+                        .get::<MachineStates>("machines")
                         .await?
                         .unwrap_or_default();
                     let mut response = Response::from_json(
-                        &serde_json::json!({"updatedAtMs":now, "machines":visible(machines,now)}),
+                        &serde_json::json!({"updatedAtMs":now_ms, "machines":public_machine_states(machines,now_ms)}),
                     )?;
                     response.headers_mut().set("cache-control", "no-store")?;
                     response
@@ -79,26 +81,26 @@ impl DurableObject for RemoteStatusBridge {
                 .map(|s| s.to_string())
                 .unwrap_or_default()
         };
-        match handle(authorized, &token, &bytes, Date::now().as_millis() as i64) {
-            Packet::Authenticated => {
+        match handle_socket_message(authorized, &token, &bytes, Date::now().as_millis() as i64) {
+            SocketAction::AcceptAuth => {
                 ws.serialize_attachment(true)?;
                 ws.send_with_str(r#"{"type":"auth-ok"}"#)
             }
-            Packet::RejectAuth => {
+            SocketAction::RejectAuth => {
                 ws.send_with_str(r#"{"type":"auth-failed"}"#)?;
                 ws.close(Some(1008), Some("auth failed"))
             }
-            Packet::Close(code, reason) => ws.close(Some(code), Some(reason)),
-            Packet::Pong => ws.send_with_str(r#"{"type":"pong"}"#),
-            Packet::Ignore => Ok(()),
-            Packet::Snapshot(machine) => {
+            SocketAction::Close(code, reason) => ws.close(Some(code), Some(reason)),
+            SocketAction::SendPong => ws.send_with_str(r#"{"type":"pong"}"#),
+            SocketAction::Ignore => Ok(()),
+            SocketAction::StoreSnapshot(machine) => {
                 // Durable Object input gates keep consecutive storage operations ordered.
                 let storage = self.state.storage();
                 let mut machines = storage
-                    .get::<Machines>("machines")
+                    .get::<MachineStates>("machines")
                     .await?
                     .unwrap_or_default();
-                merge(&mut machines, machine);
+                merge_snapshot(&mut machines, machine);
                 storage.put("machines", machines).await
             }
         }

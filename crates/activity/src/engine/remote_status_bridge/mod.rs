@@ -31,7 +31,7 @@ pub trait RemoteStatusBridgeStore: Send + Sync {
 #[derive(Debug)]
 pub struct RemoteStatusBridgeRuntimeState {
     inner: Mutex<RemoteStatusBridgeRuntimeInner>,
-    wake_tx: watch::Sender<u64>,
+    wake_rx: watch::Receiver<u64>,
     shutdown_tx: watch::Sender<u64>,
 }
 
@@ -42,7 +42,7 @@ struct RemoteStatusBridgeRuntimeInner {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct RemoteStatusBridgeSnapshot {
+struct OutboundSnapshot {
     machine_id: String,
     sampled_at_ms: i64,
     presence: String,
@@ -53,7 +53,7 @@ struct RemoteStatusBridgeSnapshot {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct RemoteStatusBridgeSnapshotPayload {
+struct SampledAppStatus {
     sampled_at_ms: i64,
     presence: String,
     app_name: String,
@@ -62,19 +62,16 @@ struct RemoteStatusBridgeSnapshotPayload {
     icon_data: Option<String>,
 }
 
-impl Default for RemoteStatusBridgeRuntimeState {
-    fn default() -> Self {
-        let (wake_tx, _) = watch::channel(0);
+impl RemoteStatusBridgeRuntimeState {
+    pub fn new(wake_rx: watch::Receiver<u64>) -> Self {
         let (shutdown_tx, _) = watch::channel(0);
         Self {
             inner: Mutex::new(RemoteStatusBridgeRuntimeInner::default()),
-            wake_tx,
+            wake_rx,
             shutdown_tx,
         }
     }
-}
 
-impl RemoteStatusBridgeRuntimeState {
     pub fn update(
         &self,
 
@@ -95,16 +92,12 @@ impl RemoteStatusBridgeRuntimeState {
             inner.task = Some(spawn_runtime_task(
                 store,
                 settings.clone(),
-                self.wake_tx.subscribe(),
+                self.wake_rx.clone(),
                 self.shutdown_tx.subscribe(),
             ));
         }
 
         inner.settings = settings;
-    }
-
-    pub fn notify_snapshot_change(&self) {
-        signal_watch(&self.wake_tx);
     }
 }
 
@@ -175,14 +168,14 @@ async fn run_connection(
     .await?;
 
     let auth_deadline = Instant::now() + Duration::from_secs(AUTH_TIMEOUT_SECS);
-    let mut pending_snapshot = build_snapshot_payload(store.as_ref()).await.ok();
+    let mut pending_sample = sample_app_status(store.as_ref()).await.ok();
     loop {
         let timeout_sleep = sleep_until_deadline(auth_deadline);
         tokio::pin!(timeout_sleep);
         tokio::select! {
             _ = shutdown_rx.changed() => return Ok(()),
             _ = wake_rx.changed() => {
-                pending_snapshot = build_snapshot_payload(store.as_ref()).await.ok();
+                pending_sample = sample_app_status(store.as_ref()).await.ok();
             }
             _ = &mut timeout_sleep => return Err("worker auth timed out".to_string()),
             next = socket_stream.next() => {
@@ -210,12 +203,12 @@ async fn run_connection(
     heartbeat.set_missed_tick_behavior(MissedTickBehavior::Delay);
     heartbeat.tick().await;
 
-    let initial_payload = match pending_snapshot.take() {
-        Some(payload) => payload,
-        None => build_snapshot_payload(store.as_ref()).await?,
+    let initial_sample = match pending_sample.take() {
+        Some(sample) => sample,
+        None => sample_app_status(store.as_ref()).await?,
     };
-    let initial_snapshot = build_snapshot(&settings.machine_id, initial_payload, true);
-    let mut last_sent_identity = snapshot_identity(&initial_snapshot);
+    let initial_snapshot = outbound_snapshot(&settings.machine_id, initial_sample, true);
+    let mut last_sent_identity = snapshot_change_key(&initial_snapshot);
     send_snapshot(&mut sink, initial_snapshot).await?;
 
     loop {
@@ -230,7 +223,7 @@ async fn run_connection(
                 )
                 .await?;
                 if let Some(snapshot) = next_snapshot {
-                    last_sent_identity = snapshot_identity(&snapshot);
+                    last_sent_identity = snapshot_change_key(&snapshot);
                     send_snapshot(&mut sink, snapshot).await?;
                 }
             }
@@ -241,7 +234,7 @@ async fn run_connection(
                     &settings.machine_id,
                     &last_sent_identity,
                 ).await?;
-                last_sent_identity = snapshot_identity(&heartbeat_snapshot);
+                last_sent_identity = snapshot_change_key(&heartbeat_snapshot);
                 send_snapshot(&mut sink, heartbeat_snapshot).await?;
             }
             next = socket_stream.next() => {
@@ -263,18 +256,18 @@ async fn run_connection(
 async fn build_snapshot_for_change(
     store: &dyn RemoteStatusBridgeStore,
     machine_id: &str,
-    last_identity: Option<&SnapshotIdentity>,
-) -> Result<Option<RemoteStatusBridgeSnapshot>, String> {
-    let payload = build_snapshot_payload(store).await?;
-    let next_identity = snapshot_identity_from_payload(&payload);
-    if last_identity == Some(&next_identity) {
+    last_sent_key: Option<&SnapshotChangeKey>,
+) -> Result<Option<OutboundSnapshot>, String> {
+    let sample = sample_app_status(store).await?;
+    let sample_key = sample_change_key(&sample);
+    if last_sent_key == Some(&sample_key) {
         return Ok(None);
     }
 
-    let snapshot = build_snapshot(
+    let snapshot = outbound_snapshot(
         machine_id,
-        payload,
-        should_include_icon_data(last_identity, &next_identity),
+        sample,
+        should_include_icon_data(last_sent_key, &sample_key),
     );
     Ok(Some(snapshot))
 }
@@ -282,20 +275,20 @@ async fn build_snapshot_for_change(
 async fn build_snapshot_for_heartbeat(
     store: &dyn RemoteStatusBridgeStore,
     machine_id: &str,
-    last_identity: &SnapshotIdentity,
-) -> Result<RemoteStatusBridgeSnapshot, String> {
-    let payload = build_snapshot_payload(store).await?;
-    let next_identity = snapshot_identity_from_payload(&payload);
-    Ok(build_snapshot(
+    last_sent_key: &SnapshotChangeKey,
+) -> Result<OutboundSnapshot, String> {
+    let sample = sample_app_status(store).await?;
+    let sample_key = sample_change_key(&sample);
+    Ok(outbound_snapshot(
         machine_id,
-        payload,
-        should_include_icon_data(Some(last_identity), &next_identity),
+        sample,
+        should_include_icon_data(Some(last_sent_key), &sample_key),
     ))
 }
 
-async fn build_snapshot_payload(
+async fn sample_app_status(
     store: &dyn RemoteStatusBridgeStore,
-) -> Result<RemoteStatusBridgeSnapshotPayload, String> {
+) -> Result<SampledAppStatus, String> {
     let runtime_snapshot = store
         .snapshot()
         .ok_or_else(|| "tracking runtime snapshot is not ready".to_string())?;
@@ -315,7 +308,7 @@ async fn build_snapshot_payload(
     let icon_data = load_icon_for_exe(store, &runtime_snapshot.window.exe_name).await;
     let icon_hash = compute_icon_hash(icon_data.as_deref());
 
-    Ok(RemoteStatusBridgeSnapshotPayload {
+    Ok(SampledAppStatus {
         sampled_at_ms: runtime_snapshot.sampled_at_ms,
         presence: if runtime_snapshot.status.is_tracking_active {
             "active".to_string()
@@ -329,31 +322,31 @@ async fn build_snapshot_payload(
     })
 }
 
-fn build_snapshot(
+fn outbound_snapshot(
     machine_id: &str,
-    payload: RemoteStatusBridgeSnapshotPayload,
+    sample: SampledAppStatus,
     include_icon_data: bool,
-) -> RemoteStatusBridgeSnapshot {
-    RemoteStatusBridgeSnapshot {
+) -> OutboundSnapshot {
+    OutboundSnapshot {
         machine_id: machine_id.to_string(),
-        sampled_at_ms: payload.sampled_at_ms,
-        presence: payload.presence,
-        app_name: payload.app_name,
-        exe_name: payload.exe_name,
-        icon_hash: payload.icon_hash,
+        sampled_at_ms: sample.sampled_at_ms,
+        presence: sample.presence,
+        app_name: sample.app_name,
+        exe_name: sample.exe_name,
+        icon_hash: sample.icon_hash,
         icon_data: if include_icon_data {
-            payload.icon_data
+            sample.icon_data
         } else {
             None
         },
     }
 }
 
-fn snapshot_identity_from_payload(payload: &RemoteStatusBridgeSnapshotPayload) -> SnapshotIdentity {
-    SnapshotIdentityFields {
-        presence: payload.presence.clone(),
-        app_name: payload.app_name.clone(),
-        icon_hash: payload.icon_hash.clone(),
+fn sample_change_key(sample: &SampledAppStatus) -> SnapshotChangeKey {
+    SnapshotChangeKey {
+        presence: sample.presence.clone(),
+        app_name: sample.app_name.clone(),
+        icon_hash: sample.icon_hash.clone(),
     }
 }
 
@@ -361,17 +354,15 @@ async fn load_icon_for_exe(store: &dyn RemoteStatusBridgeStore, exe_name: &str) 
     store.load_icon(exe_name).await.ok().flatten()
 }
 
-type SnapshotIdentity = SnapshotIdentityFields;
-
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct SnapshotIdentityFields {
+struct SnapshotChangeKey {
     presence: String,
     app_name: String,
     icon_hash: String,
 }
 
-fn snapshot_identity(snapshot: &RemoteStatusBridgeSnapshot) -> SnapshotIdentity {
-    SnapshotIdentityFields {
+fn snapshot_change_key(snapshot: &OutboundSnapshot) -> SnapshotChangeKey {
+    SnapshotChangeKey {
         presence: snapshot.presence.clone(),
         app_name: snapshot.app_name.clone(),
         icon_hash: snapshot.icon_hash.clone(),
@@ -379,11 +370,11 @@ fn snapshot_identity(snapshot: &RemoteStatusBridgeSnapshot) -> SnapshotIdentity 
 }
 
 fn should_include_icon_data(
-    last_identity: Option<&SnapshotIdentity>,
-    next_identity: &SnapshotIdentity,
+    last_sent_key: Option<&SnapshotChangeKey>,
+    sample_key: &SnapshotChangeKey,
 ) -> bool {
-    last_identity
-        .map(|identity| identity.icon_hash != next_identity.icon_hash)
+    last_sent_key
+        .map(|identity| identity.icon_hash != sample_key.icon_hash)
         .unwrap_or(true)
 }
 
@@ -396,7 +387,7 @@ fn compute_icon_hash(icon_data: Option<&str>) -> String {
     format!("png:{:08x}", hasher.finalize())
 }
 
-async fn send_snapshot<S>(sink: &mut S, snapshot: RemoteStatusBridgeSnapshot) -> Result<(), String>
+async fn send_snapshot<S>(sink: &mut S, snapshot: OutboundSnapshot) -> Result<(), String>
 where
     S: futures_util::Sink<Message, Error = WsError> + Unpin,
 {
@@ -488,8 +479,8 @@ mod tests {
     }
 
     #[test]
-    fn snapshot_identity_only_tracks_presence_app_and_icon() {
-        let snapshot = RemoteStatusBridgeSnapshot {
+    fn snapshot_change_key_only_tracks_presence_app_and_icon() {
+        let snapshot = OutboundSnapshot {
             machine_id: "machine".into(),
             sampled_at_ms: 1,
             presence: "active".into(),
@@ -499,8 +490,8 @@ mod tests {
             icon_data: None,
         };
         assert_eq!(
-            snapshot_identity(&snapshot),
-            SnapshotIdentityFields {
+            snapshot_change_key(&snapshot),
+            SnapshotChangeKey {
                 presence: "active".into(),
                 app_name: "Code".into(),
                 icon_hash: "png:1".into(),
@@ -510,17 +501,17 @@ mod tests {
 
     #[test]
     fn icon_data_only_repeats_when_icon_hash_changes() {
-        let previous = SnapshotIdentityFields {
+        let previous = SnapshotChangeKey {
             presence: "active".into(),
             app_name: "Code".into(),
             icon_hash: "png:1".into(),
         };
-        let same = SnapshotIdentityFields {
+        let same = SnapshotChangeKey {
             presence: "afk".into(),
             app_name: "Code".into(),
             icon_hash: "png:1".into(),
         };
-        let changed = SnapshotIdentityFields {
+        let changed = SnapshotChangeKey {
             presence: "afk".into(),
             app_name: "Code".into(),
             icon_hash: "png:2".into(),

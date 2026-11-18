@@ -2,23 +2,21 @@ use super::web_activity_bridge::{WebActivityBridgeHttpRequest, WebActivityBridge
 use crate::domain::{settings::WebActivitySettings, web_activity::BrowserActiveTabPayload};
 use serde_json::json;
 
-pub(crate) fn parse(
+pub(crate) fn authorize_and_parse(
     request: WebActivityBridgeHttpRequest,
     settings: Result<WebActivitySettings, String>,
     now_ms: i64,
 ) -> Result<(WebActivitySettings, BrowserActiveTabPayload), WebActivityBridgeHttpResponse> {
     if !request.method.eq_ignore_ascii_case("POST") {
-        return Err(web_activity_http_response(
+        return Err(error_response(
             405,
-            false,
             "method-not-allowed",
             "unsupported web activity method",
         ));
     }
     if request.path != "/web-activity" {
-        return Err(web_activity_http_response(
+        return Err(error_response(
             404,
-            false,
             "not-found",
             "unsupported web activity path",
         ));
@@ -27,9 +25,8 @@ pub(crate) fn parse(
     let settings = match settings {
         Ok(settings) => settings,
         Err(error) => {
-            return Err(web_activity_http_response(
+            return Err(error_response(
                 500,
-                false,
                 "settings-unavailable",
                 &format!("failed to load web activity settings: {error}"),
             ));
@@ -38,9 +35,8 @@ pub(crate) fn parse(
 
     let token = bearer_token(request.authorization.as_deref());
     if settings.token.is_empty() || token.as_deref() != Some(settings.token.as_str()) {
-        return Err(web_activity_http_response(
+        return Err(error_response(
             401,
-            false,
             "unauthorized",
             "invalid web activity token",
         ));
@@ -62,9 +58,8 @@ pub(crate) fn parse(
     let payload = match serde_json::from_slice::<BrowserActiveTabPayload>(&request.body) {
         Ok(payload) => payload,
         Err(error) => {
-            return Err(web_activity_http_response(
+            return Err(error_response(
                 400,
-                false,
                 "invalid-payload",
                 &format!("invalid active tab: {error}"),
             ));
@@ -74,7 +69,7 @@ pub(crate) fn parse(
     Ok((settings, payload))
 }
 
-pub(crate) fn recorded(changed: bool, now_ms: i64) -> WebActivityBridgeHttpResponse {
+pub(crate) fn recording_response(changed: bool, now_ms: i64) -> WebActivityBridgeHttpResponse {
     WebActivityBridgeHttpResponse::json(
         200,
         json!({
@@ -101,16 +96,15 @@ fn bearer_token(authorization: Option<&str>) -> Option<String> {
     }
 }
 
-pub(crate) fn web_activity_http_response(
+pub(crate) fn error_response(
     status: u16,
-    ok: bool,
     code: &str,
     message: &str,
 ) -> WebActivityBridgeHttpResponse {
     WebActivityBridgeHttpResponse::json(
         status,
         json!({
-            "ok": ok,
+            "ok": false,
             "code": code,
             "message": message,
         }),
