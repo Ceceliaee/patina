@@ -74,20 +74,16 @@ fn website_rules_share_atomic_drafts_and_preserve_grouping() -> Result<(), Error
         group.category = "missing-category".into();
         let mut invalid = rules.websites.clone();
         invalid.assign(&group);
-        assert!(
-            recorder
-                .save_rules(vec![app.clone()], Some(invalid), vec![], vec![])
-                .await
-                .is_err()
-        );
-        assert!(
-            recorder
-                .rules()
-                .await?
-                .apps
-                .iter()
-                .any(|r| r.name == "Studio")
-        );
+        assert!(recorder
+            .save_rules(vec![app.clone()], Some(invalid), vec![], vec![])
+            .await
+            .is_err());
+        assert!(recorder
+            .rules()
+            .await?
+            .apps
+            .iter()
+            .any(|r| r.name == "Studio"));
         group.category = "office".into();
         group.color = "#123456".into();
         group.track = false;
@@ -110,12 +106,10 @@ fn website_rules_share_atomic_drafts_and_preserve_grouping() -> Result<(), Error
         assert_eq!(group_saved.color, "#123456");
         assert!(!group_saved.track);
         assert_eq!(group_saved.category, "office");
-        assert!(
-            recorder
-                .save_rules(vec![], Some(draft), vec![], vec![])
-                .await
-                .is_err()
-        );
+        assert!(recorder
+            .save_rules(vec![], Some(draft), vec![], vec![])
+            .await
+            .is_err());
         let mut c =
             SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&db)).await?;
         let raw: String = sqlx::query_scalar(
@@ -231,21 +225,19 @@ fn member_drafts_regroup_icons_and_app_associations_are_atomic() -> Result<(), E
         assert_eq!(group.name, "Group");
         assert!(group.titles_mixed && group.tracking_mixed);
         // A cycle must roll back both the regroup and member policy change.
-        assert!(
-            recorder
-                .save_rules(
-                    vec![writer.clone()],
-                    Some(merged.clone()),
-                    vec![patina_recorder::AppLinkEdit {
-                        member: "studio.exe".into(),
-                        parent: Some("writer.exe".into()),
-                        original: None,
-                    }],
-                    vec![]
-                )
-                .await
-                .is_err()
-        );
+        assert!(recorder
+            .save_rules(
+                vec![writer.clone()],
+                Some(merged.clone()),
+                vec![patina_recorder::AppLinkEdit {
+                    member: "studio.exe".into(),
+                    parent: Some("writer.exe".into()),
+                    original: None,
+                }],
+                vec![]
+            )
+            .await
+            .is_err());
         assert_eq!(recorder.rules().await?.websites.cards().len(), 2);
         assert!(
             recorder
@@ -261,12 +253,10 @@ fn member_drafts_regroup_icons_and_app_associations_are_atomic() -> Result<(), E
             .save_rules(vec![writer], Some(merged), vec![], vec![])
             .await?;
         let joined = recorder.rules().await?;
-        assert!(
-            recorder
-                .save_rules(vec![], Some(stale_member), vec![], vec![])
-                .await
-                .is_err()
-        );
+        assert!(recorder
+            .save_rules(vec![], Some(stale_member), vec![], vec![])
+            .await
+            .is_err());
         assert_eq!(joined.websites.cards().len(), 1);
         assert!(
             !joined
@@ -277,12 +267,10 @@ fn member_drafts_regroup_icons_and_app_associations_are_atomic() -> Result<(), E
                 .titles
         );
         // Stale grouping cannot restore the old member rules.
-        assert!(
-            recorder
-                .save_rules(vec![], Some(draft), vec![], vec![])
-                .await
-                .is_err()
-        );
+        assert!(recorder
+            .save_rules(vec![], Some(draft), vec![], vec![])
+            .await
+            .is_err());
         recorder
             .save_rules(
                 vec![],

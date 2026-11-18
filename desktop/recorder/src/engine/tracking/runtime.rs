@@ -1,0 +1,1226 @@
+use super::ports::{SharedTrackingDataStore, TrackingDataStore};
+#[cfg(test)]
+use super::session_timeout::seal_active_sessions_for_tracking_pause;
+#[cfg(test)]
+use super::startup;
+use super::sustained_participation::SustainedParticipationRuntimeState;
+use super::{active_session, continuity, transition, watchdog};
+#[cfg(test)]
+use crate::data::repositories::{sessions, tracker_settings};
+#[cfg(test)]
+use crate::domain::tracking::TrackingDataChangedPayload;
+use crate::domain::tracking::TrackingStatusSnapshot;
+#[cfg(test)]
+use crate::domain::tracking::TRACKING_REASON_TRACKING_PAUSED_SEALED;
+use crate::engine::tracking::host::TrackingHost;
+use crate::platform::windows::foreground as tracker;
+use std::sync::Arc;
+use tokio::time::{sleep, Duration};
+
+#[path = "runtime/anonymous_activity.rs"]
+mod anonymous_activity;
+#[path = "runtime/loop_state.rs"]
+mod loop_state;
+#[path = "runtime/power_lifecycle.rs"]
+mod power_lifecycle;
+#[path = "runtime/snapshot_projection.rs"]
+mod snapshot_projection;
+#[path = "runtime/support.rs"]
+mod support;
+#[path = "runtime/window_polling.rs"]
+mod window_polling;
+
+use loop_state::{
+    load_tracking_loop_state, persist_tracker_runtime_timestamps, record_committed_sample,
+    TrackerTimestampPersistState, TrackingSettingsCache,
+};
+#[cfg(test)]
+use power_lifecycle::apply_power_lifecycle_event;
+use snapshot_projection::{
+    clear_active_session_snapshot, emit_tracking_loop_change,
+    refresh_active_session_snapshot_if_changed, should_emit_tracking_status_changed,
+    update_runtime_snapshot_state,
+};
+pub use support::emit_tracking_data_changed;
+use support::{log_tracker_error, now_ms};
+use window_polling::poll_active_window_with_timeout;
+
+// Owner ledger: run() owns runtime loop orchestration only. Polling,
+// loop-state loading, power lifecycle handling, and event support stay in the
+// sibling runtime/* modules so commands.rs and lib.rs remain thin IPC entrypoints.
+pub async fn run<H: TrackingHost>(
+    app: H,
+    health_state: Arc<watchdog::RuntimeHealthState>,
+    data: SharedTrackingDataStore,
+) -> Result<(), String> {
+    let progress = &health_state.progress;
+    let pause_state = app.pause();
+    let title_state = app.titles();
+    let snapshot_state = app.projection();
+
+    let mut last_window: Option<tracker::WindowInfo> = None;
+    let mut last_tracking_status: Option<TrackingStatusSnapshot> = None;
+    let mut last_emitted_window: Option<tracker::WindowInfo> = None;
+    let mut pending_continuity: Option<continuity::PendingContinuity> = None;
+    let mut sustained_participation_state = SustainedParticipationRuntimeState::default();
+    let mut timestamp_persist_state = TrackerTimestampPersistState::default();
+    let mut settings_cache = TrackingSettingsCache::default();
+    loop {
+        let generation = snapshot_state.lifecycle_generation();
+        progress.enter(watchdog::TrackingStage::Foreground);
+        let poll_outcome = poll_active_window_with_timeout().await;
+        if poll_outcome.is_successful_sample() {
+            health_state.progress.observed();
+        }
+        progress.enter(watchdog::TrackingStage::TransitionLock);
+        let transition_guard = snapshot_state.transition.lock().await;
+        progress.enter(watchdog::TrackingStage::Persisting);
+        if let Err(error) = power_lifecycle::flush_pending_power_stop_and_publish(
+            &app,
+            data.as_ref(),
+            snapshot_state,
+        )
+        .await
+        {
+            log_tracker_error(error);
+            drop(transition_guard);
+            sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+        if !snapshot_state.accepts_sample(generation) {
+            last_window = None;
+            pending_continuity = None;
+            sustained_participation_state = SustainedParticipationRuntimeState::default();
+            last_tracking_status = None;
+            title_state.clear_browser_title();
+            title_state.clear_anonymous_web();
+            drop(transition_guard);
+            sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+        if snapshot_state
+            .snapshot()
+            .is_some_and(|snapshot| snapshot.generation != generation)
+        {
+            // A stop/resume may finish between polls; previous media grace and
+            // continuity are not evidence for the new lifecycle.
+            last_window = None;
+            title_state.clear_browser_title();
+            title_state.clear_anonymous_web();
+            pending_continuity = None;
+            sustained_participation_state = SustainedParticipationRuntimeState::default();
+            last_tracking_status = None;
+        }
+        let window_info = poll_outcome.window.clone();
+        let now_ms = now_ms();
+        snapshot_projection::publish_resolved_names(&app, data.as_ref(), now_ms).await;
+        if let Some(clock_reversed) =
+            loop_state::seal_stale_sample(&app, data.as_ref(), &health_state, now_ms).await?
+        {
+            last_window = None;
+            pending_continuity = None;
+            sustained_participation_state = SustainedParticipationRuntimeState::default();
+            last_tracking_status = None;
+            if clock_reversed {
+                drop(transition_guard);
+                sleep(Duration::from_secs(1)).await;
+                continue;
+            }
+        }
+        health_state.note_heartbeat(now_ms);
+        persist_tracker_runtime_timestamps(
+            data.as_ref(),
+            now_ms,
+            false,
+            &mut timestamp_persist_state,
+        )
+        .await;
+        health_state.progress.enter(watchdog::TrackingStage::Policy);
+        let (tracking_state, next_sustained_participation_state) = load_tracking_loop_state(
+            data.as_ref(),
+            pause_state,
+            title_state,
+            &window_info,
+            now_ms,
+            &sustained_participation_state,
+            &mut settings_cache,
+        )
+        .await;
+        sustained_participation_state = next_sustained_participation_state;
+        progress.enter(watchdog::TrackingStage::Transition);
+
+        let anonymous_cutoff = poll_outcome
+            .is_successful_sample()
+            .then(|| title_state.take_invalid_anonymous_web_cutoff(&window_info, now_ms))
+            .flatten()
+            .or_else(|| {
+                (tracking_state.app_tracking_enabled
+                    && snapshot_state.snapshot().is_some_and(|s| s.anonymous))
+                .then_some(now_ms)
+            })
+            .filter(|_| poll_outcome.is_successful_sample());
+        if let Some(cutoff) = anonymous_cutoff {
+            data.seal_anonymous_activity(tracking_state.resolve_anonymous_cutoff(
+                last_window.as_ref(),
+                last_tracking_status.as_ref(),
+                cutoff,
+                now_ms,
+            ))
+            .await
+            .map_err(|error| error.to_string())?;
+        }
+        progress.enter(watchdog::TrackingStage::Snapshot);
+        update_runtime_snapshot_state(&app, &tracking_state, now_ms, &poll_outcome, generation);
+        progress.enter(watchdog::TrackingStage::Transition);
+        let stopped = match tracking_state
+            .seal_stop(
+                data.as_ref(),
+                last_window.as_ref(),
+                last_tracking_status.as_ref(),
+                now_ms,
+                poll_outcome.is_successful_sample(),
+            )
+            .await
+        {
+            Ok(stopped) => stopped,
+            Err(error) => {
+                log_tracker_error(format!("failed to seal tracking boundary: {error}"));
+                clear_active_session_snapshot(&app);
+                drop(transition_guard);
+                sleep(Duration::from_secs(1)).await;
+                continue;
+            }
+        };
+        let tracked_window = tracking_state.tracked_window;
+        if let Some(stopped) = stopped {
+            record_committed_sample(
+                data.as_ref(),
+                &health_state,
+                now_ms,
+                poll_outcome.is_successful_sample(),
+                &mut timestamp_persist_state,
+            )
+            .await;
+            pending_continuity = None;
+            last_window = tracking_state
+                .app_tracking_enabled
+                .then_some(tracked_window);
+            last_tracking_status = Some(tracking_state.tracking_status);
+            clear_active_session_snapshot(&app);
+            if let Some(reason) = stopped.change_reason {
+                let _ = emit_tracking_data_changed(&app, reason, now_ms as u64);
+            }
+            drop(transition_guard);
+            sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+        if !poll_outcome.is_successful_sample() {
+            drop(transition_guard);
+            sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+        if anonymous_cutoff.is_some() {
+            last_window = None;
+            pending_continuity = None;
+        }
+
+        if !tracking_state.app_tracking_enabled && tracking_state.tracking_status.is_tracking_active
+        {
+            if let Err(error) = anonymous_activity::record_sample(
+                &app,
+                data.as_ref(),
+                &health_state,
+                &mut timestamp_persist_state,
+                now_ms,
+                tracking_state.anonymous_web,
+            )
+            .await
+            {
+                log_tracker_error(format!("failed to record anonymous activity: {error}"));
+            }
+            pending_continuity = None;
+            last_window = Some(tracked_window);
+            last_tracking_status = Some(tracking_state.tracking_status);
+            drop(transition_guard);
+            sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+
+        let continuity_group_start_time =
+            continuity::resolve_next_session_continuity_group_start_time(
+                pending_continuity.as_ref(),
+                &tracked_window,
+                now_ms,
+            );
+        let new_pending_continuity = continuity::load_pending_continuity(
+            data.as_ref(),
+            last_window.as_ref(),
+            last_tracking_status.as_ref(),
+            &tracked_window,
+            tracking_state.continuity_window_secs,
+            now_ms,
+        )
+        .await;
+
+        let did_change_active_window =
+            tracker::has_meaningful_change(last_emitted_window.as_ref(), &window_info);
+
+        let tracking_data_change_reason =
+            match transition::apply_window_transition_with_title_policy(
+                data.as_ref(),
+                last_window.as_ref(),
+                &tracked_window,
+                now_ms,
+                continuity_group_start_time,
+                tracking_state.capture_window_title,
+                active_session::start_session_for_transition,
+            )
+            .await
+            {
+                Ok(reason) => reason,
+                Err(error) => {
+                    log_tracker_error(format!("failed to apply window transition: {error}"));
+                    clear_active_session_snapshot(&app);
+                    drop(transition_guard);
+                    sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
+            };
+        record_committed_sample(
+            data.as_ref(),
+            &health_state,
+            now_ms,
+            poll_outcome.is_successful_sample(),
+            &mut timestamp_persist_state,
+        )
+        .await;
+        let did_change_tracking_data = tracking_data_change_reason.is_some();
+
+        let did_change_tracking_status = !did_change_active_window
+            && !did_change_tracking_data
+            && should_emit_tracking_status_changed(
+                last_tracking_status.as_ref(),
+                &tracking_state.tracking_status,
+            );
+
+        pending_continuity = continuity::resolve_next_pending_continuity(
+            pending_continuity,
+            new_pending_continuity,
+            continuity_group_start_time,
+            &tracked_window,
+            now_ms,
+        );
+        progress.enter(watchdog::TrackingStage::Snapshot);
+        refresh_active_session_snapshot_if_changed(&app, data.as_ref(), did_change_tracking_data)
+            .await;
+        if did_change_active_window {
+            if let Some(snapshot) = snapshot_state.snapshot() {
+                app.active_window_changed(&snapshot.window);
+            }
+            last_emitted_window = Some(window_info.clone());
+        }
+        last_window = Some(tracked_window);
+        last_tracking_status = Some(tracking_state.tracking_status);
+        emit_tracking_loop_change(
+            &app,
+            tracking_data_change_reason,
+            did_change_tracking_status,
+            now_ms,
+        );
+        drop(transition_guard);
+        sleep(Duration::from_secs(1)).await;
+    }
+}
+
+pub async fn handle_power_lifecycle_event<H: TrackingHost>(
+    app: H,
+    data: &dyn TrackingDataStore,
+) -> Result<(), String> {
+    let snapshot_state = app.projection();
+    let _guard = snapshot_state.transition.lock().await;
+    power_lifecycle::flush_pending_power_stop_and_publish(&app, data, snapshot_state).await?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::data::schema as db_schema;
+    use crate::data::tracking_runtime::TrackingRuntimeDataStore;
+    use serde_json::json;
+    use sqlx::{Executor, SqlitePool};
+
+    fn make_window(overrides: &[(&str, &str)]) -> tracker::WindowInfo {
+        let mut window = tracker::WindowInfo {
+            hwnd: "0x100".into(),
+            root_owner_hwnd: "0x100".into(),
+            process_id: 123,
+            window_class: "Chrome_WidgetWin_1".into(),
+            title: "Window".into(),
+            exe_name: "QQ.exe".into(),
+            process_path: r"C:\Program Files\QQ\QQ.exe".into(),
+            app_user_model_id: String::new(),
+            is_afk: false,
+            idle_time_ms: 0,
+        };
+
+        for (key, value) in overrides {
+            match *key {
+                "hwnd" => window.hwnd = (*value).into(),
+                "root_owner_hwnd" => window.root_owner_hwnd = (*value).into(),
+                "process_id" => window.process_id = value.parse().unwrap(),
+                "window_class" => window.window_class = (*value).into(),
+                "title" => window.title = (*value).into(),
+                "exe_name" => window.exe_name = (*value).into(),
+                "process_path" => window.process_path = (*value).into(),
+                "is_afk" => window.is_afk = *value == "true",
+                "idle_time_ms" => window.idle_time_ms = value.parse().unwrap(),
+                _ => {}
+            }
+        }
+
+        window
+    }
+
+    async fn setup_test_db() -> SqlitePool {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        pool.execute(db_schema::CURRENT_BASELINE_SCHEMA_SQL)
+            .await
+            .unwrap();
+        pool
+    }
+
+    fn data_store(pool: &SqlitePool) -> TrackingRuntimeDataStore {
+        TrackingRuntimeDataStore::new(pool.clone())
+    }
+
+    #[test]
+    fn afk_transition_backdates_end_without_starting_new_session() {
+        let previous = make_window(&[]);
+        let next = make_window(&[
+            ("exe_name", "explorer.exe"),
+            ("process_path", r"C:\Windows\explorer.exe"),
+            ("is_afk", "true"),
+            ("idle_time_ms", "300000"),
+        ]);
+
+        let decision = transition::plan_window_transition(Some(&previous), &next, 1_000_000);
+
+        assert!(decision.should_end_previous);
+        assert!(!decision.should_start_next);
+        assert!(!decision.should_refresh_metadata);
+        assert_eq!(decision.end_time_override, Some(700_000));
+    }
+
+    #[test]
+    fn file_explorer_window_is_trackable_but_desktop_shell_is_not() {
+        let file_explorer = make_window(&[
+            ("exe_name", "explorer.exe"),
+            ("process_path", r"C:\Windows\explorer.exe"),
+            ("window_class", "CabinetWClass"),
+            ("title", "Downloads"),
+        ]);
+        let desktop_shell = make_window(&[
+            ("exe_name", "explorer.exe"),
+            ("process_path", r"C:\Windows\explorer.exe"),
+            ("window_class", "Progman"),
+            ("title", "Program Manager"),
+        ]);
+        let taskbar_shell = make_window(&[
+            ("exe_name", "explorer.exe"),
+            ("process_path", r"C:\Windows\explorer.exe"),
+            ("window_class", "Shell_TrayWnd"),
+            ("title", ""),
+        ]);
+        let wallpaper_shell = make_window(&[
+            ("exe_name", "ui32.exe"),
+            (
+                "process_path",
+                r"C:\Program Files (x86)\Steam\steamapps\common\wallpaper_engine\ui32.exe",
+            ),
+            ("window_class", "WorkerW"),
+            ("title", ""),
+        ]);
+        let wallpaper_host = make_window(&[
+            ("exe_name", "ui32.exe"),
+            (
+                "process_path",
+                r"C:\Program Files (x86)\Steam\steamapps\common\wallpaper_engine\ui32.exe",
+            ),
+            ("window_class", "Chrome_WidgetWin_1"),
+            ("title", ""),
+        ]);
+        let wallpaper_app = make_window(&[
+            ("exe_name", "ui32.exe"),
+            (
+                "process_path",
+                r"C:\Program Files (x86)\Steam\steamapps\common\wallpaper_engine\ui32.exe",
+            ),
+            ("window_class", "Chrome_WidgetWin_1"),
+            ("title", "Wallpaper Engine"),
+        ]);
+
+        assert!(transition::is_trackable_window(Some(&file_explorer)));
+        assert!(!transition::is_trackable_window(Some(&desktop_shell)));
+        assert!(!transition::is_trackable_window(Some(&taskbar_shell)));
+        assert!(!transition::is_trackable_window(Some(&wallpaper_shell)));
+        assert!(!transition::is_trackable_window(Some(&wallpaper_host)));
+        assert!(transition::is_trackable_window(Some(&wallpaper_app)));
+    }
+
+    #[test]
+    fn same_app_different_window_refreshes_metadata_without_splitting_session() {
+        let previous = make_window(&[
+            ("hwnd", "0x100"),
+            ("root_owner_hwnd", "0x100"),
+            ("title", "Window A"),
+        ]);
+        let next = make_window(&[
+            ("hwnd", "0x200"),
+            ("root_owner_hwnd", "0x200"),
+            ("title", "Window B"),
+        ]);
+
+        let decision = transition::plan_window_transition(Some(&previous), &next, 1_000_000);
+
+        assert_eq!(decision.reason, "session-metadata-refreshed");
+        assert!(!decision.should_end_previous);
+        assert!(!decision.should_start_next);
+        assert!(decision.should_refresh_metadata);
+    }
+
+    #[test]
+    fn lock_screen_processes_are_not_trackable() {
+        assert!(!crate::domain::tracking::should_track("LockApp.exe"));
+        assert!(!crate::domain::tracking::should_track("LogonUI.exe"));
+        assert!(crate::domain::tracking::should_track("time-tracker.exe"));
+        assert!(crate::domain::tracking::should_track("time_tracker.exe"));
+        assert!(crate::domain::tracking::should_track("patina.exe"));
+        assert!(!crate::domain::tracking::should_track("un.exe"));
+        assert!(!crate::domain::tracking::should_track("SearchHost.exe"));
+        assert!(!crate::domain::tracking::should_track("ShellHost.exe"));
+        assert!(!crate::domain::tracking::should_track(
+            "ShellExperienceHost.exe"
+        ));
+        assert!(!crate::domain::tracking::should_track("Consent.exe"));
+        assert!(!crate::domain::tracking::should_track("PickerHost.exe"));
+        assert!(!crate::domain::tracking::should_track("openwith.exe"));
+        assert!(!crate::domain::tracking::should_track("SearchUXHost.exe"));
+        assert!(!crate::domain::tracking::should_track(
+            "FooExperienceHost.exe"
+        ));
+        assert!(!crate::domain::tracking::should_track("svchost.exe"));
+        assert!(crate::domain::tracking::should_track("cmd.exe"));
+        assert!(crate::domain::tracking::should_track("powershell.exe"));
+        assert!(crate::domain::tracking::should_track("pwsh.exe"));
+        assert!(crate::domain::tracking::should_track("WindowsTerminal.exe"));
+        assert!(crate::domain::tracking::should_track("wt.exe"));
+        assert!(crate::domain::tracking::should_track("conhost.exe"));
+        assert!(crate::domain::tracking::should_track("OpenConsole.exe"));
+    }
+
+    #[test]
+    fn lifecycle_utility_processes_are_not_trackable() {
+        assert!(!crate::domain::tracking::should_track("uninstall.exe"));
+        assert!(!crate::domain::tracking::should_track("unins000.exe"));
+        assert!(!crate::domain::tracking::should_track("obsidian-setup.exe"));
+        assert!(!crate::domain::tracking::should_track(
+            "cursor-installer.exe"
+        ));
+        assert!(!crate::domain::tracking::should_track("cursor-updater.exe"));
+        assert!(!crate::domain::tracking::should_track(
+            "maintenancetool.exe"
+        ));
+        assert!(crate::domain::tracking::should_track("Antigravity.exe"));
+    }
+
+    #[test]
+    fn lifecycle_utility_window_titles_are_not_trackable_for_versioned_installers() {
+        let installer = make_window(&[
+            ("exe_name", "alma-0.0.750-win-x64.exe"),
+            ("title", "Alma 安装"),
+        ]);
+        let app = make_window(&[("exe_name", "Alma.exe"), ("title", "Alma")]);
+
+        assert!(!transition::is_trackable_window(Some(&installer)));
+        assert!(transition::is_trackable_window(Some(&app)));
+    }
+
+    #[test]
+    fn watchdog_seal_only_triggers_once_per_stale_sample() {
+        assert!(!watchdog::should_watchdog_seal(None, None, 20_000));
+        assert!(!watchdog::should_watchdog_seal(Some(10_000), None, 18_000));
+        assert!(watchdog::should_watchdog_seal(Some(10_000), None, 18_001));
+        assert!(!watchdog::should_watchdog_seal(
+            Some(10_000),
+            Some(10_000),
+            25_000
+        ));
+        assert!(watchdog::should_watchdog_seal(
+            Some(12_000),
+            Some(10_000),
+            21_000
+        ));
+    }
+
+    #[test]
+    fn tracking_status_refresh_emits_for_sustained_participation_changes_only() {
+        let regular = TrackingStatusSnapshot {
+            is_tracking_active: true,
+            ..TrackingStatusSnapshot::default()
+        };
+        let sustained = TrackingStatusSnapshot {
+            is_tracking_active: true,
+            sustained_participation_eligible: true,
+            sustained_participation_active: true,
+            sustained_participation_kind: Some(
+                crate::domain::tracking::SustainedParticipationKind::Audio,
+            ),
+            sustained_participation_state:
+                crate::domain::tracking::SustainedParticipationState::Active,
+            sustained_participation_signal_source: Some(
+                crate::domain::tracking::SustainedParticipationSignalSource::SystemMedia,
+            ),
+            sustained_participation_reason:
+                crate::domain::tracking::SustainedParticipationStatusReason::SignalMatched,
+            ..TrackingStatusSnapshot::default()
+        };
+        let diagnostic_timestamp_only = TrackingStatusSnapshot {
+            sustained_participation_diagnostics:
+                crate::domain::tracking::SustainedParticipationDiagnosticsSnapshot {
+                    last_match_at_ms: Some(42),
+                    ..sustained.sustained_participation_diagnostics.clone()
+                },
+            ..sustained.clone()
+        };
+
+        assert!(!should_emit_tracking_status_changed(None, &regular));
+        assert!(should_emit_tracking_status_changed(
+            Some(&regular),
+            &sustained
+        ));
+        assert!(!should_emit_tracking_status_changed(
+            Some(&sustained),
+            &diagnostic_timestamp_only
+        ));
+    }
+
+    #[tokio::test]
+    async fn app_title_capture_override_defaults_to_enabled() {
+        let pool = setup_test_db().await;
+
+        let enabled = tracker_settings::load_capture_window_title_setting_for_app(&pool, "QQ.exe")
+            .await
+            .unwrap();
+
+        assert!(enabled);
+    }
+
+    #[tokio::test]
+    async fn app_title_capture_override_can_disable_title_recording() {
+        let pool = setup_test_db().await;
+        let key = format!("{}qq.exe", tracker_settings::APP_OVERRIDE_KEY_PREFIX);
+        let value = serde_json::to_string(&json!({
+            "captureTitle": false,
+            "enabled": true
+        }))
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO settings (key, value) VALUES (?, ?)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        )
+        .bind(key)
+        .bind(value)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let enabled = tracker_settings::load_capture_window_title_setting_for_app(&pool, "QQ.exe")
+            .await
+            .unwrap();
+
+        assert!(!enabled);
+    }
+
+    #[test]
+    fn tracking_payload_contracts_are_stable() {
+        let payload =
+            serde_json::to_value(TrackingDataChangedPayload::new("session-transition", 123))
+                .unwrap();
+
+        assert_eq!(
+            payload,
+            json!({
+                "reason": "session-transition",
+                "changed_at_ms": 123
+            })
+        );
+
+        let window_payload = serde_json::to_value(make_window(&[])).unwrap();
+        assert_eq!(window_payload["hwnd"], "0x100");
+        assert_eq!(window_payload["root_owner_hwnd"], "0x100");
+        assert_eq!(window_payload["process_id"], 123);
+        assert_eq!(window_payload["window_class"], "Chrome_WidgetWin_1");
+        assert_eq!(window_payload["title"], "Window");
+        assert_eq!(window_payload["exe_name"], "QQ.exe");
+        assert_eq!(
+            window_payload["process_path"],
+            r"C:\Program Files\QQ\QQ.exe"
+        );
+        assert_eq!(window_payload["is_afk"], false);
+        assert_eq!(window_payload["idle_time_ms"], 0);
+    }
+
+    #[tokio::test]
+    async fn migration_dedupes_multiple_active_sessions() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        pool.execute(
+            "CREATE TABLE sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                app_name TEXT NOT NULL,
+                exe_name TEXT NOT NULL,
+                window_title TEXT,
+                start_time INTEGER NOT NULL,
+                end_time INTEGER,
+                duration INTEGER,
+                continuity_group_start_time INTEGER
+            )",
+        )
+        .await
+        .unwrap();
+        pool.execute(
+            "INSERT INTO sessions (app_name, exe_name, window_title, start_time)
+             VALUES ('QQ', 'QQ.exe', 'Chat A', 1000),
+                    ('QQ', 'QQ.exe', 'Chat B', 2000)",
+        )
+        .await
+        .unwrap();
+        pool.execute(db_schema::CURRENT_BASELINE_SCHEMA_SQL)
+            .await
+            .unwrap();
+
+        let active_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE end_time IS NULL")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+
+        let sealed_duration: i64 =
+            sqlx::query_scalar("SELECT duration FROM sessions WHERE start_time = 1000")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+
+        assert_eq!(active_count, 1);
+        assert_eq!(sealed_duration, 0);
+    }
+
+    #[tokio::test]
+    async fn start_session_preserves_single_active_session() {
+        let pool = setup_test_db().await;
+        let window = make_window(&[]);
+
+        assert!(active_session::start_session(&pool, &window, 1_000)
+            .await
+            .unwrap());
+        assert!(!active_session::start_session(&pool, &window, 2_000)
+            .await
+            .unwrap());
+
+        let active_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE end_time IS NULL")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+
+        assert_eq!(active_count, 1);
+    }
+
+    #[tokio::test]
+    async fn start_session_seals_stale_active_session_before_inserting_next() {
+        let pool = setup_test_db().await;
+        let previous = make_window(&[("exe_name", "Code.exe"), ("title", "Editor")]);
+        let next = make_window(&[("exe_name", "QQ.exe"), ("title", "Chat")]);
+
+        assert!(active_session::start_session(&pool, &previous, 1_000)
+            .await
+            .unwrap());
+        assert!(active_session::start_session(&pool, &next, 5_000)
+            .await
+            .unwrap());
+
+        let sessions: Vec<(String, i64, Option<i64>, Option<i64>)> = sqlx::query_as(
+            "SELECT exe_name, start_time, end_time, duration
+             FROM sessions
+             ORDER BY id ASC",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+
+        assert_eq!(
+            sessions,
+            vec![
+                ("Code.exe".to_string(), 1_000, Some(5_000), Some(4_000)),
+                ("QQ.exe".to_string(), 5_000, None, None),
+            ]
+        );
+
+        let title_samples: Vec<(String, i64, Option<i64>)> = sqlx::query_as(
+            "SELECT title, start_time, end_time
+             FROM session_title_samples
+             ORDER BY id ASC",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+
+        assert_eq!(
+            title_samples,
+            vec![
+                ("Editor".to_string(), 1_000, Some(5_000)),
+                ("Chat".to_string(), 5_000, None),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn missing_active_session_is_recovered_without_window_change() {
+        let pool = setup_test_db().await;
+        let data = data_store(&pool);
+        let window = make_window(&[]);
+
+        let reason = transition::apply_window_transition(
+            &data,
+            Some(&window),
+            &window,
+            5_000,
+            5_000,
+            active_session::start_session_for_transition,
+        )
+        .await
+        .unwrap();
+
+        let active_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE end_time IS NULL")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+
+        assert_eq!(reason, Some("session-recovered"));
+        assert_eq!(active_count, 1);
+    }
+
+    #[tokio::test]
+    async fn metadata_refresh_updates_active_session_title() {
+        let pool = setup_test_db().await;
+        let data = data_store(&pool);
+        let original = make_window(&[("title", "Window A")]);
+        let updated = make_window(&[
+            ("hwnd", "0x200"),
+            ("root_owner_hwnd", "0x200"),
+            ("title", "Window B"),
+        ]);
+
+        assert!(active_session::start_session(&pool, &original, 1_000)
+            .await
+            .unwrap());
+
+        let reason = transition::apply_window_transition(
+            &data,
+            Some(&original),
+            &updated,
+            5_000,
+            5_000,
+            active_session::start_session_for_transition,
+        )
+        .await
+        .unwrap();
+
+        let latest_title: String =
+            sqlx::query_scalar("SELECT window_title FROM sessions WHERE end_time IS NULL LIMIT 1")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+
+        assert_eq!(reason, Some("session-metadata-refreshed"));
+        assert_eq!(latest_title, "Window B");
+
+        let samples: Vec<(String, i64, Option<i64>)> = sqlx::query_as(
+            "SELECT title, start_time, end_time
+             FROM session_title_samples
+             ORDER BY id ASC",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            samples,
+            vec![
+                ("Window A".to_string(), 1_000, Some(5_000)),
+                ("Window B".to_string(), 5_000, None),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn title_capture_disabled_closes_active_title_sample_without_starting_new_one() {
+        let pool = setup_test_db().await;
+        let data = data_store(&pool);
+        let original = make_window(&[("title", "Window A")]);
+        let hidden_title = make_window(&[("title", "")]);
+
+        assert!(active_session::start_session(&pool, &original, 1_000)
+            .await
+            .unwrap());
+
+        let reason = transition::apply_window_transition(
+            &data,
+            Some(&original),
+            &hidden_title,
+            5_000,
+            5_000,
+            active_session::start_session_for_transition,
+        )
+        .await
+        .unwrap();
+
+        let latest_title: String =
+            sqlx::query_scalar("SELECT window_title FROM sessions WHERE end_time IS NULL LIMIT 1")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let samples: Vec<(String, i64, Option<i64>)> = sqlx::query_as(
+            "SELECT title, start_time, end_time
+             FROM session_title_samples
+             ORDER BY id ASC",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+
+        assert_eq!(reason, Some("session-metadata-refreshed"));
+        assert_eq!(latest_title, "");
+        assert_eq!(samples, vec![("Window A".to_string(), 1_000, Some(5_000))]);
+    }
+
+    #[tokio::test]
+    async fn lock_event_seals_active_session_immediately() {
+        let pool = setup_test_db().await;
+        let data = data_store(&pool);
+        let window = make_window(&[]);
+
+        assert!(active_session::start_session(&pool, &window, 1_000)
+            .await
+            .unwrap());
+
+        let reason = apply_power_lifecycle_event(&data, "lock", 5_000)
+            .await
+            .unwrap();
+
+        let ended: Option<(i64, i64)> = sqlx::query_as(
+            "SELECT end_time, duration FROM sessions WHERE end_time IS NOT NULL LIMIT 1",
+        )
+        .fetch_optional(&pool)
+        .await
+        .unwrap();
+
+        assert_eq!(reason, Some("session-ended-lock"));
+        assert_eq!(ended, Some((5_000, 4_000)));
+
+        let sample_end_time: Option<i64> =
+            sqlx::query_scalar("SELECT end_time FROM session_title_samples LIMIT 1")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(sample_end_time, Some(5_000));
+    }
+
+    #[tokio::test]
+    async fn unlock_event_does_not_mutate_sessions() {
+        let pool = setup_test_db().await;
+        let data = data_store(&pool);
+        let reason = apply_power_lifecycle_event(&data, "unlock", 5_000)
+            .await
+            .unwrap();
+
+        let active_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE end_time IS NULL")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+
+        assert_eq!(reason, None);
+        assert_eq!(active_count, 0);
+    }
+
+    #[tokio::test]
+    async fn suspend_event_seals_active_session_immediately() {
+        let pool = setup_test_db().await;
+        let data = data_store(&pool);
+        let window = make_window(&[]);
+
+        assert!(active_session::start_session(&pool, &window, 1_000)
+            .await
+            .unwrap());
+
+        let reason = apply_power_lifecycle_event(&data, "suspend", 5_000)
+            .await
+            .unwrap();
+
+        let ended: Option<(i64, i64)> = sqlx::query_as(
+            "SELECT end_time, duration FROM sessions WHERE end_time IS NOT NULL LIMIT 1",
+        )
+        .fetch_optional(&pool)
+        .await
+        .unwrap();
+
+        assert_eq!(reason, Some("session-ended-suspend"));
+        assert_eq!(ended, Some((5_000, 4_000)));
+    }
+
+    #[tokio::test]
+    async fn resume_event_does_not_mutate_sessions() {
+        let pool = setup_test_db().await;
+        let data = data_store(&pool);
+        let reason = apply_power_lifecycle_event(&data, "resume", 5_000)
+            .await
+            .unwrap();
+
+        let active_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE end_time IS NULL")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+
+        assert_eq!(reason, None);
+        assert_eq!(active_count, 0);
+    }
+
+    #[tokio::test]
+    async fn tracking_pause_seals_active_session_and_returns_pause_reason() {
+        let pool = setup_test_db().await;
+        let data = data_store(&pool);
+        let window = make_window(&[]);
+
+        assert!(active_session::start_session(&pool, &window, 1_000)
+            .await
+            .unwrap());
+
+        let reason = seal_active_sessions_for_tracking_pause(&data, 5_000)
+            .await
+            .unwrap();
+
+        let ended: Option<(i64, i64)> = sqlx::query_as(
+            "SELECT end_time, duration FROM sessions WHERE end_time IS NOT NULL LIMIT 1",
+        )
+        .fetch_optional(&pool)
+        .await
+        .unwrap();
+
+        assert_eq!(reason, Some(TRACKING_REASON_TRACKING_PAUSED_SEALED));
+        assert_eq!(ended, Some((5_000, 4_000)));
+    }
+
+    #[tokio::test]
+    async fn tracking_pause_without_active_session_is_a_noop() {
+        let pool = setup_test_db().await;
+        let data = data_store(&pool);
+
+        let reason = seal_active_sessions_for_tracking_pause(&data, 5_000)
+            .await
+            .unwrap();
+
+        let active_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE end_time IS NULL")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+
+        assert_eq!(reason, None);
+        assert_eq!(active_count, 0);
+    }
+
+    #[tokio::test]
+    async fn lock_after_tracking_pause_does_not_double_seal_closed_session() {
+        let pool = setup_test_db().await;
+        let data = data_store(&pool);
+        let window = make_window(&[]);
+
+        assert!(active_session::start_session(&pool, &window, 1_000)
+            .await
+            .unwrap());
+        let pause_reason = seal_active_sessions_for_tracking_pause(&data, 5_000)
+            .await
+            .unwrap();
+        let lock_reason = apply_power_lifecycle_event(&data, "lock", 8_000)
+            .await
+            .unwrap();
+
+        let ended_sessions: Vec<(i64, i64)> =
+            sqlx::query_as("SELECT end_time, duration FROM sessions WHERE end_time IS NOT NULL")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+
+        assert_eq!(pause_reason, Some(TRACKING_REASON_TRACKING_PAUSED_SEALED));
+        assert_eq!(lock_reason, None);
+        assert_eq!(ended_sessions, vec![(5_000, 4_000)]);
+    }
+
+    #[tokio::test]
+    async fn tracking_pause_after_lock_is_a_noop_for_already_closed_session() {
+        let pool = setup_test_db().await;
+        let data = data_store(&pool);
+        let window = make_window(&[]);
+
+        assert!(active_session::start_session(&pool, &window, 1_000)
+            .await
+            .unwrap());
+        let lock_reason = apply_power_lifecycle_event(&data, "lock", 5_000)
+            .await
+            .unwrap();
+        let pause_reason = seal_active_sessions_for_tracking_pause(&data, 8_000)
+            .await
+            .unwrap();
+
+        let ended_sessions: Vec<(i64, i64)> =
+            sqlx::query_as("SELECT end_time, duration FROM sessions WHERE end_time IS NOT NULL")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+
+        assert_eq!(lock_reason, Some("session-ended-lock"));
+        assert_eq!(pause_reason, None);
+        assert_eq!(ended_sessions, vec![(5_000, 4_000)]);
+    }
+
+    #[tokio::test]
+    async fn lock_after_startup_seal_is_a_noop_for_already_closed_session() {
+        let pool = setup_test_db().await;
+        let data = data_store(&pool);
+        let window = make_window(&[]);
+
+        assert!(active_session::start_session(&pool, &window, 1_000)
+            .await
+            .unwrap());
+        tracker_settings::save_tracker_timestamp(
+            &pool,
+            crate::engine::tracking::ports::TRACKER_LAST_SUCCESSFUL_SAMPLE_KEY,
+            8_000,
+        )
+        .await
+        .unwrap();
+
+        let startup_reason = startup::seal_startup_active_session(&data, 20_000)
+            .await
+            .unwrap();
+        let lock_reason = apply_power_lifecycle_event(&data, "lock", 25_000)
+            .await
+            .unwrap();
+
+        let ended_sessions: Vec<(i64, i64)> =
+            sqlx::query_as("SELECT end_time, duration FROM sessions WHERE end_time IS NOT NULL")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+
+        assert_eq!(startup_reason, Some(8_000));
+        assert_eq!(lock_reason, None);
+        assert_eq!(ended_sessions, vec![(8_000, 7_000)]);
+    }
+
+    #[tokio::test]
+    async fn suspend_after_startup_seal_is_a_noop_for_already_closed_session() {
+        let pool = setup_test_db().await;
+        let data = data_store(&pool);
+        let window = make_window(&[]);
+
+        assert!(active_session::start_session(&pool, &window, 1_000)
+            .await
+            .unwrap());
+        tracker_settings::save_tracker_timestamp(
+            &pool,
+            crate::engine::tracking::ports::TRACKER_LAST_SUCCESSFUL_SAMPLE_KEY,
+            8_000,
+        )
+        .await
+        .unwrap();
+
+        let startup_reason = startup::seal_startup_active_session(&data, 20_000)
+            .await
+            .unwrap();
+        let suspend_reason = apply_power_lifecycle_event(&data, "suspend", 25_000)
+            .await
+            .unwrap();
+
+        let ended_sessions: Vec<(i64, i64)> =
+            sqlx::query_as("SELECT end_time, duration FROM sessions WHERE end_time IS NOT NULL")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+
+        assert_eq!(startup_reason, Some(8_000));
+        assert_eq!(suspend_reason, None);
+        assert_eq!(ended_sessions, vec![(8_000, 7_000)]);
+    }
+
+    #[tokio::test]
+    async fn tracking_pause_after_startup_seal_is_a_noop_for_already_closed_session() {
+        let pool = setup_test_db().await;
+        let data = data_store(&pool);
+        let window = make_window(&[]);
+
+        assert!(active_session::start_session(&pool, &window, 1_000)
+            .await
+            .unwrap());
+        tracker_settings::save_tracker_timestamp(
+            &pool,
+            crate::engine::tracking::ports::TRACKER_LAST_SUCCESSFUL_SAMPLE_KEY,
+            8_000,
+        )
+        .await
+        .unwrap();
+
+        let startup_reason = startup::seal_startup_active_session(&data, 20_000)
+            .await
+            .unwrap();
+        let pause_reason = seal_active_sessions_for_tracking_pause(&data, 25_000)
+            .await
+            .unwrap();
+
+        let ended_sessions: Vec<(i64, i64)> =
+            sqlx::query_as("SELECT end_time, duration FROM sessions WHERE end_time IS NOT NULL")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+
+        assert_eq!(startup_reason, Some(8_000));
+        assert_eq!(pause_reason, None);
+        assert_eq!(ended_sessions, vec![(8_000, 7_000)]);
+    }
+
+    #[tokio::test]
+    async fn startup_self_heal_normalizes_closed_session_duration() {
+        let pool = setup_test_db().await;
+
+        pool.execute(
+            "INSERT INTO sessions (app_name, exe_name, window_title, start_time, end_time, duration)
+             VALUES ('QQ', 'QQ.exe', 'Chat', 1000, 5000, 99)",
+        )
+        .await
+        .unwrap();
+
+        let affected = sessions::normalize_closed_session_durations(&pool)
+            .await
+            .unwrap();
+        let duration: i64 = sqlx::query_scalar("SELECT duration FROM sessions LIMIT 1")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+        assert_eq!(affected, 1);
+        assert_eq!(duration, 4000);
+    }
+}

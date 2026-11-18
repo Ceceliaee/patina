@@ -5,9 +5,6 @@ edition = "2021"
 publish = false
 
 [lib]
-path = "../../src-tauri/src/recording.rs"
-# The shared modules' unit tests run in the existing Patina Rust test target.
-test = false
 doctest = false
 
 [dependencies]

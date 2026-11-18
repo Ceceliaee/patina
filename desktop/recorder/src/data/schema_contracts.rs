@@ -1,0 +1,525 @@
+use sqlx::{Pool, Row, Sqlite};
+use std::collections::BTreeSet;
+
+pub async fn has_unique_activity_reminder_targets(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let expected = crate::data::schema::ACTIVITY_REMINDER_UNIQUE_TARGET_SQL
+        .split_once("CREATE UNIQUE INDEX IF NOT EXISTS")
+        .expect("unique target index migration")
+        .1;
+    activity_target_index_matches(pool, &format!("CREATE UNIQUE INDEX{expected}")).await
+}
+
+pub(super) async fn activity_target_index_matches(
+    pool: &Pool<Sqlite>,
+    expected: &str,
+) -> Result<bool, String> {
+    let sql: Option<String> = sqlx::query_scalar(
+        "SELECT sql FROM sqlite_master WHERE type = 'index'
+         AND name = 'idx_tool_activity_reminder_rules_unique_target'",
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|error| error.to_string())?;
+    let normalize = |value: &str| {
+        value
+            .split_whitespace()
+            .collect::<String>()
+            .trim_end_matches(';')
+            .to_ascii_lowercase()
+    };
+    Ok(sql.is_some_and(|sql| normalize(&sql) == normalize(expected)))
+}
+
+pub async fn has_reminder_recurrence_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let columns = table_columns(pool, "tool_reminder_recurrences").await?;
+    Ok(columns.contains("reminder_id")
+        && columns.contains("recurrence")
+        && columns.contains("recurrence_anchor_at"))
+}
+
+pub async fn has_focus_history(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let groups = table_columns(pool, "focus_history_groups").await?;
+    let spans = table_columns(pool, "focus_history_spans").await?;
+    if !["group_key", "kind", "task_id", "started_at", "outcome"]
+        .iter()
+        .all(|c| groups.contains(*c))
+        || ![
+            "id",
+            "group_key",
+            "phase",
+            "cycle",
+            "rounds",
+            "started_at",
+            "ended_at",
+            "phase_finished_at",
+        ]
+        .iter()
+        .all(|c| spans.contains(*c))
+    {
+        return Ok(false);
+    }
+    sqlx::query_scalar("SELECT COUNT(*)=9 FROM sqlite_master WHERE type='trigger' AND name IN
+        ('focus_history_pomodoro_insert','focus_history_pomodoro_resume','focus_history_pomodoro_transition',
+        'focus_history_free_insert','focus_history_free_resume','focus_history_free_transition',
+        'focus_history_pomodoro_delete','focus_history_pomodoro_tombstone','focus_history_free_delete')")
+        .fetch_one(pool).await.map_err(|e| e.to_string())
+}
+
+pub async fn has_reminder_identity_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let columns = table_columns(pool, "tool_reminder_identities").await?;
+    if !columns.contains("reminder_id") || !columns.contains("restore_key") {
+        return Ok(false);
+    }
+    sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pragma_index_list('tool_reminder_identities') WHERE name='idx_tool_reminder_restore_key' AND [unique]=1)
+        AND EXISTS(SELECT 1 FROM pragma_index_info('idx_tool_reminder_restore_key') WHERE name='restore_key')
+        AND EXISTS(SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='trg_tool_reminder_identity' AND tbl_name='tool_reminders')")
+        .fetch_one(pool).await.map_err(|e| e.to_string())
+}
+
+pub async fn has_free_focus_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let columns = table_columns(pool, "tool_free_focus").await?;
+    Ok([
+        "id",
+        "label",
+        "rest_mode",
+        "rest_minutes",
+        "rest_ratio",
+        "phase",
+        "status",
+        "elapsed_ms",
+        "rest_remaining_ms",
+        "started_at",
+        "created_at",
+        "updated_at",
+        "deleted_at",
+    ]
+    .iter()
+    .all(|column| columns.contains(*column)))
+}
+
+pub async fn has_pomodoro_tasks_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let columns = table_columns(pool, "tool_pomodoro_tasks").await?;
+    Ok(["run_id", "label", "deleted_at"]
+        .iter()
+        .all(|column| columns.contains(*column)))
+}
+
+pub async fn has_pomodoro_completions_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let columns = table_columns(pool, "tool_pomodoro_task_completions").await?;
+    Ok(columns.contains("run_id") && columns.contains("completed_groups"))
+}
+
+pub async fn has_retired_widget_preferences(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    // Reuse the migration predicate so history repair and execution share the same data contract.
+    let query =
+        crate::data::schema::WIDGET_RETIREMENT_SQL.replace("DELETE FROM", "SELECT COUNT(*) FROM");
+    let count: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(query))
+        .fetch_one(pool)
+        .await
+        .map_err(|error| format!("failed to inspect retired window preferences: {error}"))?;
+    Ok(count == 0)
+}
+
+pub async fn has_anonymous_activity_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let columns = table_columns(pool, "anonymous_activity").await?;
+    let indexes = table_indexes(pool, "anonymous_activity").await?;
+    let revision_columns = table_columns(pool, "anonymous_activity_revision").await?;
+    let trigger_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger'
+        AND name IN ('trg_anonymous_read_model_insert', 'trg_anonymous_read_model_update', 'trg_anonymous_read_model_delete')")
+        .fetch_one(pool).await.map_err(|error| error.to_string())?;
+    Ok(["id", "start_time", "end_time", "observed_until", "is_web"]
+        .iter()
+        .all(|name| columns.contains(*name))
+        && indexes.contains("idx_anonymous_activity_active")
+        && indexes.contains("idx_anonymous_activity_range")
+        && revision_columns.contains("source_revision")
+        && trigger_count == 3)
+}
+
+pub async fn has_session_range_index(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let index = sqlx::query("SELECT \"unique\", partial FROM pragma_index_list('sessions') WHERE name = 'idx_sessions_end_start'")
+        .fetch_optional(pool).await.map_err(|error| error.to_string())?;
+    let Some(index) = index else { return Ok(false) };
+    let columns: Vec<String> = sqlx::query_scalar(
+        "SELECT name FROM pragma_index_info('idx_sessions_end_start') ORDER BY seqno",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|error| error.to_string())?;
+    Ok(index.get::<i64, _>("unique") == 0
+        && index.get::<i64, _>("partial") == 0
+        && columns == ["end_time", "start_time"])
+}
+
+pub async fn has_web_activity_session_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let columns = table_columns(pool, "web_activity_native_sessions").await?;
+    let indexes = table_indexes(pool, "web_activity_native_sessions").await?;
+    let trigger: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name = 'trg_native_session_web_boundary'")
+        .fetch_one(pool).await.map_err(|error| error.to_string())?;
+    Ok(columns.contains("segment_id")
+        && columns.contains("session_id")
+        && indexes.contains("idx_web_activity_native_session")
+        && trigger == 1)
+}
+
+pub async fn has_web_activity_revision_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let rows = sqlx::query("PRAGMA table_info(web_activity_revision)")
+        .fetch_all(pool)
+        .await
+        .map_err(|error| {
+            format!("failed to inspect web_activity_revision schema columns: {error}")
+        })?;
+    let columns = rows
+        .iter()
+        .map(|row| row.get::<String, _>("name"))
+        .collect::<Vec<_>>();
+
+    Ok(["id", "source_revision", "updated_at_ms"]
+        .iter()
+        .all(|required| columns.iter().any(|column| column == required)))
+}
+
+async fn table_columns(pool: &Pool<Sqlite>, table: &str) -> Result<BTreeSet<String>, String> {
+    let rows = sqlx::query("SELECT name FROM pragma_table_info(?)")
+        .bind(table)
+        .fetch_all(pool)
+        .await
+        .map_err(|error| format!("failed to inspect {table} schema columns: {error}"))?;
+    Ok(rows
+        .iter()
+        .map(|row| row.get::<String, _>("name"))
+        .collect())
+}
+
+async fn table_indexes(pool: &Pool<Sqlite>, table: &str) -> Result<BTreeSet<String>, String> {
+    let rows = sqlx::query("SELECT name FROM pragma_index_list(?)")
+        .bind(table)
+        .fetch_all(pool)
+        .await
+        .map_err(|error| format!("failed to inspect {table} schema indexes: {error}"))?;
+    Ok(rows
+        .iter()
+        .map(|row| row.get::<String, _>("name"))
+        .collect())
+}
+
+pub async fn has_activity_reminder_rules_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let columns = table_columns(pool, "tool_activity_reminder_rules").await?;
+    let indexes = table_indexes(pool, "tool_activity_reminder_rules").await?;
+    let legacy_columns = table_columns(pool, "tool_software_reminder_rules").await?;
+    Ok([
+        "id",
+        "target_kind",
+        "app_name",
+        "exe_name",
+        "category_id",
+        "normalized_domain",
+        "label_snapshot",
+        "limit_ms",
+        "message",
+        "created_at",
+        "updated_at",
+        "disabled_at",
+        "last_fired_date_key",
+    ]
+    .iter()
+    .all(|column| columns.contains(*column))
+        && [
+            "idx_tool_activity_reminder_rules_active",
+            "idx_tool_activity_reminder_rules_app",
+            "idx_tool_activity_reminder_rules_category",
+            "idx_tool_activity_reminder_rules_web",
+        ]
+        .iter()
+        .all(|index| indexes.contains(*index))
+        && legacy_columns.is_empty())
+}
+
+pub async fn has_activity_reminder_enabled_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let columns = table_columns(pool, "tool_activity_reminder_states").await?;
+    Ok(columns.contains("rule_id") && columns.contains("enabled"))
+}
+
+pub async fn has_activity_reminder_extensions_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let columns = table_columns(pool, "tool_activity_reminder_extensions").await?;
+    Ok([
+        "rule_id",
+        "last_fired_at",
+        "extension_date_key",
+        "extension_limit_ms",
+        "last_extended_alert_at",
+    ]
+    .iter()
+    .all(|column| columns.contains(*column)))
+}
+
+pub async fn has_scheduled_backup_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let config_columns = table_columns(pool, "scheduled_backup_config").await?;
+    let run_columns = table_columns(pool, "scheduled_backup_runs").await?;
+    let run_indexes = table_indexes(pool, "scheduled_backup_runs").await?;
+
+    Ok([
+        "id",
+        "enabled",
+        "cadence",
+        "weekday",
+        "local_time_minutes",
+        "target_kind",
+        "target_dir",
+        "target_identity",
+        "retention_count",
+        "target_generation",
+        "schedule_anchor_at_ms",
+        "updated_at_ms",
+    ]
+    .iter()
+    .all(|column| config_columns.contains(*column))
+        && [
+            "run_key",
+            "target_generation",
+            "target_kind",
+            "logical_date",
+            "logical_time_minutes",
+            "status",
+            "attempt_count",
+            "target_path",
+            "staging_path",
+            "phase",
+            "remote_etag",
+            "archive_sha256",
+            "size_bytes",
+            "file_state",
+            "retry_at_ms",
+            "error_code",
+            "error_message",
+            "cleanup_warning",
+            "started_at_ms",
+            "completed_at_ms",
+            "updated_at_ms",
+        ]
+        .iter()
+        .all(|column| run_columns.contains(*column))
+        && run_indexes.contains("idx_scheduled_backup_runs_retention")
+        && run_indexes.contains("idx_scheduled_backup_runs_status_retry"))
+}
+
+pub async fn has_scheduled_export_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let config_columns = table_columns(pool, "scheduled_export_config").await?;
+    let run_columns = table_columns(pool, "scheduled_export_runs").await?;
+    let run_indexes = table_indexes(pool, "scheduled_export_runs").await?;
+
+    Ok([
+        "id",
+        "enabled",
+        "cadence",
+        "weekday",
+        "local_time_minutes",
+        "target_dir",
+        "format",
+        "selected_fields_json",
+        "plan_generation",
+        "schedule_anchor_at_ms",
+        "updated_at_ms",
+    ]
+    .iter()
+    .all(|column| config_columns.contains(*column))
+        && [
+            "run_key",
+            "plan_generation",
+            "cadence",
+            "logical_start_date",
+            "logical_end_date",
+            "period_start_ms",
+            "period_end_ms",
+            "format",
+            "selected_fields_json",
+            "target_path",
+            "staging_path",
+            "phase",
+            "status",
+            "file_state",
+            "attempt_count",
+            "retry_at_ms",
+            "row_count",
+            "size_bytes",
+            "sha256",
+            "error_code",
+            "error_message",
+            "started_at_ms",
+            "completed_at_ms",
+            "updated_at_ms",
+        ]
+        .iter()
+        .all(|column| run_columns.contains(*column))
+        && run_indexes.contains("idx_scheduled_export_runs_status_retry")
+        && run_indexes.contains("idx_scheduled_export_runs_recent"))
+}
+
+pub async fn has_local_only_scheduled_backup_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let config_columns = table_columns(pool, "scheduled_backup_config").await?;
+    let run_columns = table_columns(pool, "scheduled_backup_runs").await?;
+    let run_indexes = table_indexes(pool, "scheduled_backup_runs").await?;
+    Ok(config_columns.contains("target_dir")
+        && !config_columns.contains("target_kind")
+        && run_columns.contains("target_path")
+        && !run_columns.contains("target_kind")
+        && run_indexes.contains("idx_scheduled_backup_runs_retention")
+        && run_indexes.contains("idx_scheduled_backup_runs_status_retry"))
+}
+
+pub(super) async fn has_retired_timer(pool: &Pool<Sqlite>) -> Result<bool, String> {
+    let remaining: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'
+         AND name IN ('tool_timers', 'tool_timer_laps')",
+    )
+    .fetch_one(pool)
+    .await
+    .map_err(|error| format!("failed to inspect timer retirement: {error}"))?;
+    Ok(remaining == 0)
+}
+
+pub(super) async fn schema_revision_limit(pool: &Pool<Sqlite>) -> Result<usize, String> {
+    let scheduled_backup_migration_count = if has_scheduled_backup_schema(pool).await? {
+        2
+    } else if has_local_only_scheduled_backup_schema(pool).await? {
+        1
+    } else {
+        0
+    };
+    let revision_limit = crate::data::schema::ACTIVITY_READ_MODELS_MIGRATION_VERSION as usize
+        + usize::from(has_web_activity_revision_schema(pool).await?)
+        + scheduled_backup_migration_count
+        + usize::from(has_scheduled_export_schema(pool).await?)
+        + usize::from(has_activity_reminder_rules_schema(pool).await?)
+        + usize::from(has_web_activity_session_schema(pool).await?)
+        + usize::from(has_session_range_index(pool).await?)
+        + usize::from(has_anonymous_activity_schema(pool).await?);
+    // A data migration cannot be inferred from table layout. Never mark it applied
+    // while its removed preferences remain in the database.
+    let revision_limit = revision_limit
+        + usize::from(
+            revision_limit == crate::data::schema::ANONYMOUS_ACTIVITY_MIGRATION_VERSION as usize
+                && has_retired_widget_preferences(pool).await?,
+        );
+    let revision_limit = revision_limit
+        + usize::from(
+            revision_limit == crate::data::schema::WIDGET_RETIREMENT_MIGRATION_VERSION as usize
+                && has_activity_reminder_extensions_schema(pool).await?,
+        );
+    let revision_limit = revision_limit
+        + usize::from(
+            revision_limit
+                == crate::data::schema::ACTIVITY_REMINDER_EXTENSION_MIGRATION_VERSION as usize
+                && has_activity_reminder_enabled_schema(pool).await?,
+        );
+    let revision_limit = revision_limit
+        + usize::from(
+            revision_limit
+                == crate::data::schema::ACTIVITY_REMINDER_ENABLED_MIGRATION_VERSION as usize
+                && has_reminder_recurrence_schema(pool).await?,
+        );
+    let revision_limit = revision_limit
+        + usize::from(
+            revision_limit == crate::data::schema::REMINDER_RECURRENCE_MIGRATION_VERSION as usize
+                && has_unique_activity_reminder_targets(pool).await?,
+        );
+    let revision_limit = revision_limit
+        + usize::from(
+            revision_limit
+                == crate::data::schema::ACTIVITY_REMINDER_UNIQUE_TARGET_MIGRATION_VERSION as usize
+                && has_retired_timer(pool).await?,
+        );
+    let revision_limit = revision_limit
+        + usize::from(
+            revision_limit == crate::data::schema::TIMER_RETIREMENT_MIGRATION_VERSION as usize
+                && has_pomodoro_tasks_schema(pool).await?,
+        );
+    let revision_limit = revision_limit
+        + usize::from(
+            revision_limit == crate::data::schema::POMODORO_TASKS_MIGRATION_VERSION as usize
+                && has_pomodoro_completions_schema(pool).await?,
+        );
+    let revision_limit = revision_limit
+        + usize::from(
+            revision_limit == crate::data::schema::POMODORO_COMPLETIONS_MIGRATION_VERSION as usize
+                && has_free_focus_schema(pool).await?,
+        );
+    let revision_limit = revision_limit
+        + usize::from(
+            revision_limit == crate::data::schema::FREE_FOCUS_MIGRATION_VERSION as usize
+                && has_reminder_identity_schema(pool).await?,
+        );
+    Ok(revision_limit
+        + usize::from(
+            revision_limit == crate::data::schema::REMINDER_IDENTITY_MIGRATION_VERSION as usize
+                && has_focus_history(pool).await?,
+        ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::data::schema::{SCHEDULED_BACKUP_SCHEMA_SQL, SCHEDULED_BACKUP_TARGETS_SCHEMA_SQL};
+    use sqlx::{Executor, SqlitePool};
+
+    #[tokio::test]
+    async fn scheduled_backup_contract_matches_migration_schema() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        pool.execute(SCHEDULED_BACKUP_SCHEMA_SQL).await.unwrap();
+        pool.execute(SCHEDULED_BACKUP_TARGETS_SCHEMA_SQL)
+            .await
+            .unwrap();
+        assert!(has_scheduled_backup_schema(&pool).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn scheduled_export_contract_matches_migration_schema() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        pool.execute(crate::data::schema::SCHEDULED_EXPORT_SCHEMA_SQL)
+            .await
+            .unwrap();
+        assert!(has_scheduled_export_schema(&pool).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn scheduled_backup_target_migration_preserves_local_configuration_and_runs() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        pool.execute(SCHEDULED_BACKUP_SCHEMA_SQL).await.unwrap();
+        pool.execute(
+            "INSERT INTO scheduled_backup_config (
+                id, enabled, cadence, weekday, local_time_minutes, target_dir,
+                retention_count, target_generation, schedule_anchor_at_ms, updated_at_ms
+             ) VALUES (1, 1, 'daily', NULL, 120, 'C:\\Backups', 3, 'generation', 1, 1)",
+        )
+        .await
+        .unwrap();
+        pool.execute(
+            "INSERT INTO scheduled_backup_runs (
+                run_key, target_generation, logical_date, logical_time_minutes, target_path,
+                status, file_state, attempt_count, started_at_ms, updated_at_ms
+             ) VALUES (
+                'scheduled-local-backup:generation:2026-08-09:0200', 'generation',
+                '2026-08-09', 120, 'C:\\Backups\\one.zip', 'running', 'absent', 1, 1, 1
+             )",
+        )
+        .await
+        .unwrap();
+        pool.execute(SCHEDULED_BACKUP_TARGETS_SCHEMA_SQL)
+            .await
+            .unwrap();
+
+        let target_kind: String =
+            sqlx::query_scalar("SELECT target_kind FROM scheduled_backup_config WHERE id = 1")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let run_key: String =
+            sqlx::query_scalar("SELECT run_key FROM scheduled_backup_runs LIMIT 1")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(target_kind, "local");
+        assert_eq!(run_key, "scheduled-backup:generation:2026-08-09:0200");
+        assert!(has_scheduled_backup_schema(&pool).await.unwrap());
+    }
+}

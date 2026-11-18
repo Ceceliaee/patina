@@ -15,7 +15,7 @@ use windows::{
     core::{HSTRING, Owned, PCWSTR, PWSTR},
 };
 
-#[path = "../../../src-tauri/src/platform/windows/job.rs"]
+#[path = "../../recorder/src/platform/windows/job.rs"]
 mod job;
 
 const PREFIX: &str = "Patina-Test-";

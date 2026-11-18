@@ -1,0 +1,352 @@
+use crate::domain::settings::WebActivitySettings;
+use crate::domain::web_activity::{
+    sanitize_active_tab_payload, sanitize_browser_client_id, BrowserActiveTabPayload,
+    WebActivityChange, WebActivitySegmentInput,
+};
+use crate::engine::tracking::runtime_snapshot::TrackingRuntimeSnapshotState;
+use crate::engine::tracking::title_state::TitleRecordingRuntimeState;
+use std::future::Future;
+use std::pin::Pin;
+
+pub type WebActivityStoreFuture<'a, T> =
+    Pin<Box<dyn Future<Output = Result<T, String>> + Send + 'a>>;
+
+pub trait WebActivityStore: Send + Sync {
+    fn seal_anonymous(&self, now_ms: i64) -> WebActivityStoreFuture<'_, bool>;
+    fn record_anonymous(&self, now_ms: i64) -> WebActivityStoreFuture<'_, bool>;
+    fn browser_recording_enabled<'a>(
+        &'a self,
+        exe_name: &'a str,
+    ) -> WebActivityStoreFuture<'a, bool>;
+    fn expire_active_segment(&self, now_ms: i64) -> WebActivityStoreFuture<'_, bool>;
+    fn seal_source<'a>(
+        &'a self,
+        client: &'a str,
+        native_session_id: i64,
+        now_ms: i64,
+    ) -> WebActivityStoreFuture<'a, bool>;
+    fn load_domain_recording_enabled<'a>(
+        &'a self,
+        normalized_domain: &'a str,
+    ) -> WebActivityStoreFuture<'a, bool>;
+    fn load_domain_title_recording_enabled<'a>(
+        &'a self,
+        normalized_domain: &'a str,
+    ) -> WebActivityStoreFuture<'a, bool>;
+    fn upsert_active_segment<'a>(
+        &'a self,
+        input: &'a WebActivitySegmentInput,
+        now_ms: i64,
+    ) -> WebActivityStoreFuture<'a, WebActivityChange>;
+    fn seal_active_segment(&self, now_ms: i64) -> WebActivityStoreFuture<'_, bool>;
+}
+
+#[derive(Debug, Default)]
+pub struct WebActivityRuntimeState {
+    pub(crate) expiry_changed: tokio::sync::Notify,
+    ingest: tokio::sync::Mutex<()>,
+}
+
+pub struct WebActivityContext<'a> {
+    pub runtime: &'a WebActivityRuntimeState,
+    pub tracking: &'a TrackingRuntimeSnapshotState,
+    pub titles: Option<&'a TitleRecordingRuntimeState>,
+}
+
+pub async fn record_active_tab(
+    context: WebActivityContext<'_>,
+    store: &impl WebActivityStore,
+    settings: &WebActivitySettings,
+    payload: BrowserActiveTabPayload,
+    now_ms: i64,
+    generation: u64,
+) -> Result<WebActivityChange, String> {
+    let WebActivityContext {
+        runtime,
+        tracking,
+        titles,
+    } = context;
+    let entry = tracking.snapshot();
+    let _ingest = runtime.ingest.lock().await;
+    let _transition = tracking.transition.lock().await;
+    let processed_at = crate::platform::clock::unix_timestamp_millis_i64();
+    if now_ms > processed_at || processed_at.saturating_sub(now_ms) > 5_000 {
+        return Ok(WebActivityChange::None);
+    }
+    if !tracking.accepts_sample(generation) {
+        return Ok(WebActivityChange::None);
+    }
+    let Some(snapshot) = tracking.snapshot() else {
+        return Ok(WebActivityChange::None);
+    };
+    let native = snapshot.active_session.as_ref();
+    if entry
+        .and_then(|value| value.active_session)
+        .map(|value| value.id)
+        != native.map(|session| session.id)
+        || !accepts_browser_observation(&snapshot, payload.browser_kind.as_deref(), processed_at)
+        || !settings.enabled
+    {
+        return Ok(WebActivityChange::None);
+    }
+    let observed_at = payload.captured_at_ms.unwrap_or(now_ms);
+    if observed_at
+        < native
+            .map(|session| session.start_time)
+            .unwrap_or(snapshot.sampled_at_ms)
+        || observed_at > now_ms
+        || now_ms.saturating_sub(observed_at) > 5_000
+    {
+        return Ok(WebActivityChange::None);
+    }
+    let client = sanitize_browser_client_id(payload.browser_client_id.as_deref());
+    let Some(mut sanitized) = sanitize_active_tab_payload(payload)? else {
+        if let Some(titles) = titles {
+            titles.clear_browser_title();
+            titles.clear_anonymous_web();
+        }
+        return match native {
+            Some(native) => store.seal_source(&client, native.id, observed_at).await,
+            None => store.seal_anonymous(observed_at).await,
+        }
+        .map(WebActivityChange::from_transition);
+    };
+    if !store
+        .load_domain_recording_enabled(&sanitized.normalized_domain)
+        .await?
+        || !store
+            .browser_recording_enabled(&snapshot.source_window().exe_name)
+            .await?
+    {
+        if !tracking.accepts_sample(generation) {
+            return Ok(WebActivityChange::None);
+        }
+        let changed = store.record_anonymous(observed_at).await?;
+        if let Some(titles) = titles {
+            titles.confirm_anonymous_web(snapshot.source_window(), observed_at);
+        }
+        tracking.anonymize_activity();
+        return Ok(WebActivityChange::from_transition(changed));
+    }
+    let confirmed_page_title = sanitized.title.clone();
+    let global_title_enabled = titles.map(|state| state.is_enabled()).unwrap_or(true);
+    if !global_title_enabled
+        || !store
+            .load_domain_title_recording_enabled(&sanitized.normalized_domain)
+            .await?
+    {
+        sanitized.title = None;
+    }
+    // Power notifications invalidate eligibility synchronously, including while
+    // domain policy reads were awaiting SQLite.
+    if !tracking.accepts_sample(generation) {
+        return Ok(WebActivityChange::None);
+    }
+    if let Some(titles) = titles {
+        match confirmed_page_title.as_deref() {
+            Some(title) => {
+                titles.confirm_browser_title(snapshot.source_window(), title, observed_at)
+            }
+            None => {
+                titles.clear_browser_title();
+                titles.clear_anonymous_web();
+            }
+        }
+    }
+    let Some(native) = native else {
+        return Ok(WebActivityChange::None);
+    };
+    let input = WebActivitySegmentInput::from_sanitized(
+        sanitized,
+        snapshot
+            .source_window()
+            .exe_name
+            .trim()
+            .to_ascii_lowercase(),
+        native.id,
+    );
+    store.upsert_active_segment(&input, observed_at).await
+}
+
+fn accepts_browser_observation(
+    snapshot: &crate::engine::tracking::runtime_snapshot::TrackingRuntimeSnapshot,
+    kind: Option<&str>,
+    now_ms: i64,
+) -> bool {
+    use crate::engine::tracking::runtime_snapshot::TrackingRuntimeProbeStatus;
+    let window = snapshot.source_window();
+    let native_valid = snapshot.active_session.as_ref().is_some_and(|native| {
+        now_ms >= native.start_time && native.exe_name.eq_ignore_ascii_case(&window.exe_name)
+    });
+    snapshot.status.is_tracking_active
+        && !window.is_afk
+        && snapshot.probe_status == TrackingRuntimeProbeStatus::Ok
+        && now_ms >= snapshot.sampled_at_ms
+        && now_ms - snapshot.sampled_at_ms <= 8_000
+        && (native_valid || snapshot.anonymous)
+        && browser_kind_matches_foreground(kind, &window.exe_name)
+}
+
+fn browser_kind_matches_foreground(kind: Option<&str>, exe: &str) -> bool {
+    use crate::domain::web_activity::{
+        resolve_web_activity_browser_family, WebActivityBrowserFamily,
+    };
+    let exe = exe.trim().to_ascii_lowercase();
+    let family = resolve_web_activity_browser_family(&exe);
+    let Some(kind) = kind.map(str::trim).filter(|kind| !kind.is_empty()) else {
+        // Optional Firefox technical data cannot be made a tracking prerequisite.
+        // Without it, native eligibility and finite observation lifetime still apply.
+        return family.is_some();
+    };
+    match kind.to_ascii_lowercase().as_str() {
+        "edge" => exe == "msedge.exe",
+        "opera" => exe == "opera.exe",
+        "vivaldi" => exe == "vivaldi.exe",
+        "brave" => exe == "brave.exe",
+        "firefox" | "zen" | "floorp" | "iceweasel" => {
+            family == Some(WebActivityBrowserFamily::Firefox)
+        }
+        "chrome" | "chromium" => {
+            family == Some(WebActivityBrowserFamily::Chromium)
+                && !matches!(exe.as_str(), "msedge.exe" | "opera.exe" | "vivaldi.exe")
+        }
+        _ => false,
+    }
+}
+
+pub async fn expire_active_segment(
+    store: &impl WebActivityStore,
+    now_ms: i64,
+) -> Result<bool, String> {
+    store.expire_active_segment(now_ms).await
+}
+
+pub async fn seal_active_segment(
+    store: &impl WebActivityStore,
+    now_ms: i64,
+) -> Result<bool, String> {
+    store
+        .seal_active_segment(now_ms)
+        .await
+        .map_err(|error| format!("failed to seal web activity: {error}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::data::repositories::web_activity::upsert_active_segment;
+    use crate::data::schema as db_schema;
+    use crate::data::web_activity_store::SqliteWebActivityStore;
+    use sqlx::{Executor, SqlitePool};
+
+    #[test]
+    fn browser_eligibility_requires_coherent_fresh_native_facts_and_available_source_evidence() {
+        use crate::engine::tracking::runtime_snapshot::{
+            TrackingRuntimeProbeDiagnostics, TrackingRuntimeProbeStatus, TrackingRuntimeSnapshot,
+        };
+        let window = serde_json::from_value(serde_json::json!({
+            "hwnd":"1", "root_owner_hwnd":"1", "process_id":1, "window_class":"Browser", "title":"Page",
+            "exe_name":"msedge.exe", "process_path":"", "is_afk":false, "idle_time_ms":0
+        })).unwrap();
+        let mut snapshot = TrackingRuntimeSnapshot {
+            generation: 0,
+            source_window: None,
+            anonymous: false,
+            window,
+            status: crate::domain::tracking::TrackingStatusSnapshot {
+                is_tracking_active: true,
+                ..Default::default()
+            },
+            sampled_at_ms: 2_000,
+            probe_status: TrackingRuntimeProbeStatus::Ok,
+            degraded_reason: None,
+            probe_diagnostics: TrackingRuntimeProbeDiagnostics::default(),
+            active_session: Some(crate::domain::tracking::ActiveSessionSnapshot {
+                id: 1,
+                app_name: "Edge".into(),
+                exe_name: "msedge.exe".into(),
+                start_time: 1_000,
+                continuity_group_start_time: 1_000,
+                closed_duration_ms: 0,
+            }),
+        };
+        assert!(accepts_browser_observation(&snapshot, Some("edge"), 3_000));
+        assert!(!accepts_browser_observation(
+            &snapshot,
+            Some("chrome"),
+            3_000
+        ));
+        assert!(!accepts_browser_observation(
+            &snapshot,
+            Some("edge"),
+            10_001
+        ));
+        assert!(!accepts_browser_observation(&snapshot, Some("edge"), 1_999));
+        snapshot.probe_status = TrackingRuntimeProbeStatus::TimeoutFallback;
+        assert!(!accepts_browser_observation(&snapshot, Some("edge"), 3_000));
+        snapshot.probe_status = TrackingRuntimeProbeStatus::Ok;
+        snapshot.window.exe_name = "chrome.exe".into();
+        assert!(!accepts_browser_observation(
+            &snapshot,
+            Some("chrome"),
+            3_000
+        ));
+        snapshot.active_session = None;
+        assert!(!accepts_browser_observation(&snapshot, None, 3_000));
+        snapshot.redact_anonymous();
+        assert!(accepts_browser_observation(
+            &snapshot,
+            Some("chrome"),
+            3_000
+        ));
+        let public = serde_json::to_string(&snapshot).unwrap();
+        assert!(!public.contains("chrome.exe") && !public.contains("Page"));
+        assert_eq!(snapshot.source_window().exe_name, "chrome.exe");
+        assert!(browser_kind_matches_foreground(None, "firefox.exe"));
+        assert!(!browser_kind_matches_foreground(Some("edge"), "chrome.exe"));
+        assert!(!browser_kind_matches_foreground(None, "code.exe"));
+    }
+
+    async fn setup_test_db() -> SqlitePool {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        pool.execute(db_schema::CURRENT_BASELINE_SCHEMA_SQL)
+            .await
+            .unwrap();
+        pool.execute(db_schema::WEB_ACTIVITY_SCHEMA_SQL)
+            .await
+            .unwrap();
+        pool.execute(db_schema::WEB_ACTIVITY_SESSION_SCHEMA_SQL)
+            .await
+            .unwrap();
+        crate::data::repositories::sessions::start_session(&pool, "Chrome", "chrome.exe", "", 0, 0)
+            .await
+            .unwrap();
+        pool
+    }
+
+    #[tokio::test]
+    async fn inactive_settings_seal_existing_web_segment() {
+        let pool = setup_test_db().await;
+        let input = WebActivitySegmentInput {
+            native_session_id: 1,
+            browser_client_id: "client".into(),
+            browser_kind: "chrome".into(),
+            browser_exe_name: "chrome.exe".into(),
+            domain: "github.com".into(),
+            normalized_domain: "github.com".into(),
+            url: None,
+            title: Some("Issue".into()),
+            favicon_url: None,
+        };
+        upsert_active_segment(&pool, &input, 1_000).await.unwrap();
+        let store = SqliteWebActivityStore::new(pool.clone());
+        assert!(seal_active_segment(&store, 2_000).await.unwrap());
+
+        let duration: Option<i64> =
+            sqlx::query_scalar("SELECT duration FROM web_activity_segments LIMIT 1")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(duration, Some(1_000));
+    }
+}

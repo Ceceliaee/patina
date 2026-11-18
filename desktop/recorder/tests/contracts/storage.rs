@@ -60,44 +60,36 @@ fn storage_round_trip_and_migration() -> Result<(), Error> {
     request(R::Backup(archive.clone()))?;
     request(R::DeleteBatch(id.clone()))?;
     let preview = request(R::PreviewRestore(archive.to_string_lossy().into()))?;
-    assert!(
-        request(R::Restore {
-            hash: "bad".into(),
-            replace: false
-        })
-        .is_err()
-    );
+    assert!(request(R::Restore {
+        hash: "bad".into(),
+        replace: false
+    })
+    .is_err());
     request(R::Restore {
         hash: preview["hash"].as_str().unwrap().into(),
         replace: false,
     })?;
-    assert!(
-        request(R::Batches)?
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|b| b["sourceName"] == "input.csv")
-    );
+    assert!(request(R::Batches)?
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|b| b["sourceName"] == "input.csv"));
     let preview = request(R::PreviewRestore(archive.to_string_lossy().into()))?;
     request(R::Restore {
         hash: preview["hash"].as_str().unwrap().into(),
         replace: true,
     })?;
-    assert!(
-        request(R::Batches)?
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|b| b["id"] == id)
-    );
+    assert!(request(R::Batches)?
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|b| b["id"] == id));
     request(R::Cleanup(180))?;
-    assert!(
-        !request(R::Batches)?
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|b| b["id"] == id)
-    );
+    assert!(!request(R::Batches)?
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|b| b["id"] == id));
     let out = root.path().join("automatic");
     fs::create_dir(&out)?;
     for backup in [false, true] {
@@ -183,8 +175,8 @@ fn storage_webdav_round_trip() -> Result<(), Error> {
         io::{BufRead, BufReader, Read, Write},
         net::TcpListener,
         sync::{
-            Arc,
             atomic::{AtomicBool, Ordering},
+            Arc,
         },
         time::Duration,
     };

@@ -53,11 +53,10 @@ fn websites_preserve_sources_grouping_icons_and_privacy() -> Result<(), Error> {
         Some(("Example", 17 * 60000))
     );
     assert!(day.apps.iter().any(|a| a.0 == "mail.example.com"));
-    assert!(
-        !day.apps
-            .iter()
-            .any(|a| a.0.contains("hidden") || a.0.ends_with(".exe"))
-    );
+    assert!(!day
+        .apps
+        .iter()
+        .any(|a| a.0.contains("hidden") || a.0.ends_with(".exe")));
     assert_eq!(day.favicons[group], icon);
     assert_eq!(day.app_source_color(group, Some(0xabcdef)), 0x123456);
     let trends =
@@ -84,27 +83,21 @@ fn websites_preserve_sources_grouping_icons_and_privacy() -> Result<(), Error> {
         17 * 60000
     );
     assert!(detail.records.iter().all(|r| r.key == group));
-    assert!(
-        detail
-            .records
-            .iter()
-            .flat_map(|r| &r.titles)
-            .any(|t| t.3.as_deref() == Some("https://example.com/page"))
-    );
+    assert!(detail
+        .records
+        .iter()
+        .flat_map(|r| &r.titles)
+        .any(|t| t.3.as_deref() == Some("https://example.com/page")));
 
-    assert!(
-        detail
-            .records
-            .iter()
-            .filter(|r| r.start >= start + 15 * 60000)
-            .all(|r| r.titles.is_empty())
-    );
-    assert!(
-        detail
-            .records
-            .iter()
-            .any(|r| r.group_duration == 15 * 60000)
-    );
+    assert!(detail
+        .records
+        .iter()
+        .filter(|r| r.start >= start + 15 * 60000)
+        .all(|r| r.titles.is_empty()));
+    assert!(detail
+        .records
+        .iter()
+        .any(|r| r.group_duration == 15 * 60000));
     recorder.shutdown()?;
     Ok(())
 }
