@@ -129,6 +129,7 @@
   "settings.retry": "Retry",
   "settings.save": "Save",
   "settings.saved": "Settings updated",
+  "settings.saveConflict": "Settings changed elsewhere. Select Cancel to discard your edits and load the saved settings.",
   "settings.saveFailed": "Could not save settings. Try again later.",
   "settings.scheduledBackupCleanupWarning": "The latest backup is valid, but the previous automatic backup could not be removed yet. Patina will retry later.",
   "settings.scheduledBackupLabels": {"directory":"Save to","frequency":"Frequency","nextExecution":"Next run","recentFailure":"Recent failure","recentSuccess":"Recent success","time":"Time","title":"Scheduled backup"},

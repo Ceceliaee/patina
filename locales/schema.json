@@ -802,6 +802,7 @@
   "settings.retry": {"alsoNative":true,"kind":"string","params":[],"surface":"frontend"},
   "settings.save": {"kind":"string","params":[],"surface":"frontend"},
   "settings.saved": {"kind":"string","params":[],"surface":"frontend"},
+  "settings.saveConflict": {"kind":"string","params":[],"surface":"native"},
   "settings.saveFailed": {"alsoNative":true,"kind":"string","params":[],"surface":"frontend"},
   "settings.saving": {"kind":"string","params":[],"surface":"frontend"},
   "settings.scheduledBackupCleanupWarning": {"alsoNative":true,"kind":"string","params":[],"surface":"frontend"},

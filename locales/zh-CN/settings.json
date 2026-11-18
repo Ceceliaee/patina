@@ -129,6 +129,7 @@
   "settings.retry": "重试",
   "settings.save": "保存",
   "settings.saved": "配置已更新",
+  "settings.saveConflict": "设置已在别处更改。点“取消”可放弃当前编辑并载入已保存的设置。",
   "settings.saveFailed": "配置保存失败，请稍后重试。",
   "settings.scheduledBackupCleanupWarning": "最新备份有效，但上一份自动备份暂未清理；Patina 将稍后重试。",
   "settings.scheduledBackupLabels": {"directory":"保存到","frequency":"频率","nextExecution":"下次执行","recentFailure":"最近失败","recentSuccess":"最近成功","time":"时间","title":"定时备份"},

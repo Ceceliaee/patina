@@ -78,14 +78,27 @@ fn change(hwnd: HWND, name: &str, expected: ToggleState, keyboard: bool) -> Resu
 #[test]
 #[ignore = "dedicated Windows session: system tray and login"]
 fn resident_preferences() -> Result<(), Error> {
-    patina_test_desktop::dedicated_session()?;
+    patina_test_support::dedicated_session()?;
+    exercise_resident_preferences(true)
+}
+
+#[test]
+#[ignore = "isolated Win32 desktop and profile-specific login entry"]
+fn settings_compensate_and_reopen() -> Result<(), Error> {
+    if !patina_test_support::run_case()? {
+        return Ok(());
+    }
+    exercise_resident_preferences(false)
+}
+
+fn exercise_resident_preferences(check_shell_icon: bool) -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
     let dir = root.path().join(patina::APP_ID);
     fs::create_dir(&dir)?;
     let db = dir.join("patina.db");
-    seed_profile(&db, true)?;
+    seed_profile(&db, check_shell_icon)?;
     let launch = || {
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_patina"));
         cmd.env("PATINA_GPUI_PROFILE_PARENT", root.path());
@@ -101,9 +114,11 @@ fn resident_preferences() -> Result<(), Error> {
         uID: 1,
         ..Default::default()
     };
-    wait("registered shell icon", || unsafe {
-        Shell_NotifyIconGetRect(&icon).ok()
-    })?;
+    if check_shell_icon {
+        wait("registered shell icon", || unsafe {
+            Shell_NotifyIconGetRect(&icon).ok()
+        })?;
+    }
     let entry = TestLoginEntry::for_profile(tray)?;
     assert!(main().is_none());
     assert!(launch().status()?.success());
@@ -118,7 +133,9 @@ fn resident_preferences() -> Result<(), Error> {
     wait("cancelled login change", || unsafe {
         (login.CurrentToggleState().ok()? == ToggleState_Off).then_some(())
     })?;
-    change(hwnd, "Show tray icon", ToggleState_Off, false)?;
+    if check_shell_icon {
+        change(hwnd, "Show tray icon", ToggleState_Off, false)?;
+    }
     change(hwnd, "Launch silently", ToggleState_Off, true)?;
     change(hwnd, "Launch at login", ToggleState_On, true)?;
     let rt = tokio::runtime::Builder::new_current_thread()
@@ -136,20 +153,24 @@ fn resident_preferences() -> Result<(), Error> {
     )?;
     click(hwnd, "Save")?;
     wait("failed save keeps draft", || named(hwnd, "Retry"))?;
-    assert!(unsafe { Shell_NotifyIconGetRect(&icon) }.is_ok());
+    if check_shell_icon {
+        assert!(unsafe { Shell_NotifyIconGetRect(&icon) }.is_ok());
+    }
     assert_eq!(
         entry.key.get_raw_value(&entry.name).unwrap_err().kind(),
         std::io::ErrorKind::NotFound
     );
     rt.block_on(sqlx::query("DROP TRIGGER reject_login").execute(&mut conn))?;
-    click(hwnd, "Save")?;
+    click(hwnd, "Retry")?;
     wait("saved resident settings", || named(hwnd, "Saved"))?;
     let login_command: String = entry.key.get_value(&entry.name)?;
     assert!(
         login_command.contains("--autostart")
             && login_command.contains(root.path().to_str().unwrap())
     );
-    assert!(unsafe { Shell_NotifyIconGetRect(&icon) }.is_err());
+    if check_shell_icon {
+        assert!(unsafe { Shell_NotifyIconGetRect(&icon) }.is_err());
+    }
     unsafe { PostMessageW(Some(hwnd), WM_CLOSE, WPARAM(0), LPARAM(0))? };
     wait("closed to background", || main().is_none().then_some(()))?;
     assert!(host.0.try_wait()?.is_none());
@@ -193,7 +214,7 @@ fn resident_preferences() -> Result<(), Error> {
         entry.key.get_raw_value(&entry.name).unwrap_err().kind(),
         std::io::ErrorKind::NotFound
     );
-    click(hwnd, "Close window")?;
+    press(hwnd, "Close window")?;
     assert!(wait("close exits recorder", || next.0.try_wait().ok().flatten())?.success());
     Ok(())
 }

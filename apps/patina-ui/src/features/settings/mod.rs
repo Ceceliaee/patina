@@ -7,7 +7,7 @@ use gpui_kit::{
     prelude::*,
     *,
 };
-use patina_activity_model::{CloseBehavior, Locale, Theme, TrackingPreferences, text};
+use patina_activity_model::{AppPreferences, CloseBehavior, Locale, Theme, text};
 use quietpro::{CARD_TITLE_GAP, content_card, heading, page, page_actions, page_title_row};
 use quietpro::{Icon, IconControl, text_button};
 use std::rc::Rc;
@@ -20,19 +20,30 @@ use quietpro::{
 };
 use services::ServiceFields;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Failure {
+    Load,
+    Save,
+    Conflict,
+    Token {
+        field: services::Field,
+        reveal: bool,
+    },
+}
+
 pub(crate) struct Settings {
     storage: Entity<storage::StorageCard>,
     client: Rc<Client>,
-    saved: Option<TrackingPreferences>,
+    saved: Option<AppPreferences>,
     load: Option<Task<()>>,
     write: Option<Task<()>>,
-    draft: Option<TrackingPreferences>,
+    draft: Option<AppPreferences>,
     sliders: [Entity<SliderState>; 2],
     theme_focus: [FocusHandle; 3],
     scheme_triggers: [FocusHandle; 2],
     picker: Option<schemes::Picker>,
     busy: bool,
-    error: bool,
+    failure: Option<Failure>,
     services: ServiceFields,
 }
 impl Settings {
@@ -54,9 +65,9 @@ impl Settings {
                     {
                         let n = v.round() as i64 * 60;
                         if i == 0 {
-                            p.gap = n;
+                            p.timeline_merge_gap_secs = n;
                         } else {
-                            p.idle = n;
+                            p.idle_timeout_secs = n;
                         }
                         cx.notify();
                     }
@@ -91,7 +102,7 @@ impl Settings {
             scheme_triggers: std::array::from_fn(|_| cx.focus_handle()),
             picker: None,
             busy: false,
-            error: false,
+            failure: None,
         };
         this.reload(win, cx);
         this
@@ -104,22 +115,26 @@ impl Settings {
                 if let Ok(p) = res {
                     t.saved = Some(p);
                     t.reset(win, cx);
-                    t.error = false;
                 } else {
-                    t.error = true;
+                    t.failure = Some(Failure::Load);
                 }
                 cx.notify();
             });
         }));
     }
     fn reset(&mut self, win: &mut Window, cx: &mut Context<Self>) {
+        self.failure = None;
         self.draft = self.saved.clone();
         if let Some(p) = &self.saved {
             self.client.locale.set(p.locale);
             self.client.theme.set(p.theme);
             cx.refresh_windows();
             self.services.reset(p, win, cx);
-            for (s, v) in self.sliders.iter().zip([p.gap, p.idle]) {
+            for (s, v) in self
+                .sliders
+                .iter()
+                .zip([p.timeline_merge_gap_secs, p.idle_timeout_secs])
+            {
                 s.update(cx, |s, cx| s.set_value((v / 60) as f32, win, cx));
             }
         }
@@ -144,11 +159,17 @@ impl Settings {
             let _ = view.update(cx, |t, cx| {
                 t.busy = false;
                 t.services.set_busy(false, cx);
-                t.error = res.is_err();
-                if let Err(error) = &res {
+                if let Err(error) = res {
                     eprintln!("save preferences: {error}");
-                }
-                if res.is_ok() {
+                    t.failure = Some(
+                        if matches!(error, patina_desktop_protocol::RequestError::Conflict(_)) {
+                            Failure::Conflict
+                        } else {
+                            Failure::Save
+                        },
+                    );
+                } else {
+                    t.failure = None;
                     t.saved = Some(p.clone());
                     client.locale.set(p.locale);
                     t.services.set_locale(p.locale, cx);
@@ -167,7 +188,9 @@ impl Render for Settings {
         let c = self.client.palette(win);
         let tr = |k| text(self.client.locale.get(), k);
         let changed = self.dirty() && !self.busy;
-        let can_apply = changed
+        let conflict = self.failure == Some(Failure::Conflict);
+        let can_apply = !conflict
+            && changed
             && !self.services.invalid_port
             && self.draft.as_ref().is_some_and(|p| p.valid());
         let actions = page_actions()
@@ -182,8 +205,17 @@ impl Render for Settings {
                 row.child(save_status(status, c))
             })
             .child(
-                text_button("cancel", tr("common.cancel"), c, changed)
-                    .on_click(cx.listener(|t, _, win, cx| t.reset(win, cx))),
+                text_button("cancel", tr("common.cancel"), c, changed || conflict).on_click(
+                    cx.listener(|t, _, win, cx| {
+                        let conflict = t.failure == Some(Failure::Conflict);
+                        t.reset(win, cx);
+                        if conflict {
+                            t.draft = None;
+                            t.saved = None;
+                            t.reload(win, cx);
+                        }
+                    }),
+                ),
             )
             .child(
                 text_button("save", tr("common.save"), c, can_apply)
@@ -191,14 +223,30 @@ impl Render for Settings {
             );
         let mut shell =
             page(c).child(page_title_row(tr("settings.title"), Icon::Settings2, c).child(actions));
-        if self.error {
-            if self.draft.is_some() {
-                shell = shell.child(label(tr("settings.saveFailed")));
+        match self.failure {
+            Some(Failure::Load) => {
+                shell = shell.child(
+                    text_button("retry", tr("common.retry"), c, true)
+                        .on_click(cx.listener(|t, _, win, cx| t.reload(win, cx))),
+                );
             }
-            shell = shell.child(
-                text_button("retry", tr("common.retry"), c, true)
-                    .on_click(cx.listener(|t, _, win, cx| t.reload(win, cx))),
-            );
+            Some(Failure::Save) => {
+                shell = shell.child(label(tr("settings.saveFailed"))).child(
+                    text_button("retry", tr("common.retry"), c, can_apply)
+                        .on_click(cx.listener(|t, _, _, cx| t.save(cx))),
+                );
+            }
+            Some(Failure::Conflict) => {
+                shell = shell.child(label(tr("settings.saveConflict")));
+            }
+            Some(Failure::Token { field, reveal }) => {
+                shell = shell.child(
+                    text_button("retry", tr("common.retry"), c, !self.busy).on_click(
+                        cx.listener(move |t, _, win, cx| t.generate_token(field, reveal, win, cx)),
+                    ),
+                );
+            }
+            None => {}
         }
         let Some(p) = self.draft.as_ref() else {
             return shell.child(label(tr("common.loading")));
@@ -206,8 +254,20 @@ impl Render for Settings {
         let divider = divider_color(c);
         let mut time_group = settings_rows_card(c);
         for (i, k, value, min, max) in [
-            (0, "settings.timelineMergeGapLabel", p.gap / 60, 1, 5),
-            (1, "settings.idleTimeoutLabel", p.idle / 60, 5, 30),
+            (
+                0,
+                "settings.timelineMergeGapLabel",
+                p.timeline_merge_gap_secs / 60,
+                1,
+                5,
+            ),
+            (
+                1,
+                "settings.idleTimeoutLabel",
+                p.idle_timeout_secs / 60,
+                5,
+                30,
+            ),
         ] {
             let name = tr(k);
             let mut row = settings_row()
@@ -234,9 +294,9 @@ impl Render for Settings {
                             let next = (value + dir).clamp(min, max);
                             if let Some(p) = &mut t.draft {
                                 if i == 0 {
-                                    p.gap = next * 60;
+                                    p.timeline_merge_gap_secs = next * 60;
                                 } else {
-                                    p.idle = next * 60;
+                                    p.idle_timeout_secs = next * 60;
                                 }
                             }
                             t.sliders[i].update(cx, |s, cx| s.set_value(next as f32, win, cx));
@@ -248,7 +308,7 @@ impl Render for Settings {
             time_group =
                 time_group.child(row.when(i == 0, |r| r.border_b_1().border_color(divider)));
         }
-        let update_toggle = |set: fn(&mut TrackingPreferences, bool)| {
+        let update_toggle = |set: fn(&mut AppPreferences, bool)| {
             let v = cx.weak_entity();
             move |next: bool, _: &ClickEvent, _: &mut Window, cx: &mut App| {
                 let _ = v.update(cx, |t, cx| {

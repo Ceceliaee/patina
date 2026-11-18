@@ -4,8 +4,8 @@ use gpui_kit::base::{
     input::{InputAccessibility, InputEvent, InputState},
 };
 
-#[derive(Copy, Clone, PartialEq)]
-enum Field {
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub(super) enum Field {
     Port,
     WebToken,
     Url,
@@ -154,7 +154,7 @@ impl ServiceFields {
     }
     pub(super) fn reset(
         &mut self,
-        p: &TrackingPreferences,
+        p: &AppPreferences,
         win: &mut Window,
         cx: &mut Context<Settings>,
     ) {
@@ -188,7 +188,7 @@ impl ServiceFields {
 }
 
 impl Settings {
-    fn generate_token(
+    pub(super) fn generate_token(
         &mut self,
         field: Field,
         reveal: bool,
@@ -198,9 +198,12 @@ impl Settings {
         use std::fmt::Write;
         let mut bytes = [0u8; 24];
         if getrandom::fill(&mut bytes).is_err() {
-            self.error = true;
+            self.failure = Some(Failure::Token { field, reveal });
             cx.notify();
             return;
+        }
+        if matches!(self.failure, Some(Failure::Token { .. })) {
+            self.failure = None;
         }
         let mut token = String::with_capacity(48);
         for byte in bytes {

@@ -129,6 +129,7 @@
   "settings.retry": "Повторить",
   "settings.save": "Сохранить",
   "settings.saved": "Настройки обновлены",
+  "settings.saveConflict": "Настройки были изменены в другом месте. Нажмите «Отмена», чтобы отказаться от своих правок и загрузить сохранённые настройки.",
   "settings.saveFailed": "Не удалось сохранить настройки. Повторите позже.",
   "settings.scheduledBackupCleanupWarning": "Последняя копия исправна, но предыдущую автоматическую копию пока не удалось удалить. Patina повторит попытку позже.",
   "settings.scheduledBackupLabels": {"directory":"Сохранять в","frequency":"Периодичность","nextExecution":"Следующий запуск","recentFailure":"Последняя ошибка","recentSuccess":"Последний успешный запуск","time":"Время","title":"Копирование по расписанию"},

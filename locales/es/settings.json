@@ -129,6 +129,7 @@
   "settings.retry": "Reintentar",
   "settings.save": "Guardar",
   "settings.saved": "Configuración actualizada",
+  "settings.saveConflict": "La configuración cambió en otro lugar. Selecciona Cancelar para descartar tus cambios y cargar la configuración guardada.",
   "settings.saveFailed": "No se pudo guardar la configuración. Inténtalo más tarde.",
   "settings.scheduledBackupCleanupWarning": "La última copia es válida, pero aún no se pudo eliminar la copia automática anterior. Patina lo reintentará más tarde.",
   "settings.scheduledBackupLabels": {"directory":"Guardar en","frequency":"Frecuencia","nextExecution":"Próxima ejecución","recentFailure":"Último error","recentSuccess":"Último éxito","time":"Hora","title":"Copia de seguridad programada"},

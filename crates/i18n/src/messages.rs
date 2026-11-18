@@ -538,6 +538,7 @@ pub fn settings_restore_strategy_options_merge(locale: Locale) -> String { super
 pub fn settings_restore_strategy_options_replace(locale: Locale) -> String { super::format_text(locale, "settings.restoreStrategyOptions.replace", &[]) }
 pub fn settings_retry(locale: Locale) -> String { super::format_text(locale, "settings.retry", &[]) }
 pub fn settings_runtime_behavior_title(locale: Locale) -> String { super::format_text(locale, "settings.runtimeBehaviorTitle", &[]) }
+pub fn settings_save_conflict(locale: Locale) -> String { super::format_text(locale, "settings.saveConflict", &[]) }
 pub fn settings_save_failed(locale: Locale) -> String { super::format_text(locale, "settings.saveFailed", &[]) }
 pub fn settings_scheduled_backup_cleanup_warning(locale: Locale) -> String { super::format_text(locale, "settings.scheduledBackupCleanupWarning", &[]) }
 pub fn settings_scheduled_backup_labels_directory(locale: Locale) -> String { super::format_text(locale, "settings.scheduledBackupLabels.directory", &[]) }
