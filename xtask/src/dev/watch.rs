@@ -16,6 +16,7 @@ pub(super) const DIRECTORIES: &[(&str, bool)] = &[
     ("apps", true),
     ("crates", true),
     ("locales", true),
+    ("packaging/windows", true),
     ("plugins/official", false),
     ("plugins/official/focus", true),
     ("plugins/official/reminders", true),

@@ -192,7 +192,7 @@ jobs:
         shell: pwsh
         run: |
           $env:PATINA_TEST_MAKENSIS = "${env:ProgramFiles(x86)}/NSIS/makensis.exe"
-          cargo build --locked -p patina -p patina-ui -p patina-probe --bins
+          cargo build --locked -p patina --bin patina
           if ($LASTEXITCODE -ne 0) { throw "Desktop program build failed" }
           foreach ($case in @("tools::preference_segments_persist_and_support_keyboard", "tools::mini_opens_the_selected_tool_and_keeps_dirty_settings", "tools::in_window_reminder_uses_the_selected_delivery", "tools::separate_reminder_survives_window_release")) {
             cargo test --locked -p patina --features native-tests --test pages $case -- --ignored --exact --test-threads=1

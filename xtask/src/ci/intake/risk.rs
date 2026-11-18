@@ -5,8 +5,8 @@ use std::collections::BTreeSet;
 const AREAS: &[(&str, &str, &str)] = &[
     (
         "window process and command dispatch",
-        r"^(?:apps/patina/src/(?:window_process|tray|message_loop)|apps/patina-ui/src/(?:windows/mod\.rs|client/)|crates/desktop-protocol/src/)",
-        r"^(?:apps/patina/tests/(?:today|pages/resident|resources|lifecycle)|apps/patina-ui/tests/handshake|crates/desktop-protocol/)",
+        r"^(?:apps/patina/src/(?:main\.rs|lib\.rs|window_process|tray|message_loop)|apps/patina-ui/src/(?:lib\.rs|windows/mod\.rs|client/)|crates/desktop-protocol/src/)",
+        r"^(?:apps/patina/tests/(?:today|pages/resident|resources|lifecycle|handshake)|crates/desktop-protocol/)",
     ),
     (
         "tracking lifecycle",
@@ -40,8 +40,8 @@ const AREAS: &[(&str, &str, &str)] = &[
     ),
     (
         "native probe",
-        r"^(?:apps/patina-probe/src/|crates/windows-integration/src/.*native_probe)",
-        r"^(?:apps/patina-probe/tests/native_probe|crates/windows-integration/src/.*native_probe)",
+        r"^crates/windows-integration/src/.*native_probe",
+        r"^(?:apps/patina/tests/(?:native_probe|lifecycle)|crates/windows-integration/src/.*native_probe)",
     ),
     (
         "settings persistence",

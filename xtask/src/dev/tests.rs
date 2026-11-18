@@ -32,21 +32,22 @@ fn failed_build_keeps_preview_until_fixed_save() -> io::Result<()> {
         root.join("Cargo.toml"),
         "[workspace]\nresolver='3'\nmembers=['apps/*']",
     )?;
-    for name in super::BINARIES {
-        let dir = root.join("apps").join(name);
-        fs::create_dir_all(dir.join("src"))?;
-        fs::write(
-            dir.join("Cargo.toml"),
-            format!("[package]\nname='{name}'\nversion='0.1.0'\nedition='2024'"),
-        )?;
-        fs::write(dir.join("src/main.rs"), "fn main() {}")?;
-    }
+    let host = root.join("apps/patina");
+    fs::create_dir_all(host.join("src/bin"))?;
+    fs::write(
+        host.join("Cargo.toml"),
+        "[package]\nname='patina'\nversion='0.1.0'\nedition='2024'",
+    )?;
+    fs::write(host.join("src/main.rs"), "fn main() {}")?;
+    fs::write(
+        host.join("src/bin/unrelated.rs"),
+        r#"compile_error!("preview must build only the desktop executable");"#,
+    )?;
     let status = std::process::Command::new(env!("CARGO"))
         .args(["generate-lockfile", "--offline"])
         .current_dir(root)
         .status()?;
     assert!(status.success());
-    let host = root.join("apps/patina");
     fs::write(
         host.join("build.rs"),
         r#"
@@ -68,8 +69,8 @@ use std::{env, fs, io::{self, Read}, path::PathBuf};
 fn main() {
     let profile = PathBuf::from(env::var_os("PATINA_GPUI_PROFILE_PARENT").unwrap());
     let executable = env::current_exe().unwrap();
-    assert!(executable.with_file_name("patina-ui.exe").is_file());
-    assert!(executable.with_file_name("patina-probe.exe").is_file());
+    assert_eq!(executable.file_name().unwrap(), "patina.exe");
+    assert_eq!(fs::read_dir(executable.parent().unwrap()).unwrap().count(), 1);
     if env!("VERSION") == "first" {
         fs::write(profile.join("ready"), "").unwrap();
         io::stdin().read_to_end(&mut Vec::new()).unwrap();

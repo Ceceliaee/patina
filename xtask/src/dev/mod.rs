@@ -26,44 +26,38 @@ unsafe extern "system" fn interrupt(event: u32) -> i32 {
     0
 }
 
-const BINARIES: [&str; 3] = ["patina", "patina-ui", "patina-probe"];
-
-fn build(root: &Path) -> io::Result<Option<Vec<PathBuf>>> {
+fn build(root: &Path) -> io::Result<Option<PathBuf>> {
     let mut command = Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into()));
     command.current_dir(root).args([
         "build",
         "--locked",
-        "--bins",
+        "--package",
+        "patina",
+        "--bin",
+        "patina",
         "--message-format=json-render-diagnostics",
     ]);
-    for package in BINARIES {
-        command.args(["--package", package]);
-    }
+    // Test workspaces build a fixture named patina, even with a shared Cargo target directory.
+    #[cfg(test)]
+    command.arg("--target-dir").arg(root.join("target"));
     let mut cargo = command.stdout(Stdio::piped()).spawn()?;
-    let mut binaries = std::collections::HashMap::new();
+    let mut binary = None;
     for line in BufReader::new(cargo.stdout.take().unwrap()).lines() {
         let message: serde_json::Value = serde_json::from_str(&line?)?;
         if message["reason"] == "compiler-artifact"
-            && let Some(name) = message["target"]["name"].as_str()
-            && BINARIES.contains(&name)
+            && message["target"]["name"] == "patina"
             && let Some(path) = message["executable"].as_str()
         {
-            binaries.insert(name.to_owned(), PathBuf::from(path));
+            binary = Some(PathBuf::from(path));
         }
     }
     if !cargo.wait()?.success() {
         eprintln!("Build failed. Save a source file to retry.");
         return Ok(None);
     }
-    BINARIES
-        .iter()
-        .map(|name| {
-            binaries.remove(*name).ok_or_else(|| {
-                io::Error::other(format!("Cargo did not report the {name} executable"))
-            })
-        })
-        .collect::<io::Result<Vec<_>>>()
+    binary
         .map(Some)
+        .ok_or_else(|| io::Error::other("Cargo did not report the patina executable"))
 }
 
 fn stop(preview: &mut Option<Child>) -> io::Result<()> {
@@ -83,7 +77,9 @@ pub(super) fn run(root: &Path, mut args: Vec<String>) -> io::Result<()> {
         .iter()
         .any(|arg| !matches!(arg.as_str(), "--today" | "--mini"))
     {
-        return Err(io::Error::other("Usage: cargo run [-- --today | --mini]"));
+        return Err(io::Error::other(
+            "Usage: cargo xtask dev [--today | --mini]",
+        ));
     }
     let profile = if let Some(parent) = env::var_os("PATINA_GPUI_PROFILE_PARENT") {
         PathBuf::from(parent)
@@ -105,7 +101,7 @@ fn develop(root: &Path, profile: &Path, args: &[String]) -> io::Result<()> {
     let session = tempfile::Builder::new().prefix("patina-dev-").tempdir()?;
     let mut running_dir = None;
     let mut preview: Option<Child> = None;
-    let mut running_build: Option<Vec<SystemTime>> = None;
+    let mut running_build: Option<SystemTime> = None;
     let mut changed = true;
     eprintln!(
         "Watching GPUI sources. Ctrl+C to exit. Profile: {}",
@@ -130,27 +126,22 @@ fn develop(root: &Path, profile: &Path, args: &[String]) -> io::Result<()> {
             }
             break;
         }
-        if let Some(binaries) = build {
-            let version = binaries
-                .iter()
-                .map(|p| fs::metadata(p)?.modified())
-                .collect::<io::Result<Vec<_>>>()?;
-            if running_build.as_ref() != Some(&version) && !STOP.load(Ordering::Relaxed) {
+        if let Some(binary) = build {
+            let version = fs::metadata(&binary)?.modified()?;
+            if running_build != Some(version) && !STOP.load(Ordering::Relaxed) {
                 // Windows locks running executables. Keep Cargo's output free for the next build.
                 let staged = tempfile::Builder::new()
                     .prefix("bin-")
                     .tempdir_in(session.path())?;
-                for binary in &binaries {
-                    fs::copy(binary, staged.path().join(binary.file_name().unwrap()))?;
-                }
-                stop(&mut preview)?;
                 let executable = staged.path().join("patina.exe");
+                fs::copy(&binary, &executable)?;
+                stop(&mut preview)?;
                 preview = Some(
                     Command::new(&executable)
                         .args(args)
                         .env("PATINA_GPUI_PROFILE_PARENT", profile)
                         .env("PATINA_GPUI_DEV_SESSION", session.path())
-                        .env("PATINA_GPUI_DEV_BINARY", &binaries[0])
+                        .env("PATINA_GPUI_DEV_BINARY", &binary)
                         .creation_flags(CREATE_NO_WINDOW)
                         .stdin(Stdio::piped())
                         .spawn()?,
