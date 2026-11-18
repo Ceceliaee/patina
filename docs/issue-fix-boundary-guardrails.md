@@ -92,7 +92,7 @@
 - Web Activity：按 [`web-activity-protocol.md`](./web-activity-protocol.md)。
 - 本地化：按 [`localization.md`](./localization.md)。
 
-按 [`engineering-quality.md`](./engineering-quality.md#5-默认验证门槛) 区分文档、前端行为和 Rust/架构实现/发布风险；命令图由 `package.json` 拥有。无法运行的检查说明原因、残余风险和验证 owner。
+按[工程质量](./engineering-quality.md#5-默认验证门槛)为文档、窗口行为、Rust 模块和发布风险选择验证。仓库检查由 [Cargo 检查入口](../xtask/src/check.rs)组织。无法运行的检查说明原因、残余风险和验证负责人。
 
 ## 9. 完成判断
 

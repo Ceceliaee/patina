@@ -238,11 +238,11 @@ Codex 参考用于校正命名主题的基础调色板和背景派生，不替�
 - 替代标题
 - 没有语义必要的“彩色点缀”
 
-Feature 私有表面也必须使用同一状态语义，但其布局和交互细节由最近的代码与测试 owner 维护。例如迷你窗由 `src/app/mini/*`、对应样式和 `tests/uiBrowserSmoke/miniScenarios.ts` 负责，本文不保存第二份行为清单。
+各窗口遵循相同的状态语义。Mini 的布局和动作由[窗口实现](../apps/patina-ui/src/windows/mini/mod.rs)维护，打开工具和保留设置草稿的交互由[原生用例](../apps/patina/tests/pages/tools.rs)验证。
 
 ### 9.6 共享组件准入与 owner
 
-组件是否进入 `shared/*`，先看长期语义和 owner，不看 JSX 是否相似。
+判断组件是否归入 QuietPro 时，先看它提供的交互语义和长期维护职责。
 
 共享组件默认应满足：
 
@@ -332,15 +332,15 @@ Select、Tooltip、日期、时间、颜色等复合控件至少应保证：
 
 默认按以下顺序开展组件工作：
 
-1. UI 实现前检查本文、`src/shared/components/*`、真实消费者与浏览器测试。未查找不代表没有规范。
+1. UI 实现前检查本文、[QuietPro 控件](../crates/quietpro/src/controls)、调用它们的页面和对应测试。
 2. 已有相同视觉骨架、交互目标或状态机时，组合或扩展真实组件，不复制 class、尺寸或外观另做一套。相同外壳下的内容与业务状态留在各自 owner。
 3. 确实没有规范时，在真实 feature owner 内探索，复用 token 与原型，并完整定义第 9.2 节状态；未经确认不宣称为通用规范，也不为假想复用提前抽象。
 4. 用户或维护者确认后，按第 9.6 节判断是业务组合、已有组件变体还是稳定共享能力。仅适合单个 feature 的组合可以留在当地；应共享的方案不再保留页面私有副本。
-5. 固化到正确 owner，以结构或浏览器测试保护尺寸、状态、键盘、焦点与弹层行为。只有跨页面契约形成或变化才更新本文；其他组合由代码与测试维护，遵循 [文档准入](../AGENTS.md#documentation-hygiene)。
+5. 在所属模块用组件测试和原生窗口测试验证尺寸、状态、键盘、焦点与弹层行为。只有跨页面契约形成或变化才更新本文；其他组合由代码与测试维护，遵循 [文档准入](../AGENTS.md#documentation-hygiene)。
 
 ### 9.11 跨页面交互原型与机器 owner
 
-跨页面复用的 Dialog、Popover、Tooltip、Select、日期与范围控件优先由 `src/shared/components/Quiet*.tsx` 拥有实现契约；feature wrapper 只组合领域数据和文案，不能复制焦点、关闭、定位或键盘状态机。
+跨页面复用的弹窗、菜单、选择和日历交互归 QuietPro。页面组合领域数据与文案，复用公共控件的焦点、关闭、定位和键盘行为。
 
 长期通用契约只有：
 
@@ -348,9 +348,9 @@ Select、Tooltip、日期、时间、颜色等复合控件至少应保证：
 - listbox、menu、calendar 和分段选择使用正确 role、单一可操作焦点与键盘移动，视觉选中不能代替语义状态；
 - icon-only 入口必须有可访问名称、可见焦点和足够命中区，不能只靠 hover tooltip 解释；
 - 日期、范围、时区和 locale 语义由共享组件与领域 resolver 分工，feature 不自行复制日期算法；
-- 共享原型的键盘、焦点、关闭、定位、viewport 和消费者场景由 `tests/uiBrowserSmoke/*Scenarios.ts` 保护；新增独有失败模式先补可重复测试。
+- 键盘、焦点和关闭行为由[控件测试](../crates/quietpro/tests)验证。弹层定位、窗口尺寸和具体页面操作由[原生页面测试](../apps/patina/tests/pages)验证。
 
-滚动区域的唯一视觉 owner 是 `src/styles/components/quiet-scroll-region.css` 中的 `.qp-scroll-region`。feature 拥有尺寸、padding、`overflow-*` 和 overscroll，不得复制 scrollbar pseudo、创建 JavaScript 自绘滚动条或使用已退出的 `.custom-scrollbar`。`.qp-scroll-region-stable` 只适用于 overflow 前后宽度变化会破坏真实信息几何且有 browser geometry test 的消费者；forced-colors、原生键盘/指针路径和系统 overlay scrollbar 必须保持可用。
+页面通过 GPUI 滚动容器设置可视范围、内边距与滚动方向。需要还原或定位当前选项时由视图持有滚动位置，见[配色选择器](../apps/patina-ui/src/features/settings/schemes.rs)。为滚动条预留空间时，用窗口几何测试核对内容溢出前后的宽度，并保留键盘、指针和系统辅助显示设置的行为。
 
 单个 feature 的卡片布局、迷你窗状态、具体日期入口、详情弹窗内容和消费者选择规则归最近的 feature 源码与测试。只有跨页面契约发生变化时才更新本文。
 

@@ -1,5 +1,7 @@
 # 使用限制规则操作
 
+2026-11-18 归档。此记录对应旧 Tauri 工具页。下文的 Node 依赖审计、WebView 退出和 Mini 输入复验随该实现退役，保留当时的验证结果。当前桌面环境的验收入口见[工程质量](../engineering-quality.md#5-默认验证门槛)。
+
 范围：将每日上限放到目标名称旁，提供开关、编辑每日上限和删除操作。保持现有紧凑行高、滚动间距和稳定列宽。
 
 数据 owner 为工具规则 repository，运行时写入沿用 Tools mutation，界面沿用 Quiet Pro。新增启用状态独立于既有移除标记；已有移除规则保持隐藏。编辑保留规则身份并清除当天旧额度扩展，关闭和重新开启不重置当天提醒记录。
@@ -18,7 +20,7 @@
 
 隔离 Tauri / WebView2 的 contracts、storage-restart 和 data-recovery 组通过；使用真实 SQLite 验证开关与上限落盘、延时兼容、Mini 权限拒绝、重启和存储迁移。data-recovery 首次在末尾的旧版本断言失败，数据库实际已升级至 19；同步断言并检查启用状态表后，整组复验通过。
 
-## 剩余门禁
+## 2026-10-31 剩余门禁
 
 联网依赖审计仍报告现有开发依赖 minimatch、glob 的两项中等级别 advisory；Rust 审计通过。本次未修改依赖和锁文件，不宣称 `check:full` 全绿。依赖修复由后续依赖维护处理，依据[工程质量的依赖审计要求](../engineering-quality.md#5-默认验证门槛)完成后再关闭该门禁；本记录暂留 working。
 
@@ -47,4 +49,4 @@
 
 随后独立运行 window-lifecycle 通过，运行标识为 `1793541947896-83080f15-4968-49ff-8caa-df6f77f26107`。同一构建的 mini-input 在输入前置条件处失败：Windows 的 `SetPhysicalCursorPos` 返回失败，探针报告 `Cannot move to owned input target`。此次未完成 Mini 焦点及循环采样验证；需要可用的交互桌面，由 `tests/miniNativeProbe.ts` owner 复验。没有通过重复运行覆盖失败记录。
 
-本次为当前开发进度的仓库交接，依赖安全与桌面完整验收仍未完成。本记录保留在 working。
+截至 2026-11-01 交接时，旧版依赖安全与桌面完整验收仍未完成。

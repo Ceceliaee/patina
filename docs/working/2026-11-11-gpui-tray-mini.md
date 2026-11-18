@@ -17,7 +17,7 @@
 ## 1. 建立基线与实验身份
 
 - [x] 在实现前保存一份可重复运行的 Tauri 对照构建，记下提交、构建配置、测试库和设置。见下方基线记录。测量口径沿用[资源测量与生命周期验证](../engineering-quality.md#53-性能测量与资源生命周期)和[历史托盘测量](../archive/2026-11-06-desktop-resource-optimization.md)。
-- [x] 沿用同一工作目录。GPUI 的 Cargo 输出在 `desktop/target/`；开始时磁盘可用约 436 GiB。对照构建和原始采样保留在忽略的 `artifacts/runtime-smoke/`。Tauri 补丁仍在对应分支维护。
+- [x] 沿用同一工作目录。实验开始时 GPUI 的 Cargo 输出位于 `desktop/target/`，磁盘可用约 436 GiB。对照构建和原始采样保留在忽略的 `artifacts/runtime-smoke/`。
 - [x] 给 GPUI 程序分配独立的应用身份、单实例锁、配置及数据根。用固定样本库或一致性备份的副本验证。启动时指定无效实验路径应明确失败；重复启动同一实验身份时，数据库只有一个记录者。[运行身份与持久化隔离](../architecture.md#69-运行身份与持久化隔离)
 
 ### Tauri 对照构建与复测
@@ -36,7 +36,7 @@
 
 私有提交取进程树总和的时间中位数，CPU 取有效间隔的时间加权均值。私有提交包含可换出的内存；工作集是驻留页，但跨进程求和会重复计算共享页。汇总脚本分别保留两种口径。以第一轮收起为例，6 个 WebView2 进程合计的私有提交中位数为 184.18 MiB；主进程贡献单核 CPU 的 1.11%，WebView2 合计 0.14%。这些是受控验证构建的数据，不能代替安装版的实测。
 
-在仓库根目录运行 `pnpm run test:tauri-runtime-prepare` 生成与当前源码匹配的 manifest，构建 `src-tauri` 的 `windows-resource-sample` example；把两者的路径依次传给 `node --experimental-strip-types tests/tauriTrayMiniBaseline.ts`。使用 `node --experimental-strip-types tests/resourceSummary.ts <已完成的 JSONL 文件...>` 汇总。重新构建分支上的 Tauri 会测到已修改的共享引擎，应单独保留其运行编号。
+复现这份 Tauri 基线时，在 `b032de5f` 的仓库根目录运行 `pnpm run test:tauri-runtime-prepare` 生成 manifest，构建该提交中 `src-tauri` 的 `windows-resource-sample` 示例，把两者的路径依次传给 `node --experimental-strip-types tests/tauriTrayMiniBaseline.ts`。当时使用同一提交的 `tests/resourceSummary.ts` 汇总 JSONL。其他版本的测量需单独记录运行编号。
 
 ## 2. 让记录引擎在纯托盘下运行
 
@@ -48,17 +48,18 @@ Patina 自己维护 Windows 桌面入口。平台层通过现有的 `windows` cr
 
 在 Windows 仓库根目录运行 `cargo run` 启动 GPUI 开发预览，默认打开主窗口。用 `cargo run -- --mini` 预览 Mini。启动器按原生工作区的工具链编译，监听 Rust 源码和内嵌资源。保存后编译成功会重启预览，主窗口回到上次浏览的页面。页面草稿和弹窗随重启关闭。编译报错时可以继续操作上一次成功的预览，修正并保存后会再次编译。按 Ctrl+C 或从预览托盘退出即可结束。开发预览使用 `%LOCALAPPDATA%/Patina.GPUI.Dev/Patina.GPUI.Experimental/`，也可通过 `PATINA_GPUI_PROFILE_PARENT` 指定已有的绝对目录。
 
-需要单次运行时，从仓库根目录直接启动实验版。原生工作区使用 Rust 1.100.0，Tauri 保持 1.94.1。
+需要单次运行时，从仓库根目录构建三个桌面程序，再启动 Mini。
 
 ```powershell
-cargo +1.100.0 run --locked --manifest-path Cargo.toml -p patina-gpui -- --mini
+cargo build --locked --bins -p patina -p patina-ui -p patina-probe
+cargo run --locked -p patina --bin patina -- --mini
 ```
 
 不带窗口参数时，首次启动按「静默启动」偏好决定是否打开主窗口，再次启动会打开同一配置的主窗口，隐藏托盘图标后也可通过此方式返回。`--mini` 打开 Mini，`--today` 打开主窗口。左键单击「Patina · GPUI」托盘图标打开主窗口。右键菜单可打开主窗口或 Mini、暂停或恢复记录，以及退出应用。
 
 在「设置 → 常驻」保存「开机自启动」后，Windows 会在当前用户登录时启动相应配置的 GPUI 程序。新实验配置默认关闭该选项，启用静默启动和关闭到后台。默认数据位于 `%LOCALAPPDATA%/Patina.GPUI.Experimental/`。需要另一个测试库时，把 `PATINA_GPUI_PROFILE_PARENT` 设为已存在的绝对目录，程序仍使用该目录中的 `Patina.GPUI.Experimental/` 子目录。正式旧库的迁移历史修复与升级演练在主线接替前完成。
 
-使用 `cargo +1.100.0 run --locked --manifest-path Cargo.toml -p patina-gpui --example native-lifecycle` 在独立临时库验收实际窗口、真实采样循环与退出。前台应用由原有的调试探测样本提供，程序结束后释放临时库。
+构建上述桌面程序后，在[专用 Windows 测试会话](../engineering-quality.md#5-默认验证门槛)运行 `cargo run --locked -p patina --example native-lifecycle`，验收实际窗口、采样循环与退出。示例使用固定前台探测样本和独立临时库，程序结束后释放临时库。
 
 本机还在默认实验目录启动了真实前台探测，核对到可见的 Mini。通过托盘的退出命令关闭程序后，以只读连接确认实验库中未结束的会话数为 0；重新启动后继续使用同一实验库。
 
@@ -76,7 +77,7 @@ cargo +1.100.0 run --locked --manifest-path Cargo.toml -p patina-gpui -- --mini
 现版 Mini 是视觉对照。保留信息层级、明暗色、紧凑尺寸和贴边手感。比如[现版固定和关闭按钮](../../apps/patina-ui/src/windows/mini/mod.rs)的命中尺寸参见[原生窗口布局](../../apps/patina-ui/src/windows/mini/mod.rs)，在原生版中由 QuietPro 持有。每迁一个控件，先区分它是动作、选择还是状态展示，再确定谁持有值、如何触发、能否聚焦，以及禁用时读到什么。视觉一致和行为正确分别验收；后续页面遇到同一种控件就消费同一接口。
 
 - [x] [QuietPro 图标控件](../../crates/quietpro/src/lib.rs)共享 24 px 命中框、14 px 图标、焦点和禁用样式。关闭接一次动作；固定接当前选中值和变更回调，让辅助技术能读出开关状态。调用方提供稳定 ID 和本地化名称，并持有窗口与业务状态。
-- [x] 用 Windows UI Automation 在独立示例中读到固定开关和复位按钮的名称、开关值和禁用状态。切换一次只更新一次计数，复位后按钮禁用。在 `desktop/` 下运行 `cargo test --locked -p quietpro --test controls -- --ignored`。测试会构建并启动示例。[控件验收测试](../../crates/quietpro/tests/controls.rs)
+- [x] 用 Windows UI Automation 在独立示例中读到固定开关和复位按钮的名称、开关值和禁用状态。切换一次只更新一次计数，复位后按钮禁用。从仓库根目录运行 `cargo test --locked -p quietpro --features native-tests --test controls accessible_controls -- --ignored --exact`。[控件验收测试](../../crates/quietpro/tests/controls.rs)
 - [ ] 在独立的[控件示例](../../crates/quietpro/examples/controls.rs)中切换系统明暗主题，以 Tab 聚焦固定按钮，按一次 Space 或 Enter 只增加一次计数。清零后复位按钮应不可再触发。运行命令：`cargo +1.100.0 run --locked --manifest-path Cargo.toml -p quietpro --example controls`。
 - [ ] 对照现版逐项检查默认浅色、深色及缩放下的 Mini。实验版目前跟随系统明暗外观；自定义预设随设置页迁移。用键盘验证焦点可见、按钮触发一次、禁用时无回调，再验证鼠标悬停不抢输入焦点。视觉差异和组件行为分别记录。
 
@@ -105,7 +106,7 @@ cargo +1.100.0 run --locked --manifest-path Cargo.toml -p patina-gpui -- --mini
 
 每项取三轮中位数。收起态私有提交节省 155.14 MiB（64.4%），工作集总和减少 416.27 MiB（64.7%），单核 CPU 下降 0.35 个百分点（相对降低 27.0%）。三轮收起态私有提交分别为 85.61、91.39、85.52 MiB，单核 CPU 分别为 0.73%、0.97%、0.95%。纯托盘的 CPU 区间与 Tauri 重叠。GPUI 在收起时保留绘制面板的画布，收起比纯托盘多用约 60.56 MiB 私有提交。工作集跨进程相加包含共享页的重复计数。
 
-复测使用与 Tauri 基线相同的 Windows 采样器。先按第 1 节构建采样器，再在交互式 Windows 桌面的 `desktop/` 目录运行 `cargo test --locked -p patina-gpui --test resources tray_mini_baseline -- --ignored --nocapture`。测试创建新的 `artifacts/runtime-smoke/gpui-baseline-*/` 目录，结果文件 `result.json` 记录二进制散列、窗口尺寸和记录进度，九份 JSONL 可交给前述 `resourceSummary.ts` 汇总。将测试名替换为 `sampler_smoke` 可验证三个状态各 15 秒的采样流程，结果写入单独的 `gpui-smoke-*/` 目录。[资源验收测试](../../apps/patina/tests/resources.rs)
+复测时先按第 2 节构建桌面程序，再从仓库根目录运行 `cargo build --locked -p patina --example windows-resource-sample` 构建 Windows 采样器。在专用 Windows 测试会话运行 `cargo test --locked -p patina --features native-tests --test resources tray_mini_baseline -- --ignored --exact --nocapture`。每轮在 `artifacts/runtime-smoke/gpui-baseline-*/` 保存原始 JSONL，`result.json` 记录二进制散列、窗口尺寸和记录进度。将测试名替换为 `sampler_smoke` 可验证三个状态各 15 秒的采样流程，结果写入单独的 `gpui-smoke-*/` 目录。[资源验收测试](../../apps/patina/tests/resources.rs)
 
 | 场景 | 核对结果 |
 | --- | --- |
@@ -123,15 +124,14 @@ cargo +1.100.0 run --locked --manifest-path Cargo.toml -p patina-gpui -- --mini
 
 [Rust 验收](../../apps/patina/tests/today.rs)在独立 SQLite 库写入跨午夜的 Studio 会话、Writer 会话、与 Writer 重叠的精确导入及匿名活动。预期今天 70 分钟、昨天 30 分钟；三项排行分别为 45、20、5 分钟（64%、29%、7%）。零点和一点的活动分别为 60 和 10 分钟。两版从同一份已关闭的数据库复制启动，使用英语、总量模式和暂停记录的设置。Windows UI Automation 从实际窗口读取结果。恢复记录的生命周期场景另外使用固定前台应用。
 
-在 Windows 的 `desktop/` 目录运行：
+按第 2、4 节构建桌面程序和采样器后，从仓库根目录运行排行操作和窗口生命周期用例。后者需要专用 Windows 测试会话。交互样本包含当天 01:10 前的活动，在当地 01:10 后运行。
 
 ```powershell
-cargo test --locked -p patina-gpui --test today
-cargo test --locked -p patina-gpui --test today ranked_app_actions -- --ignored
-cargo test --locked -p patina-gpui --test today main_window_lifecycle -- --ignored --nocapture
+cargo test --locked -p patina --features native-tests --test today ranked_app_actions -- --ignored --exact
+cargo test --locked -p patina --features native-tests --test today main_window_lifecycle -- --ignored --exact --nocapture
 ```
 
-最后一条命令使用第 4 节的 Windows 采样器，输出本次 `artifacts/runtime-smoke/today-*/` 路径。把该目录和第 1 节 Tauri 对照构建的 `prepared/manifest.json` 的绝对路径分别赋给 `PATINA_TODAY_RUN` 和 `PATINA_TAURI_MANIFEST`，再运行 `cargo test --locked -p patina-gpui --test today tauri_comparison -- --ignored`。该测试使用 Python 标准库在本机回环地址提供已构建的前端资源。交互样本包含当天 01:10 前的活动，在当地 01:10 后运行。
+生命周期用例将采样结果写入 `artifacts/runtime-smoke/today-*/`。下表的 Tauri 数据来自当时的对照测试，该测试使用第 1 节的构建清单，在本机回环地址提供旧前端资源。
 
 ### 2026-11-11 同机对照（窗口进程拆分前）
 
@@ -189,14 +189,14 @@ Section 的对象名末段为 `{2627E361-24E2-4F14-99ED-A20D0685D8DD}_v22`，互
 
 记录连续性由只读 SQLite 连接核对。固定前台应用的活动会话 ID 全程为 3，关回纯托盘后最后成功采样时间前进 30.535 秒，关回原来固定的 Mini 后又前进 30.468 秒。独立复跑 `today-20261111T111250.969Z` 的这两段分别前进 30.650 和 30.599 秒。其 `recording.json` 保留了进度和退出后的数据库读数：同一条会话已封口，结束时间比最后一次成功采样晚 1.016 秒。
 
-在交互式 Windows 桌面的 `desktop/` 目录运行下列测试。前两项分别输出本机 Direct3D 对照计数及两组逐轮进程快照。资源测试使用第 4 节的 Windows 采样器，原始文件位于 `artifacts/runtime-smoke/` 的对应运行目录。
+在专用 Windows 测试会话中，从仓库根目录运行下列测试。前两项分别输出本机 Direct3D 对照计数及两组逐轮进程快照。资源测试使用第 4 节的 Windows 采样器，原始文件位于 `artifacts/runtime-smoke/` 的对应运行目录。
 
 ```powershell
-cargo test --locked -p patina-gpui --test today graphics_handles -- --ignored --nocapture
-cargo test --locked -p patina-gpui --test today window_handles -- --ignored --nocapture
-cargo test --locked -p patina-gpui --test today mini_window_handles -- --ignored --nocapture
-cargo test --locked -p patina-gpui --test today renderer_recovery -- --ignored
-cargo test --locked -p patina-gpui --test today main_window_lifecycle -- --ignored --nocapture
+cargo test --locked -p patina --features native-tests --test today handles::graphics_handles -- --ignored --exact --nocapture
+cargo test --locked -p patina --features native-tests --test today handles::window_handles -- --ignored --exact --nocapture
+cargo test --locked -p patina --features native-tests --test today handles::mini_window_handles -- --ignored --exact --nocapture
+cargo test --locked -p patina --features native-tests --test today handles::renderer_recovery -- --ignored --exact
+cargo test --locked -p patina --features native-tests --test today main_window_lifecycle -- --ignored --exact --nocapture
 ```
 
 窗口进程拆分后，原生工作区测试和 Clippy 通过，Mini 生命周期、排行编辑、窗口故障恢复均通过。仓库完整检查通过 232 项浏览器用例、Tauri Rust 回归（含原生探测进程回收）和 Clippy，最后在依赖审计处失败。告警为分支基点已锁定的 `rustix 1.1.4`（`RUSTSEC-2026-0486`）。
@@ -253,11 +253,10 @@ GPUI 的[常驻设置验收](../../apps/patina/tests/pages/resident.rs)、[服�
 
 [Windows 适配器修补](../../vendor/accesskit_windows/README.md)让这类请求返回 `UIA_E_ELEMENTNOTAVAILABLE`。复验 `handles-20261112T025312.863Z` 和 `handles-20261112T025928.911Z` 使用相同操作。每次有、无 UIA 主动读取各开关 15 轮，每组的渲染进程均正常退出，四份标准错误日志均为空。第 3、8、15 轮的托盘进程均为 273 个句柄，目标 Section 与 Mutant 均为零。两次固定 Mini 各开关 15 轮后，原窗口和固定状态均保留。另连续执行 15 次立即重开与渲染进程恢复测试，各次错误输出均无 panic。
 
-[页面回归](../../apps/patina/tests/pages.rs)使用独立的临时 SQLite 库，覆盖页面导航、布局对照、精确记录与时段导入、事务冲突回滚。中文空库用例从数据页点击历史，验证“活跃跨度”和“高峰时段”的两个空值都可通过 UI Automation 读取，再通过侧栏返回今天。日常页面交互由测试入口分配临时桌面。以下全套验收命令在[专用 Windows 测试会话](../engineering-quality.md#5-默认验证门槛)中从 `desktop/` 运行。布局对照需要第 5 节基线目录中的 `original-pages.json`、`tauri.json` 和同目录的样本库。
+[页面回归](../../apps/patina/tests/pages.rs)使用独立的临时 SQLite 库，覆盖页面导航、布局、精确记录与时段导入、事务冲突回滚。中文空库用例从数据页点击历史，验证“活跃跨度”和“高峰时段”的两个空值都可通过 UI Automation 读取，再通过侧栏返回今天。日常页面交互由测试入口分配临时桌面。在[专用 Windows 测试会话](../engineering-quality.md#5-默认验证门槛)中从仓库根目录运行整套页面验收。
 
 ```powershell
-$env:PATINA_PAGE_BASELINE = (Resolve-Path ../artifacts/runtime-smoke/today-20261111T094101.988Z/original-pages.json).Path
-cargo test --locked -p patina-gpui --test pages -- --include-ignored --test-threads=1
+cargo test --locked -p patina --features native-tests --test pages -- --include-ignored --test-threads=1
 ```
 
 ### 清理 Tauri Today 后的前端产物
