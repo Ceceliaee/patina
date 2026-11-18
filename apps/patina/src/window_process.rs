@@ -1,10 +1,9 @@
 use crate::Action;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
-use patina_recorder::{Activity, AppEdit, Recorder};
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use serde_json::Value;
+use patina_desktop_protocol::Reply;
+use patina_recorder::Recorder;
 use std::{
-    io::{self, BufRead, BufReader, BufWriter, Write},
+    io,
     os::windows::{
         io::{AsRawHandle, OwnedHandle},
         process::CommandExt,
@@ -18,129 +17,18 @@ use std::{
     rc::Rc,
     sync::{
         Arc,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
 };
 
-#[derive(Clone, Copy, Serialize, Deserialize)]
-pub(super) enum Target {
-    Today,
-    Notice { dialog: bool },
-    Tool(patina_recorder::ToolTarget),
-    Mini { focus: bool },
-}
-
-#[derive(Serialize, Deserialize)]
-pub(super) enum Query {
-    Update(patina_updater::Request),
-    InstallUpdate,
-    OpenExternal(String),
-    Storage(patina_recorder::StorageRequest),
-    Tools(crate::tool_service::ToolRequest),
-    HistoryMinimum(bool, i64),
-    DetailZoom(Option<f32>),
-    HistoryZoom(Option<f32>),
-    HistoryModes(Option<[u8; 3]>),
-    Rules,
-    ClassificationMode(bool),
-    DeleteApplication(String, Option<patina_recorder::DeletionImpact>),
-    DeleteWebsite(String, Option<patina_recorder::DeletionImpact>),
-    SaveRules(
-        Vec<patina_recorder::AppRule>,
-        Option<patina_recorder::WebDraft>,
-        Vec<patina_recorder::AppLinkEdit>,
-        Vec<patina_recorder::CategoryEdit>,
-    ),
-    Preferences,
-    SavePreferences(
-        patina_recorder::TrackingPreferences,
-        patina_recorder::TrackingPreferences,
-    ),
-    Trends(Option<(i64, i64)>, patina_recorder::SeriesKind),
-    History {
-        day: i64,
-        app: Option<String>,
-        titles: bool,
-        web: bool,
-    },
-    Today,
-    Recent,
-    Icons(Vec<String>),
-    ChartMode(bool),
-    Edit(String, AppEdit),
-}
-
-#[derive(Serialize, Deserialize)]
-pub(super) enum ToWindow {
-    ToolChanged {
-        background: bool,
-    },
-    Open {
-        serial: u64,
-        target: Target,
-        activity: Activity,
-        paused: bool,
-    },
-    Changed {
-        activity: Activity,
-        paused: bool,
-    },
-    Answer(u64, Result<Value, String>),
-    Exit,
-}
-
-#[derive(Serialize, Deserialize)]
-pub(super) enum FromWindow {
-    Open(Target),
-    MainOpened(Option<usize>),
-    MainClosed,
-    Idle(u64),
-    Query(u64, Box<Query>),
-}
+use patina_desktop_protocol::{
+    FromWindow, Query, Target, ToWindow, WIRE_VERSION, handshake, read_messages, writer,
+};
 
 enum Event {
     Action(Action),
     Message(u64, FromWindow),
     Disconnected(u64),
-}
-
-pub(super) fn read_messages<T: DeserializeOwned>(
-    stream: impl io::Read,
-    mut deliver: impl FnMut(T) -> bool,
-) -> io::Result<()> {
-    let mut reader = BufReader::new(stream);
-    let mut line = Vec::new();
-    loop {
-        line.clear();
-        if reader.read_until(b'\n', &mut line)? == 0 {
-            return Ok(());
-        }
-        if !deliver(serde_json::from_slice(&line)?) {
-            return Ok(());
-        }
-    }
-}
-
-pub(super) fn writer<T: Serialize + Send + 'static>(
-    stream: impl Write + Send + 'static,
-) -> io::Result<mpsc::Sender<T>> {
-    let (tx, rx) = mpsc::channel();
-    thread::Builder::new()
-        .name("window-pipe-write".into())
-        .spawn(move || {
-            let mut stream = BufWriter::new(stream);
-            for message in rx {
-                if serde_json::to_writer(&mut stream, &message).is_err()
-                    || stream
-                        .write_all(b"\n")
-                        .and_then(|()| stream.flush())
-                        .is_err()
-                {
-                    break;
-                }
-            }
-        })?;
-    Ok(tx)
 }
 
 struct WindowProcess {
@@ -155,17 +43,19 @@ struct WindowProcess {
 impl WindowProcess {
     fn start(
         generation: u64,
-        recorder: &Recorder,
+        preferences: &patina_recorder::TrackingPreferences,
         events: async_channel::Sender<Event>,
     ) -> io::Result<Self> {
-        let job = patina_recorder::child_job().map_err(io::Error::other)?;
-        let mut child = Command::new(std::env::current_exe()?)
+        let job =
+            patina_windows_integration::windows::job::kill_on_close().map_err(io::Error::other)?;
+        let mut child = Command::new(std::env::current_exe()?.with_file_name("patina-ui.exe"))
             .args([
                 "--window-process",
-                recorder.locale.get().tag(),
-                recorder.theme.get().tag(),
+                WIRE_VERSION,
+                preferences.locale.tag(),
+                preferences.theme.tag(),
             ])
-            .args(recorder.schemes.borrow().iter())
+            .args(&preferences.schemes)
             .creation_flags(0x08000000)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -187,10 +77,12 @@ impl WindowProcess {
             thread::Builder::new()
                 .name("window-pipe-read".into())
                 .spawn(move || {
-                    if let Err(e) = read_messages(stdout, |msg| {
-                        events
-                            .send_blocking(Event::Message(generation, msg))
-                            .is_ok()
+                    if let Err(e) = handshake(stdout).and_then(|reader| {
+                        read_messages(reader, |msg| {
+                            events
+                                .send_blocking(Event::Message(generation, msg))
+                                .is_ok()
+                        })
                     }) {
                         eprintln!("read window process: {e}");
                     }
@@ -214,7 +106,7 @@ impl WindowProcess {
             }
         }
     }
-    fn open(&mut self, target: Target, recorder: &Recorder) -> io::Result<()> {
+    fn open(&mut self, target: Target, recorder: &Recorder, revision: u64) -> io::Result<()> {
         if self.child.try_wait()?.is_some() {
             return Err(io::Error::other("window process has exited"));
         }
@@ -231,6 +123,7 @@ impl WindowProcess {
         self.tx
             .send(ToWindow::Open {
                 serial: self.serial,
+                revision,
                 target,
                 activity: recorder.activity(),
                 paused: recorder.paused(),
@@ -259,8 +152,8 @@ async fn answer(
     recorder: &Recorder,
     tools: &crate::tool_service::ToolService,
     query: Query,
-) -> Result<Value, String> {
-    let encoded = match query {
+) -> Result<Reply, String> {
+    match query {
         Query::OpenExternal(url) => {
             if !url.starts_with("https://") || url.contains('\0') {
                 return Err("Invalid external link".into());
@@ -283,64 +176,66 @@ async fn answer(
             if result.0 as isize <= 32 {
                 return Err("Could not open external link".into());
             }
-            Ok(Value::Null)
+            Ok(Reply::Done)
         }
-        Query::Storage(request) => return recorder.storage(request).await,
-        Query::Tools(request) => return tools.request(request, recorder.locale.get().tag()).await,
-        Query::DetailZoom(hours) => serde_json::to_value(recorder.detail_zoom(hours).await?),
-        Query::HistoryModes(modes) => serde_json::to_value(recorder.history_modes(modes).await?),
-        Query::HistoryZoom(hours) => serde_json::to_value(recorder.history_zoom(hours).await?),
-        Query::HistoryMinimum(d, v) => {
-            serde_json::to_value(recorder.set_history_minimum(d, v).await?)
-        }
-        Query::Rules => serde_json::to_value(recorder.rules().await?),
-        Query::ClassificationMode(web) => {
-            serde_json::to_value(recorder.remember_classification_mode(web).await?)
-        }
+        Query::Storage(request) => recorder.storage(request).await.map(Reply::Storage),
+        Query::Tools(request) => tools.request(request, recorder.locale.get().tag()).await,
+        Query::DetailZoom(hours) => recorder.detail_zoom(hours).await.map(Reply::Zoom),
+        Query::HistoryModes(modes) => recorder.history_modes(modes).await.map(Reply::HistoryModes),
+        Query::HistoryZoom(hours) => recorder.history_zoom(hours).await.map(Reply::Zoom),
+        Query::HistoryMinimum(d, v) => recorder
+            .set_history_minimum(d, v)
+            .await
+            .map(|()| Reply::Done),
+        Query::Rules => recorder.rules().await.map(Reply::Rules),
+        Query::ClassificationMode(web) => recorder
+            .remember_classification_mode(web)
+            .await
+            .map(|()| Reply::Done),
         Query::DeleteApplication(exe, confirmed) => {
             let apply = confirmed.is_some();
             let impact = recorder.delete_application(exe, confirmed).await?;
             if apply {
                 tools.wake();
             }
-            serde_json::to_value(impact)
+            Ok(Reply::Deletion(impact))
         }
-        Query::SaveRules(r, w, l, c) => {
-            serde_json::to_value(recorder.save_rules(r, w, l, c).await?)
-        }
+        Query::SaveRules(r, w, l, c) => recorder.save_rules(r, w, l, c).await.map(|()| Reply::Done),
         Query::DeleteWebsite(identity, confirmed) => {
             let apply = confirmed.is_some();
             let impact = recorder.delete_website(identity, confirmed).await?;
             if apply {
                 tools.wake();
             }
-            serde_json::to_value(impact)
+            Ok(Reply::Deletion(impact))
         }
-        Query::Preferences => serde_json::to_value(recorder.preferences().await?),
+        Query::Preferences => recorder.preferences().await.map(Reply::Preferences),
         Query::SavePreferences(..) | Query::Update(_) | Query::InstallUpdate => {
             unreachable!("host operations are serialized")
         }
-        Query::Trends(r, k) => serde_json::to_value(recorder.trends(r, k).await?),
+        Query::Trends(r, k) => recorder.trends(r, k).await.map(Reply::Trends),
         Query::History {
             day,
             app,
             titles,
             web,
-        } => serde_json::to_value(recorder.history_source(day, app, titles, web).await?),
-        Query::Today => serde_json::to_value(recorder.today().await?),
-        Query::Recent => serde_json::to_value(recorder.recent().await?),
-        Query::Icons(keys) => serde_json::to_value(
+        } => recorder
+            .history_source(day, app, titles, web)
+            .await
+            .map(Reply::History),
+        Query::Today => recorder.today().await.map(Reply::Today),
+        Query::Recent => recorder.recent().await.map(Reply::Recent),
+        Query::Icons(keys) => Ok(Reply::Icons(
             recorder
                 .icons(keys)
                 .await?
                 .into_iter()
                 .map(|(key, bytes)| (key, STANDARD.encode(bytes)))
                 .collect::<Vec<_>>(),
-        ),
-        Query::ChartMode(mode) => serde_json::to_value(recorder.set_chart_mode(mode).await?),
-        Query::Edit(key, edit) => serde_json::to_value(recorder.edit_app(key, edit).await?),
-    };
-    encoded.map_err(|e| e.to_string())
+        )),
+        Query::ChartMode(mode) => recorder.set_chart_mode(mode).await.map(|()| Reply::Done),
+        Query::Edit(key, edit) => recorder.edit_app(key, edit).await.map(|()| Reply::Done),
+    }
 }
 
 async fn save_preferences(
@@ -349,7 +244,7 @@ async fn save_preferences(
     login: &crate::login::LoginEntry,
     old: patina_recorder::TrackingPreferences,
     next: patina_recorder::TrackingPreferences,
-) -> Result<Value, String> {
+) -> Result<Reply, String> {
     let current = tray.behavior.get();
     if old.desktop != current && old.desktop != next.desktop {
         return Err("resident settings changed since loading".into());
@@ -385,7 +280,7 @@ async fn save_preferences(
         return Err(error);
     }
     tray.behavior.set(desired);
-    Ok(Value::Null)
+    Ok(Reply::Done)
 }
 
 pub(super) struct Services {
@@ -396,11 +291,12 @@ pub(super) struct Services {
 }
 
 /// The last-window notification only retires the process if it has handled the latest open request.
-pub(super) fn serve(
-    cx: &mut gpui_kit::App,
+pub(super) async fn serve(
+    executor: &async_executor::LocalExecutor<'_>,
     actions: async_channel::Receiver<Action>,
     recorder: Rc<Recorder>,
     windows_open: Arc<AtomicBool>,
+    revision: Arc<AtomicU64>,
     services: Services,
 ) {
     let Services {
@@ -411,17 +307,19 @@ pub(super) fn serve(
     } = services;
     let (events, inbox) = async_channel::unbounded();
     let tray_events = events.clone();
-    cx.spawn(async move |_| {
-        while let Ok(action) = actions.recv().await {
-            if tray_events.send(Event::Action(action)).await.is_err() {
-                break;
+    executor
+        .spawn(async move {
+            while let Ok(action) = actions.recv().await {
+                if tray_events.send(Event::Action(action)).await.is_err() {
+                    break;
+                }
             }
-        }
-    })
-    .detach();
-    cx.spawn(async move |cx| {
+        })
+        .detach();
+    {
         let mut worker: Option<WindowProcess> = None;
         let mut generation = 0;
+        let mut active: Vec<async_executor::Task<()>> = Vec::new();
         while let Ok(event) = inbox.recv().await {
             let target = match event {
                 Event::Action(Action::Exit) => break,
@@ -446,6 +344,7 @@ pub(super) fn serve(
                     }
                     if let Some(w) = &worker {
                         let _ = w.tx.send(ToWindow::Changed {
+                            revision: revision.load(Ordering::Acquire),
                             activity: recorder.activity(),
                             paused: recorder.paused(),
                         });
@@ -480,10 +379,8 @@ pub(super) fn serve(
                         FromWindow::Query(request, query) => {
                             let tx = current.tx.clone();
                             if let Query::Update(command) = query.as_ref() {
-                                let result = updater.request(*command).and_then(|s| {
-                                    serde_json::to_value(s).map_err(|e| e.to_string())
-                                });
-                                let _ = tx.send(ToWindow::Answer(request, result));
+                                let result = updater.request(*command).map(Reply::Update);
+                                let _ = tx.send(ToWindow::answer(request, result));
                                 continue;
                             }
                             if matches!(query.as_ref(), Query::InstallUpdate) {
@@ -491,17 +388,16 @@ pub(super) fn serve(
                                     Err("Open the main window to install an update".into())
                                 } else {
                                     let updater = updater.clone();
-                                    cx.background_executor()
-                                        .spawn(async move {
-                                            let executable = std::env::current_exe()
-                                                .map_err(|e| e.to_string())?;
-                                            updater.begin_install(&executable)
-                                        })
-                                        .await
+                                    blocking::unblock(move || {
+                                        let executable =
+                                            std::env::current_exe().map_err(|e| e.to_string())?;
+                                        updater.begin_install(&executable)
+                                    })
+                                    .await
                                 };
                                 let installed = result.is_ok();
                                 let _ =
-                                    tx.send(ToWindow::Answer(request, result.map(|_| Value::Null)));
+                                    tx.send(ToWindow::answer(request, result.map(|_| Reply::Done)));
                                 if installed {
                                     break;
                                 }
@@ -527,7 +423,7 @@ pub(super) fn serve(
                                     || pid != current.child.id()
                                     || foreground != handle
                                 {
-                                    let _ = tx.send(ToWindow::Answer(
+                                    let _ = tx.send(ToWindow::answer(
                                         request,
                                         Err(
                                             "Open the main Settings window to reveal this password"
@@ -544,9 +440,12 @@ pub(super) fn serve(
                                         | patina_recorder::StorageRequest::Restore { .. }
                                 )
                             ) {
+                                for task in active.drain(..) {
+                                    task.await;
+                                }
                                 let result = answer(&recorder, &tools, *query).await;
                                 let restart = result.is_ok();
-                                let _ = tx.send(ToWindow::Answer(request, result));
+                                let _ = tx.send(ToWindow::answer(request, result));
                                 if restart {
                                     crate::RESTART_AFTER_STORAGE.store(true, Ordering::Release);
                                     break;
@@ -560,22 +459,29 @@ pub(super) fn serve(
                                     | Query::HistoryModes(_)
                             ) {
                                 let result = answer(&recorder, &tools, *query).await;
-                                let _ = tx.send(ToWindow::Answer(request, result));
+                                let _ = tx.send(ToWindow::answer(request, result));
                                 continue;
                             }
                             if let Query::SavePreferences(old, next) = *query {
                                 let result =
                                     save_preferences(&recorder, &tray, &login, old, next).await;
-                                let _ = tx.send(ToWindow::Answer(request, result));
+                                let _ = tx.send(ToWindow::answer(request, result));
+                                continue;
+                            }
+                            active.retain(|task| !task.is_finished());
+                            if active.len() >= patina_desktop_protocol::MAX_PENDING {
+                                let _ = tx.send(ToWindow::Answer(
+                                    request,
+                                    Err(patina_desktop_protocol::RequestError::Busy),
+                                ));
                                 continue;
                             }
                             let recorder = recorder.clone();
                             let tools = tools.clone();
-                            cx.spawn(async move |_| {
+                            active.push(executor.spawn(async move {
                                 let result = answer(&recorder, &tools, *query).await;
-                                let _ = tx.send(ToWindow::Answer(request, result));
-                            })
-                            .detach();
+                                let _ = tx.send(ToWindow::answer(request, result));
+                            }));
                             None
                         }
                     }
@@ -591,18 +497,25 @@ pub(super) fn serve(
             };
             if let Some(target) = target {
                 if let Some(w) = worker.as_mut()
-                    && w.open(target, &recorder).is_ok()
+                    && w.open(target, &recorder, revision.load(Ordering::Acquire))
+                        .is_ok()
                 {
                     continue;
                 }
                 drop(worker.take());
                 generation += 1;
-                match WindowProcess::start(generation, &recorder, events.clone()).and_then(
-                    |mut w| {
-                        w.open(target, &recorder)?;
+                windows_open.store(true, Ordering::Release);
+                match recorder
+                    .preferences()
+                    .await
+                    .map_err(io::Error::other)
+                    .and_then(|preferences| {
+                        WindowProcess::start(generation, &preferences, events.clone())
+                    })
+                    .and_then(|mut w| {
+                        w.open(target, &recorder, revision.load(Ordering::Acquire))?;
                         Ok(w)
-                    },
-                ) {
+                    }) {
                     Ok(w) => {
                         worker = Some(w);
                         windows_open.store(true, Ordering::Release);
@@ -613,7 +526,7 @@ pub(super) fn serve(
                         if matches!(target, Target::Notice { .. }) {
                             let _ = tools
                                 .request(
-                                    crate::tool_service::ToolRequest::DisplayFailed,
+                                    patina_desktop_protocol::tools::ToolRequest::DisplayFailed,
                                     recorder.locale.get().tag(),
                                 )
                                 .await;
@@ -624,7 +537,8 @@ pub(super) fn serve(
         }
         drop(worker);
         windows_open.store(false, Ordering::Release);
-        cx.update(|cx| cx.quit());
-    })
-    .detach();
+        for task in active {
+            task.await;
+        }
+    }
 }

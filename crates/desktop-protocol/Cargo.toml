@@ -1,0 +1,12 @@
+[package]
+name = "patina-desktop-protocol"
+version.workspace = true
+edition = "2024"
+publish = false
+
+[dependencies]
+patina-activity-model = { path = "../activity-model" }
+patina-plugin-sdk = { path = "../plugin-sdk" }
+patina-updater = { path = "../updater", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

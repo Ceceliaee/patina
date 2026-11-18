@@ -2,19 +2,19 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use patina_tool_host::{Package, ToolData};
 use serde_json::Value;
 
-pub(super) const IDS: [&str; 2] = ["patina.focus", "patina.reminders"];
+pub(super) use patina_desktop_protocol::tools::BUNDLED_IDS as IDS;
 
 pub(super) fn package(id: &str) -> Result<Package, String> {
     let (manifest, wasm): (&str, &[u8]) = match id {
         "patina.focus" => (
-            include_str!("../../plugins/official/focus/manifest.json"),
+            include_str!("../../../plugins/official/focus/manifest.json"),
             include_bytes!(concat!(
                 env!("OUT_DIR"),
                 "/guests/wasm32-unknown-unknown/release/patina_focus.wasm"
             )),
         ),
         "patina.reminders" => (
-            include_str!("../../plugins/official/reminders/manifest.json"),
+            include_str!("../../../plugins/official/reminders/manifest.json"),
             include_bytes!(concat!(
                 env!("OUT_DIR"),
                 "/guests/wasm32-unknown-unknown/release/patina_reminders.wasm"

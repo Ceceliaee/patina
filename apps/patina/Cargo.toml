@@ -1,6 +1,6 @@
 [package]
-name = "patina-gpui"
-version = "0.1.0"
+name = "patina"
+version.workspace = true
 edition = "2024"
 publish = false
 
@@ -16,6 +16,10 @@ name = "today"
 required-features = ["native-tests"]
 
 [[test]]
+name = "lifecycle"
+required-features = ["native-tests"]
+
+[[test]]
 name = "resources"
 required-features = ["native-tests"]
 
@@ -27,29 +31,29 @@ required-features = ["native-tests"]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 base64 = "0.22"
-gpui-kit.workspace = true
-quietpro = { path = "../quietpro" }
-patina-tool-host = { path = "../tool-host" }
-patina-recorder = { path = "../recorder" }
-patina-updater = { path = "../updater" }
+patina-windows-integration = { path = "../../crates/windows-integration" }
+patina-desktop-protocol = { path = "../../crates/desktop-protocol" }
+async-executor = "1"
+blocking = "1"
+patina-tool-host = { path = "../../crates/tool-host" }
+patina-recorder = { path = "../../crates/activity" }
+patina-updater = { path = "../../crates/updater" }
 async-channel = "2"
-raw-window-handle = "0.6"
-getrandom = "0.3"
 winreg = "0.56"
 sha2 = "0.10"
 windows = { version = "0.62.2", features = [
-  "Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_Shell", "Win32_Globalization",
-  "Win32_System_JobObjects", "Web_Http", "Storage_Streams",
+  "Win32_Security", "Win32_System_Threading", "Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_Shell", "Win32_Globalization",
+  "Win32_System_JobObjects",
   "Win32_UI_WindowsAndMessaging", "Win32_UI_HiDpi", "Win32_System_LibraryLoader", "Win32_System_RemoteDesktop",
 ] }
 
 chrono = "0.4"
 
 [dev-dependencies]
-patina-test-desktop = { path = "../test-support" }
+patina-test-desktop = { path = "../../crates/test-support" }
 tungstenite = "0.28"
 windows = { version = "0.62.2", features = [
-  "Win32_System_Com", "Win32_UI_Accessibility", "Win32_Graphics_Direct3D11",
+  "Win32_System_Com", "Win32_System_Ole", "Win32_System_Variant", "Win32_UI_Accessibility", "Win32_Graphics_Direct3D11",
   "Win32_Graphics_Direct3D", "Win32_Graphics_Dxgi_Common", "Win32_System_Diagnostics_ProcessSnapshotting",
   "Win32_System_Diagnostics_ToolHelp", "Win32_System_ProcessStatus", "Win32_System_Threading",
     "Win32_System_SystemInformation",
@@ -60,5 +64,5 @@ tokio = { version = "1", features = ["rt", "time"] }
 
 [[example]]
 name = "windows-resource-sample"
-path = "../../scripts/perf/windows-resource-sample.rs"
+path = "examples/windows-resource-sample.rs"
 test = true

@@ -1,10 +1,10 @@
 use std::{env, path::PathBuf, process::Command};
 
 fn main() {
-    let desktop = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap()).join("..");
+    let desktop = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap()).join("../..");
     let manifest = desktop.join("plugins/official/Cargo.toml");
-    println!("cargo:rerun-if-changed=../plugins/official");
-    println!("cargo:rerun-if-changed=../plugin-sdk");
+    println!("cargo:rerun-if-changed=../../plugins/official");
+    println!("cargo:rerun-if-changed=../../crates/plugin-sdk");
     let out = PathBuf::from(env::var_os("OUT_DIR").unwrap());
     let status = Command::new(env::var_os("CARGO").unwrap())
         .arg("build")

@@ -1,46 +1,14 @@
-use patina_tool_host::{Host, Notice, Preview, now_ms};
-use serde::{Deserialize, Serialize};
-use serde_json::{Value, to_value};
+use patina_desktop_protocol::Reply;
+use patina_tool_host::{Host, now_ms};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
 use std::{path::PathBuf, sync::mpsc, time::Duration};
 
-#[derive(Serialize, Deserialize)]
-pub(super) enum ToolRequest {
-    List,
-    DisplayFailed,
-    RetryDisplay,
-    Shortcuts,
-    Stopping(String, String),
-    Restore(String),
-    Notices(bool),
-    Submit {
-        id: String,
-        generation: String,
-        button: String,
-        fields: std::collections::BTreeMap<String, String>,
-    },
-    Acknowledge(Notice, String),
-    Presented(Notice),
-    Preferences,
-    SavePreferences(patina_recorder::NoticePreferencesPatch),
-    Inspect(PathBuf),
-    Install(PathBuf, Preview),
-    Panel {
-        id: String,
-        generation: String,
-        action: Option<String>,
-        remember: bool,
-    },
-    Uninstall {
-        id: String,
-        generation: String,
-    },
-}
+use patina_desktop_protocol::tools::ToolRequest;
 
-type ResultValue = Result<Value, String>;
+type ResultValue = Result<Reply, String>;
 type Job = (ToolRequest, String, async_channel::Sender<ResultValue>);
 enum Message {
     Job(Box<Job>),
@@ -197,8 +165,8 @@ impl ToolService {
                             host = open();
                         }
                         let host = host.as_mut().map_err(|e| e.clone())?;
-                        let encoded = match request {
-                            ToolRequest::List => to_value((
+                        let response = match request {
+                            ToolRequest::List => Reply::Tools((
                                 host.list(),
                                 display_failures > 0 && !events.list(host, &storage)?.is_empty(),
                                 storage.last_section()?,
@@ -207,61 +175,68 @@ impl ToolService {
                                 display_failures = display_failures.saturating_add(1);
                                 retry_display_at = (display_failures <= 3)
                                     .then(|| now_ms() + i64::from(display_failures) * 500);
-                                to_value(())
+                                Reply::Done
                             }
                             ToolRequest::RetryDisplay => {
                                 display_failures = 0;
                                 retry_display_at = None;
                                 notify(&mut events, host);
-                                to_value(())
+                                Reply::Done
                             }
                             ToolRequest::Stopping(id, gen_id) => {
-                                to_value(host.stopping(&id, &gen_id, &locale)?)
+                                Reply::Stopping(host.stopping(&id, &gen_id, &locale)?)
                             }
                             ToolRequest::Shortcuts => {
                                 let installed = host.list();
                                 let has = |id: &str| installed.iter().any(|t| t.manifest.id == id);
-                                to_value(storage.shortcuts(
+                                Reply::Shortcuts(storage.shortcuts(
                                     has("patina.focus"),
                                     has("patina.reminders"),
                                     &locale,
                                     now_ms(),
                                 )?)
                             }
-                            ToolRequest::Restore(id) => to_value(
+                            ToolRequest::Restore(id) => Reply::Installed(
                                 host.restore_bundled(crate::bundled_tools::package(&id)?, &locale)?,
                             ),
-                            ToolRequest::Notices(dialog) => {
-                                to_value(if events.delivery(host, &storage)? == Some(dialog) {
+                            ToolRequest::Notices(dialog) => Reply::Notices(
+                                if events.delivery(host, &storage)? == Some(dialog) {
                                     events.list(host, &storage)?
                                 } else {
                                     vec![]
-                                })
+                                },
+                            ),
+                            ToolRequest::Preferences => {
+                                Reply::NoticePreferences(storage.preferences()?)
                             }
-                            ToolRequest::Preferences => to_value(storage.preferences()?),
                             ToolRequest::SavePreferences(p) => {
-                                to_value(storage.save_preferences(p)?)
+                                Reply::NoticePreferences(storage.save_preferences(p)?)
                             }
                             ToolRequest::Presented(n) => {
                                 events.present(&n, host, &storage)?;
                                 display_failures = 0;
                                 retry_display_at = None;
-                                to_value(())
+                                Reply::Done
                             }
                             ToolRequest::Submit {
                                 id,
                                 generation,
                                 button,
                                 fields,
-                            } => {
-                                to_value(host.submit(&id, &generation, button, fields, &locale)?)
-                            }
+                            } => Reply::Panel(host.submit(
+                                &id,
+                                &generation,
+                                button,
+                                fields,
+                                &locale,
+                            )?),
                             ToolRequest::Acknowledge(n, choice) => {
-                                to_value(events.acknowledge(&n, &choice, host, &storage, &locale)?)
+                                events.acknowledge(&n, &choice, host, &storage, &locale)?;
+                                Reply::Done
                             }
-                            ToolRequest::Inspect(path) => to_value(host.inspect(&path)?),
+                            ToolRequest::Inspect(path) => Reply::Preview(host.inspect(&path)?),
                             ToolRequest::Install(path, preview) => {
-                                to_value(host.install(&path, &preview, &locale)?)
+                                Reply::Installed(host.install(&path, &preview, &locale)?)
                             }
                             ToolRequest::Panel {
                                 id,
@@ -273,13 +248,14 @@ impl ToolService {
                                 if remember && let Err(error) = storage.remember_section(&id) {
                                     eprintln!("Save selected tool: {error}");
                                 }
-                                to_value(panel)
+                                Reply::Panel(panel)
                             }
                             ToolRequest::Uninstall { id, generation } => {
-                                to_value(host.uninstall(&id, &generation)?)
+                                host.uninstall(&id, &generation)?;
+                                Reply::Done
                             }
                         };
-                        encoded.map_err(|e| e.to_string())
+                        Ok(response)
                     })();
                     if changed && result.is_ok() {
                         dirty.store(true, Ordering::Release);
@@ -360,23 +336,29 @@ mod tests {
             delivery: Some(D::Notification),
             sound: None,
         }))?;
-        assert_eq!(request(ToolRequest::Notices(false))?, serde_json::json!([]));
-        let mut notices: Vec<Notice> =
-            serde_json::from_value(request(ToolRequest::Notices(true))?)?;
+        assert!(matches!(request(ToolRequest::Notices(false))?, Reply::Notices(n) if n.is_empty()));
+        let mut notices: Vec<patina_tool_host::Notice> =
+            patina_desktop_protocol::FromReply::from_reply(request(ToolRequest::Notices(true))?)?;
         let notice = notices.pop().unwrap();
         for _ in 0..3 {
             request(ToolRequest::DisplayFailed)?;
             wait_dialog()?;
         }
         request(ToolRequest::DisplayFailed)?;
-        assert_eq!(request(ToolRequest::List)?[1], true);
+        assert!(matches!(
+            request(ToolRequest::List)?,
+            Reply::Tools((_, true, _))
+        ));
         request(ToolRequest::RetryDisplay)?;
         wait_dialog()?;
         request(ToolRequest::Presented(notice.clone()))?;
         request(ToolRequest::Presented(notice.clone()))?;
         request(ToolRequest::Acknowledge(notice.clone(), "5".into()))?;
         assert!(request(ToolRequest::Acknowledge(notice, "5".into())).is_err());
-        assert_eq!(request(ToolRequest::List)?[1], false);
+        assert!(matches!(
+            request(ToolRequest::List)?,
+            Reply::Tools((_, false, _))
+        ));
         worker.stop()?;
         recorder.shutdown()?;
         Ok(())

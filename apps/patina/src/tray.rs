@@ -63,7 +63,7 @@ pub(super) fn reopen(profile_id: &str, actions: &async_channel::Receiver<Action>
     Ok(())
 }
 
-// Windows dispatches this class on GPUI's UI thread, including while the
+// Windows dispatches this class on the resident thread, including while the
 // native menu is tracking. Never hold a RefCell borrow across menu dispatch.
 thread_local! {
     static STATE: RefCell<Option<Dispatch>> = const { RefCell::new(None) };
@@ -121,6 +121,7 @@ impl Tray {
     pub fn new(
         sender: Sender<Action>,
         recorder: Rc<Recorder>,
+        behavior: patina_recorder::DesktopBehaviorSettings,
         profile_id: &str,
         silent: bool,
     ) -> Result<Self> {
@@ -174,7 +175,7 @@ impl Tray {
             let tray = Self {
                 class: name,
                 visible: Rc::new(Cell::new(false)),
-                behavior: Cell::new(recorder.initial_desktop),
+                behavior: Cell::new(behavior),
                 silent_start: Cell::new(silent),
                 hwnd,
                 icon,
@@ -184,7 +185,7 @@ impl Tray {
             if restart == 0 {
                 return Err(Error::from_thread());
             }
-            tray.apply_visibility(recorder.initial_desktop)?;
+            tray.apply_visibility(behavior)?;
             WTSRegisterSessionNotification(hwnd, NOTIFY_FOR_THIS_SESSION)?;
             STATE.with(|state| {
                 *state.borrow_mut() = Some(Dispatch {

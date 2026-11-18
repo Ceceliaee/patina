@@ -1,27 +1,13 @@
-mod app_windows;
 mod bundled_tools;
-mod data_page;
 #[cfg(debug_assertions)]
 mod dev_preview;
-mod dock;
-mod format;
-mod history;
 mod login;
-mod main_window;
-mod mini;
-mod page_controls;
-mod source_icon;
-mod today;
+mod message_loop;
 mod tool_events;
-mod tool_notice;
 mod tool_service;
-mod tools;
 mod tray;
 mod window_process;
-mod windows_host;
-pub use windows_host::run_if_requested as run_window_process_if_requested;
 
-use gpui_kit::{QuitMode, WindowingRequest};
 use patina_recorder::Recorder;
 use std::{
     env, fs, io,
@@ -32,12 +18,12 @@ use std::{
     rc::Rc,
     sync::{
         Arc,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
 };
 pub use tray::Action;
 
-pub const APP_ID: &str = "Patina.GPUI.Experimental";
+pub use patina_desktop_protocol::APP_ID;
 static RESTART_AFTER_STORAGE: AtomicBool = AtomicBool::new(false);
 
 fn profile_root(parent: Option<&Path>) -> io::Result<PathBuf> {
@@ -101,15 +87,18 @@ pub fn launch(
     };
     #[cfg(debug_assertions)]
     dev_preview::exit_with_launcher(&send)?;
-    dock::enable_monitor_dpi()?;
+    patina_windows_integration::enable_monitor_dpi()?;
     let windows_open = Arc::new(AtomicBool::new(false));
+    let revision = Arc::new(AtomicU64::new(0));
     let usage_active = Arc::new(AtomicBool::new(false));
     let database = patina_recorder::database_for_profile(&root)?;
-    let recorder = Rc::new(Recorder::start_in_profile(&database, &root, {
+    let (recorder, preferences) = Recorder::start_with_preferences(&database, &root, {
         let send = send.clone();
         let windows_open = windows_open.clone();
         let usage_active = usage_active.clone();
+        let revision = revision.clone();
         move || {
+            revision.fetch_add(1, Ordering::AcqRel);
             if usage_active.load(Ordering::Acquire) {
                 let _ = send.try_send(Action::WakeTools);
             }
@@ -117,16 +106,20 @@ pub fn launch(
                 let _ = send.try_send(Action::Refresh);
             }
         }
-    })?);
-    let application = gpui_kit::application()
-        .with_windowing(WindowingRequest::Headless)
-        .with_quit_mode(QuitMode::Explicit);
-    let behavior = recorder.initial_desktop;
+    })?;
+    let recorder = Rc::new(recorder);
+    let behavior = preferences.desktop;
     let silent = actions.is_empty() && behavior.start_minimized;
     if actions.is_empty() && !silent {
         send.try_send(Action::Today)?;
     }
-    let tray = tray::Tray::new(send.clone(), recorder.clone(), &profile_id, silent)?;
+    let tray = tray::Tray::new(
+        send.clone(),
+        recorder.clone(),
+        behavior,
+        &profile_id,
+        silent,
+    )?;
     let login = login::LoginEntry::new(&profile_id, parent.as_deref())?;
     if let Err(e) = login.apply(behavior.launch_at_login) {
         eprintln!("restore login entry: {e}");
@@ -141,23 +134,24 @@ pub fn launch(
     )?;
     let updater = make_updater(&root).map_err(io::Error::other)?;
     let update_shutdown = updater.clone();
-    application.run(move |cx| {
-        window_process::serve(
-            cx,
-            actions,
-            recorder,
-            windows_open,
-            window_process::Services {
-                tools,
-                tray,
-                login,
-                updater,
-            },
-        );
-    });
+    let executor = async_executor::LocalExecutor::new();
+    let loop_result = message_loop::run(executor.run(window_process::serve(
+        &executor,
+        actions,
+        recorder,
+        windows_open,
+        revision,
+        window_process::Services {
+            tools,
+            tray,
+            login,
+            updater,
+        },
+    )));
     let tools_stopped = worker.stop();
     shutdown.shutdown()?;
     tools_stopped?;
+    loop_result?;
     update_shutdown
         .complete_shutdown()
         .map_err(io::Error::other)?;
@@ -176,12 +170,6 @@ pub fn launch(
     }
     Ok(())
 }
-
-mod classification;
-
-mod settings;
-
-mod about;
 
 fn make_updater(root: &Path) -> Result<patina_updater::Service, String> {
     #[cfg(debug_assertions)]
