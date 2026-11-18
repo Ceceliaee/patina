@@ -44,13 +44,6 @@ pub(super) fn client_center(hwnd: HWND, trigger: &IUIAutomationElement) -> Resul
     Ok(LPARAM(((p.y as isize) << 16) | p.x as isize))
 }
 
-pub(super) fn hash(path: &Path) -> Result<String, Error> {
-    use sha2::{Digest, Sha256};
-    let mut digest = Sha256::new();
-    std::io::copy(&mut fs::File::open(path)?, &mut digest)?;
-    Ok(format!("{:x}", digest.finalize()))
-}
-
 pub(super) fn command(tray: HWND, id: usize) -> windows::core::Result<()> {
     unsafe { PostMessageW(Some(tray), WM_COMMAND, WPARAM(id), LPARAM(0)) }
 }

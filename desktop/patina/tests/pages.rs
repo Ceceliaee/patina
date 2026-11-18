@@ -100,7 +100,11 @@ fn selected_segment(hwnd: HWND, label: &str) -> Option<()> {
     }
 }
 fn select_segment(hwnd: HWND, label: &str) -> Result<(), Error> {
-    let el = wait(label, || segment(hwnd, label))?;
+    let el = wait(label, || {
+        segment(hwnd, label).filter(|option| unsafe {
+            option.CurrentIsEnabled().is_ok_and(|value| value.as_bool())
+        })
+    })?;
     activate_control(hwnd, &el, false)?;
     wait(
         &format!("selected segment remains enabled: {label}"),
@@ -118,6 +122,14 @@ fn activate(hwnd: HWND, label: &str, keyboard: bool) -> Result<(), Error> {
 }
 
 fn activate_control(hwnd: HWND, el: &IUIAutomationElement, keyboard: bool) -> Result<(), Error> {
+    if keyboard {
+        unsafe {
+            el.SetFocus()?;
+        }
+        // UIA HasKeyboardFocus also requires host foreground focus, unavailable on
+        // the non-input desktop. The caller observes this key's resulting state.
+        return Ok(key(hwnd, 13)?);
+    }
     // Bring lower cards in the scrolling page into view before invoking their button.
     for attempt in 0..=16 {
         let r = unsafe { el.CurrentBoundingRectangle()? };
@@ -159,20 +171,11 @@ fn activate_control(hwnd: HWND, el: &IUIAutomationElement, keyboard: bool) -> Re
             }
         })?;
     }
-    if keyboard {
-        unsafe {
-            el.SetFocus()?;
-        }
-        // UIA HasKeyboardFocus also requires host foreground focus, unavailable on
-        // the non-input desktop. The caller observes this key's resulting state.
-        key(hwnd, 13)?;
-    } else {
-        let position = client_center(hwnd, el)?;
-        unsafe {
-            PostMessageW(Some(hwnd), WM_MOUSEMOVE, WPARAM(0), position)?;
-            PostMessageW(Some(hwnd), WM_LBUTTONDOWN, WPARAM(1), position)?;
-            PostMessageW(Some(hwnd), WM_LBUTTONUP, WPARAM(0), position)?;
-        }
+    let position = client_center(hwnd, el)?;
+    unsafe {
+        PostMessageW(Some(hwnd), WM_MOUSEMOVE, WPARAM(0), position)?;
+        PostMessageW(Some(hwnd), WM_LBUTTONDOWN, WPARAM(1), position)?;
+        PostMessageW(Some(hwnd), WM_LBUTTONUP, WPARAM(0), position)?;
     }
     Ok(())
 }
@@ -225,7 +228,7 @@ fn sidebar_opens_empty_history() -> Result<(), Error> {
 fn sample(dir: &Option<PathBuf>, pid: u32, name: &str) -> Result<(), Error> {
     if let Some(dir) = dir {
         let exe = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../src-tauri/target/debug/examples/windows-resource-sample.exe");
+            .join("../../desktop/target/debug/examples/windows-resource-sample.exe");
         let status = Command::new(exe)
             .arg(pid.to_string())
             .arg(dir.join(format!("{name}.jsonl")))
@@ -337,7 +340,9 @@ fn navigate_in_locale(tag: &str) -> Result<(), Error> {
         })?;
         activate_control(hwnd, &option, false)?;
         let next_locale = patina_recorder::Locale::from_tag(Some(next_tag));
-        wait("language immediately previewed", || named(hwnd, &patina_recorder::text(next_locale, "settings.title")))?;
+        wait("language immediately previewed", || {
+            named(hwnd, &patina_recorder::text(next_locale, "settings.title"))
+        })?;
         press(hwnd, &patina_recorder::text(next_locale, "common.save"))?;
         wait("saved language applied", || {
             named(hwnd, &patina_recorder::text(next_locale, "settings.title"))
@@ -433,7 +438,7 @@ fn check_history_hourly(hwnd: HWND) -> Result<(), Error> {
         unsafe {
             hour.SetFocus()?;
         }
-        wait("history hour focus tooltip", || tooltip())?;
+        wait("history hour focus tooltip", &tooltip)?;
         key(hwnd, 27)?;
         wait("history hour Escape", || tooltip().is_none().then_some(()))?;
         unsafe {
@@ -1404,11 +1409,18 @@ fn settings_navigation() -> Result<(), Error> {
     assert!(menu.top >= initial.bottom || menu.bottom <= initial.top);
     activate_control(hwnd, &spanish, false)?;
     wait("language draft", || {
-        button(hwnd, &patina_recorder::text(patina_recorder::Locale::Es, "common.save")).filter(|b| unsafe { b.CurrentIsEnabled().is_ok_and(|v| v.as_bool()) })
+        button(
+            hwnd,
+            &patina_recorder::text(patina_recorder::Locale::Es, "common.save"),
+        )
+        .filter(|b| unsafe { b.CurrentIsEnabled().is_ok_and(|v| v.as_bool()) })
     })?;
     let changed = unsafe { language.CurrentBoundingRectangle()? };
     assert_eq!(initial.right - initial.left, changed.right - changed.left);
-    click(hwnd, &patina_recorder::text(patina_recorder::Locale::Es, "common.cancel"))?;
+    click(
+        hwnd,
+        &patina_recorder::text(patina_recorder::Locale::Es, "common.cancel"),
+    )?;
     wait("language preview cancelled", || named(hwnd, "Language"))?;
     activate_control(hwnd, &language, true)?;
     let english = wait("English restored", || option("English"))?;
@@ -1523,21 +1535,17 @@ fn about_navigation() -> Result<(), Error> {
 }
 
 #[test]
-#[ignore = "dedicated Windows session: prepared layout baseline"]
-fn page_layout_comparison() -> Result<(), Error> {
-    patina_test_desktop::dedicated_session()?;
+#[ignore = "isolated Win32 desktop"]
+fn page_header_layout() -> Result<(), Error> {
+    if !patina_test_desktop::run_case()? {
+        return Ok(());
+    }
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
     let dir = root.path().join(patina_gpui::APP_ID);
     fs::create_dir(&dir)?;
-    let base = PathBuf::from(
-        std::env::var_os("PATINA_PAGE_BASELINE")
-            .ok_or("set PATINA_PAGE_BASELINE to the original-pages.json file")?,
-    );
-    let fixture = base.with_file_name("fixture.db");
-    fs::copy(&fixture, dir.join("patina.db"))?;
-    let source: Vec<serde_json::Value> = serde_json::from_slice(&fs::read(&base)?)?;
+    seed(&dir.join("patina.db"))?;
     let mut host = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
@@ -1546,24 +1554,6 @@ fn page_layout_comparison() -> Result<(), Error> {
     );
     let pid = host.0.id();
     let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
-    let mut origin = windows::Win32::Foundation::POINT::default();
-    unsafe {
-        windows::Win32::Graphics::Gdi::ClientToScreen(hwnd, &mut origin).ok()?;
-    }
-    let mut client = RECT::default();
-    unsafe {
-        GetClientRect(hwnd, &mut client)?;
-    }
-    let mut comparisons = Vec::new();
-    let dpi = unsafe { GetDpiForWindow(hwnd) };
-    let original_window: serde_json::Value =
-        serde_json::from_slice(&fs::read(base.with_file_name("tauri.json"))?)?;
-    assert_eq!(
-        original_window["client"],
-        serde_json::json!([client.right, client.bottom])
-    );
-    assert_eq!(original_window["dpi"], dpi);
-    assert_eq!(original_window["fixtureHash"], hash(&fixture)?);
     let title_bounds = |page: &str| {
         wait(page, || {
             controls(hwnd).ok()?.into_iter().find_map(|el| unsafe {
@@ -1598,47 +1588,27 @@ fn page_layout_comparison() -> Result<(), Error> {
             );
             end = rect.right;
         }
-        assert!((end - today.right).abs() <= 1, "{page} right edge");
+        if page == "Data" {
+            for name in ["Overview", "Detailed analysis"] {
+                let option = wait(name, || segment(hwnd, name))?;
+                let rect = unsafe { option.CurrentBoundingRectangle()? };
+                assert!(rect.left >= end && rect.right > rect.left);
+                assert!((rect.top + rect.bottom - title.top - title.bottom).abs() <= 2);
+                end = rect.right;
+            }
+            // The segmented control has four logical pixels of padding on each side.
+            end += (4 * unsafe { GetDpiForWindow(hwnd) } as i32 + 48) / 96;
+        }
+        assert!(
+            (end - today.right).abs() <= 1,
+            "{page} right edge: {end} vs {}",
+            today.right
+        );
         Ok(())
     };
     click(hwnd, "Tools")?;
     check_header("Tools", &["Manage tools", "Tools settings"])?;
-    for (page, labels) in [
-        (
-            "History",
-            vec![
-                "History",
-                "Day Timeline",
-                "Day Summary",
-                "Daily Activity",
-                "Day Distribution",
-            ],
-        ),
-        (
-            "Data",
-            vec!["Data", "Activity Trend", "Activity Heatmap", "App Trends"],
-        ),
-        ("Classification", vec!["Classification", "Studio", "Writer"]),
-        (
-            "Settings",
-            vec![
-                "Settings",
-                "Tracking",
-                "Time rules",
-                "Recording options",
-                "Appearance",
-            ],
-        ),
-        (
-            "About",
-            vec![
-                "About",
-                "Patina",
-                "A local-first time tracker",
-                "App updates",
-            ],
-        ),
-    ] {
+    for page in ["History", "Data", "Classification", "Settings", "About"] {
         click(hwnd, page)?;
         let actions: &[&str] = match page {
             "History" => &["Previous day", "Next day"],
@@ -1646,50 +1616,7 @@ fn page_layout_comparison() -> Result<(), Error> {
             _ => &[],
         };
         check_header(page, actions)?;
-
-        let original = &source
-            .iter()
-            .find(|v| v["page"] == page)
-            .ok_or("missing original page")?["nodes"];
-        let nodes = original.as_array().ok_or("missing original nodes")?;
-        for name in labels {
-            let old = nodes
-                .iter()
-                .filter(|r| {
-                    r[0] == name
-                        && r[1].as_i64().is_some_and(|x| x > 150)
-                        && r[2].as_i64().is_some_and(|y| y > 80)
-                })
-                .min_by_key(|r| r[3].as_i64().unwrap_or(i64::MAX))
-                .ok_or_else(|| format!("missing original {page}/{name}"))?;
-            let current = wait(name, || {
-                controls(hwnd).ok()?.into_iter().find_map(|el| unsafe {
-                    let rect = el.CurrentBoundingRectangle().ok()?;
-                    let n = el.CurrentName().ok()?;
-                    (n == name
-                        && rect.left - origin.x > 150
-                        && rect.top - origin.y > 80
-                        && rect.right > rect.left)
-                        .then_some([
-                            rect.left - origin.x,
-                            rect.top - origin.y,
-                            rect.right - rect.left,
-                            rect.bottom - rect.top,
-                        ])
-                })
-            })?;
-            comparisons.push(
-                serde_json::json!({"page":page,"label":name,"original":old,"native":current}),
-            );
-        }
     }
-    let path = base.with_file_name("native-layout-comparison.json");
-    fs::write(
-        &path,
-        serde_json::to_vec_pretty(
-            &serde_json::json!({"client":[client.right,client.bottom],"dpi":dpi,"fixtureHash":hash(&fixture)?,"comparisons":comparisons}),
-        )?,
-    )?;
     command(window(pid, w!("Patina GPUI")).unwrap(), 2)?;
     assert!(wait("exit", || host.0.try_wait().ok().flatten())?.success());
     Ok(())

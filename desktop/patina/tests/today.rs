@@ -6,6 +6,13 @@ mod desktop;
 mod handles;
 #[path = "today/presentation.rs"]
 mod presentation;
+fn hash(path: &Path) -> Result<String, Error> {
+    use sha2::{Digest, Sha256};
+    let mut digest = Sha256::new();
+    std::io::copy(&mut fs::File::open(path)?, &mut digest)?;
+    Ok(format!("{:x}", digest.finalize()))
+}
+
 mod support;
 use support::*;
 
@@ -462,166 +469,6 @@ fn headings(hwnd: HWND) -> Result<serde_json::Value, Error> {
 }
 
 #[test]
-#[ignore = "dedicated Windows session: prepared Tauri baseline"]
-fn tauri_comparison() -> Result<(), Error> {
-    patina_test_desktop::dedicated_session()?;
-    use std::{
-        env,
-        net::{TcpListener, TcpStream},
-        os::windows::process::CommandExt,
-        process::Stdio,
-    };
-    let _com = ComApartment::init()?;
-    unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
-    let out =
-        std::path::PathBuf::from(env::var_os("PATINA_TODAY_RUN").ok_or("set PATINA_TODAY_RUN")?);
-    let manifest: serde_json::Value = serde_json::from_slice(&fs::read(
-        env::var_os("PATINA_TAURI_MANIFEST").ok_or("set PATINA_TAURI_MANIFEST")?,
-    )?)?;
-    let root = tempfile::Builder::new()
-        .prefix("patina-tauri-e2e-")
-        .tempdir()?;
-    fs::create_dir(root.path().join("data"))?;
-    fs::copy(out.join("fixture.db"), root.path().join("data/patina.db"))?;
-    let port = manifest["frontendPort"].as_u64().ok_or("frontend port")? as u16;
-    let address = ("127.0.0.1", port);
-    let probe = TcpListener::bind(address)?;
-    drop(probe);
-    let mut server = TestChild(
-        Command::new("python")
-            .args([
-                "-m",
-                "http.server",
-                &port.to_string(),
-                "--bind",
-                "127.0.0.1",
-                "--directory",
-                manifest["frontend"].as_str().ok_or("frontend directory")?,
-            ])
-            .creation_flags(0x08000000)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()?,
-    );
-    wait("Tauri assets", || TcpStream::connect(address).ok())?;
-    assert!(server.0.try_wait()?.is_none());
-    let devtools = TcpListener::bind(("127.0.0.1", 0))?.local_addr()?.port();
-    let mut child = TestChild(
-        Command::new(manifest["binary"].as_str().ok_or("Tauri baseline binary")?)
-            .env("PATINA_E2E", "1")
-            .env("PATINA_E2E_SINGLE_INSTANCE", "1")
-            .env("PATINA_E2E_DATA_ROOT", root.path())
-            .env("PATINA_E2E_STORAGE_ID", root.path().file_name().unwrap())
-            .env(
-                "PATINA_E2E_FRONTEND_URL",
-                format!("http://127.0.0.1:{port}"),
-            )
-            .env("PATINA_E2E_DEVTOOLS_PORT", devtools.to_string())
-            .env(
-                "TAURI_CONFIG",
-                manifest["config"].as_str().ok_or("Tauri config")?,
-            )
-            .spawn()?,
-    );
-    let hwnd = wait("baseline main window", || {
-        window(child.0.id(), w!("Patina"))
-    })?;
-    wait("Tauri Today data", || {
-        names(hwnd).contains(&"Studio".into()).then_some(())
-    })?;
-    if std::env::var_os("PATINA_COMPARE_PAGE_LAYOUT").is_some() {
-        capture_original_pages(hwnd, &out)?;
-        unsafe {
-            PostMessageW(Some(hwnd), WM_CLOSE, WPARAM(0), LPARAM(0))?;
-        }
-        return Ok(());
-    }
-    let labels = names(hwnd);
-    let mut rect = RECT::default();
-    unsafe {
-        GetClientRect(hwnd, &mut rect)?;
-    }
-    let dpi = unsafe { GetDpiForWindow(hwnd) };
-    let native: serde_json::Value = serde_json::from_slice(&fs::read(out.join("gpui.json"))?)?;
-    let fixture_hash = hash(&out.join("fixture.db"))?;
-    assert_eq!(native["fixtureHash"], fixture_hash);
-    let binary_hash = hash(Path::new(
-        manifest["binary"].as_str().ok_or("baseline binary")?,
-    ))?;
-    assert_eq!(manifest["binaryHash"], binary_hash);
-    fs::write(
-        out.join("tauri.json"),
-        serde_json::to_vec_pretty(
-            &serde_json::json!({"labels":labels,"headings":headings(hwnd)?,"client":[rect.right,rect.bottom],"dpi":dpi,"fixtureHash":fixture_hash,"binaryHash":binary_hash}),
-        )?,
-    )?;
-    assert_eq!(
-        native["client"],
-        serde_json::json!([rect.right, rect.bottom])
-    );
-    assert_eq!(native["dpi"], dpi);
-    for hour in 0..24 {
-        let minutes = match hour {
-            0 => 60,
-            1 => 10,
-            _ => 0,
-        };
-        let hour_label = format!("{hour:02}:00 · Active {minutes}m");
-        assert!(labels.contains(&hour_label));
-        assert!(
-            native["labels"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|v| v == &hour_label)
-        );
-    }
-    for label in [
-        "1h 10m",
-        "Up 40m from yesterday",
-        "Top 3",
-        "45m",
-        "20m",
-        "5m",
-    ] {
-        assert!(
-            labels.iter().any(|s| s.contains(label)),
-            "missing {label}: {labels:?}"
-        );
-    }
-    let button = controls(hwnd)?
-        .into_iter()
-        .find(|el| unsafe { el.CurrentName().is_ok_and(|s| s == "Show by category") })
-        .ok_or("baseline chart mode")?;
-    let toggle: IUIAutomationTogglePattern =
-        unsafe { button.GetCurrentPatternAs(UIA_TogglePatternId)? };
-    unsafe {
-        toggle.Toggle()?;
-    }
-    wait("Tauri category chart", || {
-        names(hwnd)
-            .contains(&"Show total activity".into())
-            .then_some(())
-    })?;
-    let sampler = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../src-tauri/target/debug/examples/windows-resource-sample.exe");
-    assert!(
-        Command::new(sampler)
-            .arg(child.0.id().to_string())
-            .arg(out.join("tauri-today.jsonl"))
-            .args(["30", "5", "tauri-today"])
-            .status()?
-            .success()
-    );
-    // This isolated profile is paused; use the window's normal exit policy for teardown.
-    unsafe {
-        PostMessageW(Some(hwnd), WM_CLOSE, WPARAM(0), LPARAM(0))?;
-    }
-    assert!(wait("Tauri exit", || child.0.try_wait().ok().flatten())?.success());
-    Ok(())
-}
-
-#[test]
 #[ignore = "dedicated Windows session: resource sampler and lifecycle baseline"]
 fn main_window_lifecycle() -> Result<(), Error> {
     patina_test_desktop::dedicated_session()?;
@@ -660,7 +507,7 @@ fn main_window_lifecycle() -> Result<(), Error> {
     let tray = wait("tray", || window(pid, w!("Patina GPUI")))?;
     let main = || children::find(pid, |p| window(p, w!("Patina")));
     let sample = |state: &str| -> Result<u64, Error> {
-        let sampler = repo.join("src-tauri/target/debug/examples/windows-resource-sample.exe");
+        let sampler = repo.join("desktop/target/debug/examples/windows-resource-sample.exe");
         let status = Command::new(sampler)
             .arg(pid.to_string())
             .arg(out.join(format!("{state}.jsonl")))
@@ -951,59 +798,5 @@ fn ranked_app_actions() -> Result<(), Error> {
     let tray = wait("tray", || window(child.0.id(), w!("Patina GPUI")))?;
     command(tray, 2)?;
     assert!(wait("exit", || child.0.try_wait().ok().flatten())?.success());
-    Ok(())
-}
-
-fn capture_original_pages(hwnd: HWND, dir: &Path) -> Result<(), Error> {
-    let mut pages = Vec::new();
-    for (name, ready) in [
-        ("History", "Day Timeline"),
-        ("Data", "Activity Trend"),
-        ("Classification", "Manage"),
-        ("Settings", "Time rules"),
-        ("About", "GitHub"),
-    ] {
-        let trigger = wait(name, || {
-            controls(hwnd).ok()?.into_iter().find(|e| unsafe {
-                e.CurrentControlType().ok() == Some(UIA_ButtonControlTypeId)
-                    && e.CurrentName().is_ok_and(|s| s == name)
-            })
-        })?;
-        let invoke: IUIAutomationInvokePattern =
-            unsafe { trigger.GetCurrentPatternAs(UIA_InvokePatternId)? };
-        unsafe {
-            invoke.Invoke()?;
-        }
-        wait("original page content", || {
-            names(hwnd).iter().any(|s| s.contains(ready)).then_some(())
-        })?;
-        let mut origin = windows::Win32::Foundation::POINT::default();
-        unsafe {
-            windows::Win32::Graphics::Gdi::ClientToScreen(hwnd, &mut origin).ok()?;
-        }
-        let items = controls(hwnd)?
-            .into_iter()
-            .filter_map(|el| unsafe {
-                let name = el.CurrentName().ok()?.to_string();
-                if name.is_empty() {
-                    return None;
-                }
-                let rect = el.CurrentBoundingRectangle().ok()?;
-                Some(serde_json::json!([
-                    name,
-                    rect.left - origin.x,
-                    rect.top - origin.y,
-                    rect.right - rect.left,
-                    rect.bottom - rect.top
-                ]))
-            })
-            .collect::<Vec<_>>();
-
-        pages.push(serde_json::json!({"page":name,"nodes":items}));
-        fs::write(
-            dir.join("original-pages.json"),
-            serde_json::to_vec_pretty(&pages)?,
-        )?;
-    }
     Ok(())
 }

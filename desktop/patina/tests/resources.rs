@@ -217,9 +217,7 @@ fn run(smoke: bool) -> Result<(), Error> {
     let binary = Path::new(env!("CARGO_BIN_EXE_patina-gpui"));
     let sampler = env::var_os("PATINA_RESOURCE_SAMPLER")
         .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            repo.join("src-tauri/target/debug/examples/windows-resource-sample.exe")
-        });
+        .unwrap_or_else(|| repo.join("desktop/target/debug/examples/windows-resource-sample.exe"));
     let hashes =
         || -> io::Result<Value> { Ok(json!({"binary":sha(binary)?,"sampler":sha(&sampler)?})) };
     let initial = hashes()?;

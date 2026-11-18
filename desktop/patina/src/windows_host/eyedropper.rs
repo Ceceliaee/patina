@@ -270,17 +270,25 @@ unsafe fn select_snapshot(
 
 #[cfg(test)]
 mod tests {
-    use super::{Selection, Snapshot, select_snapshot};
+    use super::Snapshot;
+    #[cfg(feature = "native-tests")]
+    use super::{Selection, select_snapshot};
+    #[cfg(feature = "native-tests")]
     use std::{
         sync::{Arc, atomic::AtomicBool},
         time::{Duration, Instant},
     };
     use windows::Win32::{
-        Foundation::{COLORREF, HWND, LPARAM, WPARAM},
+        Foundation::COLORREF,
         Graphics::Gdi::*,
         System::Threading::{GR_GDIOBJECTS, GetCurrentProcess, GetGuiResources},
+    };
+    #[cfg(feature = "native-tests")]
+    use windows::Win32::{
+        Foundation::{HWND, LPARAM, WPARAM},
         UI::WindowsAndMessaging::*,
     };
+    #[cfg(feature = "native-tests")]
     use windows::core::w;
 
     #[test]
@@ -316,6 +324,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "native-tests")]
     #[ignore = "isolated Win32 desktop"]
     fn native_screen_selection_and_cancellation() -> Result<(), Box<dyn std::error::Error>> {
         if !patina_test_desktop::run_case()? {
@@ -383,6 +392,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "native-tests")]
     #[ignore = "reads desktop pixels in memory without opening windows or sending input"]
     fn desktop_screen_capture_is_readable() {
         let snapshot = unsafe { Snapshot::capture() }.expect("capture current desktop");

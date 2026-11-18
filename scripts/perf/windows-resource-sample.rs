@@ -1,6 +1,6 @@
 //! Windows-only diagnostic: `pnpm run perf:resources <PID> <new-output.jsonl> [seconds] [interval] [scenario]`
 use chrono::{DateTime, Utc};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
     collections::HashMap,
     error::Error,
@@ -10,12 +10,12 @@ use std::{
 };
 use windows::Win32::{
     Foundation::{
-        CloseHandle, GetLastError, SetLastError, ERROR_NO_MORE_FILES, ERROR_SUCCESS, FILETIME,
-        HANDLE,
+        CloseHandle, ERROR_NO_MORE_FILES, ERROR_SUCCESS, FILETIME, GetLastError, HANDLE,
+        SetLastError,
     },
     System::{
         Diagnostics::ToolHelp::{
-            CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+            CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW,
             TH32CS_SNAPPROCESS,
         },
         ProcessStatus::{
@@ -23,8 +23,8 @@ use windows::Win32::{
         },
         SystemInformation::GetSystemTimePreciseAsFileTime,
         Threading::{
-            GetGuiResources, GetProcessHandleCount, GetProcessTimes, OpenProcess,
-            GET_GUI_RESOURCES_FLAGS, GR_GDIOBJECTS, GR_USEROBJECTS, PROCESS_QUERY_INFORMATION,
+            GET_GUI_RESOURCES_FLAGS, GR_GDIOBJECTS, GR_USEROBJECTS, GetGuiResources,
+            GetProcessHandleCount, GetProcessTimes, OpenProcess, PROCESS_QUERY_INFORMATION,
             PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_VM_READ,
         },
     },
@@ -101,10 +101,10 @@ fn processes() -> windows::core::Result<Vec<Row>> {
         });
         status = unsafe { Process32NextW(snapshot.0, &mut entry) };
     }
-    if let Err(error) = status {
-        if error.code() != ERROR_NO_MORE_FILES.to_hresult() {
-            return Err(error);
-        }
+    if let Err(error) = status
+        && error.code() != ERROR_NO_MORE_FILES.to_hresult()
+    {
+        return Err(error);
     }
     Ok(rows)
 }
@@ -369,21 +369,26 @@ mod tests {
                 Ok(())
             }
         }
-        assert!(write_summary(&mut FullDisk, &summary)
-            .unwrap_err()
-            .to_string()
-            .contains("summary write failed"));
+        assert!(
+            write_summary(&mut FullDisk, &summary)
+                .unwrap_err()
+                .to_string()
+                .contains("summary write failed")
+        );
     }
 
     #[test]
     fn sampler_output_never_overwrites_an_existing_file() {
-        let path = std::env::temp_dir().join(format!("patina-sampler-{}", uuid::Uuid::new_v4()));
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("existing");
         std::fs::write(&path, b"existing evidence").unwrap();
-        assert!(OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)
-            .is_err());
+        assert!(
+            OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)
+                .is_err()
+        );
         assert_eq!(std::fs::read(&path).unwrap(), b"existing evidence");
         std::fs::remove_file(path).unwrap();
     }

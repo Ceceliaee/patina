@@ -265,10 +265,24 @@ async fn answer(
             if !url.starts_with("https://") || url.contains('\0') {
                 return Err("Invalid external link".into());
             }
-            use windows::{core::{PCWSTR, w}, Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL}};
+            use windows::{
+                Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL},
+                core::{PCWSTR, w},
+            };
             let wide: Vec<u16> = url.encode_utf16().chain(Some(0)).collect();
-            let result = unsafe { ShellExecuteW(None, w!("open"), PCWSTR(wide.as_ptr()), None, None, SW_SHOWNORMAL) };
-            if result.0 as isize <= 32 { return Err("Could not open external link".into()); }
+            let result = unsafe {
+                ShellExecuteW(
+                    None,
+                    w!("open"),
+                    PCWSTR(wide.as_ptr()),
+                    None,
+                    None,
+                    SW_SHOWNORMAL,
+                )
+            };
+            if result.0 as isize <= 32 {
+                return Err("Could not open external link".into());
+            }
             Ok(Value::Null)
         }
         Query::Storage(request) => return recorder.storage(request).await,
@@ -541,7 +555,9 @@ pub(super) fn serve(
                             }
                             if matches!(
                                 query.as_ref(),
-                                Query::DetailZoom(_) | Query::HistoryZoom(_) | Query::HistoryModes(_)
+                                Query::DetailZoom(_)
+                                    | Query::HistoryZoom(_)
+                                    | Query::HistoryModes(_)
                             ) {
                                 let result = answer(&recorder, &tools, *query).await;
                                 let _ = tx.send(ToWindow::Answer(request, result));

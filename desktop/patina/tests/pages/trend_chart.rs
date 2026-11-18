@@ -35,7 +35,7 @@ pub(super) fn check(hwnd: HWND) -> Result<(), Error> {
             client_center(hwnd, &last)?,
         )?;
     }
-    let tip = wait("trend hover tooltip", || tooltip())?;
+    let tip = wait("trend hover tooltip", &tooltip)?;
     assert!(
         unsafe { tip.CurrentName()? }
             .to_string()
@@ -57,7 +57,7 @@ pub(super) fn check(hwnd: HWND) -> Result<(), Error> {
     unsafe {
         last.SetFocus()?;
     }
-    wait("trend keyboard tooltip", || tooltip())?;
+    wait("trend keyboard tooltip", &tooltip)?;
     key(hwnd, 27)?;
     wait("trend Escape hides tooltip", || {
         tooltip().is_none().then_some(())
@@ -84,7 +84,7 @@ pub(super) fn check(hwnd: HWND) -> Result<(), Error> {
             client_center(hwnd, &heat)?,
         )?;
     }
-    let tip = wait("heatmap hover tooltip", || tooltip())?;
+    let tip = wait("heatmap hover tooltip", &tooltip)?;
     assert!(
         unsafe { tip.CurrentName()? }
             .to_string()
@@ -99,7 +99,7 @@ pub(super) fn check(hwnd: HWND) -> Result<(), Error> {
         )?;
         heat.SetFocus()?;
     }
-    wait("heatmap keyboard tooltip", || tooltip())?;
+    wait("heatmap keyboard tooltip", &tooltip)?;
     key(hwnd, 27)?;
     wait("heatmap Escape hides tooltip", || {
         tooltip().is_none().then_some(())

@@ -72,21 +72,6 @@ fn visible_legend_count(widths: &[f32], available: f32, overflow_width: f32) -> 
     visible
 }
 
-#[cfg(test)]
-mod tests {
-    use super::visible_legend_count;
-
-    #[test]
-    fn legend_overflow_reserves_counter_and_handles_resize() {
-        let widths = [60., 80., 100.];
-        assert_eq!(visible_legend_count(&widths, 264., 24.), 3);
-        assert_eq!(visible_legend_count(&widths, 188., 24.), 2);
-        assert_eq!(visible_legend_count(&widths, 95., 24.), 0);
-        assert_eq!(visible_legend_count(&[], 0., 24.), 0);
-        assert_eq!(visible_legend_count(&[20.; 12], 1000., 24.), 7);
-    }
-}
-
 impl Render for SegmentTip {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         content_card(self.1.border, self.1.panel)
@@ -242,5 +227,20 @@ impl RenderOnce for TimelineOverview {
             );
         }
         content_card(c.border, c.panel).flex_none().child(body)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::visible_legend_count;
+
+    #[test]
+    fn legend_overflow_reserves_counter_and_handles_resize() {
+        let widths = [60., 80., 100.];
+        assert_eq!(visible_legend_count(&widths, 264., 24.), 3);
+        assert_eq!(visible_legend_count(&widths, 188., 24.), 2);
+        assert_eq!(visible_legend_count(&widths, 95., 24.), 0);
+        assert_eq!(visible_legend_count(&[], 0., 24.), 0);
+        assert_eq!(visible_legend_count(&[20.; 12], 1000., 24.), 7);
     }
 }

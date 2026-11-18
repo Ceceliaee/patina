@@ -189,10 +189,7 @@ fn make_updater(root: &Path) -> Result<patina_updater::Service, String> {
         if env::var_os("PATINA_GPUI_PROFILE_PARENT").is_none() {
             return Err("Updater fixtures require an isolated profile".into());
         }
-        return patina_updater::fixture::service(
-            root.join("updates"),
-            Path::new(&fixture),
-        );
+        return patina_updater::fixture::service(root.join("updates"), Path::new(&fixture));
     }
     patina_updater::Service::bundled(env!("CARGO_PKG_VERSION"), root.join("updates"))
 }

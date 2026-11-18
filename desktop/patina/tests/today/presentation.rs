@@ -25,10 +25,10 @@ pub(super) fn check(hwnd: HWND, db: &Path) -> Result<(), Error> {
     }
     let comparison = |direction: &str| {
         let id = format!("today-comparison-{direction}");
-        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
-            el.CurrentAutomationId()
-                .is_ok_and(|value| value.to_string() == id)
-        })
+        controls(hwnd)
+            .ok()?
+            .into_iter()
+            .find(|el| unsafe { el.CurrentAutomationId().is_ok_and(|value| value == id) })
     };
     wait("increased since yesterday", || comparison("increase"))?;
     let rt = tokio::runtime::Builder::new_current_thread()
