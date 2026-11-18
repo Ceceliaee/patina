@@ -24,7 +24,6 @@ fn generated(p: &str) -> bool {
     p == "Cargo.lock"
         || p.ends_with("/Cargo.lock")
         || p.starts_with("target/")
-        || p.starts_with("dist/")
         || p.rsplit_once('.').is_some_and(|(_, ext)| {
             [
                 "png", "jpg", "jpeg", "gif", "webp", "ico", "icns", "bmp", "mp4", "mov", "zip",

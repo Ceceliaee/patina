@@ -1,17 +1,10 @@
 # Logs
 logs
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-dist-codex-smoke/
-artifacts/
+/dist-release/
+/release-inputs/
+/artifacts/
 target/
 tmp/
 .tmp/
@@ -37,6 +30,7 @@ timetracker.db-shm
 timetracker.db-wal
 
 # Local Cloudflare build and credentials
+/examples/remote-status-bridge-worker/node_modules/
 /examples/remote-status-bridge-worker/build/
 /examples/remote-status-bridge-worker/.wrangler/
 /examples/remote-status-bridge-worker/.dev.vars

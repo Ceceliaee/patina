@@ -115,6 +115,7 @@ fn metadata_keeps_unusual_paths_and_fails_closed_on_malformed_counts() {
 }
 #[test]
 fn manual_size_ownership_and_design_rules_apply_to_new_workspace() {
+    assert!(!generated("dist/manual.rs"));
     assert!(
         size(&[Change {
             add: 999,
