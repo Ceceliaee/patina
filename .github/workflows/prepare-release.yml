@@ -29,110 +29,22 @@ jobs:
     outputs:
       version: ${{ steps.release.outputs.version }}
       tag: ${{ steps.release.outputs.tag }}
-      commit: ${{ steps.tag.outputs.commit }}
+      commit: ${{ steps.release.outputs.commit }}
 
     steps:
-      - name: Checkout
+      - name: Checkout trusted release verification code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: refs/heads/main
           fetch-depth: 0
-
-      - name: Resolve release version
-        id: release
-        shell: pwsh
-        env:
-          REQUESTED_VERSION: ${{ inputs.version }}
-        run: |
-          $semverPattern = '(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9A-Za-z-][0-9A-Za-z-]*))*))?'
-
-          if ($env:GITHUB_EVENT_NAME -eq "workflow_dispatch") {
-            $version = $env:REQUESTED_VERSION
-          } else {
-            $refName = $env:GITHUB_REF_NAME
-            if ($refName -notmatch "^v(?<version>$semverPattern)$") {
-              throw "Tag '$refName' is not a release version tag."
-            }
-            $version = $Matches.version
-          }
-
-          if ($version -notmatch "^$semverPattern$") {
-            throw "Version '$version' is not a valid SemVer version."
-          }
-
-          "version=$version" >> $env:GITHUB_OUTPUT
-          "tag=v$version" >> $env:GITHUB_OUTPUT
-          Write-Host "Resolved release version: $version"
-
-      - name: Confirm release tag
-        shell: pwsh
-        run: |
-          $tag = "${{ steps.release.outputs.tag }}"
-
-          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-            $existingTag = git ls-remote --tags origin "refs/tags/$tag"
-            if (-not $existingTag) {
-              throw "Tag $tag does not exist. Prepare the release commit and push the tag first."
-            }
-            Write-Host "Tag $tag exists. The workflow will publish from that tag."
-          } else {
-            Write-Host "Release was triggered by pushed tag $tag."
-          }
-
-      - name: Ensure release does not already exist
-        id: tag
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $tag = "${{ steps.release.outputs.tag }}"
-          $releaseUri = "https://api.github.com/repos/${{ github.repository }}/releases/tags/$tag"
-          $headers = @{
-            Accept = "application/vnd.github+json"
-            Authorization = "Bearer $env:GH_TOKEN"
-            "X-GitHub-Api-Version" = "2022-11-28"
-          }
-          $releaseExists = $false
-
-          try {
-            Invoke-RestMethod -Uri $releaseUri -Headers $headers | Out-Null
-            $releaseExists = $true
-          } catch {
-            $statusCode = [int]$_.Exception.Response.StatusCode
-            if ($statusCode -ne 404) {
-              throw "Could not determine whether release $tag already exists: $($_.Exception.Message)"
-            }
-          }
-
-          if ($releaseExists) {
-            throw "Release $tag already exists. Published release assets are immutable; prepare a new version instead of rebuilding or overwriting this tag."
-          }
-
-          Write-Host "Release $tag does not exist; publication may continue."
-
-          $tagRef = "refs/tags/$tag"
-          git fetch --force origin "${tagRef}:${tagRef}"
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to fetch $tag from origin."
-          }
-
-          $tagCommit = git rev-parse --verify "${tagRef}^{commit}"
-          if ($LASTEXITCODE -ne 0 -or $tagCommit -notmatch '^[0-9a-f]{40}$') { throw "Cannot resolve commit for $tag" }
-          if ($env:GITHUB_REF -cne $tagRef -or $tagCommit -cne (git rev-parse HEAD)) {
-            throw "Start this workflow from $tagRef at $tagCommit."
-          }
-          "commit=$tagCommit" >> $env:GITHUB_OUTPUT
-          Write-Host "Publishing $tag from $tagCommit"
-
-      - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version-file: .node-version
-          package-manager-cache: false
+          persist-credentials: false
 
       - name: Require successful main verification for the release commit
+        id: release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node --experimental-strip-types scripts/release-verification.ts ${{ steps.tag.outputs.commit }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: cargo xtask release resolve
 
   version-files:
     name: Check version files
@@ -146,15 +58,10 @@ jobs:
           ref: ${{ needs.resolve.outputs.commit }}
           fetch-depth: 0
 
-      - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version-file: .node-version
-
       - name: Validate version files
         shell: pwsh
         run: |
-          node --experimental-strip-types scripts/release.ts validate-version-files ${{ needs.resolve.outputs.version }}
+          cargo xtask release validate-version-files ${{ needs.resolve.outputs.version }}
 
   changelog:
     name: Check changelog
@@ -168,13 +75,8 @@ jobs:
           ref: ${{ needs.resolve.outputs.commit }}
           fetch-depth: 0
 
-      - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version-file: .node-version
-
       - name: Validate changelog
-        run: node --experimental-strip-types scripts/release.ts validate-changelog ${{ needs.resolve.outputs.version }}
+        run: cargo xtask release validate-changelog ${{ needs.resolve.outputs.version }}
 
   release-notes:
     name: Prepare release notes
@@ -188,13 +90,8 @@ jobs:
           ref: ${{ needs.resolve.outputs.commit }}
           fetch-depth: 0
 
-      - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version-file: .node-version
-
       - name: Write release notes
-        run: node --experimental-strip-types scripts/release.ts write-release-notes ${{ needs.resolve.outputs.version }} dist-release/release-notes.md
+        run: cargo xtask release write-release-notes ${{ needs.resolve.outputs.version }} dist-release/release-notes.md
 
       - name: Upload release notes
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -226,9 +123,8 @@ jobs:
           ref: ${{ needs.resolve.outputs.commit }}
           fetch-depth: 0
 
-      - name: Set up Rust from desktop/rust-toolchain.toml
+      - name: Set up Rust from rust-toolchain.toml
         shell: pwsh
-        working-directory: desktop
         run: |
           rustup set default-host ${{ matrix.target }}
           if ($LASTEXITCODE -ne 0) { throw "Rust host configuration failed" }
@@ -251,27 +147,17 @@ jobs:
           if (-not (Test-Path -LiteralPath $minisign -PathType Leaf)) { throw "Missing native Minisign binary" }
           "PATINA_MINISIGN=$minisign" >> $env:GITHUB_ENV
 
+      - name: Compile the release tool
+        shell: pwsh
+        run: cargo install --locked --path xtask --root "$env:RUNNER_TEMP/patina-tools"
+
       - name: Build and sign installer
         shell: pwsh
         env:
           SIGNING_PRIVATE_KEY: ${{ secrets.PATINA_SIGNING_PRIVATE_KEY }}
           SIGNING_PASSWORD: ${{ secrets.PATINA_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          if (-not $env:SIGNING_PRIVATE_KEY) { throw "Missing updater signing key" }
-          $key = Join-Path $env:RUNNER_TEMP 'patina-update-signing.key'
-          try {
-            $keyText = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:SIGNING_PRIVATE_KEY))
-            if (-not $keyText.StartsWith('untrusted comment:')) { throw "Expected a Base64-encoded Minisign secret key" }
-            [IO.File]::WriteAllText($key, $keyText, [Text.UTF8Encoding]::new($false))
-            $env:SIGNING_PRIVATE_KEY = $null
-            ./scripts/package-gpui.ps1 -Targets '${{ matrix.target }}' -OutputDirectory bundle-artifact -Makensis "${env:ProgramFiles(x86)}/NSIS/makensis.exe" -Minisign $env:PATINA_MINISIGN -SigningKey $key -SigningPasswordEnvironment SIGNING_PASSWORD -DownloadBaseUrl 'https://github.com/${{ github.repository }}/releases/download/${{ needs.resolve.outputs.tag }}'
-            if ($LASTEXITCODE -ne 0) { throw "Installer packaging failed" }
-            Copy-Item -LiteralPath 'desktop/target/${{ matrix.target }}/release/patina-gpui.exe' -Destination bundle-artifact/patina-gpui.exe
-          } finally {
-            if (Test-Path -LiteralPath $key) { Remove-Item -LiteralPath $key -Force }
-            $keyText = $null
-            $env:SIGNING_PASSWORD = $null
-          }
+          & "$env:RUNNER_TEMP/patina-tools/bin/xtask.exe" release package --target '${{ matrix.target }}' --output bundle-artifact --makensis "${env:ProgramFiles(x86)}/NSIS/makensis.exe" --minisign $env:PATINA_MINISIGN --signing-key-env SIGNING_PRIVATE_KEY --password-env SIGNING_PASSWORD --base-url 'https://github.com/${{ github.repository }}/releases/download/${{ needs.resolve.outputs.tag }}'
 
       - name: Upload signed bundle
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -298,11 +184,6 @@ jobs:
           ref: ${{ needs.resolve.outputs.commit }}
           fetch-depth: 0
 
-      - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version-file: .node-version
-
       - name: Download signed bundles
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
@@ -327,13 +208,13 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force dist-release | Out-Null
           $version = "${{ needs.resolve.outputs.version }}"
-          node --experimental-strip-types scripts/native-release.ts prepare $version release-inputs dist-release ${{ github.repository }} ${{ needs.resolve.outputs.tag }}
+          cargo xtask release prepare $version release-inputs dist-release ${{ github.repository }} ${{ needs.resolve.outputs.tag }}
 
       - name: Verify release assets
         shell: pwsh
         run: |
           $version = "${{ needs.resolve.outputs.version }}"
-          node --experimental-strip-types scripts/native-release.ts verify $version release-inputs dist-release ${{ github.repository }} ${{ needs.resolve.outputs.tag }}
+          cargo xtask release verify $version release-inputs dist-release ${{ github.repository }} ${{ needs.resolve.outputs.tag }}
 
       - name: Attest Windows installer
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
@@ -376,12 +257,7 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release download '${{ needs.resolve.outputs.tag }}' --repo '${{ github.repository }}' --dir published-readback --pattern 'Patina_${{ needs.resolve.outputs.version }}_x64-setup.exe' --pattern 'Patina_${{ needs.resolve.outputs.version }}_arm64-setup.exe' --pattern SHA256SUMS.txt --pattern gpui-latest.json
-          if ($LASTEXITCODE -ne 0) { throw "Release readback failed" }
-          foreach ($name in @('Patina_${{ needs.resolve.outputs.version }}_x64-setup.exe', 'Patina_${{ needs.resolve.outputs.version }}_arm64-setup.exe', 'SHA256SUMS.txt', 'gpui-latest.json')) {
-            if ((Get-FileHash "published-readback/$name").Hash -ne (Get-FileHash "dist-release/$name").Hash) { throw "Published bytes differ: $name" }
-          }
+        run: cargo xtask release readback '${{ needs.resolve.outputs.version }}' dist-release '${{ github.repository }}'
 
   r2:
     name: Sync R2 updater mirror
@@ -433,12 +309,6 @@ jobs:
           ref: ${{ needs.resolve.outputs.commit }}
           fetch-depth: 0
 
-      - name: Set up Node
-        if: steps.r2.outputs.enabled == 'true'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version-file: .node-version
-
       - name: Download release assets
         if: steps.r2.outputs.enabled == 'true'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -458,83 +328,13 @@ jobs:
           choco install awscli -y --no-progress
           aws --version
 
-      - name: Generate R2 updater manifest
+      - name: Publish verified mirror and retire older installers
         if: steps.r2.outputs.enabled == 'true'
-        shell: pwsh
         env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
           R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
-        run: |
-          New-Item -ItemType Directory -Force dist-release/r2 | Out-Null
-          node --experimental-strip-types scripts/native-release.ts mirror dist-release/gpui-latest.json '${{ github.repository }}' "$env:R2_PUBLIC_BASE_URL" dist-release/r2/gpui-latest.json
-
-      - name: Upload R2 updater mirror
-        if: steps.r2.outputs.enabled == 'true'
-        shell: pwsh
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: auto
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-        run: |
-          $version = "${{ needs.resolve.outputs.version }}"
-          $r2Endpoint = "https://$env:R2_ACCOUNT_ID.r2.cloudflarestorage.com"
-          $latest = Get-Content dist-release/r2/gpui-latest.json -Raw | ConvertFrom-Json
-          $objects = aws s3api list-objects-v2 --bucket $env:R2_BUCKET --prefix gpui-latest.json --endpoint-url $r2Endpoint | ConvertFrom-Json
-          if ($LASTEXITCODE -ne 0) { throw "Cannot inspect the current mirror" }
-          if (@($objects.Contents | Where-Object Key -eq 'gpui-latest.json').Count -gt 0) {
-            $currentManifest = Join-Path $env:RUNNER_TEMP 'current-update-manifest.json'
-            aws s3 cp "s3://$env:R2_BUCKET/gpui-latest.json" $currentManifest --endpoint-url $r2Endpoint
-            if ($LASTEXITCODE -ne 0) { throw "Cannot read the current mirror" }
-            node --experimental-strip-types scripts/native-release.ts mirror-advance dist-release/r2/gpui-latest.json $currentManifest
-            if ($LASTEXITCODE -ne 0) { throw "Mirror version cannot advance" }
-          }
-          foreach ($entry in $latest.platforms.PSObject.Properties) {
-            $installerName = [IO.Path]::GetFileName(([uri]$entry.Value.url).AbsolutePath)
-            aws s3 cp "dist-release/$installerName" "s3://$env:R2_BUCKET/desktop/releases/v$version/$installerName" --endpoint-url $r2Endpoint --content-type "application/octet-stream"
-            if ($LASTEXITCODE -ne 0) { throw "R2 installer upload failed: $installerName" }
-            $readback = Join-Path $env:RUNNER_TEMP $installerName
-            aws s3 cp "s3://$env:R2_BUCKET/desktop/releases/v$version/$installerName" $readback --endpoint-url $r2Endpoint
-            if ($LASTEXITCODE -ne 0) { throw "R2 installer readback failed: $installerName" }
-            if ((Get-FileHash $readback).Hash -ne (Get-FileHash "dist-release/$installerName").Hash) { throw "R2 digest mismatch: $installerName" }
-          }
-
-          aws s3 cp `
-            "dist-release/r2/gpui-latest.json" `
-            "s3://$env:R2_BUCKET/gpui-latest.json" `
-            --endpoint-url $r2Endpoint `
-            --content-type "application/json" `
-            --cache-control "no-cache"
-          if ($LASTEXITCODE -ne 0) { throw "R2 manifest upload failed" }
-          aws s3 cp "s3://$env:R2_BUCKET/gpui-latest.json" "$env:RUNNER_TEMP/gpui-latest-readback.json" --endpoint-url $r2Endpoint
-          if ($LASTEXITCODE -ne 0) { throw "R2 manifest readback failed" }
-          if ((Get-FileHash "$env:RUNNER_TEMP/gpui-latest-readback.json").Hash -ne (Get-FileHash dist-release/r2/gpui-latest.json).Hash) { throw "R2 manifest bytes differ" }
-
-      - name: Clean old R2 updater mirrors
-        if: steps.r2.outputs.enabled == 'true'
-        shell: pwsh
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: auto
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-        run: |
-          $version = "${{ needs.resolve.outputs.version }}"
-          $currentPrefix = "desktop/releases/v$version/"
-          $r2Endpoint = "https://$env:R2_ACCOUNT_ID.r2.cloudflarestorage.com"
-          $objects = aws s3api list-objects-v2 `
-            --bucket $env:R2_BUCKET `
-            --prefix "desktop/releases/" `
-            --delimiter "/" `
-            --endpoint-url $r2Endpoint | ConvertFrom-Json
-
-          if ($LASTEXITCODE -ne 0) { throw "R2 listing failed" }
-          $prefixes = @($objects.CommonPrefixes | ForEach-Object { $_.Prefix })
-          foreach ($prefix in $prefixes) {
-            if ($prefix -and $prefix -ne $currentPrefix) {
-              Write-Host "Removing old R2 mirror prefix: $prefix"
-              aws s3 rm "s3://$env:R2_BUCKET/$prefix" --recursive --endpoint-url $r2Endpoint
-              if ($LASTEXITCODE -ne 0) { throw "R2 cleanup failed: $prefix" }
-            }
-          }
+        run: cargo xtask release sync-mirror dist-release '${{ github.repository }}'

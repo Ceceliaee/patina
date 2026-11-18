@@ -41,8 +41,8 @@
 
 每次发布时，下列位置必须保持同一个版本语义：
 
-- `package.json` 的 `version`
-- `desktop/patina/Cargo.toml` 中 `[package].version` 与 `desktop/Cargo.lock` 对应条目
+- 根 `Cargo.toml` 的 `workspace.package.version`，由三个程序及需要绑定程序版本的进程协议包继承
+- 根 `Cargo.lock` 中所有继承产品版本的本地包条目
 - Git tag
 - GitHub Release 标题
 - 原生更新通道中的 `gpui-latest.json`
@@ -222,7 +222,7 @@ App note: 一句话概括这个版本最值得用户知道的变化。
 - `App note:`：给简体中文更新弹窗使用的同一句摘要
 - `App note en:`：该摘要的英文版本，供英文界面及其他非中文界面回退使用
 
-这些字段是随版本发布的正文数据：内容由 `CHANGELOG.md` 持有，解析与发布产物生成由 `scripts/release.ts` 持有，不进入 `locales/` 消息资源。仅修改正文按[工程质量的默认门槛与风险路由](./engineering-quality.md#5-默认验证门槛) 运行文档与 changelog 检查，不触发 i18n 生成。承载正文的界面标题、按钮和无障碍文案仍遵守[本地化契约](./localization.md)；修改正文解析、语言选择或展示行为时，仍须按实际代码与本地化风险验证。
+这些字段是随版本发布的正文数据：内容由 `CHANGELOG.md` 持有，解析与发布产物生成由 [`xtask/src/release`](../xtask/src/release) 持有，不进入 `locales/` 消息资源。仅修改正文按[工程质量的默认门槛与风险路由](./engineering-quality.md#5-默认验证门槛) 运行文档与 changelog 检查，不触发 i18n 生成。承载正文的界面标题、按钮和无障碍文案仍遵守[本地化契约](./localization.md)；修改正文解析、语言选择或展示行为时，仍须按实际代码与本地化风险验证。
 
 写法要求：
 
@@ -403,40 +403,41 @@ GitHub Release 继续作为正式发布源、主下载入口和主更新清单�
 
 原生更新使用独立的 `gpui-latest.json` 和 NSIS 安装包，不依赖 Tauri updater。[`prepare-release.yml`](../.github/workflows/prepare-release.yml) 已接入原生打包，沿用 `vX.Y.Z` 标签和 `Patina vX.Y.Z` 发布标题。当前程序仍使用独立安装身份及实验版资料目录；首次正式发布前必须完成旧安装版的安装身份、数据路径和版本衔接验收。工作流接线不代表迁移验收完成，也不能将原生包写入旧 `latest.json`。
 
-[`desktop/updater/config.json`](../desktop/updater/config.json) 拥有更新源及公钥：先检查 GitHub Releases，访问或解析失败再尝试 R2。两个通道发布同版本、同字节的资产。清单包含 `schema: 1`、`application`、SemVer `version`、可选 `notes`，以及按 `windows-x86_64`、`windows-aarch64` 索引的 `platforms`；每个包提供 HTTPS `url`、字节数 `size` 和 Base64 编码的完整 Minisign `signature`。
+[`crates/updater/config.json`](../crates/updater/config.json) 拥有更新源及公钥：先检查 GitHub Releases，访问或解析失败再尝试 R2。两个通道发布同版本、同字节的资产。清单包含 `schema: 1`、`application`、SemVer `version`、可选 `notes`，以及按 `windows-x86_64`、`windows-aarch64` 索引的 `platforms`；每个包提供 HTTPS `url`、字节数 `size` 和 Base64 编码的完整 Minisign `signature`。
 
 安装包签名使用预哈希 Minisign，签名的 trusted comment 必须严格等于 `patina-gpui <version> <platform>`。客户端同时验证包字节和该签名注释，防止把旧版本、其他架构或 Tauri 安装包改名后作为 GPUI 更新。版本不高于当前版本时不提供安装；稳定版不接受预发布版。更新签名与 Windows Authenticode 是不同契约。
 
-构建前安装 `desktop/rust-toolchain.toml` 指定的 Rust、两个 Windows 目标和 Wasm 目标，并准备 NSIS、独立 Minisign CLI 及与公钥匹配的私钥文件。先按仓库网络偏好检查代理，然后从仓库根目录执行；以下变量指向维护者准备好的本地工具、私钥、发布说明和候选资产 URL：
+构建需要仓库指定的 Rust 工具链、目标 Windows 架构及插件使用的 Wasm 目标，并需要 NSIS 和 Minisign。使用与应用公钥匹配的私钥，在仓库根目录为各架构选择独立的空输出目录。
 
 ```powershell
-./scripts/package-gpui.ps1 -Makensis $makensis -Minisign $minisign -SigningKey $signingKey -DownloadBaseUrl $assetBaseUrl -NotesFile $notesFile
+cargo xtask release package --target x64 --output target/bundles/x64 --makensis $makensis --minisign $minisign --signing-key $signingKey --base-url $assetBaseUrl
+cargo xtask release package --target arm64 --output target/bundles/arm64 --makensis $makensis --minisign $minisign --signing-key $signingKey --base-url $assetBaseUrl
 ```
 
-[`package-gpui.ps1`](../scripts/package-gpui.ps1) 从 GPUI Cargo manifest 读取版本，构建双架构、生成 NSIS 包、签名并用应用公钥复验，全部成功后才写清单。默认输出到 `desktop/target/gpui-release`，已存在的同名包或清单不会被覆盖；重试时使用新的 `-OutputDirectory`。`-Unsigned` 仅生成本地验证安装包，不生成更新清单。安装器的 Windows 发布者及文件公司名称统一为 `Ceceliaee`。
+[`cargo xtask release package`](../xtask/src/release/package.rs) 读取工作区产品版本，在本地构建宿主、界面和探测进程，逐个检查 PE 架构并生成单一 NSIS 安装包。工具用应用公钥复验签名成功后才写入更新清单。需要安装验收时，使用 `--unsigned` 代替签名参数，输出仅包含安装包与三个程序。安装器的 Windows 发布者和文件公司名称为 `Ceceliaee`。
 
-脚本只生成本地资产，不发布 GitHub Release 或 R2。发布工作流在各架构的原生 Windows runner 上调用该脚本，再合并和独立校验两份清单，完成摘要与 attestation 后发布。签名使用 `PATINA_SIGNING_PRIVATE_KEY` 和 `PATINA_SIGNING_PRIVATE_KEY_PASSWORD` 两个 secret 名称；前者保存 Base64 编码的 Minisign 私钥文件，后者经进程标准输入提供，临时私钥在成功或失败后均删除。私钥必须与应用内公钥匹配。
+工作流在各架构的 Windows runner 上调用同一个打包工具，合并清单后独立验证，再为两个最终安装包生成证明。签名步骤使用 `PATINA_SIGNING_PRIVATE_KEY` 和 `PATINA_SIGNING_PRIVATE_KEY_PASSWORD`。前者保存 Base64 编码的 Minisign 私钥文件，后者经进程标准输入交给签名器。工具回收临时私钥文件。
 
 ## 10. 发布前的最低验证门槛
 
 正式发布前至少应完成以下验证：
 
-- `pnpm run release:validate-version-files <version>` 或工作流中的等价校验
-- 本地运行 `pnpm run release:check`
+- `cargo xtask release validate-version-files <version>`
+- `cargo xtask release validate-changelog <version>`
+- `cargo xtask check`
 
-`package.json` 拥有 `release:check` 的检查组成与执行顺序；通用质量门槛由
-[`engineering-quality.md`](./engineering-quality.md#5-默认验证门槛) 拥有。正式发布前，目标提交必须在本仓库 `main` 的 push 事件上通过 `Verify`。发布工作流按 tag 的完整提交 SHA 查验最近一次对应运行及其全部作业；记录缺失、运行未结束、作业未全绿或查询失败时停止。通过后，版本、changelog 和安装包均取自该提交。
+通用质量门槛见[工程质量](./engineering-quality.md#5-默认验证门槛)。正式发布前，目标提交必须在本仓库 `main` 的 push 事件上通过 `Verify`。发布工作流按 tag 的完整提交 SHA 查验最近一次对应运行及其全部作业；记录缺失、运行未结束、作业未全绿或查询失败时停止。通过后，版本、changelog 和安装包均取自该提交。
 
-`Verify` 的双架构 `Native desktop checks` 运行 workspace 单元、契约和无头控件交互测试，以及 Clippy、格式与依赖审计；独立的 `Native Windows acceptance` 显式启用原生测试，运行隔离桌面中的更新交互和安装、升级、卸载验收。发布门禁要求同一候选的两组任务均成功，无头通过不能替代 Windows 原生验收。版本一致性校验同时覆盖原生 Cargo manifest 与 lockfile；`release:sync-version` 同步这两处，仍需按原有版本准备流程刷新和校验旧后端 lockfile。
+`Verify` 的双架构 `Native desktop checks` 运行 workspace 单元、契约和无头控件交互测试，以及 Clippy、格式与依赖审计；独立的 `Native Windows acceptance` 显式启用原生测试，运行隔离桌面中的更新交互和安装、升级、卸载验收。发布门禁要求同一候选的两组任务均成功，无头通过不能替代 Windows 原生验收。版本准备使用 `cargo xtask release sync-version <version>` 同步工作区与锁文件中的产品版本。
 
 GitHub Actions 生成正式发布资产后、发布 GitHub Release 前，还必须执行：
 
-- `pnpm run release:verify-assets <version> <bundle-dir> <output-dir> <repository> v<version>`
+- `cargo xtask release verify <version> <bundle-dir> <output-dir> <repository> v<version>`
 
-该 gate 必须重新读取磁盘产物。`<bundle-dir>` 下使用 `x64/` 与 `arm64/` 两个子目录，每个目录包含 `patina-gpui.exe`、签名安装包和该架构的 `gpui-latest.json`；校验主程序 PE 架构、输入与最终安装包 SHA-256、完整 `SHA256SUMS.txt`、清单版本、平台、字节数和下载 URL，并使用应用公钥验证最终安装包签名及版本、架构注释。生成命令成功不能代替独立校验命令成功。发布后还须从 GitHub 下载四个公开附件，逐一比对本地产物摘要；回读失败阻断镜像同步，但不能覆盖已发布资产。
+该 gate 必须重新读取磁盘产物。`<bundle-dir>` 下使用 `x64/` 与 `arm64/` 两个子目录，每个目录包含 `patina.exe`、`patina-ui.exe`、`patina-probe.exe`、签名安装包和该架构的 `gpui-latest.json`；逐个校验三个程序的 PE 架构、输入与最终安装包 SHA-256、完整 `SHA256SUMS.txt`、清单版本、平台、字节数和下载 URL，并使用应用公钥验证最终安装包签名及版本、架构注释。生成命令成功不能代替独立校验命令成功。发布后还须从 GitHub 下载四个公开附件，逐一比对本地产物摘要；回读失败阻断镜像同步，但不能覆盖已发布资产。
 
 默认不在本地手工生成 `dist-release`、安装包或更新清单。
-`write-release-notes`、`scripts/package-gpui.ps1` 与 `pnpm run release:prepare-assets`
+`cargo xtask release` 的 `write-release-notes`、`package` 和 `prepare` 子命令
 默认属于 GitHub Actions 工作流 [`prepare-release.yml`](../.github/workflows/prepare-release.yml)
 中的 `Publish Release` 流程，只有在明确需要排查发布流水线问题时才例外。
 浏览器商店提交、AMO 公开 listed XPI 获取与扩展 GitHub Release 不属于 Patina 主应用发布流程；它们由 `patina-web-sync` 仓库负责。
@@ -453,13 +454,13 @@ GitHub Actions 生成正式发布资产后、发布 GitHub Release 前，还必�
 
 1. 找到最近已发布版本，审查其后完整 commit 与 diff，再按实际范围选择 SemVer；不能只看最后一轮局部改动。
 2. 在本地同步所有版本文件并整理 changelog。长期政策文档不保存当前版本值。
-3. 运行版本一致性、changelog 和 `pnpm run release:check`；正式资产由 workflow 生成，本地默认不创建 `dist-release`、安装包或 updater 产物。
+3. 运行版本一致性、changelog 和 `cargo xtask check`；正式资产由 workflow 生成，本地默认不创建 `dist-release`、安装包或 updater 产物。
 4. 获得当前任务的远程 push 授权后推送准备提交。等该提交在 `main` 的 `Verify` 全绿，再依单独的 tag 或发布授权为该提交创建并推送 `vX.Y.Z`。
 5. [`prepare-release.yml`](../.github/workflows/prepare-release.yml) 从 tag 对应 commit 校验版本与 changelog，拒绝已有 Release，生成并独立验证安装包、校验和与 updater manifest，完成 attestation 后以禁止覆盖的方式创建 GitHub Release。
 6. GitHub Release 成立后再同步 R2 镜像；镜像失败不能撤销、覆盖或改变 GitHub Release 主事实，updater 继续优先使用 GitHub endpoint。
 7. 发布模式的 `workflow_dispatch` 只补跑已有 tag 且尚无 Release 的流程。补跑使用原 tag 的工作流和源码，仍需满足该工作流的发布门槛。Release 已存在时必须按不可变规则准备新版本。
 
-补跑时使用目标 tag 对应的 workflow 版本，例如 `gh workflow run prepare-release.yml --ref v<version> -f version=<version>`。迁移前使用 npm 的 tag 沿用其原始 workflow；当前 pnpm workflow 消费包含 pnpm 声明和锁文件的 tag，不增加管理器兼容分支。
+补跑时使用目标 tag 对应的 workflow 版本，例如 `gh workflow run prepare-release.yml --ref v<version> -f version=<version>`。历史 tag 沿用该版本发布时的工作流和工具链。
 
 默认协作在 tag 推送并确认发布 workflow 已触发后即可结束；只有用户要求或正在排查失败时才持续监看。浏览器扩展商店与扩展 Release 由 `patina-web-sync` 仓库负责，不进入 Patina 主应用发布流程。
 
