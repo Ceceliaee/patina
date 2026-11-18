@@ -126,27 +126,17 @@ GPUI 按钮的鼠标点击与选中状态不添加强调色描边。图标切换
 
 没有分组的页面不额外增加层级；列表内的时长仍属于内容，不因为是数字就使用核心读数角色。
 
-角色的字号和行高由 [tokens.css](../src/styles/tokens.css) 中配对的 `--qp-font-size-*` 与 `--qp-line-height-*` 持有，使用 `rem` 并保留用户根字号。组件消费角色，不另建逐页字号或响应式字号变体；窄空间先调整布局、换行或刻度密度。字重独立使用 `tokens.css` 的 `--qp-font-weight-regular`、`--qp-font-weight-medium`、`--qp-font-weight-emphasis` 三个角色：正文与说明使用 regular；名称、设置项、输入内容和普通时长使用 medium；时间轴图例、时间轴与小时图刻度、摘要指标标签也使用 medium，保持小字号下的识别度；各级标题、按钮、分段选项、重点数值与 badge 使用 emphasis。控件尺寸不另设字重，hover、focus 和禁用状态不改变字重；选中状态沿用背景与颜色表达，确需字重强调时复用 emphasis。名称可以省略，状态与重要数值不能被挤截。
-
-基础 `h1/h2/h3` 字号放在 CSS 基础层，允许组件明确的视觉角色覆盖；保留语义标题结构，不依赖标签级别强制视觉大小。SVG 图表使用相同字号 token，并按实际容器尺寸建立坐标。紧凑信息统一使用 `compact` 角色，包括数量标记、时间轴图例、紧凑分段导航与筛选、工具侧栏标签和热力图日历标签。数据窄列选择器使用 `caption` 名称与时长、`compact` 元信息；输入框（含提示文字、日期、时间和颜色值）、搜索框、紧凑按钮和紧凑下拉使用 `caption`。表单中的分段选项使用 `QuietSegmentedFilter` 的 `control` 变体，字号与行高采用 `caption`，与相邻表单控件一致。数据汇总数值与趋势内联数值使用 `section-title` 尺度，区别于 `metric` 核心读数。相同阅读任务复用角色，不保留逐页局部字号。迷你窗与窗口壳层保留各自几何约束，由其样式 owner 持有；共享控件改动仍须覆盖这些消费者的回归检查。
+字号、间距和布局由[原生布局](../desktop/quietpro/src/layout.rs)及共享控件持有。窄空间先调整换行和刻度密度，保留标题、状态和数值的层级。
 
 ### 7.5 样式事实要有清楚 owner
 
-`src/App.css` 长期只作为样式入口，汇总导入 `src/styles/` 下的 CSS-only 文件。当前样式 owner 口径为：
-
-- `src/styles/tokens.css`：Quiet Pro 几何、字体、动效 token 与 Tailwind 颜色别名
-- `src/shared/theme/`：主题预设、默认对比度与颜色派生；`useAppThemeMode` 将结果应用到主窗口及 Mini 的 `--qp-*`
-- `src/styles/quiet-pro.css`：可复用组件原型
-- `src/styles/app-shell.css`：应用壳层、通用页面与响应式规则
-- `src/styles/features/*`：对应 feature 的局部样式
-
-Web 与原生窗口从同一份[配色预设](../src/shared/theme/presets.json)读取方案名称、色样和默认对比度。Web 组件使用 [deriveTheme.ts](../src/shared/theme/deriveTheme.ts) 生成的 `--qp-*` 变量，原生控件使用 [Quiet Pro 调色板](../desktop/quietpro/src/theme.rs)。
+[配色预设](../desktop/quietpro/src/theme/presets.json)保存明暗配色和默认对比度。[QuietPro 调色板](../desktop/quietpro/src/theme.rs)派生界面颜色，主窗口、Mini 与工具通知消费相同的主题。
 
 #### 主题与颜色派生
 
 浅色和深色分别保存主题预设，颜色派生采用各预设默认对比度，不提供用户对比度选项，也不读取或保存自定义覆盖值。普通与强调边框保留 Patina 各主题既有配色，由预设持有；主按钮文字保持白色。
 
-主按钮背景由 `deriveTheme.ts` 派生为 `--qp-button-primary-bg`；仅当强调色与白字的对比度低于 [WCAG 4.5:1 阈值](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html)时，以最小必要幅度向黑色混合。主按钮边框和交互态使用该 token，保留既有混色比例；全局强调色和其他控件配色不变。
+主按钮背景由 QuietPro 调色板派生；仅当强调色与白字的对比度低于 [WCAG 4.5:1 阈值](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html)时，以最小必要幅度向黑色混合。主按钮边框和交互态使用该 token，保留既有混色比例；全局强调色和其他控件配色不变。
 
 Codex 参考用于校正命名主题的基础调色板和背景派生，不替换 Patina 的文字、滑条、开关、滚动条和交互状态配色规则。默认主题保留 Patina 原有基础与语义配色。控件继续消费既有语义 token，保持原来的混色比例和明暗层级。
 

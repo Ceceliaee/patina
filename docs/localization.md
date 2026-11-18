@@ -18,15 +18,14 @@ Patina 使用仓库级、语言无关的消息契约，而不是让某个前端�
 - `locales/registry.ts` 是唯一生产语言注册表；
 - `locales/<locale>/` 是人工维护的纯声明式资源目录；
 - `locales/review-manifest.ts` 记录各翻译对标准原文版本的复核结果；
-- `scripts/i18n/generate.ts` 为前端和 Rust 生成各自的静态产物；
-- `src/shared/i18n/` 是前端运行时 owner；
-- `src-tauri/src/domain/localization/` 是 Rust 运行时 owner。
+- `scripts/i18n/generate.ts` 为原生应用生成 Rust 消息与数据资源；
+- `desktop/recorder/src/domain/localization/` 是 Rust 运行时 owner。
 
 资源文件使用受限制的 TypeScript 对象字面量承载数据。这里使用 TypeScript 只是为了仓库内编辑体验；检查器禁止函数、调用、条件表达式、展开、计算属性和跨文件继承。消息中的 `$op` 节点是一种小型声明式 DSL：它描述“做什么”，不执行任意代码。生成结果才是业务代码消费的 API。
 
 schema 条目可增加语言无关的 `description` 和 `translatorNote`。翻译包始终提供由表面与 key 形成的稳定位置上下文；当短文案、品牌名、无障碍含义或业务语义可能歧义时，维护者必须补充这两个字段之一，导出器会把它们直接交给翻译者。
 
-同一句前端消息也供原生窗口使用时，在现有 schema 条目标记 `alsoNative: true`。两个宿主消费同一个 key 和译文。
+同一句前端消息也供原生窗口使用时，在现有 schema 条目标记 `alsoNative: true`。原生生成器导出该 key 和译文。
 
 这不是 Fluent，也没有引入新的前端语言或运行时框架。前端使用浏览器内建的 `Intl`，Rust 仅为 CLDR 基数复数使用 ICU4X。
 
@@ -34,7 +33,7 @@ schema 条目可增加语言无关的 `description` 和 `translatorNote`。翻�
 
 ## 不变量
 
-- locale 是显式运行时输入；React 通过 `LocaleProvider` 和 hook 获取，纯函数显式接收 locale 或 `UiText`。
+- locale 是显式运行时输入；纯函数显式接收 locale 或 `UiText`。
 - 语言相关缓存必须包含 locale；优先缓存语言无关数据。
 - 业务代码不得读取 `locales/`，也不得直接读取 generated 资源表。
 - generated 文件不可手改；修改源后运行 `pnpm run i18n:generate`。
@@ -199,20 +198,9 @@ schema 声明参数名和类型，资源使用 `arg` 与 `concat`：
 
 <a id="53-前端资源装载与-locale-激活"></a>
 
-## 前端资源装载与 locale 激活
+## 原生资源与语言切换
 
-生成器为每个生产 locale 输出独立资源模块，并生成只包含明确动态 import 的 loader manifest。标准原文 `zh-CN` 作为同步可用的初始资源进入默认启动图；其他语言只在已保存设置或窗口恢复实际需要时加载。每个 locale chunk 都应有稳定 owner、独立 bundle 预算和构建图断言，不能落入无 owner support aggregate，也不能让新增语言继续线性抬高初始 localization runtime。
-
-前端运行时遵守以下契约：
-
-- 已完成资源按 locale 缓存；同一 locale 的并发首次请求合并为同一个 in-flight Promise；
-- `LocaleProvider` 只对当前仍有效的请求结果提交状态，较早请求即使较晚完成也不得覆盖新选择；
-- `text`、有效 locale、`document.lang` 与 `document.dir` 在目标资源可用后一起切换；等待期间继续呈现最后一个可用 locale，不显示空白或混合状态；
-- 目标资源加载失败时保留最后一个可用 locale，记录可诊断错误，并阻止 Settings 保存一个未实际展示的目标语言；
-- 主窗口和 Mini 通过同一 Provider/runtime 契约装载资源，feature 与业务代码不得直接读取 generated locale 模块；
-- 缺失消息仍按标准原文回退，但“整个目标 locale 资源无法加载”属于激活失败，不能伪装成一次成功切换。
-
-修改生成器、loader、缓存或激活顺序时，至少验证 manifest 与注册表一致、同 locale 请求合并、快速连续切换、当前请求失败、Mini/主窗口契约以及 locale chunk 的构建图归属。
+窗口和托盘从 Recorder 读取已注册语言的静态资源。切换语言时由页面重新读取相应消息，语言相关的缓存以 locale 区分。
 
 <a id="6-rust-原生表面"></a>
 
@@ -230,24 +218,13 @@ CSV、SQLite 和 Parquet 的稳定字段名是数据契约，不随 UI locale �
 
 ## 硬编码例外
 
-检查器使用 TypeScript AST 检查 `.ts`/`.tsx` 中的 JSX 文本与字符串表达式、可见属性、常见 view-model 展示字段和受控通知调用；它按词法作用域跟踪常量和 `let` 的直线/条件赋值，并把同一 sink 的全部可能文本分别送入例外检查，避免已批准值遮蔽未批准值。Rust 门禁检查已声明 native 文案是否在托盘、提醒和 Markdown owner 中重新出现。
-
-DSL validator 会同时检查操作数类型和值域。例如数值必须有限，`monthName` 的月份必须是 `0..11` 的整数且字面日期必须有效；前端运行时仍保留同样的防御，非法输入只记录诊断并返回安全空串。生成器可以移除 `concat` 中的空字符串节点，但必须保留 `concat` 操作本身的字符串转换语义。
-
-确属非自然语言的数据、诊断文本或注册名称（例如主题的正式名称），登记在 `scripts/i18n/hardcoded-exceptions.ts`。每项必须包含：
-
-- 精确文件；
-- 精确值；
-- owner；
-- 为什么不能本地化。
-
-检查器会同时拒绝未登记硬编码和已经不再命中的陈旧例外。不接受目录、前缀、glob 或正则豁免。
+原生界面文案从消息契约读取。仓库检查器扫描原生界面及导出路径，检测重新写入源码的译文。DSL 校验器检查参数类型、操作数与值域；变更生成器时同时验证对应 Rust 资源。
 
 <a id="8-验证入口"></a>
 
 ## 验证入口
 
-- `pnpm run test:i18n`：前端格式化、CLDR 夹具、通用翻译包往返、篡改和占位符反例。
+- `pnpm run test:i18n`：CLDR 夹具、通用翻译包往返、篡改和占位符反例。
 - `pnpm run check:i18n:self-test`：validator、硬编码门禁和新语言命令的反例。
 - `pnpm run check:i18n`：资源完整性、参数、CLDR 类别、source-review hash、generated stale 和硬编码。
 - `pnpm run check:types`：生成类型与调用方一致性。

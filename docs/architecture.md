@@ -9,17 +9,15 @@
 | 理解系统如何记录与显示活动 | [系统现实](#2-系统现实)、[协作通道](#4-系统边界与所有权) |
 | 找新增代码落点 | [owner 表](#7-新增代码-owner-与落点)，再查[前端](#5-前端长期结构)或 [Rust](#6-rust-长期结构) |
 | 改数据、迁移或恢复 | [本地读取](#43-本地数据读取通道)、[存储位置](#存储位置与启动控制状态)、[备份与恢复](#备份与恢复) |
-| 改窗口或 IPC | [窗口授权](#42-tauri-ipc-通道)、[Mini 生命周期](#mini-生命周期)、[运行身份](#69-运行身份与持久化隔离) |
+| 改窗口或 IPC | [窗口授权](#42-窗口与常驻进程)、[Mini 生命周期](#mini-生命周期)、[运行身份](#69-运行身份与持久化隔离) |
 | 改平台探测或 tracking | [平台隔离](#64-platform)、[核心行为](#65-engine) |
 | 检查边界是否成立 | [依赖约束](#10-如何判断架构在健康落地)、[验证](#11-最低验证门槛) |
 
 ## 2. 系统现实
 
-Patina 是采用 Tauri v2、Rust、React、TypeScript 和 SQLite 的本地优先 Windows 时间追踪应用，依赖前台窗口、图标、锁屏和休眠等平台能力。
+Patina 是使用 GPUI、Rust 和 SQLite 的 Windows 桌面应用。常驻进程持有 Recorder、托盘、工具与更新服务。独立窗口进程绘制主窗口、Mini 和工具通知。关闭窗口后，常驻进程继续采样和调度到期任务。
 
-架构优先保证运行稳定、所有权清晰、行为可验证，以及本地数据和平台细节可控；在真实任务中渐进演进，不为目录整齐或套用分层模板做无收益重构。
-
-记录主链是 Windows 平台观察 → Rust tracking 决策 → data 事务提交。界面通过 platform gateway 与 typed command 读取事实或派生汇总，再由 feature 组织视图；UI 操作经同一显式边界进入写侧。应用装配负责连接这些 owner，不能另建业务事实。浏览器扩展提供外部观察，但是否计为有效活动仍由本机运行时决定。
+Windows 前台观察经过 tracking 决策，在同一事务中提交活动事实和派生状态的修订。窗口通过宿主读取数据并发出操作请求。浏览器扩展经本机协议提供网页观察，有效活动区间由 Recorder 决定。
 
 ## 3. 架构原则
 
@@ -29,11 +27,11 @@ Patina 是采用 Tauri v2、Rust、React、TypeScript 和 SQLite 的本地优先
 
 ### 3.2 运行时写侧和持久化派生状态归 Rust，界面读模型归前端
 
-Rust 拥有运行时主链、写侧副作用，以及需要跨启动维护一致性的持久化派生状态；前端拥有 UI、交互编排和页面读模型组织。前端可以组合页面视图，但不应为了页面方便长期装载全部事实并在 WebView 内维护第二份持久化索引。
+Rust 拥有运行时主链、写侧副作用，以及需要跨启动维护一致性的持久化派生状态；前端拥有 UI、交互编排和页面读模型组织。前端可以组合页面视图，但不应为了页面方便长期装载全部事实并在 窗口进程内维护第二份持久化索引。
 
 ### 3.3 平台细节必须显式收口
 
-与 Tauri、SQLite、本地桌面环境、Windows API 打交道的能力必须有明确边界，不应散落在页面、壳层或临时 util 中。
+与 SQLite、本地桌面环境、Windows API 打交道的能力必须有明确边界，不应散落在页面、壳层或临时 util 中。
 
 ### 3.4 共享层只承接稳定共享能力
 
@@ -85,32 +83,13 @@ Rust 负责：
 
 这条通道是产品最关键的运行时主链。
 
-### 4.2 Tauri IPC 通道
+### 4.2 窗口与常驻进程
 
-前端通过 command / event 与 Rust 协作，用于：
-
-- 获取活动窗口与 tracker 状态
-- 同步运行时事件
-- 修改桌面行为
-- 调用更新与备份能力
-
-IPC 契约应保持稳定、可解析、可测试。
-
-Tauri application command 采用显式、默认拒绝的窗口授权模型：
-
-- `src-tauri/build.rs` 中的 application command manifest 是命令分类入口；新增 custom command 必须先归入 main-only 或对应小窗的精确 allowlist，未分类即构建门失败。
-- `src-tauri/permissions/window-commands.toml` 和 `src-tauri/capabilities/` 的窗口配置只授予精确命令，不使用 application command 通配符或 default allow-all。
-- main、mini、tool-notification 使用独立 permission set。mini 通过专用命令读取 bootstrap、内容与窗口快照，可操作自身窗口、打开主窗口，以及通过带会话代次的 Mini 动作请求主窗口打开专注或提醒分区。原生端只接受这两个目标；mini 不能修改工具任务或追踪设置。通知窗只读取分配给自己的呈现快照、报告尺寸并执行绑定当前提醒 ID 的动作，不能调用通用任务写入或全局设置命令。三个窗口均不获得 plugin SQL load/select/execute。
-- 删除、恢复、密钥、存储迁移和更新安装等敏感 command 即使 capability 配错，也必须在 Rust handler 内根据真实 `WebviewWindow` label 做 caller guard；前端按钮不是安全边界。
-- 存储迁移编排归 `data/storage_migration.rs`，真实路径身份与无破坏写探针归 `data/storage_path_safety.rs`，staging/替换/旧数据清理的 reparse-safe 删除策略归 `data/storage_migration_cleanup.rs`；三者均默认拒绝无法确认的路径，破坏性清理前必须重新比较数据根和 WebView 根的交叉真实身份。
-- manifest、permission sets、capabilities、前端调用和 Rust `invoke_handler` 注册必须由静态 checker 保持一致，并由真实 main / mini / tool-notification runtime denial matrix 证明边界没有只停留在配置文本。
+[窗口消息](../desktop/patina/src/window_process.rs)定义请求、事件和响应，常驻进程持有录制、工具与更新服务。主窗口、Mini 和通知窗口通过客户端提交操作。涉及工具身份、过期提醒或安装交接的请求，由持有对应状态的服务再次校验。
 
 ### 4.3 本地数据读取通道
 
-前端通过 `platform/persistence/*` 的 typed Rust command 读取本地数据；SQL 在 Rust repository 执行，WebView 没有 SQL plugin 权限。读取用途包括：
-
-- settings 读取
-- History 精确会话、标题样本及局部明细读取
+[Recorder](../desktop/recorder/src/lib.rs) 提供公开读写接口，SQLite 查询与事务由数据模块实现。
 
 #### 活动派生状态与应用关联
 
@@ -125,31 +104,21 @@ Tauri application command 采用显式、默认拒绝的窗口授权模型：
 
 小时投影在来源优先级确定后按小时和应用归并原生片段，导入仍保留必要的批次身份。原生重叠时长可以累计超过一小时，存储分行不能钳制总量。非整小时边界先读取完整小时的占用事实、完成来源分配，再精确裁剪；不能由汇总时长按比例推算局部分布。
 
-前端通过 `platform/persistence/activityReadModelGateway.ts` 调用 typed Rust command，并继续在 feature service 内应用用户分类、别名和页面展示规则；这些可编辑规则不固化进活动汇总表。
+页面通过 Recorder 读取活动事实和汇总，展示时应用分类与别名。可编辑规则单独持久化。
 
-应用关联使用独立的成员到主程序设置，不修改 canonical executable 或原始会话。前端 `shared/classification/appLinks.ts` 拥有归属验证与解析，`AppClassification` 提供统计展示入口；Rust classification snapshot 在分类统计中解析归属。配置 repository 在同一事务中检查预期旧归属与最终完整关系，拒绝自身关联、嵌套和循环。来源优先级、时间裁剪与原程序排除先于归属聚合，精确明细保留原程序边界。备份恢复验证合并后的完整关系。
+应用关联使用独立的成员到主程序设置，不修改 canonical executable 或原始会话。Recorder 在分类统计中解析归属。配置 repository 在同一事务中检查预期旧归属与最终完整关系，拒绝自身关联、嵌套和循环。来源优先级、时间裁剪与原程序排除先于归属聚合，精确明细保留原程序边界。备份恢复验证合并后的完整关系。
 
 存储页按时间清理活动记录，保留应用和网站的用户配置。记录删除事务只检查本次涉及的对象。仍有活动记录、已保存的关联、分类配置或使用提醒引用时保留图标，否则一并移除数据库中的图标缓存。
 
 #### 存储位置与启动控制状态
 
-`platform/storage_control.rs` 拥有本机数据位置、WebView 位置、待重启存储操作及维护结果的完整快照，`platform/windows/storage_registry.rs` 负责 HKCU 读写与提交确认。位置和提交阶段写入同一个 `REG_BINARY` 值，低频存储提交在清理原配置或数据前刷新并读回验证。`app/bootstrap.rs` 在 SQLite 和 WebView 初始化前准备配置、处理待执行操作并验证最终路径；迁移编排和文件系统安全仍归现有 data owner。
-
-注册表入口为 `HKEY_CURRENT_USER\Software\Patina\Storage\<profile>\State`（`State` 是值名）。production、local、dev 分开，测试只使用独立测试子键。入口不包含应用版本或安装位置，普通更新保留配置。默认数据库仍是 `%APPDATA%\Patina\patina.db`，默认 WebView 数据仍在 `%LOCALAPPDATA%\Patina\EBWebView`；显式默认模式与“尚未初始化”不同。
-
-首次升级由 `platform/storage_control/file_import.rs` 读取已发布 JSON 定位与控制状态，确认新快照持久化后按明确文件名单清理旧文件；新记录存在时不重新导入。清理失败保留待清理记录，不恢复旧文件为路径来源。格式损坏、权限拒绝和自定义数据位置不可用必须明确失败，不静默改用默认数据库。数据库尚不可用时，启动失败提示使用消息契约的默认语言。
-
-配置转存不搬动数据库。用户以后更改目录仍沿用预览、checkpoint、staging、校验和受控重启。目标准备阶段中断时保留源与操作记录；位置提交后中断则使用已提交目标，不重复执行破坏性清理，可能残留的旧文件通过维护结果提示。源与目标必须在实际执行和清理时重新验证身份。可再生 WebView 缓存清理失败记录维护诊断，不阻止正常启动；位置配置和数据库迁移错误仍保留恢复状态并停止启动。
-
-两个自定义根均已迁出、没有操作进行时，旧定位文件不再是启动依赖。但默认根或安装目录仍可能位于 AppData，不能将“配置已迁移”解释成可以删除正在使用的目录。备份恢复使用目标电脑当前选定的位置，不恢复来源电脑的注册表路径。定位信息已被手工删除时，不扫描磁盘猜测原库；先保全已有库，通过备份恢复或维护者核查处理，现有更改目录入口不等于关联已有库。
-
-旧格式导入器的退出由[发布升级边界](./versioning-and-release-policy.md#72-存储位置配置的升级边界)决定。
+启动时按 profile 解析数据库，位置与待执行的迁移写入该 profile 的 database-location.json。选择目标、校验、分阶段迁移及中断恢复由[原生设置与存储](#48-原生设置与存储)管理。备份恢复沿用当前机器的存储位置。
 
 #### 网页关联与历史清理
 
 网页由 Rust `domain/web_links.rs` 使用锁定的公共后缀数据解析可注册主域名，包含私有托管后缀。缺省自动归组，完整域名例外优先；IP、本地主机及未知后缀不猜测归属。组目标带独立类型和无前缀域名，在字符串索引中序列化为对象，与实际根域名互不覆盖。版本 2 规则仅保存独立例外及组展示设置；分类事务保留预期旧值检查、幂等重放及冲突拒绝。后缀数据随依赖升级，升级需复测租户边界，不在运行时联网获取规则。
 
-`data/repositories/web_links.rs` 在同一数据库快照中提供规则、原域名设置、主域名映射、全历史时长及图标，范围读取同时返回原始事实；聚合修订包含规则快照摘要。前端 `shared/classification/webLinks.ts` 消费主域名映射并叠加草稿例外，按不可变快照复用代表图标索引。图标使用具名且允许记录的成员，同源重叠区间去重，时长相同时按完整域名排序。原域名匿名策略先于展示归属，精确明细和导出保留原始身份。
+`data/repositories/web_links.rs` 在同一数据库快照中提供规则、原域名设置、主域名映射、全历史时长及图标，范围读取同时返回原始事实；聚合修订包含规则快照摘要。分类页消费该映射。图标使用具名且允许记录的成员，同源重叠区间去重，时长相同时按完整域名排序。原域名匿名策略先于展示归属，精确明细和导出保留原始身份。
 
 启动及备份恢复共用事务迁移：旧手动关系和组展示设置存入 `__web_grouping_backup_v2` 恢复副本后移除，原始域名设置及事实不变；更早自动格式中的明确例外转换为版本 2。分类承接使用一次性事务标记：尚无新版规则的组继承组内累计使用时长最长域名的分类，时长相同按完整域名排序，最长域名未分类时不猜测分类；既有新版规则与独立例外优先。分类迁移与关系转换共用入口及事务，不依赖安装版本号；后续用户清除分类不会在重启时恢复。合并恢复优先保留目标库已有新规则，未知格式拒绝并回滚。恢复副本保留原规则 JSON，可用于人工恢复旧配置；新版本不双写旧格式，也不承诺旧版本可读取新配置。
 
@@ -157,20 +126,7 @@ Tauri application command 采用显式、默认拒绝的窗口授权模型：
 
 #### 读取与备份边界
 
-这条通道不是默认自由边界，而是显式受控边界。规则如下：
-
-- 页面组件不能直接写 SQL
-- feature 不能直接跳过边界访问底层 DB
-- SQLite 访问应通过 `platform/persistence/*` 暴露的明确出口
-- 前端 persistence gateway 只调用按数据域定义的 typed Rust command，SQL 与参数绑定留在 Rust repository；History 会话与标题在同一读取事务中取得
-- settings、classification、backup settings、数据清理与类似写侧操作默认通过 typed Rust command 完成
-- main、mini 均无 SQL plugin 权限；连接池由 `AppSqlitePool` 持有，数据库替换后 command 解析到当前连接池，不能通过 WebView 加载或操作任意 SQL 连接
-- settings 原始读取、tracker health 时间戳与类似本地持久化适配，默认归 `platform/persistence/*`
-- `app/services/*` 只保留应用启动、运行时同步或全局偏好写入所需的薄协调，不从页面模块借基础能力
-- 原生设置和存储弹窗的归属见[原生设置与存储](#48-原生设置与存储)
-- 涉及运行时写侧、数据写侧和平台副作用的操作，优先迁往 Rust command
-- 需要持久化、跨页面复用或保证事实/派生一致性的读索引，默认由 Rust data owner 维护并经 typed command 读取
-- 页面特有的格式化、分类映射、图表组合和精确时间线几何继续留在对应 feature read model
+SQL、参数绑定及跨表一致性归 Recorder。页面消费具名的查询结果，负责展示格式、图表组合与时间线几何。精确会话与标题须在同一读取快照中取得。
 
 #### 备份与恢复
 
@@ -179,7 +135,7 @@ Tauri application command 采用显式、默认拒绝的窗口授权模型：
 - SQLite 快照容器、manifest、摘要、格式识别和恢复编排归 `data/backup/*`
 - 数据库文件切换、WAL checkpoint、pool 重开和中断恢复归 `data/sqlite_pool/*`
 - 合并去重由各数据域 repository 持有，不能把表级 SQL 上提到 command、app 或前端
-- `commands/backup.rs` 与 `app/backup.rs` 只承担参数边界和恢复后的薄协调
+- 原生存储服务协调备份、恢复及运行中任务。
 - 恢复只接受 SQLite 数据快照；旧结构化 JSON ZIP 读取器已退役。源文件身份、容器和候选库校验先于恢复引起的计时封口，执行消费同一准备副本。历史 SQLite 快照仍按受支持的 migration 契约升级
 - 合并恢复按快照导出时刻结算运行中的自由专注和番茄时钟，导入的任务保持暂停，目标库的活动任务继续运行。定时提醒以持久化身份判重，已推进、改名或暂停的目标提醒保留当前状态。缺少该身份的旧快照按源数据库摘要和源行号识别重复导入；不同旧快照里的提醒可能重复，优先保留无法确认同源的记录。
 - WebDAV 下载先校验归档；索引含归档摘要时，下载文件还须匹配该摘要才能进入恢复确认。旧条目和手动备份可沿用无摘要的预览校验。
@@ -189,7 +145,7 @@ Tauri application command 采用显式、默认拒绝的窗口授权模型：
 
 #### WebDAV 凭据与跨资源保存
 
-- WebDAV 地址、用户名和远端目录可作为非秘密配置持久化；密码不得进入 SQLite、事件载荷、远端索引或日志。唯一允许返回密码的 IPC 是 main window 用户明确点击“显示密码”触发的 `cmd_reveal_webdav_backup_secret`：handler 必须执行真实窗口 caller guard，前端不得在打开弹窗时预取，隐藏或关闭弹窗后必须清除已读取的明文预览；mini 和其他窗口不得获得该命令
+- WebDAV 地址、用户名和远端目录可作为非秘密配置持久化；密码不得进入 SQLite、事件载荷、远端索引或日志。返回密码的请求限于主窗口用户明确点击“显示密码”触发的 `DavReveal`：handler 必须执行真实窗口 caller guard，前端不得在打开弹窗时预取，隐藏或关闭弹窗后必须清除已读取的明文预览；mini 和其他窗口不得获得该命令
 - WebDAV 配置保存由 `data/remote_backup_config.rs` 协调。完整校验后先创建不可变候选凭据，SQLite 事务原子提交配置、凭据引用和保存标识，再清理旧凭据。`platform/credentials/store.rs` 在 profile 私有目录记录不含秘密的归属凭证；凭据只按本机归属和配置身份读取。保存、删除和网络快照取得共用锁，网络请求持有已取得的完整配对；清理失败不改变已提交结果，可在后续读取中重试。备份不授予本机凭据访问权：覆盖恢复解绑，合并保留已有配对或将新增配置标为待配置。旧凭据只为无引用的现存配置读取，首次保存转换后退役；回退到不支持引用协议的旧程序需要重新配置密码
 
 #### 追踪快照一致性
@@ -215,48 +171,7 @@ Tauri application command 采用显式、默认拒绝的窗口授权模型：
 
 ### 4.5 命名与跨层协议
 
-命名规范优先服务边界清晰，而不是追求所有层表面一致。
-
-Rust 侧继续遵守 Rust 习惯：
-
-- 文件名、模块名、函数名、变量名、struct 字段使用 `snake_case`
-- 类型、struct、enum、trait 使用 `PascalCase`
-- 常量使用 `SCREAMING_SNAKE_CASE`
-- 多词 Rust 文件名使用 `_`，例如 `loop_state.rs`；单词文件名不强行加 `_`，例如 `support.rs`
-
-前端业务模型继续遵守 TypeScript / React 习惯：
-
-- React 组件文件使用 `PascalCase.tsx`
-- hook 文件和函数使用 `useXxx.ts` / `useXxx`
-- service、gateway、helper 文件使用 `lowerCamelCase.ts`
-- 类型和 interface 使用 `PascalCase`
-- 普通变量、函数、props 与前端模型字段使用 `camelCase`
-- 常量使用 `SCREAMING_SNAKE_CASE`
-
-协议和数据边界不为了前端命名偏好破坏兼容：
-
-- Tauri command 名称保持既有 `snake_case`
-- Tauri command 参数在 invoke 边界按现状处理，不做无收益重命名
-- Tauri event 名称保持既有 `kebab-case`
-- tracking data changed reason 保持既有 `kebab-case`
-- SQLite 表名、字段名与持久化 key 保持 `snake_case`
-- serde 输出默认允许 Rust / 数据协议侧的 `snake_case`
-
-Raw DTO 只能停留在明确边界：
-
-- `src/platform/**` 可以定义 `RawXxxDto`、`RawXxxSnapshot` 或局部 raw row，并负责映射为前端模型
-- `src/features/*/services/*ReadModel.ts` 只允许在 read model 内部短暂承接数据库 raw row，不允许继续向组件、hook 或 view model 扩散
-- `src-tauri/**` 继续使用 Rust 与协议侧命名
-- 测试 raw payload fixture 必须让 raw 意图清楚，优先使用 `Raw` 前缀或直接验证 raw parser
-
-前端业务层默认不承载 raw DTO：
-
-- `src/app/**`、`src/features/*/components/**`、`src/features/*/hooks/**`、`src/features/*/services/*ViewModel.ts` 不应读取 IPC 或 SQLite raw 字段
-- `src/shared/types/**` 默认承载前端模型，不作为协议转储层
-- `src/shared/lib/**` 的通用业务函数入参和返回值默认使用前端模型字段
-- 例外必须有明确 owner，要么留在允许目录，要么类型名带 `Raw` 并保持变薄
-
----
+Rust 模块、函数与字段使用 snake_case，类型使用 PascalCase。数据库、备份格式、宿主消息和独立发布的 Web Sync 协议各自维护兼容边界。协议字段的序列化名称与既有数据保持兼容。
 
 ### 4.6 GPUI 实验版工具插件
 
@@ -264,7 +179,7 @@ GPUI 主窗口在「分类」与「设置」之间提供「工具」入口。窗
 
 外部插件以单个签名包分发。宿主在预览和确认时校验内容摘要、API 版本和发布者。更新及重装须符合原 ID 的发布者绑定。新模块成功返回合规面板后，宿主才原子替换已有安装；实例代次用于拒绝旧动作。工具无法自行取得文件、网络或数据库访问。插件所需的通用能力在安装时展示，Rust 作者可用同一入口发布文本、表单、按钮和后台计时。[包校验与运行时](../desktop/tool-host/src/lib.rs) · [插件作者指南](../desktop/plugins/counter/README.md)
 
-专注和提醒随程序分发为两个独立 Wasm 包。两者各自拥有面板及任务动作，绑定的原生数据适配器复用已有 SQLite 任务、阶段转换、专注历史和日程事务。旧任务沿用原 ID、历史关系和备份身份。卸载专注会结算活动区间，卸载提醒会暂停日程与使用规则。宿主保留数据和卸载选择；重启会完成中断的撤销，主动重装后由用户重新启动任务。通知确认还校验当前事件及其来源任务。[随附插件](../desktop/plugins/official) · [原生数据适配器](../src-tauri/src/recording/tools.rs) · [通知与使用提醒](../desktop/patina/src/tool_events.rs)
+专注和提醒随程序分发为两个独立 Wasm 包。两者各自拥有面板及任务动作，绑定的原生数据适配器复用已有 SQLite 任务、阶段转换、专注历史和日程事务。旧任务沿用原 ID、历史关系和备份身份。卸载专注会结算活动区间，卸载提醒会暂停日程与使用规则。宿主保留数据和卸载选择；重启会完成中断的撤销，主动重装后由用户重新启动任务。通知确认还校验当前事件及其来源任务。[随附插件](../desktop/plugins/official) · [原生数据适配器](../desktop/recorder/src/recording/tools.rs) · [通知与使用提醒](../desktop/patina/src/tool_events.rs)
 
 ### 4.7 GPUI 原生更新
 
@@ -274,183 +189,21 @@ GPUI 主窗口在「分类」与「设置」之间提供「工具」入口。窗
 
 ### 4.8 原生设置与存储
 
-[设置窗口](../desktop/patina/src/settings.rs) 拥有主题和语言预览，取消或离开页面时还原未保存的预览。[存储界面](../desktop/patina/src/settings/storage.rs) 拥有导出、导入、备份、恢复和定时配置弹窗；[存储服务](../src-tauri/src/recording/storage.rs) 复用共享数据协议与事务，持久保存按格式区分的导出偏好。
+[设置窗口](../desktop/patina/src/settings.rs) 拥有主题和语言预览，取消或离开页面时还原未保存的预览。[存储界面](../desktop/patina/src/settings/storage.rs) 拥有导出、导入、备份、恢复和定时配置弹窗；[存储服务](../desktop/recorder/src/recording/storage.rs) 复用共享数据协议与事务，持久保存按格式区分的导出偏好。
 
-原生数据目录迁移在所选目录下使用 `Patina` 子目录，所选目录本身已名为 `Patina` 时直接使用它。数据库和本地备份在重启时一起迁移；[迁移实现](../src-tauri/src/recording/storage/migration.rs) 拒绝覆盖已有目标，用暂存目录确认发布归属，持久保存新位置后才清理已确认复制的源文件。共享的数据库、导入导出和备份模块仍由原有 data owner 维护。
+原生数据目录迁移在所选目录下使用 `Patina` 子目录，所选目录本身已名为 `Patina` 时直接使用它。数据库和本地备份在重启时一起迁移；[迁移实现](../desktop/recorder/src/recording/storage/migration.rs) 拒绝覆盖已有目标，用暂存目录确认发布归属，持久保存新位置后才清理已确认复制的源文件。共享的数据库、导入导出和备份模块仍由原有 data owner 维护。
 
 ## 5. 前端长期结构
 
-当前前端长期结构为：
-
-```text
-src/
-  app/
-  features/
-  shared/
-  platform/
-```
-
-`src/styles/` 是 CSS-only 的 Quiet Pro 样式资产区，由 `src/App.css` 作为单入口汇总导入；它不承接 TypeScript 业务代码、平台适配或跨层逻辑，因此不视为新的前端 owner 层。
-
-前端终局结构中不再保留：
-
-- 根层 `src/lib/`
-- 根层 `src/types/`
-
-### 5.1 `app/`
-
-`app/*` 负责：
-
-- 应用入口与壳层
-- 启动 bootstrap
-- 全局 provider
-- 页面切换与全局对话框
-- 跨 feature 运行时编排
-
-#### 工具通知生命周期
-
-`app/tool_notifications` 是工具到期事件的唯一呈现协调器；`domain/tool_notifications` 拥有偏好合法值与提醒有效性规则，`data/repositories/tools/notification_preferences` 在 settings 表内事务合并偏好。通知方式只影响之后首次呈现的事件，当前事件不迁移载体。主窗与通知窗读取带修订号的定向快照；动作校验真实窗口、当前提醒 ID 和工具状态后，复用 engine 的业务操作。
-
-`tool-notification` 按需创建独立 WebView，只装配主题、语言、当前提醒及其目标图标。内容就绪后在前台窗口所在屏幕工作区非激活显示，复用现有提醒组件，首次成功呈现只播放一次本地合成音。窗口销毁不确认业务；创建或加载失败有界重试并在工具页提供失败状态及重试入口，不降级为抢焦点弹窗。队列清空释放窗口，明确退出后不重建。定时提醒仍从持久化的待确认状态恢复；其他类型保留原有业务恢复边界，不构成持久化通知历史。
+主窗口持有页面导航和未保存编辑的确认。工具页的左侧分区显示已安装工具，跟随主导航的图标或图文模式。首次打开优先显示提醒，重开时恢复此 profile 上次选择的已安装工具。Mini 指定的工具优先于保存的选择。面板动作交给常驻工具服务。共享布局、输入、选择控件、键盘焦点、主题与色板归 [QuietPro](../desktop/quietpro/src/lib.rs)。
 
 #### Mini 生命周期
 
-迷你窗由主标题栏独立打开，使用 `mini` label 和独立 WebView；主窗口最小化统一进入任务栏。`domain/mini_window` 拥有几何、收起规则与工具投影，`domain/window_geometry` 保存 Windows 全屏检测也需要的物理坐标值类型。`app/mini_window` 串行应用窗口动作与工具导航请求并编排生命周期；窗口偏好保存失败时回滚已应用状态。`data/mini_window_store` 保存独立偏好并读取 bootstrap。前端 `app/mini` 拥有活动区、标题栏状态入口、状态指示与订阅，接受带会话代次与修订号的窗口状态；活动区不再由旧页面偏好切换。主窗聚焦不关闭 mini，悬停展开不激活窗口，关闭 mini 释放它自己的检测任务和 WebView。
-
-追踪与工具展示快照沿用 tracking transition 锁。今日与最近一小时通过 Mini 专用只读命令，在同一 SQLite 事务和时间截点读取活动事实、分类与显示元数据，不占用 tracking transition 锁。今日沿用小时读模型的 projection / fallback，最近一小时沿用精确会话与网站归并规则；时间线纯规则由 `shared/lib` 供 History 与 Mini 消费。内容只在展开时刷新，折叠清理内容任务并丢弃迟到请求；失败与空数据分别呈现。主界面与 Mini 共用工具状态入口组件和文案规则，固定计时在前、提醒在后，每类最多一个。计时仅在运行时显示；多个运行任务选最近更新的任务，更新时间相同优先番茄计时。提醒选最早 scheduled 项，同一时刻按 ID 排序；仅在触发时间位于当前时刻至未来 24 小时内时显示，随时钟自动更新。Mini 固定为 320×240，不随工具状态加高。点击状态入口打开主界面对应工具分区；`app/main_window/tools_navigation` 暂存最近目标，主窗口订阅后读取一次，后台回收和重建不丢失请求，正常未保存编辑确认仍生效。mini 不挂载主界面页面树、不延长主窗口后台寿命，主窗口释放后仍能更新内容。收起后停止内容刷新和健康轮询，状态颜色继续通过追踪与设置事件更新。
-
-小时图消费已有 `hourly_activity_chart_mode`；时间线模式由 `activityDisplaySettings` 定义，规范值存入 `history_timeline_mode`。主窗口启动时迁移旧本地偏好，事务插入不覆盖已存在的规范值，成功后清理旧值；History 写入并广播设置变化，Mini 只读跟随。两个窗口使用相同的模式解析和网站不可用回退，不共享历史日期、缩放或详情筛选状态。
-
-贴边展开与收起保持原生画布及 WebView 视口的位置、尺寸稳定。横条与活动区使用不透明背景；前端连续改变外壳的位置和尺寸，内容保持原有布局并淡入淡出。展开前放开原生裁剪；收起时，等待外壳、内容与横条标记的当前视觉过渡都完成后，再将显示和鼠标命中区域裁回横条，避免缩窗重排造成闪帧。前端确认携带会话代次与过渡编号，迟到确认不能结束新的过渡。视觉插值归前端，原生目标与裁剪归 mini owner；收起确认缺失时仍有界收回面板命中区域，环境改变、拖动和重建不继续旧过渡。
-
-#### app 的职责限制
-
-`app/*` 不负责：
-
-- feature 私有规则
-- feature 私有格式化
-- 直接写 SQL
-- 平台网关实现
-- 持续膨胀成新的全局业务中心
-
-### 5.2 `features/`
-
-`features/*` 负责产品能力闭环。
-
-每个 feature 可以按真实需要拥有自己的局部目录或类型文件：
-
-- `components/`
-- `hooks/`
-- `services/`
-- `types.ts`
-
-这些不是必须配齐的固定四件套。只有当该 feature 确实有对应 UI、状态编排、服务逻辑或共享类型时才创建；像 `about` 这类轻量页面只保留 `components/` 是合理的。
-
-实际 feature 清单由 [`src/features/`](../src/features/) 持有。页面型 feature 拥有各自主路径；跨页面能力按独立职责组织，不复制页面私有实现。
-
-`destination` 拥有跨 Dashboard、History 与 Data 的应用/网页对象详情能力，包括详情目标契约、打开状态、读模型、时间轴视口、用户偏好和弹窗 UI。来源页面只能构造公开的 `DestinationDetailTarget` 并调用公开 launcher；不得直接读取 `destination/services/*`，也不得复制一套页面私有详情弹窗。
-
-时间线列表、时间轴概括和对象详情消费有效片段，显示组的起止跨度不参与有效用时计算。详情先限定对象；视窗裁剪使用组内真实片段，短间隔归组不补空档、不吞穿插对象。应用保留上游明确的持续参与连续性。网页在相同浏览器客户端、浏览器类型、可执行文件和域名集合内按区间并集计量，独立来源累计；前端既有网页 compiler 与 Rust data 聚合遵守同一来源政策，原始记录不改写。
-
-History 时间轴的分钟主要对象色块负责概括，分轨与图例累计使用完整有效片段。最短时长筛选只改变可见组，不影响总览。时间线和详情的筛选各自支持0～10分钟，0不过滤有效组；各自默认值、存储键及紧凑用时格式保持独立。显示文本的逐行取整不承担总量对账。
-
-### 5.3 `shared/`
-
-`shared/*` 只容纳已脱离单一 feature、语义稳定、不依赖页面局部状态且不直接承担平台细节的跨 feature 能力，例如 Quiet Pro 原型、共享 hooks/类型、纯展示格式化和低上下文依赖的只读模型。
-
-`shared/lib/*` 存放这些稳定共享逻辑，不作为平台或持久化适配的默认落点，也不堆放临时公共能力或兼容层。真实兼容例外仍须满足第 3.7 节。
-
-### 5.4 `platform/`
-
-新增前端外部环境适配默认优先进入 `platform/*`，包括 runtime/persistence gateway、备份与更新适配、桌面能力包装。子目录优先按能力边界命名，如 `runtime/`、`persistence/`、`desktop/`、`backup/`、`storage/`。
-
-`platform/tauri/` 等历史技术名目录不作为新命名先例，也不继续扩张。
-
-### 5.5 前端兼容壳规则
-
-前端允许保留少量兼容壳，例如：
-
-- 为旧调用方保留的薄转发入口
-- 逐步迁移中的服务形状兼容层
-
-但这些兼容壳必须满足：
-
-- 自身不新增 feature 私有规则
-- 自身不直接承担平台实现
-- 优先做转发、组合、类型兼容
-- 一旦真实 owner 已清晰，新逻辑直接落到真实 owner，而不是继续堆在兼容壳上
-
----
+[Mini](../desktop/patina/src/mini.rs)读取当前活动和工具状态，点击工具时由主窗口导航。隐藏和重开由窗口生命周期管理，录制继续运行。
 
 ## 6. Rust 长期结构
 
-当前 Rust 长期结构为：
-
-```text
-src-tauri/src/
-  main.rs
-  lib.rs
-  app/
-  commands/
-  platform/
-  engine/
-  domain/
-  data/
-```
-
-### 6.1 `main.rs` 与 `lib.rs`
-
-它们负责应用入口与总装配。
-
-允许承担：
-
-- context 获取
-- builder 组装
-- plugin 注册
-- invoke handler 汇总
-- setup 链路接入
-
-不应承担：
-
-- 厚业务逻辑
-- 仓储实现
-- 平台细节
-- 核心 tracking 规则
-
-### 6.2 `app/`
-
-`app/*` 负责：
-
-- Tauri 应用装配
-- runtime state
-- tray / window 生命周期协调
-- 应用级启动链路
-
-桌面行为中，关闭后的后台驻留与托盘图标显示是独立决策。`domain/settings.rs` 拥有偏好规则，`app/desktop_behavior.rs` 从已保存设置更新运行时，`app/tray.rs` 在原生事件循环应用显隐。隐藏启动可暂不创建托盘对象，首次显示时创建并随后复用；主窗口仍通过既有单实例链路恢复。后台启动驻留与故障恢复入口由应用状态区分，明确退出优先于驻留。设置保存需要等待原生应用结果，并区分写入失败与已保存但未能应用。
-
-`app/*` 不负责：
-
-- 仓储细节
-- SQLite pool 获取或 SQL 事务
-- `data::repositories::*` 直连
-- 厚领域判断
-- 第二套业务中心
-
-### 6.3 `commands/`
-
-`commands/*` 只做：
-
-- `#[tauri::command]` 入口
-- 参数接收
-- DTO 映射
-- 转发到 `app / engine / data`
-
-`commands/*` 不做：
-
-- 大段业务判断
-- 复杂时序编排
-- 平台 API 细节
-- 仓储实现细节
+[桌面工作区](../desktop/Cargo.toml)分别维护应用、录制与存储、控件、工具宿主、插件 SDK、更新及原生测试支持。桌面入口负责装配和退出顺序。以下模块路径相对 Recorder 源码目录。
 
 ### 6.4 `platform/`
 
@@ -469,7 +222,7 @@ src-tauri/src/
 
 #### 原生探测的隔离与回收
 
-不可可靠取消的 Windows 前台、名称、图标、媒体和音频探测由 `platform/windows/native_probe` 隔离。各类探测使用固定、独立的子进程通道；主程序的受限子模式先于 Tauri bootstrap 分派，不创建窗口、数据库或单实例注册。父进程通过有长度上限的匿名管道传递数据，以请求序号校验响应，并用 Windows Job 管理进程归属。期限到达后须确认旧进程及通信线程结束，才允许替换；无法确认退出时停止该通道的重建。
+不可可靠取消的 Windows 前台、名称、图标、媒体和音频探测由 `platform/windows/native_probe` 隔离。各类探测使用固定、独立的子进程通道；主程序的受限子模式先于常驻宿主初始化分派，不创建窗口、数据库或单实例注册。父进程通过有长度上限的匿名管道传递数据，以请求序号校验响应，并用 Windows Job 管理进程归属。期限到达后须确认旧进程及通信线程结束，才允许替换；无法确认退出时停止该通道的重建。
 
 helper 的存活由现有诊断观察线程通过该世代持有的进程句柄非等待检查，不获取请求通道的准入锁，也不新增轮询线程。进程仍存活时不读取异常记录或访问请求发送器。确认退出后，进程 owner 保存唯一退出事实并关闭发送器，使空闲通信线程能够结束；只有仍为当前世代的观察器才能清除当前 PID 与上次响应缓存、发布退出计数，晚到的旧观察不能覆盖替代进程。退出码、创建 / 退出 FILETIME、已取得的清理耗时及历史异常分别保留，未知耗时不记零。下一次请求先确认旧进程和通信线程已回收，再创建新世代；已经发送的失败请求不自动重放。退出码与本进程是否请求过终止属于观察事实，不能单独确定故障 API 或外部终止来源。
 
@@ -485,7 +238,7 @@ helper 的未处理异常使用预留的固定大小共享记录保存异常码�
 
 #### 诊断边界
 
-`platform/runtime_diagnostics` 在独立线程读取不可阻塞的进度快照，以有限队列交给轮转日志线程。诊断不等待 tracking 锁、SQLite 或 WebView；日志不可写时计数并舍弃输出。诊断阶段可以定位停顿边界，不能代替原生线程栈证明具体 API 根因。
+`platform/runtime_diagnostics` 在独立线程读取不可阻塞的进度快照，以有限队列交给轮转日志线程。诊断不等待 tracking 锁、SQLite 或窗口线程；日志不可写时计数并舍弃输出。诊断阶段可以定位停顿边界，不能代替原生线程栈证明具体 API 根因。
 
 ### 6.5 `engine/`
 
@@ -496,7 +249,7 @@ helper 的未处理异常使用预留的固定大小共享记录保存异常码�
 - watchdog / self-heal / updater 等核心流程
 - 与平台事件、数据边界对接的行为编排
 
-tracking 相关逻辑在 [`engine/tracking/`](../src-tauri/src/engine/tracking/) 内按职责演进，不回流到单个超厚文件或入口层。`runtime.rs` 保持主循环编排；持续参与、连续性、封口、轮询、电源生命周期等细节优先留在相邻 owner 模块。当前模块清单由源码目录持有。
+tracking 相关逻辑在 [`engine/tracking/`](../desktop/recorder/src/engine/tracking/) 内按职责演进，不回流到单个超厚文件或入口层。`runtime.rs` 保持主循环编排；持续参与、连续性、封口、轮询、电源生命周期等细节优先留在相邻 owner 模块。当前模块清单由源码目录持有。
 
 `engine/tracking` 统一决定应用的有效活动区间，协调转换、暂停、排除、电源、watchdog 和恢复边界。转换失败不得推进已提交状态；失效资格必须先反映到快照，旧采样、请求和持续参与状态不得跨停止边界复用。中断恢复使用最后成功采样，普通心跳不证明活动；证据缺失或无效时以会话起点结束，不补记停机时间。
 
@@ -548,78 +301,30 @@ tracking 相关逻辑在 [`engine/tracking/`](../src-tauri/src/engine/tracking/)
 
 ### 6.8 Rust 兼容与演进规则
 
-Rust 侧允许为了稳定演进保留少量入口协调或兼容封装，但规则是：
-
-- 新增核心逻辑优先进入 `engine / domain / data`
-- `app/*` 只保留装配与 runtime 协调，不吸收厚业务
-- `commands/*` 只保留 IPC 边界适配，不吸收流程编排
-- 如果某段逻辑未来还会继续增长，优先先给它一个真实 owner，而不是暂挂在入口层
+历史 SQLite 数据、备份与外部协议按各自格式验证。新增领域逻辑进入对应的 domain、engine 或 data 模块。
 
 ### 6.9 运行身份与持久化隔离
 
-安装版、日常开发版和隔离验证版可以同时运行，但必须是不同的运行身份，而不是共享同一身份后再靠调用纪律避让：
-
-- 正式安装版使用 `com.ceceliaee.patina` 与 `Patina` 数据目录。
-- `pnpm run tauri dev` 必须自动合并 `src-tauri/tauri.dev.conf.json`，使用 `com.ceceliaee.patina.dev`、`Patina Dev` 数据目录和独立单实例作用域。
-- 本地 release 验证需要独立身份时使用 `src-tauri/tauri.local.conf.json`，不得把普通 debug 构建指向正式版数据。
-- `platform/app_paths.rs` 是运行身份到数据、缓存路径映射的唯一 owner；调用方不得自行拼接正式版、开发版目录。
-- debug 构建若仍携带正式版身份，必须在接触数据 anchor、SQLite、备份或 WebView 持久化之前失败关闭；只有显式提供绝对隔离根目录的自动化测试可例外。
-- 正式构建与安装包仍使用默认生产配置。开发入口的保护不得改变 `tauri build`、发布签名或安装版升级路径。
-
-这条边界的目的不是禁止共存，而是保证共存时迁移、设置、备份、单实例锁与 WebView 状态互不污染。数据库 migration 只负责同一运行身份内的版本升级，不能承担开发版与安装版之间的并发兼容。
-
----
+开发启动器提供独立的开发目录。桌面入口从规范化 profile 路径建立单实例身份并锁定目录，自动化测试使用临时 profile。正式发行前的安装身份与历史数据衔接由[发布规范](versioning-and-release-policy.md#96-gpui-原生更新包)管理。
 
 ## 7. 新增代码 owner 与落点
 
-新增代码先判断真实 owner，再选择最小作用域；不能先选一个方便目录，再为其补理由。
-
-| 问题 | 前端落点 |
+| 能力 | 实现位置 |
 | --- | --- |
-| 某个 feature 私有的 UI、状态、hook、service 或读模型 | `features/*` 下对应 owner |
-| 稳定、低上下文依赖且跨 feature 的类型、纯函数或组件 | `shared/*` |
-| Tauri、SQLite、本地桌面环境等外部适配 | `platform/*` |
-| 应用启动、壳层或跨 feature 编排 | `app/*` |
-
-| 问题 | Rust 落点 |
-| --- | --- |
-| Tauri 命令入口与参数映射 | `commands/*`，保持薄 |
-| 应用装配、生命周期或 runtime 协调 | `app/*` |
-| Windows、系统 API 与其他平台事实 | `platform/*` |
-| 核心行为流程 | `engine/*` |
-| 领域语义与稳定契约 | `domain/*` |
-| SQLite、仓储、migration 与数据边界 | `data/*` |
-
-补充边界：
-
-- 设置页面及其弹窗归 `desktop/patina/src/settings*`；应用启动读取偏好和 tracker health 协调归各宿主；尚在使用的前端 persistence adapter 归 `platform/persistence/*`，共享数据事务继续归 Rust data owner。
-- 持续参与识别按 `platform/windows/* -> domain/tracking* -> engine/tracking/*` 的 owner 链收口，不回流到 `commands/*`、`lib.rs` 或前端本地规则。
-- 不能明确证明共享时，先留在 feature 或最小 owner；不能明确证明平台边界时，不进入 `platform/*`。
-
-## 8. 禁止事项
-
-第 3～7 节的职责限制同样适用于整理和重构：不得恢复已退出的根层 `src/lib/*`、`src/types/*`，不得让入口、共享或平台层吸收领域逻辑，也不得把 engine 收回单个超厚文件。文件位置正确不等于职责正确；审查实际依赖与状态 owner，不为目录整齐进行无收益搬迁。
-
----
-
-## 9. 当前重点防守区
-
-修改前端 `app/*`、`shared/*`（尤其 `shared/lib/*`）、`platform/*`，以及 Rust `lib.rs`、`app/*`、`commands/*` 时，先确认真实 owner，避免让入口或共享层吸收领域逻辑。若这些高吸力层明显变厚，应先暂停并重新判断边界。
+| 页面、Mini、通知、托盘与窗口进程 | desktop/patina |
+| 调色板、预设、布局、可复用控件 | desktop/quietpro |
+| SQLite、迁移、活动采集、备份恢复与统计 | desktop/recorder |
+| 工具包验证、执行与作者接口 | desktop/tool-host、desktop/plugin-sdk |
+| 更新清单、下载、签名及安装 | desktop/updater、desktop/installer |
+| Win32 隔离桌面和跨 crate 测试辅助 | desktop/test-support |
 
 ## 10. 如何判断架构在健康落地
 
-以第 3 至第 7 节的分层和 owner 规则审查实际依赖，并保护以下跨层约束：
-
-- `engine/*` 通过显式数据端口隔离持久化，只调用 `platform/*` 的窄平台能力；原始 Windows API 不进入 engine，跨 owner 的数据实现与生命周期由 `app/*` 组合。
-- `platform/*` 只报告外部环境事实或实现显式端口，不反向调用应用层。
-- `domain/tracking.rs` 等领域聚合出口保持薄，稳定语义拆入明确的 `domain/tracking/*` owner。
-- 高吸力层边界有轻量自动化门禁；关键路径变更能通过固定验证回归。
+领域层持有状态转换。Windows 接口报告外部事实，engine 通过显式端口组合采样和存储。窗口通过宿主请求访问服务，单个 profile 只有一个录制写入者。
 
 ## 11. 最低验证门槛
 
-默认验证入口、风险追加和证据有效性由 [`engineering-quality.md`](./engineering-quality.md#5-默认验证门槛) 定义；命令组合由 [`package.json`](../package.json) 持有。本文只补充架构检查必须保护的事实。
-
-边界门禁必须覆盖静态与动态 import、重导出、直接 IPC 调用和剥离测试模块后的 Rust 生产依赖。例外只能是精确、可审计且有自测的局部例外，不能使用目录级通配豁免。真实 runtime、IPC 注册或 capability 变更还需要真实 Tauri runtime smoke，静态一致性不能代替运行时证据。
+改数据边界时验证 Recorder 事务与恢复。窗口、进程及系统集成使用对应 Windows 验收。验证入口及其适用范围见[工程质量](engineering-quality.md#5-默认验证门槛)。
 
 ## 12. 与其他长期文档的关系
 

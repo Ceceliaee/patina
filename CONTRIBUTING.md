@@ -181,50 +181,16 @@ scope approval before marking the pull request ready for review.
 
 ### 3.4 Install Dependencies
 
-Work from a local clone of this repository on Windows. Install the [Tauri Windows prerequisites](https://v2.tauri.app/start/prerequisites/#windows): Microsoft C++ Build Tools with Desktop development with C++, WebView2, and Rust using an MSVC host. The repository pins Rust in [rust-toolchain.toml](rust-toolchain.toml).
+Install Microsoft C++ Build Tools with Desktop development with C++ and Rust for the Windows MSVC host. The [desktop toolchain](desktop/rust-toolchain.toml) pins Rust. Use the Node and pnpm versions from .node-version and package.json.
 
-If you do not have a checkout yet:
+From the repository root, install the tooling dependencies and start the development app.
 
-```bash
-git clone https://github.com/Ceceliaee/patina.git
-cd patina
-```
-
-Run the following commands from the repository root.
-
-Use Node from `.node-version` and the exact pnpm version in `package.json#packageManager`. Install that pnpm version with `npm install --global pnpm@<version>` if needed. Use the committed lockfile when preparing a contribution:
-
-```bash
+```sh
 pnpm install --frozen-lockfile
+pnpm run dev
 ```
 
-Start the development app:
-
-```bash
-pnpm run tauri dev
-```
-
-`pnpm run tauri dev` automatically uses `src-tauri/tauri.dev.conf.json`. Do not
-start a debug build with the production identifier: development and installed
-editions are designed to coexist with separate data and single-instance scopes.
-
-The startup outcome is a development window with usable navigation. If startup fails, inspect the first terminal error, check the pinned toolchains and Windows prerequisites, and leave the installed app's data untouched. `pnpm run build` builds the frontend only; installer preparation follows the [release policy](docs/versioning-and-release-policy.md#10-发布前的最低验证门槛).
-
-#### Test Single-Instance Recovery
-
-Debug builds disable single-instance recovery by default. To test reopening with
-the tray icon hidden, stop the existing development process and run the following
-in PowerShell from the repository root:
-
-```powershell
-$env:PATINA_E2E_SINGLE_INSTANCE = "1"
-pnpm run tauri dev
-```
-
-Keep that terminal running. In another PowerShell at the repository root, set the
-same environment variable and run `& .\src-tauri\target\debug\patina.exe` to reveal
-the existing development window. The installed app's Start menu entry cannot
-reopen a development instance.
+The development launcher uses a separate profile under LOCALAPPDATA. Use the [native build and release policy](docs/versioning-and-release-policy.md#96-gpui-原生更新包) when preparing an installer.
 
 ## 4. Branch And Commit Workflow
 
@@ -338,7 +304,7 @@ Choose the owner before choosing a file. Use the [placement map](docs/architectu
 
 ### 5.2 Frontend Rules
 
-Follow the [frontend structure](docs/architecture.md#5-前端长期结构): feature work stays with its feature, shared code needs real shared semantics, and platform access goes through the explicit boundary. Components and hooks must not bypass that boundary to reach SQLite, Tauri, or platform gateways.
+Keep page behavior with its GPUI owner, shared controls in QuietPro, and SQLite access in Recorder. See the [placement map](docs/architecture.md#7-新增代码-owner-与落点).
 
 ### 5.3 Rust Rules
 
@@ -383,7 +349,7 @@ For validation stages, evidence reuse and local/CI responsibilities, follow the
 
 For local changes, run the related tests and static checks selected under
 [engineering quality §5](docs/engineering-quality.md#5-默认验证门槛).
-For cross-module frontend behavior:
+For repository tooling:
 
 ```bash
 pnpm run check
@@ -396,17 +362,7 @@ test target and named case through the
 [GPUI test guide](docs/engineering-quality.md#gpui-测试文件与定向入口).
 Recorder data contracts do not require launching a GPUI window.
 
-When [engineering quality §5](docs/engineering-quality.md#5-默认验证门槛)
-requires full validation, use the affected architecture's aggregate. For the
-GPUI workspace, run `cargo test --locked --workspace` from `desktop/` and the
-required static and native checks. For the retained Tauri/TypeScript application:
-
-```bash
-pnpm run check:full
-```
-
-Select additional native and performance checks through
-[risk-based desktop validation](docs/engineering-quality.md#风险追加与桌面验收).
+From desktop/, run cargo test-headless --locked for the native workspace. Use pnpm run check:full from the root when the change also affects shared tooling or the build chain. Select additional native and performance checks through the [desktop validation guide](docs/engineering-quality.md#gpui-测试文件与定向入口).
 
 ### 6.3 Release Validation
 
@@ -832,48 +788,16 @@ Draft PR 不运行准入 job。请先完成模板并获得范围批准，再将 
 
 #### 3.4 安装依赖
 
-在 Windows 上使用本仓库的本地 clone。先按 [Tauri Windows 前置条件](https://v2.tauri.app/start/prerequisites/#windows)准备包含“使用 C++ 的桌面开发”的 Microsoft C++ Build Tools、WebView2 和 MSVC host 的 Rust。仓库通过 [rust-toolchain.toml](rust-toolchain.toml)固定 Rust 工具链。
+在 Windows 安装含“使用 C++ 的桌面开发”的 Microsoft C++ Build Tools 与 MSVC Rust 工具链。桌面工具链由 [desktop/rust-toolchain.toml](desktop/rust-toolchain.toml) 固定。Node 与 pnpm 版本分别见 .node-version 和 package.json。
 
-尚无本地 checkout 时：
+从仓库根目录安装工具依赖并启动开发版。
 
-```bash
-git clone https://github.com/Ceceliaee/patina.git
-cd patina
-```
-
-以下命令均在仓库根目录执行。
-
-使用 `.node-version` 指定的 Node 和 `package.json#packageManager` 固定的 pnpm 版本。需要安装 pnpm 时，执行 `npm install --global pnpm@<版本>`。准备贡献时，使用已提交的锁文件安装依赖：
-
-```bash
+```sh
 pnpm install --frozen-lockfile
+pnpm run dev
 ```
 
-启动开发版：
-
-```bash
-pnpm run tauri dev
-```
-
-`pnpm run tauri dev` 会自动加载 `src-tauri/tauri.dev.conf.json`。请勿让 debug
-构建使用正式版 identifier；开发版与安装版应使用彼此隔离的数据目录和单实例作用域，
-并可同时运行。
-
-首次运行的完成信号是开发窗口打开且导航可用。启动失败时先查终端首个错误、固定工具链和 Windows 前置条件，不修改安装版数据。`pnpm run build` 只构建前端；安装包准备遵循[发布规范](docs/versioning-and-release-policy.md#10-发布前的最低验证门槛)。
-
-##### 验证单实例唤回
-
-Debug 构建默认关闭单实例唤回。验证隐藏托盘后的重新打开时，先停止已有开发进程，
-再从仓库根目录的 PowerShell 启动：
-
-```powershell
-$env:PATINA_E2E_SINGLE_INSTANCE = "1"
-pnpm run tauri dev
-```
-
-保留该终端运行，在另一个位于仓库根目录的 PowerShell 设置同一环境变量，
-执行 `& .\src-tauri\target\debug\patina.exe`，即可唤回已有开发窗口。
-开始菜单中的安装版入口不能唤回开发版。
+启动器在 LOCALAPPDATA 下使用开发专用资料目录。安装包按[原生发布规范](docs/versioning-and-release-policy.md#96-gpui-原生更新包)准备。
 
 ### 4. 分支与提交工作流
 
@@ -976,7 +900,7 @@ Refs #4
 
 #### 5.2 前端规则
 
-遵循[前端结构](docs/architecture.md#5-前端长期结构)：feature 私有行为留在所属 feature，共享代码需要真实共享语义，平台访问经过显式边界。组件和 hook 不得跳过该边界直达 SQLite、Tauri 或 platform gateway。
+页面行为归 GPUI 页面，共享控件归 QuietPro，SQLite 访问归 Recorder。参见[落点表](docs/architecture.md#7-新增代码-owner-与落点)。
 
 #### 5.3 Rust 规则
 
@@ -1015,7 +939,7 @@ Refs #4
 #### 6.1 默认代码验证
 
 局部改动按[工程质量第 5 节](docs/engineering-quality.md#5-默认验证门槛)运行相关测试和静态检查。
-前端跨模块行为改动运行：
+仓库工具发生跨模块变化时运行：
 
 ```bash
 pnpm run check

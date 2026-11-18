@@ -42,8 +42,6 @@
 每次发布时，下列位置必须保持同一个版本语义：
 
 - `package.json` 的 `version`
-- `src-tauri/tauri.conf.json` 的 `version`
-- `src-tauri/Cargo.toml` 中 `[package].version`
 - `desktop/patina/Cargo.toml` 中 `[package].version` 与 `desktop/Cargo.lock` 对应条目
 - Git tag
 - GitHub Release 标题
@@ -417,7 +415,7 @@ GitHub Release 继续作为正式发布源、主下载入口和主更新清单�
 
 [`package-gpui.ps1`](../scripts/package-gpui.ps1) 从 GPUI Cargo manifest 读取版本，构建双架构、生成 NSIS 包、签名并用应用公钥复验，全部成功后才写清单。默认输出到 `desktop/target/gpui-release`，已存在的同名包或清单不会被覆盖；重试时使用新的 `-OutputDirectory`。`-Unsigned` 仅生成本地验证安装包，不生成更新清单。安装器的 Windows 发布者及文件公司名称统一为 `Ceceliaee`。
 
-脚本只生成本地资产，不发布 GitHub Release 或 R2。发布工作流在各架构的原生 Windows runner 上调用该脚本，再合并和独立校验两份清单，完成摘要与 attestation 后发布。签名沿用 `TAURI_SIGNING_PRIVATE_KEY` 和 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 两个 secret 名称；前者保存 Base64 编码的 Minisign 私钥文件，后者经进程标准输入提供，临时私钥在成功或失败后均删除。名称沿用不引入 Tauri 构建依赖；私钥必须与应用内公钥匹配。
+脚本只生成本地资产，不发布 GitHub Release 或 R2。发布工作流在各架构的原生 Windows runner 上调用该脚本，再合并和独立校验两份清单，完成摘要与 attestation 后发布。签名使用 `PATINA_SIGNING_PRIVATE_KEY` 和 `PATINA_SIGNING_PRIVATE_KEY_PASSWORD` 两个 secret 名称；前者保存 Base64 编码的 Minisign 私钥文件，后者经进程标准输入提供，临时私钥在成功或失败后均删除。私钥必须与应用内公钥匹配。
 
 ## 10. 发布前的最低验证门槛
 
@@ -429,7 +427,7 @@ GitHub Release 继续作为正式发布源、主下载入口和主更新清单�
 `package.json` 拥有 `release:check` 的检查组成与执行顺序；通用质量门槛由
 [`engineering-quality.md`](./engineering-quality.md#5-默认验证门槛) 拥有。正式发布前，目标提交必须在本仓库 `main` 的 push 事件上通过 `Verify`。发布工作流按 tag 的完整提交 SHA 查验最近一次对应运行及其全部作业；记录缺失、运行未结束、作业未全绿或查询失败时停止。通过后，版本、changelog 和安装包均取自该提交。
 
-`Verify` 包括双架构原生 workspace 测试、Clippy、格式与依赖审计，以及隔离桌面中的更新交互和安装、升级、卸载验收。版本一致性校验同时覆盖原生 Cargo manifest 与 lockfile；`release:sync-version` 同步这两处，仍需按原有版本准备流程刷新和校验旧后端 lockfile。
+`Verify` 的双架构 `Native desktop checks` 运行 workspace 单元、契约和无头控件交互测试，以及 Clippy、格式与依赖审计；独立的 `Native Windows acceptance` 显式启用原生测试，运行隔离桌面中的更新交互和安装、升级、卸载验收。发布门禁要求同一候选的两组任务均成功，无头通过不能替代 Windows 原生验收。版本一致性校验同时覆盖原生 Cargo manifest 与 lockfile；`release:sync-version` 同步这两处，仍需按原有版本准备流程刷新和校验旧后端 lockfile。
 
 GitHub Actions 生成正式发布资产后、发布 GitHub Release 前，还必须执行：
 

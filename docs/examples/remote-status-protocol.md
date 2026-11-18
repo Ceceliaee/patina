@@ -183,4 +183,4 @@ Worker 是否把当前状态持久化，取决于展示链路需求。内置示�
 Patina 发送的数据只代表当前状态，但仍可能暴露正在使用的软件名称。公网展示前应确认屏幕内容符合使用者预期。
 ## 实现与示例边界
 
-发送端字段与时序由 [Rust bridge](../../src-tauri/src/engine/remote_status_bridge/mod.rs)实现；[示例 Worker](./remote-status-bridge-worker/src/index.js)保存最新状态。示例收到 `iconData: null` 或缺省时保留该机器先前的图标，因此无图标输入不保证清掉旧图标；自定义接收端需要按自身展示要求处理 `iconHash` 变化。部署结果仍需按[使用指南](./remote-status-bridge.md#确认连接与快照)验证，源码核对不代表远端部署已验收。
+发送端字段与时序由 [Rust bridge](../../desktop/recorder/src/engine/remote_status_bridge/mod.rs)实现；[示例 Worker](./remote-status-bridge-worker/src/index.js)保存最新状态。示例收到 `iconData: null` 或缺省时保留该机器先前的图标，因此无图标输入不保证清掉旧图标；自定义接收端需要按自身展示要求处理 `iconHash` 变化。部署结果仍需按[使用指南](./remote-status-bridge.md#确认连接与快照)验证，源码核对不代表远端部署已验收。

@@ -65,15 +65,15 @@ cargo +1.100.0 run --locked --manifest-path desktop/Cargo.toml -p patina-gpui --
 本轮 `pnpm run check:full` 通过，包含 232 个浏览器用例、Tauri Rust 回归和依赖审计。原生工作区单独通过 Windows 构建与 Clippy（`--workspace --bins --examples -- -D warnings`）。窗口生命周期和独立控件验收日志保存在本地 `artifacts/gpui-native/`。
 
 - [x] 在 Patina 仓内建立 GPUI 桌面入口和私有 `quietpro` crate（`publish = false`）。选择相互匹配的 GPUI、gpui-base 版本并锁定依赖。用 Windows 构建和依赖树核实实验程序能够独立启动，记录所用版本。[GPUI Base 使用说明](https://gpui-kit.com/base/getting-started/)
-- [x] 沿用 [TrackingDataStore](../../src-tauri/src/engine/tracking/ports.rs) 和现有 SQLite 实现。沿[记录循环](../../src-tauri/src/engine/tracking/runtime.rs)逐处识别经 `AppHandle` 读取的状态、发布的事件及启动的任务，将实际用到的能力交给桌面入口提供。两个宿主调用同一份采样、会话和恢复逻辑。
+- [x] 沿用 [TrackingDataStore](../../desktop/recorder/src/engine/tracking/ports.rs) 和现有 SQLite 实现。沿[记录循环](../../desktop/recorder/src/engine/tracking/runtime.rs)逐处识别经 `AppHandle` 读取的状态、发布的事件及启动的任务，将实际用到的能力交给桌面入口提供。两个宿主调用同一份采样、会话和恢复逻辑。
 - [ ] 在两版上重放完全相同的前台序列，逐条比较应用身份、会话边界和时长。
-- [x] 接入 Windows 托盘的打开 Mini、暂停、恢复与退出动作，参照[现有托盘实现](../../src-tauri/src/app/tray.rs)。先在无可见窗口时验证采样与落库，再验证暂停期间无新增活动、恢复后按新样本起算、显式退出后会话封口。
+- [x] 接入 Windows 托盘的打开 Mini、暂停、恢复与退出动作，参照[现有托盘实现](../../desktop/patina/src/tray.rs)。先在无可见窗口时验证采样与落库，再验证暂停期间无新增活动、恢复后按新样本起算、显式退出后会话封口。
 - [ ] 单独观察退出前后的探测子进程，确认没有残留。
 - [ ] 用锁屏、休眠恢复和进程中断重启验证已有保障。以最后一次有效采样核对恢复边界；不确定的停机时间应保持为空。关闭 Mini 和退出程序分别验证。
 
 ## 3. 用 QuietPro 实现 Mini
 
-现版 Mini 是视觉对照。保留信息层级、明暗色、紧凑尺寸和贴边手感。比如[现版固定和关闭按钮](../../src/app/mini/MiniShell.tsx)的命中尺寸来自[页面 CSS](../../src/styles/mini-window.css)，在原生版中由 QuietPro 持有。每迁一个控件，先区分它是动作、选择还是状态展示，再确定谁持有值、如何触发、能否聚焦，以及禁用时读到什么。视觉一致和行为正确分别验收；后续页面遇到同一种控件就消费同一接口。
+现版 Mini 是视觉对照。保留信息层级、明暗色、紧凑尺寸和贴边手感。比如[现版固定和关闭按钮](../../desktop/patina/src/mini.rs)的命中尺寸参见[原生窗口布局](../../desktop/patina/src/mini.rs)，在原生版中由 QuietPro 持有。每迁一个控件，先区分它是动作、选择还是状态展示，再确定谁持有值、如何触发、能否聚焦，以及禁用时读到什么。视觉一致和行为正确分别验收；后续页面遇到同一种控件就消费同一接口。
 
 - [x] [QuietPro 图标控件](../../desktop/quietpro/src/lib.rs)共享 24 px 命中框、14 px 图标、焦点和禁用样式。关闭接一次动作；固定接当前选中值和变更回调，让辅助技术能读出开关状态。调用方提供稳定 ID 和本地化名称，并持有窗口与业务状态。
 - [x] 用 Windows UI Automation 在独立示例中读到固定开关和复位按钮的名称、开关值和禁用状态。切换一次只更新一次计数，复位后按钮禁用。在 `desktop/` 下运行 `cargo test --locked -p quietpro --test controls -- --ignored`。测试会构建并启动示例。[控件验收测试](../../desktop/quietpro/tests/controls.rs)
@@ -81,7 +81,7 @@ cargo +1.100.0 run --locked --manifest-path desktop/Cargo.toml -p patina-gpui --
 - [ ] 对照现版逐项检查默认浅色、深色及缩放下的 Mini。实验版目前跟随系统明暗外观；自定义预设随设置页迁移。用键盘验证焦点可见、按钮触发一次、禁用时无回调，再验证鼠标悬停不抢输入焦点。视觉差异和组件行为分别记录。
 
 - [ ] 从 Mini 实际需要的主题、文本和图标按钮开始。QuietPro 定义语义颜色、尺寸、交互反馈和组件接口，内部组合 gpui-base 的交互能力。用不连接 Patina 数据库的最小示例验证明暗主题、焦点和触发回调。
-- [ ] Patina 负责窗口位置、贴边、展开和内容，用已有[领域规则](../../src-tauri/src/domain/mini_window)与[展示快照](../../src-tauri/src/app/mini_window/content.rs)接入 GPUI。收起时只消费必要状态，展开时读取活动明细。用快速收起再展开、关闭时仍有读取在途等情形，验证旧结果不会更新新窗口。[Mini 生命周期](../architecture.md#mini-生命周期)
+- [ ] Patina 负责窗口位置、贴边、展开和内容，用已有[领域规则](../../desktop/recorder/src/domain/mini_window)与[展示快照](../../desktop/recorder/src/domain/mini_window/content.rs)接入 GPUI。收起时只消费必要状态，展开时读取活动明细。用快速收起再展开、关闭时仍有读取在途等情形，验证旧结果不会更新新窗口。[Mini 生命周期](../architecture.md#mini-生命周期)
 - [x] 在 125% 缩放下验证展开态客户区为 400 × 300 物理像素，顶部贴合工作区。15 次关闭和重开中，重复请求只打开一个 Mini；被动打开不取得前台焦点。关窗后切换样本应用仍能生成会话。
 - [x] 在 125% 缩放下，固定画布中的可见区域可从 400 × 300 连续收至 140 × 30。验收覆盖展开、收起及收起中途反向。关闭 Windows 客户区动画时直接显示目标状态。
 - [x] 用真实鼠标从横条移入，再从内容区、固定按钮和关闭按钮移出。四次实测在移出后 211–230 ms 开始收起，381–399 ms 恢复横条；等待期间移回面板会取消收起。运行原生 `native-lifecycle` 示例时附加 `-- --pointer` 可复测。
@@ -119,7 +119,7 @@ cargo +1.100.0 run --locked --manifest-path desktop/Cargo.toml -p patina-gpui --
 
 从托盘菜单或 Mini 标题栏打开今天页，重复打开会激活现有窗口。主窗口标题栏也可打开 Mini。[主窗口](../../desktop/patina/src/main_window.rs)管理壳层，[Today](../../desktop/patina/src/today.rs)持有图表、排行和读取任务。关闭窗口会注销页面订阅和刷新任务，后台记录继续使用同一引擎。QuietPro 提供现有的图标动作、开关和明暗色；Today 和 Mini 共用时长格式。环图、小时图和排行留在 Today。
 
-[现版读模型](../../src/features/dashboard/services/dashboardReadModel.ts)比较当地今天截至读取时的活动与完整的昨天。两版复用 [SQLite 小时聚合查询](../../src-tauri/src/data/activity_read_model/hourly.rs)，由它处理原生记录、精确导入、时段导入、匿名活动和重叠优先级。应用排行使用关联后的统计身份、显示名覆盖和占总时长的四舍五入百分比。总时长显示到整分钟，小时图按小时分配并舍入。暂停时静置页面的下次定时读取安排在本地午夜，窗口重新激活会重新读取。
+[现版读模型](../../desktop/patina/src/today.rs)比较当地今天截至读取时的活动与完整的昨天。两版复用 [SQLite 小时聚合查询](../../desktop/recorder/src/data/activity_read_model/hourly.rs)，由它处理原生记录、精确导入、时段导入、匿名活动和重叠优先级。应用排行使用关联后的统计身份、显示名覆盖和占总时长的四舍五入百分比。总时长显示到整分钟，小时图按小时分配并舍入。暂停时静置页面的下次定时读取安排在本地午夜，窗口重新激活会重新读取。
 
 [Rust 验收](../../desktop/patina/tests/today.rs)在独立 SQLite 库写入跨午夜的 Studio 会话、Writer 会话、与 Writer 重叠的精确导入及匿名活动。预期今天 70 分钟、昨天 30 分钟；三项排行分别为 45、20、5 分钟（64%、29%、7%）。零点和一点的活动分别为 60 和 10 分钟。两版从同一份已关闭的数据库复制启动，使用英语、总量模式和暂停记录的设置。Windows UI Automation 从实际窗口读取结果。恢复记录的生命周期场景另外使用固定前台应用。
 
