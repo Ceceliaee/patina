@@ -30,6 +30,9 @@ export const MESSAGES = {
   "mapping.cancel": "Отмена",
   "mapping.categoryFilter": "Фильтр по категории",
   "mapping.categoryControl": "Управление категориями",
+  "mapping.appSort": "Порядок сортировки приложений",
+  "mapping.appSortRecent": "Недавние",
+  "mapping.appSortFilename": "Имя файла A-Z",
   "mapping.categoryDialogTitle": "Управление категориями",
   "mapping.categorySelectLabel": {
     "$type": "message",

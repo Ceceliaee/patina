@@ -66,6 +66,8 @@ export async function runClassificationCategoryFilterScenarios({ client, session
   });
   await runTest("category shortcuts fill the sole search field without an independent filter", async () => {
     const settingsBefore = await evaluate(client!, sessionId, `localStorage.getItem('__time_tracker_smoke_settings')`);
+    const sortBefore = await evaluate(client!, sessionId, `localStorage.getItem('patina:classification-app-sort')`);
+    const sortTrigger = 'button[aria-label^="应用排序方式:"]';
     const script = await client!.command("Page.addScriptToEvaluateOnNewDocument", {
       source: "globalThis.__TIME_TRACKER_ENABLE_WEB_FIXTURE = true;",
     }, sessionId) as { identifier: string };
@@ -113,6 +115,7 @@ export async function runClassificationCategoryFilterScenarios({ client, session
         settings['__web_domain_override::docs.example'] = JSON.stringify({category:'utility',enabled:true});
         localStorage.setItem('__time_tracker_smoke_settings',JSON.stringify(settings));
         localStorage.setItem('patina:classification-object-mode','app');
+        localStorage.removeItem('patina:classification-app-sort');
         localStorage.setItem('patina:last-active-view','mapping');
         location.reload();
       })()`);
@@ -137,15 +140,23 @@ export async function runClassificationCategoryFilterScenarios({ client, session
       await waitForExpression(client!, sessionId, `document.querySelector('[data-classification-app]')?.dataset.classificationApp === 'cursor.exe'`);
       await input('');
       await waitForExpression(client!, sessionId, `document.querySelectorAll('[data-classification-app]').length === 2`);
+      await waitForExpression(client!, sessionId, `document.querySelector(${jsonString(sortTrigger)})?.getAttribute('aria-label') === '应用排序方式: 默认'`);
+      await click(sortTrigger);
+      await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.qp-select-menu'))`);
+      await button('最近使用');
+      await waitForExpression(client!, sessionId, `document.querySelector('[data-classification-app]')?.dataset.classificationApp === 'cursor.exe'`);
+      assert.equal(await evaluate(client!, sessionId, `localStorage.getItem('patina:classification-app-sort')`), 'recent');
       await open();
       await choose('办公');
       await button('网页');
+      assert.equal(await evaluate(client!, sessionId, `Boolean(document.querySelector(${jsonString(sortTrigger)}))`), false);
       await open();
       assert.equal(await evaluate(client!, sessionId, `document.querySelector('.qp-category-search input').value`), '办公');
       assert.deepEqual(await evaluate(client!, sessionId, `Array.from(document.querySelectorAll('.qp-category-filter-option')).map(n=>n.textContent.trim())`), ['开发','工具']);
       await choose('工具');
       await waitForExpression(client!, sessionId, `document.body.innerText.includes('docs.example') && !document.body.innerText.includes('stable.example')`);
       await button('应用');
+      await waitForExpression(client!, sessionId, `document.querySelector(${jsonString(sortTrigger)})?.getAttribute('aria-label') === '应用排序方式: 最近使用'`);
       assert.equal(await evaluate(client!, sessionId, `document.querySelector('.qp-category-search input').value`), '工具');
       await input('');
       await waitForExpression(client!, sessionId, `document.querySelectorAll('[data-classification-app]').length === 2`);
@@ -198,12 +209,20 @@ export async function runClassificationCategoryFilterScenarios({ client, session
       await open();
       await key('Tab',9);
       await waitForExpression(client!, sessionId, `!document.querySelector('.qp-category-filter-popover')`);
+      await click(sortTrigger);
+      await waitForExpression(client!, sessionId, `Boolean(document.querySelector('.qp-select-menu'))`);
+      await button('文件名 A-Z');
+      const previousOrigin = await evaluate(client!, sessionId, "performance.timeOrigin");
+      await evaluate(client!, sessionId, "location.reload()");
+      await waitForExpression(client!, sessionId, `performance.timeOrigin !== ${previousOrigin} && document.querySelector(${jsonString(sortTrigger)})?.getAttribute('aria-label') === '应用排序方式: 文件名 A-Z'`);
     } finally {
       await client!.command('Page.removeScriptToEvaluateOnNewDocument', {identifier:script.identifier}, sessionId);
       await client!.command('Emulation.setDeviceMetricsOverride', {width:1280,height:820,deviceScaleFactor:1,mobile:false}, sessionId);
       await evaluate(client!, sessionId, `(() => {
         const settings=${JSON.stringify(settingsBefore)};
         if(settings===null) localStorage.removeItem('__time_tracker_smoke_settings'); else localStorage.setItem('__time_tracker_smoke_settings',settings);
+        const sort=${JSON.stringify(sortBefore)};
+        if(sort===null) localStorage.removeItem('patina:classification-app-sort'); else localStorage.setItem('patina:classification-app-sort',sort);
         localStorage.setItem('patina:last-active-view','dashboard');
         location.reload();
       })()`);

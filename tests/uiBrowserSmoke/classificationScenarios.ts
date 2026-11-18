@@ -574,11 +574,11 @@ async function runClassificationCases(context: BrowserSmokeContext) {
       `),
       true,
     );
-    await waitForExpression(client!, sessionId, `Boolean(document.querySelector(".qp-select-trigger"))`);
+    await waitForExpression(client!, sessionId, `Boolean(document.querySelector("[data-classification-app] .qp-select-trigger"))`);
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const triggers = Array.from(document.querySelectorAll('.qp-select-trigger'));
+          const triggers = Array.from(document.querySelectorAll('[data-classification-app] .qp-select-trigger'));
           return triggers.length > 0
             && triggers.every((trigger) => {
               const label = trigger.getAttribute('aria-label');
@@ -734,7 +734,7 @@ async function runClassificationCases(context: BrowserSmokeContext) {
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const trigger = document.querySelector(".qp-select-trigger");
+          const trigger = document.querySelector("[data-classification-app] .qp-select-trigger");
           if (!trigger) return false;
           trigger.click();
           return true;
@@ -763,14 +763,14 @@ async function runClassificationCases(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `document.activeElement?.classList.contains('qp-select-trigger')`,
+      `document.activeElement?.matches('[data-classification-app] .qp-select-trigger')`,
       undefined,
       "select trigger should regain focus before reopening",
     );
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const trigger = document.querySelector('.qp-select-trigger');
+          const trigger = document.querySelector('[data-classification-app] .qp-select-trigger');
           if (!trigger) return false;
           trigger.focus();
           return true;
@@ -840,14 +840,14 @@ async function runClassificationCases(context: BrowserSmokeContext) {
     await waitForExpression(
       client!,
       sessionId,
-      `document.activeElement?.classList.contains('qp-select-trigger')`,
+      `document.activeElement?.matches('[data-classification-app] .qp-select-trigger')`,
       undefined,
       "select trigger focus restoration",
     );
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {
-          const trigger = document.querySelector('.qp-select-trigger');
+          const trigger = document.querySelector('[data-classification-app] .qp-select-trigger');
           if (!(trigger instanceof HTMLElement)) return false;
           const controls = Array.from(document.querySelectorAll(
             "a[href], button:not([disabled]), input:not([disabled]):not([type='hidden']), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
@@ -919,7 +919,7 @@ async function runClassificationCases(context: BrowserSmokeContext) {
       true,
     );
     await waitForExpression(client!, sessionId, `Boolean(document.querySelector(
-      'main[data-presented-view="mapping"][data-view-transition-state="settled"] .qp-select-trigger'))`);
+      'main[data-presented-view="mapping"][data-view-transition-state="settled"] [data-classification-app] .qp-select-trigger'))`);
     assert.equal(
       await evaluate(client!, sessionId, `
         (() => {

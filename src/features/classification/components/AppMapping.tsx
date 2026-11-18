@@ -5,6 +5,7 @@ import { ListX, RefreshCw, Save, Sparkles, SlidersHorizontal } from "lucide-reac
 import QuietDialog from "../../../shared/components/QuietDialog";
 import QuietButton from "../../../shared/components/QuietButton";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader";
+import QuietSelect from "../../../shared/components/QuietSelect";
 import QuietSegmentedFilter from "../../../shared/components/QuietSegmentedFilter";
 import CategoryColorControls from "./CategoryColorControls";
 import CategorySearchField from "./CategorySearchField.tsx";
@@ -15,8 +16,11 @@ import { useAppMappingState } from "../hooks/useAppMappingState";
 import { useMappingLinkLayout } from "../hooks/useMappingLinkLayout.ts";
 import type { CandidateFilter } from "../types";
 import {
+  readClassificationAppSort,
   readClassificationObjectMode,
+  rememberClassificationAppSort,
   rememberClassificationObjectMode,
+  type ClassificationAppSort,
   type MappingObjectMode,
 } from "../services/classificationLayoutPreferenceStorage.ts";
 
@@ -35,6 +39,7 @@ export default function AppMapping(props: Props) {
   const mappingRoot = useRef<HTMLDivElement>(null);
   const { webActivityEnabled = false, titleRecordingEnabled = true } = props;
   const [objectMode, setObjectMode] = useState<MappingObjectMode>(readClassificationObjectMode);
+  const [appSort, setAppSort] = useState(readClassificationAppSort);
   const filterOptions: Array<{ value: CandidateFilter; label: ReactNode; showCount?: boolean; ariaLabel?: string }> = [
     { value: "all", label: UI_TEXT.mapping.filters.all },
     { value: "classified", label: UI_TEXT.mapping.filters.classified },
@@ -120,7 +125,7 @@ export default function AppMapping(props: Props) {
     handleDeleteAllSessions,
     handleDeleteWebDomainHistory,
     applyCategoryColor,
-  } = useAppMappingState({ ...props, objectMode: webActivityEnabled ? objectMode : "app" });
+  } = useAppMappingState({ ...props, appSort, objectMode: webActivityEnabled ? objectMode : "app" });
 
   useEffect(() => {
     if (webActivityEnabled || objectMode !== "web") return;
@@ -150,7 +155,7 @@ export default function AppMapping(props: Props) {
   };
   const contentPaneKey = `${effectiveObjectMode}:${filter}`;
   const layoutView = `${contentPaneKey}:${searchQuery}:${deletingSessionsExe}`;
-  const appLayout = useMappingLinkLayout(filteredCandidates, candidate => candidate.exeName, mappingRoot, "app", layoutView, saving);
+  const appLayout = useMappingLinkLayout(filteredCandidates, candidate => candidate.exeName, mappingRoot, "app", `${layoutView}:${appSort}`, saving);
   const webLayout = useMappingLinkLayout(filteredWebDomainCandidates, candidate => candidate.normalizedDomain, mappingRoot, "web", layoutView, saving);
   const webLinksIdentity = webLayout.openIdentity;
   const setWebLinksIdentity = webLayout.open;
@@ -270,6 +275,22 @@ export default function AppMapping(props: Props) {
                 value={effectiveObjectMode}
                 onChange={handleObjectModeChange}
                 options={objectModeOptions}
+              />
+            )}
+            {effectiveObjectMode === "app" && (
+              <QuietSelect<ClassificationAppSort>
+                density="compact"
+                ariaLabel={UI_TEXT.mapping.appSort}
+                value={appSort}
+                options={[
+                  { value: "default", label: UI_TEXT.common.default },
+                  { value: "recent", label: UI_TEXT.mapping.appSortRecent },
+                  { value: "filename", label: UI_TEXT.mapping.appSortFilename },
+                ]}
+                onChange={(sort) => {
+                  setAppSort(sort);
+                  rememberClassificationAppSort(sort);
+                }}
               />
             )}
             <QuietButton

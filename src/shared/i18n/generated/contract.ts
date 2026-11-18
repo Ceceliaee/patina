@@ -589,6 +589,9 @@ export interface UiText {
     "addLinkedApp": string;
     "addLinkedWebDomain": string;
     "appSearchPlaceholder": string;
+    "appSort": string;
+    "appSortFilename": string;
+    "appSortRecent": string;
     "backToLinkedApps": string;
     "backToLinkedWebDomains": string;
     "cancel": string;

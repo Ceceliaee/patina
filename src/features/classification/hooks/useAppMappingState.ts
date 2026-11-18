@@ -67,11 +67,12 @@ import {
   useAppMappingDerivedState,
 } from "./useAppMappingDerivedState.ts";
 import { useClassificationAppCatalog } from "./useClassificationAppCatalog.ts";
-import type { MappingObjectMode } from "../services/classificationLayoutPreferenceStorage.ts";
+import type { ClassificationAppSort, MappingObjectMode } from "../services/classificationLayoutPreferenceStorage.ts";
 
 
 interface UseAppMappingStateOptions {
   objectMode: MappingObjectMode;
+  appSort: ClassificationAppSort;
   icons: Record<string, string>;
   onDirtyChange?: (dirty: boolean) => void;
   onOverridesChanged?: () => void;
@@ -82,6 +83,7 @@ interface UseAppMappingStateOptions {
 
 export function useAppMappingState({
   objectMode,
+  appSort,
   icons,
   onDirtyChange,
   onOverridesChanged,
@@ -295,6 +297,7 @@ export function useAppMappingState({
     webNameEditSnapshots,
     filter,
     searchQuery,
+    appSort,
     webActivityEnabled,
   });
 

@@ -33,6 +33,9 @@ export const MESSAGES = {
   "mapping.cancel": "Cancel",
   "mapping.categoryFilter": "Filter by category",
   "mapping.categoryControl": "Manage categories",
+  "mapping.appSort": "App sort order",
+  "mapping.appSortRecent": "Recently used",
+  "mapping.appSortFilename": "Filename A-Z",
   "mapping.categoryDialogTitle": "Manage categories",
   "mapping.categorySelectLabel": {
     "$type": "message",

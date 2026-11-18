@@ -1016,7 +1016,10 @@ export const LOCALE_SOURCE_REVIEWS = {
     "tools.focusHistoryEmpty": "c637e27239c198db",
     "tools.focusHistoryError": "ee8509e191f98aae",
     "tools.focusHistoryOpen": "e4f73c35da043ee9",
-    "tools.focusHistoryEnded": "5f5887c7e4471247"
+    "tools.focusHistoryEnded": "5f5887c7e4471247",
+    "mapping.appSort": "53c961e6cc4c00e8",
+    "mapping.appSortRecent": "b204fb5b9fcc3bb9",
+    "mapping.appSortFilename": "a84cff1f0462582c"
   },
   "es": {
     "about.description": "9e6291ff14b79ed3",
@@ -2034,7 +2037,10 @@ export const LOCALE_SOURCE_REVIEWS = {
     "tools.focusHistoryEmpty": "c637e27239c198db",
     "tools.focusHistoryError": "ee8509e191f98aae",
     "tools.focusHistoryOpen": "e4f73c35da043ee9",
-    "tools.focusHistoryEnded": "5f5887c7e4471247"
+    "tools.focusHistoryEnded": "5f5887c7e4471247",
+    "mapping.appSort": "53c961e6cc4c00e8",
+    "mapping.appSortRecent": "b204fb5b9fcc3bb9",
+    "mapping.appSortFilename": "a84cff1f0462582c"
   },
   "ru-RU": {
     "about.description": "9e6291ff14b79ed3",
@@ -3052,6 +3058,9 @@ export const LOCALE_SOURCE_REVIEWS = {
     "tools.focusHistoryEmpty": "c637e27239c198db",
     "tools.focusHistoryError": "ee8509e191f98aae",
     "tools.focusHistoryOpen": "e4f73c35da043ee9",
-    "tools.focusHistoryEnded": "5f5887c7e4471247"
+    "tools.focusHistoryEnded": "5f5887c7e4471247",
+    "mapping.appSort": "53c961e6cc4c00e8",
+    "mapping.appSortRecent": "b204fb5b9fcc3bb9",
+    "mapping.appSortFilename": "a84cff1f0462582c"
   }
 } as const;

@@ -33,6 +33,9 @@ export const MESSAGES = {
   "mapping.cancel": "取消",
   "mapping.categoryFilter": "筛选分类",
   "mapping.categoryControl": "管理分类",
+  "mapping.appSort": "应用排序方式",
+  "mapping.appSortRecent": "最近使用",
+  "mapping.appSortFilename": "文件名 A-Z",
   "mapping.categoryDialogTitle": "管理分类",
   "mapping.categorySelectLabel": {
     "$type": "message",

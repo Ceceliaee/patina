@@ -2680,6 +2680,21 @@ export const MESSAGE_SCHEMA = {
     "params": [],
     "surface": "frontend"
   },
+  "mapping.appSort": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "mapping.appSortRecent": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
+  "mapping.appSortFilename": {
+    "kind": "string",
+    "params": [],
+    "surface": "frontend"
+  },
   "mapping.categoryDialogTitle": {
     "kind": "string",
     "params": [],
