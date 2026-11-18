@@ -92,7 +92,7 @@ impl Run<'_> {
             let profile = root.path().join(patina::APP_ID);
             fs::create_dir(&profile)?;
             rt.block_on(async {
-                let pool=patina_recorder::open_database(&profile.join("patina.db")).await?;
+                let pool=patina_activity::open_database(&profile.join("patina.db")).await?;
                 sqlx::query("INSERT OR REPLACE INTO settings(key,value) VALUES ('show_tray_icon','0'),('start_minimized','1'),('close_behavior','tray'),('language','en-US')").execute(&pool).await?;
                 pool.close().await;
                 Ok::<_, Error>(())
@@ -410,21 +410,21 @@ fn run(smoke: bool, isolated: bool) -> Result<(), Error> {
 #[test]
 #[ignore = "dedicated Windows session: three ten-minute resource rounds"]
 fn tray_mini_baseline() -> Result<(), Error> {
-    patina_test_desktop::dedicated_session()?;
+    patina_test_support::dedicated_session()?;
     run(false, false)
 }
 
 #[test]
 #[ignore = "dedicated Windows session: resource sampler"]
 fn sampler_smoke() -> Result<(), Error> {
-    patina_test_desktop::dedicated_session()?;
+    patina_test_support::dedicated_session()?;
     run(true, false)
 }
 
 #[test]
 #[ignore = "isolated Windows desktop, environment-dependent resource measurements"]
 fn isolated_resource_comparison() -> Result<(), Error> {
-    if !patina_test_desktop::run_case()? {
+    if !patina_test_support::run_case()? {
         return Ok(());
     }
     run(true, true)

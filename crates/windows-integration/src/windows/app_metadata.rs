@@ -76,7 +76,7 @@ struct LangAndCodePage {
 }
 
 pub fn resolve_process_display_name(process_path: &str) -> Option<String> {
-    super::native_probe::name(process_path, "")
+    super::native_probe::app_display_name(process_path, "")
 }
 
 fn resolve_process_display_name_native(process_path: &str) -> Option<String> {
@@ -120,7 +120,7 @@ fn resolve_process_display_name_native(process_path: &str) -> Option<String> {
 }
 
 pub fn resolve_app_display_name(process_path: &str, app_user_model_id: &str) -> Option<String> {
-    super::native_probe::name(process_path, app_user_model_id)
+    super::native_probe::app_display_name(process_path, app_user_model_id)
 }
 
 pub(super) fn resolve_app_display_name_native(
@@ -141,7 +141,7 @@ pub fn resolve_icon_base64(
     root_owner_hwnd: &str,
     hwnd: &str,
 ) -> Option<String> {
-    super::native_probe::icon(super::native_probe::IconRequest {
+    super::native_probe::app_icon(super::native_probe::IconRequest {
         process_id,
         process_path: process_path.to_owned(),
         exe_name: exe_name.to_owned(),

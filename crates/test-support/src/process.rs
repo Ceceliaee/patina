@@ -19,7 +19,7 @@ pub struct ChildProcess {
     pub arguments: Vec<String>,
 }
 
-fn open(pid: u32) -> Result<Owned<HANDLE>> {
+fn open_for_query(pid: u32) -> Result<Owned<HANDLE>> {
     unsafe {
         Ok(Owned::new(OpenProcess(
             PROCESS_QUERY_LIMITED_INFORMATION,
@@ -29,7 +29,7 @@ fn open(pid: u32) -> Result<Owned<HANDLE>> {
     }
 }
 
-fn image(handle: HANDLE) -> Result<PathBuf> {
+fn query_image_path(handle: HANDLE) -> Result<PathBuf> {
     let mut buffer = vec![0u16; 32768];
     let mut len = buffer.len() as u32;
     unsafe {
@@ -43,8 +43,8 @@ fn image(handle: HANDLE) -> Result<PathBuf> {
     Ok(PathBuf::from(OsString::from_wide(&buffer[..len as usize])))
 }
 
-pub fn path(pid: u32) -> Option<PathBuf> {
-    image(*open(pid).ok()?).ok()
+pub fn executable_path(pid: u32) -> Option<PathBuf> {
+    query_image_path(*open_for_query(pid).ok()?).ok()
 }
 
 fn arguments(handle: HANDLE) -> Option<Vec<String>> {
@@ -99,7 +99,7 @@ fn arguments(handle: HANDLE) -> Option<Vec<String>> {
     }
 }
 
-pub fn children(parent: u32, executable: &Path) -> Result<Vec<ChildProcess>> {
+pub fn children_with_executable(parent_pid: u32, executable: &Path) -> Result<Vec<ChildProcess>> {
     let expected = executable.canonicalize()?;
     let snapshot = unsafe { Owned::new(CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)?) };
     let mut row = PROCESSENTRY32W {
@@ -109,9 +109,9 @@ pub fn children(parent: u32, executable: &Path) -> Result<Vec<ChildProcess>> {
     let mut found = Vec::new();
     let mut next = unsafe { Process32FirstW(*snapshot, &mut row) };
     while next.is_ok() {
-        if row.th32ParentProcessID == parent
-            && let Ok(process) = open(row.th32ProcessID)
-            && image(*process)
+        if row.th32ParentProcessID == parent_pid
+            && let Ok(process) = open_for_query(row.th32ProcessID)
+            && query_image_path(*process)
                 .ok()
                 .and_then(|p| p.canonicalize().ok())
                 .as_ref()

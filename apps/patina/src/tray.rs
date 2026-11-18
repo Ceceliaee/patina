@@ -1,7 +1,7 @@
 use async_channel::Sender;
 mod icon;
 use icon::TrayIcon;
-use patina_recorder::Recorder;
+use patina_activity::{Locale, RecordingControl};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use windows::Win32::System::RemoteDesktop::{
@@ -76,22 +76,23 @@ struct Dispatch {
     send: Sender<Action>,
     icon: Rc<TrayIcon>,
     restart: u32,
-    recorder: Rc<Recorder>,
+    recorder: RecordingControl,
+    locale: Rc<Cell<Locale>>,
     visible: Rc<Cell<bool>>,
 }
 
 pub struct Tray {
     class: windows::core::HSTRING,
     visible: Rc<Cell<bool>>,
-    pub(super) behavior: Cell<patina_recorder::DesktopBehaviorSettings>,
+    pub(super) behavior: Cell<patina_activity::DesktopBehaviorSettings>,
     silent_start: Cell<bool>,
     hwnd: HWND,
     icon: Rc<TrayIcon>,
     instance: HINSTANCE,
 }
 
-fn data(hwnd: HWND, icon: HICON) -> NOTIFYICONDATAW {
-    let mut d = NOTIFYICONDATAW {
+fn icon_data(hwnd: HWND, icon: HICON) -> NOTIFYICONDATAW {
+    let mut entry = NOTIFYICONDATAW {
         cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
         hWnd: hwnd,
         uID: 1,
@@ -100,19 +101,19 @@ fn data(hwnd: HWND, icon: HICON) -> NOTIFYICONDATAW {
         hIcon: icon,
         ..Default::default()
     };
-    for (slot, ch) in d.szTip.iter_mut().zip("Patina · GPUI".encode_utf16()) {
+    for (slot, ch) in entry.szTip.iter_mut().zip("Patina · GPUI".encode_utf16()) {
         *slot = ch;
     }
-    d
+    entry
 }
 
 fn register_icon(hwnd: HWND, icon: HICON) -> Result<()> {
-    let mut d = data(hwnd, icon);
+    let mut entry = icon_data(hwnd, icon);
     unsafe {
-        Shell_NotifyIconW(NIM_ADD, &d).ok()?;
-        d.Anonymous.uVersion = NOTIFYICON_VERSION_4;
-        if let Err(error) = Shell_NotifyIconW(NIM_SETVERSION, &d).ok() {
-            let _ = Shell_NotifyIconW(NIM_DELETE, &d);
+        Shell_NotifyIconW(NIM_ADD, &entry).ok()?;
+        entry.Anonymous.uVersion = NOTIFYICON_VERSION_4;
+        if let Err(error) = Shell_NotifyIconW(NIM_SETVERSION, &entry).ok() {
+            let _ = Shell_NotifyIconW(NIM_DELETE, &entry);
             return Err(error);
         }
         Ok(())
@@ -122,8 +123,9 @@ fn register_icon(hwnd: HWND, icon: HICON) -> Result<()> {
 impl Tray {
     pub fn new(
         sender: Sender<Action>,
-        recorder: Rc<Recorder>,
-        behavior: patina_recorder::DesktopBehaviorSettings,
+        recorder: RecordingControl,
+        locale: Rc<Cell<Locale>>,
+        behavior: patina_activity::DesktopBehaviorSettings,
         profile_id: &str,
         silent: bool,
     ) -> Result<Self> {
@@ -188,6 +190,7 @@ impl Tray {
                     icon,
                     restart,
                     recorder,
+                    locale,
                     visible: tray.visible.clone(),
                 })
             });
@@ -207,7 +210,7 @@ impl Tray {
 
     pub(super) fn apply_visibility(
         &self,
-        behavior: patina_recorder::DesktopBehaviorSettings,
+        behavior: patina_activity::DesktopBehaviorSettings,
     ) -> Result<()> {
         let visible = behavior.should_keep_tray_visible()
             || (self.silent_start.get() && behavior.show_tray_icon);
@@ -216,7 +219,7 @@ impl Tray {
                 register_icon(self.hwnd, self.icon.handle())?;
             } else {
                 unsafe {
-                    Shell_NotifyIconW(NIM_DELETE, &data(self.hwnd, self.icon.handle())).ok()?
+                    Shell_NotifyIconW(NIM_DELETE, &icon_data(self.hwnd, self.icon.handle())).ok()?
                 };
             }
             self.visible.set(visible);
@@ -230,14 +233,14 @@ impl Drop for Tray {
         STATE.with(|state| state.borrow_mut().take());
         unsafe {
             let _ = WTSUnRegisterSessionNotification(self.hwnd);
-            let _ = Shell_NotifyIconW(NIM_DELETE, &data(self.hwnd, self.icon.handle()));
+            let _ = Shell_NotifyIconW(NIM_DELETE, &icon_data(self.hwnd, self.icon.handle()));
             let _ = DestroyWindow(self.hwnd);
             let _ = UnregisterClassW(&self.class, Some(self.instance));
         }
     }
 }
 
-fn menu(hwnd: HWND, at: WPARAM, recorder: &Recorder) -> Result<()> {
+fn menu(hwnd: HWND, at: WPARAM, recorder: &RecordingControl, locale: Locale) -> Result<()> {
     unsafe {
         let paused = recorder.paused();
         let popup = CreatePopupMenu()?;
@@ -255,8 +258,7 @@ fn menu(hwnd: HWND, at: WPARAM, recorder: &Recorder) -> Result<()> {
                 ),
                 (EXIT, "native.tray.quit"),
             ] {
-                let label =
-                    windows::core::HSTRING::from(patina_recorder::text(recorder.locale.get(), key));
+                let label = windows::core::HSTRING::from(patina_activity::text(locale, key));
                 AppendMenuW(popup, MF_STRING, id, &label)?;
             }
             let mut pt = POINT {
@@ -282,6 +284,7 @@ unsafe extern "system" fn dispatch(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -
         icon,
         restart,
         recorder,
+        locale,
         visible,
     }) = STATE.with(|s| s.borrow().clone())
     {
@@ -327,7 +330,7 @@ unsafe extern "system" fn dispatch(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -
                     let _ = tx.try_send(Action::Today);
                 }
                 WM_CONTEXTMENU => {
-                    if let Err(error) = menu(hwnd, w, &recorder) {
+                    if let Err(error) = menu(hwnd, w, &recorder, locale.get()) {
                         eprintln!("tray menu: {error}");
                     }
                 }

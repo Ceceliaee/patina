@@ -1,4 +1,4 @@
-use super::{HWND, data};
+use super::{HWND, icon_data};
 use std::cell::Cell;
 use windows::Win32::UI::{Shell::*, WindowsAndMessaging::*};
 use windows::core::Result;
@@ -83,7 +83,7 @@ impl TrayIcon {
         let handle = next.load()?;
         unsafe {
             if visible {
-                let mut entry = data(hwnd, handle);
+                let mut entry = icon_data(hwnd, handle);
                 entry.uFlags = NIF_ICON;
                 if let Err(error) = Shell_NotifyIconW(NIM_MODIFY, &entry).ok() {
                     let _ = DestroyIcon(handle);

@@ -430,7 +430,7 @@ pub fn foreground(afk_threshold_secs: u64) -> Result<WindowInfo, String> {
     Ok(result.window)
 }
 
-pub fn name(process_path: &str, app_user_model_id: &str) -> Option<String> {
+pub fn app_display_name(process_path: &str, app_user_model_id: &str) -> Option<String> {
     call(
         ProbeKind::Name,
         RequestBody::Name {
@@ -442,7 +442,7 @@ pub fn name(process_path: &str, app_user_model_id: &str) -> Option<String> {
     .flatten()
 }
 
-pub fn icon(request: IconRequest) -> Option<String> {
+pub fn app_icon(request: IconRequest) -> Option<String> {
     call(ProbeKind::Icon, RequestBody::Icon(request))
         .ok()
         .flatten()

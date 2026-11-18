@@ -68,7 +68,7 @@ fn gpui_platform_window(pid: u32) -> bool {
 fn probes(owner: u32) -> Result<BTreeMap<String, u32>, Error> {
     let image = Path::new(env!("CARGO_BIN_EXE_patina"));
     let mut workers = BTreeMap::new();
-    for child in patina_test_desktop::process::children(owner, image)? {
+    for child in patina_test_support::process::children_with_executable(owner, image)? {
         match &child.arguments[1..] {
             [flag, role, kind] if flag == "--role" && role == "Patina Probe" => {
                 assert!(
@@ -144,8 +144,81 @@ async fn recording(db: &mut SqliteConnection) -> sqlx::Result<Option<(i64, i64)>
 
 #[test]
 #[ignore = "isolated Win32 desktop"]
+fn partial_startup_releases_the_profile_and_preserves_the_last_sample() -> Result<(), Error> {
+    if !patina_test_support::run_case()? {
+        return Ok(());
+    }
+    let root = tempfile::tempdir()?;
+    let profile = root.path().join(patina::APP_ID);
+    fs::create_dir(&profile)?;
+    let database = profile.join("patina.db");
+    const SESSION_START: i64 = 1_700_000_000_000;
+    const LAST_SAMPLE: i64 = SESSION_START + 4000;
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    runtime.block_on(async {
+        let pool = patina_activity::open_database(&database).await?;
+        sqlx::query("INSERT INTO sessions(exe_name,app_name,start_time) VALUES('interrupted.exe','Interrupted',?)")
+            .bind(SESSION_START).execute(&pool).await?;
+        sqlx::query("INSERT OR REPLACE INTO settings(key,value) VALUES('tracking_paused','1'),('show_tray_icon','0'),('start_minimized','1'),('__tracker_last_successful_sample_ms',?)")
+            .bind(LAST_SAMPLE.to_string()).execute(&pool).await?;
+        pool.close().await;
+        Ok::<_, Error>(())
+    })?;
+    let mut failed = TestChild(
+        Command::new(env!("CARGO_BIN_EXE_patina"))
+            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env(
+                "PATINA_GPUI_UPDATE_FIXTURE",
+                root.path().join("missing-fixture"),
+            )
+            .spawn()?,
+    );
+    assert!(
+        !wait("failure after recorder and maintenance startup", || failed
+            .0
+            .try_wait()
+            .ok()
+            .flatten())?
+        .success()
+    );
+    drop(
+        fs::OpenOptions::new()
+            .write(true)
+            .share_mode(0)
+            .open(profile.join("instance.lock"))?,
+    );
+    let mut reopened = launch(root.path())?;
+    let tray = wait("profile reopened after failed startup", || {
+        window(reopened.0.id(), w!("Patina GPUI"))
+    })?;
+    unsafe {
+        PostMessageW(Some(tray), WM_COMMAND, WPARAM(2), LPARAM(0))?;
+    }
+    assert!(
+        wait("reopened host completed shutdown", || reopened
+            .0
+            .try_wait()
+            .ok()
+            .flatten())?
+        .success()
+    );
+    let mut db = runtime.block_on(SqliteConnection::connect_with(
+        &SqliteConnectOptions::new().filename(database),
+    ))?;
+    let record: (i64, i64) = runtime.block_on(
+        sqlx::query_as("SELECT end_time,duration FROM sessions WHERE exe_name='interrupted.exe'")
+            .fetch_one(&mut db),
+    )?;
+    assert_eq!(record, (LAST_SAMPLE, LAST_SAMPLE - SESSION_START));
+    Ok(())
+}
+
+#[test]
+#[ignore = "isolated Win32 desktop"]
 fn concurrent_launch_and_renderer_crash_reopen_the_committed_snapshot() -> Result<(), Error> {
-    if !patina_test_desktop::run_case()? {
+    if !patina_test_support::run_case()? {
         return Ok(());
     }
     let _com = ComApartment::init()?;
@@ -157,7 +230,7 @@ fn concurrent_launch_and_renderer_crash_reopen_the_committed_snapshot() -> Resul
         .enable_all()
         .build()?;
     rt.block_on(async {
-        let pool = patina_recorder::open_database(&path).await?;
+        let pool = patina_activity::open_database(&path).await?;
         sqlx::query("INSERT OR REPLACE INTO settings(key,value) VALUES
             ('show_tray_icon','0'),('start_minimized','1'),('close_behavior','tray'),('language','en-US'),
             ('hourly_activity_chart_mode','total')").execute(&pool).await?;
