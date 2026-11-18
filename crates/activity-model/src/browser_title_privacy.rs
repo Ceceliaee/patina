@@ -1,4 +1,4 @@
-use crate::domain::web_activity::WEB_ACTIVITY_OBSERVATION_TTL_MS;
+use crate::web_activity::WEB_ACTIVITY_OBSERVATION_TTL_MS;
 
 /// An in-memory grant for one observed browser window and one confirmed page title.
 /// No raw page identity is persisted by this policy.

@@ -130,7 +130,7 @@ pub struct ToolReminder {
     pub status: ReminderStatus,
     pub fired_at: Option<i64>,
     pub cancelled_at: Option<i64>,
-    pub recurrence: Option<crate::domain::reminder_schedule::ReminderRecurrence>,
+    pub recurrence: Option<crate::reminder_schedule::ReminderRecurrence>,
     pub recurrence_anchor_at: Option<i64>,
 }
 
@@ -152,7 +152,7 @@ pub enum ActivityReminderTarget {
 #[derive(Clone, Debug, Default)]
 pub struct ActivityReminderWatch {
     pub rules: Vec<ActivityReminderWatchedRule>,
-    pub classification: crate::domain::classification::ClassificationSnapshot,
+    pub classification: crate::classification::ClassificationSnapshot,
 }
 
 impl ActivityReminderWatch {
@@ -368,7 +368,7 @@ impl ToolPomodoroRun {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct ToolsRuntimeSnapshot {
-    pub free_focus_tasks: Vec<crate::domain::free_focus::FreeFocusTask>,
+    pub free_focus_tasks: Vec<crate::free_focus::FreeFocusTask>,
     pub settings: ToolRuntimeSettings,
     pub reminders: Vec<ToolReminder>,
     pub activity_reminder_rules: Vec<ToolActivityReminderRule>,
@@ -381,7 +381,7 @@ pub struct ToolsRuntimeSnapshot {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct ToolAlert {
-    pub free_focus: Option<crate::domain::free_focus::FreeFocusTask>,
+    pub free_focus: Option<crate::free_focus::FreeFocusTask>,
     pub pomodoro: Option<ToolPomodoroTask>,
     pub id: String,
     pub kind: ToolAlertKind,

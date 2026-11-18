@@ -1,4 +1,4 @@
-use crate::domain::tools::{ToolAlert, ToolAlertKind, ToolsRuntimeSnapshot};
+use crate::tools::{ToolAlert, ToolAlertKind, ToolsRuntimeSnapshot};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -47,7 +47,7 @@ impl Preferences {
 pub fn is_current(alert: &ToolAlert, snapshot: &ToolsRuntimeSnapshot) -> bool {
     match alert.kind {
         ToolAlertKind::Reminder => snapshot.reminders.iter().any(|r| {
-            r.status == crate::domain::tools::ReminderStatus::PendingConfirmation
+            r.status == crate::tools::ReminderStatus::PendingConfirmation
                 && r.fired_at == Some(alert.occurred_at)
                 && alert.id == format!("reminder:{}:{}", r.id, alert.occurred_at)
         }),

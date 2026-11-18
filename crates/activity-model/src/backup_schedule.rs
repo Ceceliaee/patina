@@ -2,7 +2,7 @@ use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, NaiveTime, Weekday};
 use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_LOCAL_TIME_MINUTES: u16 = 21 * 60;
-pub(crate) const SCHEDULED_BACKUP_KEEP_COUNT: u8 = 1;
+pub const SCHEDULED_BACKUP_KEEP_COUNT: u8 = 1;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -191,7 +191,7 @@ pub struct ScheduledBackupRun {
     pub updated_at_ms: i64,
 }
 
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ScheduledBackupSnapshot {
     pub config: ScheduledBackupConfig,

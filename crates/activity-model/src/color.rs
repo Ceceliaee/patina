@@ -3,11 +3,11 @@ pub fn app_color(key: &str) -> u32 {
     if key == "activity:anonymous" {
         return 0x8f98a8;
     }
-    let key = crate::domain::tracking::resolve_app_override_executable(key).unwrap_or_default();
+    let key = crate::tracking::resolve_app_override_executable(key).unwrap_or_default();
     identity_color("app:", &key)
 }
 
-pub(super) fn web_color(key: &str) -> u32 {
+pub fn web_color(key: &str) -> u32 {
     identity_color("web:", &key.trim().to_lowercase())
 }
 
@@ -25,12 +25,7 @@ fn identity_color(kind: &str, key: &str) -> u32 {
     COLORS[hash as usize % COLORS.len()]
 }
 
-pub(super) fn source_color(
-    anonymous: bool,
-    custom: Option<u32>,
-    icon: Option<u32>,
-    fallback: u32,
-) -> u32 {
+pub fn source_color(anonymous: bool, custom: Option<u32>, icon: Option<u32>, fallback: u32) -> u32 {
     if anonymous {
         fallback
     } else {
@@ -78,7 +73,7 @@ pub fn icon_color(bytes: &[u8]) -> Option<u32> {
         i64::from((size - width) / 2),
         i64::from((size - height) / 2),
     );
-    crate::domain::icon_color::from_rgba(sample.as_raw(), size as usize)
+    crate::icon_color::from_rgba(sample.as_raw(), size as usize)
 }
 
 pub fn icon_png(bytes: &[u8]) -> Option<Vec<u8>> {

@@ -71,7 +71,7 @@ pub struct BackupToolReminder {
     pub status: String,
     pub fired_at: Option<i64>,
     pub cancelled_at: Option<i64>,
-    pub recurrence: Option<crate::domain::reminder_schedule::ReminderRecurrence>,
+    pub recurrence: Option<crate::reminder_schedule::ReminderRecurrence>,
     pub recurrence_anchor_at: Option<i64>,
 }
 
@@ -104,7 +104,7 @@ pub struct BackupToolDailyStats {
 
 #[derive(Clone, Debug, Default)]
 pub struct BackupRecords {
-    pub free_focus_tasks: Vec<crate::domain::free_focus::FreeFocusTask>,
+    pub free_focus_tasks: Vec<crate::free_focus::FreeFocusTask>,
     pub sessions: Vec<BackupSession>,
     pub title_samples: Vec<BackupTitleSample>,
     pub settings: Vec<BackupSetting>,
@@ -116,7 +116,7 @@ pub struct BackupRecords {
     pub tool_daily_stats: Vec<BackupToolDailyStats>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, serde::Deserialize, Serialize)]
 pub struct BackupPreview {
     pub hash: String,
     pub format_kind: String,

@@ -1,4 +1,4 @@
-use crate::domain::window_geometry::{PhysicalPoint, PhysicalRect};
+use crate::window_geometry::{PhysicalPoint, PhysicalRect};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 

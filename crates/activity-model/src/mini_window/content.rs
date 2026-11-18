@@ -1,4 +1,4 @@
-use crate::domain::tools::{PomodoroPhase, PomodoroStatus, ReminderStatus, ToolsRuntimeSnapshot};
+use crate::tools::{PomodoroPhase, PomodoroStatus, ReminderStatus, ToolsRuntimeSnapshot};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -143,7 +143,7 @@ pub fn build_mini_status_snapshot(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::tools::{PomodoroPhase, ToolPomodoroRun};
+    use crate::tools::{PomodoroPhase, ToolPomodoroRun};
 
     fn pomodoro(status: PomodoroStatus, now_ms: i64) -> ToolPomodoroRun {
         ToolPomodoroRun {
@@ -204,7 +204,7 @@ mod tests {
 
     #[test]
     fn earliest_scheduled_reminder_wins_with_stable_ties_and_no_other_entry() {
-        use crate::domain::tools::ToolReminder;
+        use crate::tools::ToolReminder;
         let reminder = |id, scheduled_at, status| ToolReminder {
             id,
             scheduled_at,
@@ -243,7 +243,7 @@ mod tests {
 
     #[test]
     fn running_free_focus_counts_up_and_takes_priority_over_paused_pomodoro() {
-        use crate::domain::free_focus::{FreeFocusTask, RestMode};
+        use crate::free_focus::{FreeFocusTask, RestMode};
         let tools = ToolsRuntimeSnapshot {
             current_pomodoro: Some(pomodoro(PomodoroStatus::Paused, 100_000)),
             free_focus_tasks: vec![FreeFocusTask {

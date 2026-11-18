@@ -292,7 +292,7 @@ pub struct ActiveSessionSnapshot {
     pub closed_duration_ms: i64,
 }
 
-pub(crate) fn resolve_interrupted_session_end(
+pub fn resolve_interrupted_session_end(
     session_start_time: i64,
     last_sample_ms: Option<i64>,
     now_ms: i64,

@@ -1,4 +1,4 @@
-use crate::domain::web_links::{group_domain, group_key, registrable_domain, SETTING_PREFIX};
+use crate::web_links::{group_domain, group_key, registrable_domain, SETTING_PREFIX};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
@@ -33,11 +33,11 @@ pub struct WebRule {
 /// Only changed settings are persisted; observed metadata is read-only.
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct WebDraft {
-    pub(crate) original: BTreeMap<String, Option<String>>,
-    pub(crate) values: BTreeMap<String, Map<String, Value>>,
-    pub(crate) domains: BTreeSet<String>,
-    pub(crate) totals: BTreeMap<String, i64>,
-    pub(crate) favicons: BTreeMap<String, String>,
+    pub original: BTreeMap<String, Option<String>>,
+    pub values: BTreeMap<String, Map<String, Value>>,
+    pub domains: BTreeSet<String>,
+    pub totals: BTreeMap<String, i64>,
+    pub favicons: BTreeMap<String, String>,
 }
 
 impl WebDraft {
@@ -221,7 +221,7 @@ impl WebDraft {
         !self.changed().is_empty()
     }
 
-    pub(crate) fn changed(&self) -> Vec<(&String, &Map<String, Value>)> {
+    pub fn changed(&self) -> Vec<(&String, &Map<String, Value>)> {
         self.values
             .iter()
             .filter(|(key, value)| {

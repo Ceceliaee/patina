@@ -28,13 +28,13 @@ pub struct DesktopBehaviorSettings {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum StartupUiStrategy {
+pub enum StartupUiStrategy {
     Show,
     OptimizeHidden,
 }
 
 impl StartupUiStrategy {
-    pub(crate) fn as_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             Self::Show => "show-main-window",
             Self::OptimizeHidden => "start-in-tray-optimized",
@@ -43,7 +43,7 @@ impl StartupUiStrategy {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum StartupSource {
+pub enum StartupSource {
     Manual,
     Autostart,
     StorageRestart,
@@ -51,7 +51,7 @@ pub(crate) enum StartupSource {
 }
 
 impl StartupSource {
-    pub(crate) fn as_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             Self::Manual => "manual",
             Self::Autostart => "autostart",
@@ -248,7 +248,7 @@ impl DesktopBehaviorSettings {
         self.show_tray_icon && self.should_keep_running_in_background()
     }
 
-    pub(crate) fn startup_ui_strategy(self, source: StartupSource) -> StartupUiStrategy {
+    pub fn startup_ui_strategy(self, source: StartupSource) -> StartupUiStrategy {
         if source.must_show_main_window() || !self.start_minimized {
             return StartupUiStrategy::Show;
         }

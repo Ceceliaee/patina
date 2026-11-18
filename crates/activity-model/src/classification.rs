@@ -1,4 +1,4 @@
-use crate::domain::localization::{self, Locale};
+use crate::localization::{self, Locale};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 
@@ -114,7 +114,7 @@ pub struct ClassificationSnapshot {
     app_links: HashMap<String, String>,
     app_overrides: HashMap<String, ClassificationOverride>,
     web_overrides: HashMap<String, ClassificationOverride>,
-    web_sites: crate::domain::web_links::WebLinkRules,
+    web_sites: crate::web_links::WebLinkRules,
     label_overrides: HashMap<String, String>,
     color_overrides: HashMap<String, String>,
     color_defaults: HashMap<String, String>,
@@ -127,7 +127,7 @@ impl ClassificationSnapshot {
     pub fn from_settings(rows: impl IntoIterator<Item = (String, String)>) -> Self {
         let mut snapshot = Self::default();
         for (key, value) in rows {
-            if let Some(root) = key.strip_prefix(crate::domain::web_links::SETTING_PREFIX) {
+            if let Some(root) = key.strip_prefix(crate::web_links::SETTING_PREFIX) {
                 if let Ok(rule) = serde_json::from_str(&value) {
                     snapshot.web_sites.insert(root.to_string(), rule);
                 }
@@ -224,7 +224,7 @@ impl ClassificationSnapshot {
         if !self.is_app_enabled(&canonical) {
             return None;
         }
-        let association_key = crate::domain::tracking::resolve_app_override_executable(&canonical)
+        let association_key = crate::tracking::resolve_app_override_executable(&canonical)
             .unwrap_or_else(|| canonical.clone());
         let canonical = self
             .app_links
@@ -259,8 +259,8 @@ impl ClassificationSnapshot {
         if !self.is_web_domain_enabled(&domain) {
             return None;
         }
-        let owner = crate::domain::web_links::resolve_owner(&domain, &self.web_sites);
-        let raw_category = if let Some(root) = crate::domain::web_links::group_domain(&owner) {
+        let owner = crate::web_links::resolve_owner(&domain, &self.web_sites);
+        let raw_category = if let Some(root) = crate::web_links::group_domain(&owner) {
             self.web_sites
                 .get(&root)
                 .and_then(|rule| rule.category.clone())
@@ -335,7 +335,7 @@ impl ClassificationSnapshot {
 )]
 impl ClassificationSnapshot {
     pub fn app_owner(&self, exe: &str) -> String {
-        let canonical = crate::domain::tracking::resolve_app_override_executable(exe)
+        let canonical = crate::tracking::resolve_app_override_executable(exe)
             .unwrap_or_else(|| canonical_exe(exe));
         self.app_links
             .get(&canonical)
@@ -389,7 +389,7 @@ pub fn canonical_exe(value: &str) -> String {
     value.trim().trim_matches('"').to_ascii_lowercase()
 }
 
-pub(crate) fn normalize_category_id(category: &str) -> &str {
+pub fn normalize_category_id(category: &str) -> &str {
     match category {
         "ai" => "office",
         "music" => "video",
