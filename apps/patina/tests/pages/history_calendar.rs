@@ -18,7 +18,7 @@ fn day_cell(hwnd: HWND, date: &str) -> Option<IUIAutomationElement> {
 #[test]
 #[ignore = "isolated Win32 desktop"]
 fn anchored_calendar() -> Result<(), Error> {
-    if !patina_test_desktop::run_case()? {
+    if !patina_test_support::run_case()? {
         return Ok(());
     }
     let _com = ComApartment::init()?;

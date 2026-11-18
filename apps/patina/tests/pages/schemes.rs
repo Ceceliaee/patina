@@ -3,7 +3,7 @@ use super::*;
 #[test]
 #[ignore = "isolated Win32 desktop"]
 fn settings_color_schemes() -> Result<(), Error> {
-    if !patina_test_desktop::run_case()? {
+    if !patina_test_support::run_case()? {
         return Ok(());
     }
     let _com = ComApartment::init()?;

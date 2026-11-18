@@ -48,7 +48,7 @@ fn day(hwnd: HWND, date: chrono::NaiveDate) -> Option<IUIAutomationElement> {
 #[test]
 #[ignore = "isolated Win32 desktop"]
 fn range_draft_apply_and_dismiss() -> Result<(), Error> {
-    if !patina_test_desktop::run_case()? {
+    if !patina_test_support::run_case()? {
         return Ok(());
     }
     let _com = ComApartment::init()?;
@@ -381,7 +381,7 @@ fn overview_heat_layout(hwnd: HWND) -> Result<(), Error> {
 #[test]
 #[ignore = "isolated Win32 desktop"]
 fn destination_heatmap_year_range() -> Result<(), Error> {
-    if !patina_test_desktop::run_case()? {
+    if !patina_test_support::run_case()? {
         return Ok(());
     }
     let _com = ComApartment::init()?;

@@ -182,7 +182,7 @@ fn activate_control(hwnd: HWND, el: &IUIAutomationElement, keyboard: bool) -> Re
 #[test]
 #[ignore = "isolated Win32 desktop"]
 fn sidebar_opens_empty_history() -> Result<(), Error> {
-    if !patina_test_desktop::run_case()? {
+    if !patina_test_support::run_case()? {
         return Ok(());
     }
     let _com = ComApartment::init()?;
@@ -195,7 +195,7 @@ fn sidebar_opens_empty_history() -> Result<(), Error> {
         .enable_all()
         .build()?;
     rt.block_on(async {
-        let pool = patina_recorder::open_database(&db).await?;
+        let pool = patina_activity::open_database(&db).await?;
         sqlx::query("INSERT OR REPLACE INTO settings(key,value) VALUES ('language','zh-CN'),('tracking_paused','1'),('show_tray_icon','0')")
             .execute(&pool).await?;
         pool.close().await;
@@ -244,7 +244,7 @@ fn sample(dir: &Option<PathBuf>, pid: u32, name: &str) -> Result<(), Error> {
 #[test]
 #[ignore = "isolated Win32 desktop"]
 fn repeated_sidebar_navigation_keeps_window_alive() -> Result<(), Error> {
-    if !patina_test_desktop::run_case()? {
+    if !patina_test_support::run_case()? {
         return Ok(());
     }
     let _com = ComApartment::init()?;
@@ -274,7 +274,7 @@ fn navigate_in_locale(tag: &str) -> Result<(), Error> {
             .await?;
         Ok::<_, Error>(())
     })?;
-    let locale = patina_recorder::Locale::from_tag(Some(tag));
+    let locale = patina_activity::Locale::from_tag(Some(tag));
     let stderr = root.path().join("renderer.log");
     let mut host = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
@@ -322,7 +322,7 @@ fn navigate_in_locale(tag: &str) -> Result<(), Error> {
             }
         }
         navigate_sidebar(hwnd, locale, "settings.title")?;
-        let language_name = patina_recorder::text(locale, "settings.languageLabel");
+        let language_name = patina_activity::text(locale, "settings.languageLabel");
         let language = wait("language selector", || {
             controls(hwnd).ok()?.into_iter().find(|el| unsafe {
                 el.CurrentControlType().ok() == Some(UIA_ComboBoxControlTypeId)
@@ -349,13 +349,13 @@ fn navigate_in_locale(tag: &str) -> Result<(), Error> {
             })
         })?;
         activate_control(hwnd, &option, false)?;
-        let next_locale = patina_recorder::Locale::from_tag(Some(next_tag));
+        let next_locale = patina_activity::Locale::from_tag(Some(next_tag));
         wait("language immediately previewed", || {
-            named(hwnd, &patina_recorder::text(next_locale, "settings.title"))
+            named(hwnd, &patina_activity::text(next_locale, "settings.title"))
         })?;
-        press(hwnd, &patina_recorder::text(next_locale, "common.save"))?;
+        press(hwnd, &patina_activity::text(next_locale, "common.save"))?;
         wait("saved language applied", || {
-            named(hwnd, &patina_recorder::text(next_locale, "settings.title"))
+            named(hwnd, &patina_activity::text(next_locale, "settings.title"))
         })?;
         for key in [
             "history.title",
@@ -371,7 +371,7 @@ fn navigate_in_locale(tag: &str) -> Result<(), Error> {
         wait("translated preferences ready", || {
             named(
                 hwnd,
-                &patina_recorder::text(next_locale, "settings.themeModeLabel"),
+                &patina_activity::text(next_locale, "settings.themeModeLabel"),
             )
         })?;
         command(window(pid, w!("Patina GPUI")).ok_or("missing tray")?, 2)?;
@@ -381,8 +381,8 @@ fn navigate_in_locale(tag: &str) -> Result<(), Error> {
     outcome.map_err(|e| format!("{e}\n{}", fs::read_to_string(stderr).unwrap_or_default()).into())
 }
 
-fn navigate_sidebar(hwnd: HWND, locale: patina_recorder::Locale, key: &str) -> Result<(), Error> {
-    let page = patina_recorder::text(locale, key);
+fn navigate_sidebar(hwnd: HWND, locale: patina_activity::Locale, key: &str) -> Result<(), Error> {
+    let page = patina_activity::text(locale, key);
     // The sidebar precedes page controls that may have the same translated name.
     let button = wait(&page, || {
         controls(hwnd).ok()?.into_iter().find(|el| unsafe {
@@ -464,7 +464,7 @@ fn check_history_hourly(hwnd: HWND) -> Result<(), Error> {
 #[test]
 #[ignore = "isolated Win32 desktop"]
 fn history_navigation() -> Result<(), Error> {
-    if !patina_test_desktop::run_case()? {
+    if !patina_test_support::run_case()? {
         return Ok(());
     }
     let _com = ComApartment::init()?;
@@ -604,7 +604,7 @@ fn history_navigation() -> Result<(), Error> {
 #[test]
 #[ignore = "isolated Win32 desktop"]
 fn data_navigation() -> Result<(), Error> {
-    if !patina_test_desktop::run_case()? {
+    if !patina_test_support::run_case()? {
         return Ok(());
     }
     let _com = ComApartment::init()?;
@@ -760,7 +760,7 @@ fn data_navigation() -> Result<(), Error> {
 #[test]
 #[ignore = "isolated Win32 desktop"]
 fn classification_navigation() -> Result<(), Error> {
-    if !patina_test_desktop::run_case()? {
+    if !patina_test_support::run_case()? {
         return Ok(());
     }
     let _com = ComApartment::init()?;
@@ -1283,7 +1283,7 @@ fn classification_navigation() -> Result<(), Error> {
 #[test]
 #[ignore = "isolated Win32 desktop"]
 fn classification_totals() -> Result<(), Error> {
-    if !patina_test_desktop::run_case()? {
+    if !patina_test_support::run_case()? {
         return Ok(());
     }
     let _com = ComApartment::init()?;
@@ -1354,7 +1354,7 @@ fn classification_totals() -> Result<(), Error> {
 #[test]
 #[ignore = "isolated Win32 desktop"]
 fn settings_navigation() -> Result<(), Error> {
-    if !patina_test_desktop::run_case()? {
+    if !patina_test_support::run_case()? {
         return Ok(());
     }
     let _com = ComApartment::init()?;
@@ -1436,7 +1436,7 @@ fn settings_navigation() -> Result<(), Error> {
     wait("language draft", || {
         button(
             hwnd,
-            &patina_recorder::text(patina_recorder::Locale::Es, "common.save"),
+            &patina_activity::text(patina_activity::Locale::Es, "common.save"),
         )
         .filter(|b| unsafe { b.CurrentIsEnabled().is_ok_and(|v| v.as_bool()) })
     })?;
@@ -1444,7 +1444,7 @@ fn settings_navigation() -> Result<(), Error> {
     assert_eq!(initial.right - initial.left, changed.right - changed.left);
     click(
         hwnd,
-        &patina_recorder::text(patina_recorder::Locale::Es, "common.cancel"),
+        &patina_activity::text(patina_activity::Locale::Es, "common.cancel"),
     )?;
     wait("language preview cancelled", || named(hwnd, "Language"))?;
     activate_control(hwnd, &language, true)?;
@@ -1522,7 +1522,7 @@ fn settings_navigation() -> Result<(), Error> {
 #[test]
 #[ignore = "isolated Win32 desktop"]
 fn about_navigation() -> Result<(), Error> {
-    if !patina_test_desktop::run_case()? {
+    if !patina_test_support::run_case()? {
         return Ok(());
     }
     let _com = ComApartment::init()?;
@@ -1564,7 +1564,7 @@ fn about_navigation() -> Result<(), Error> {
 #[test]
 #[ignore = "isolated Win32 desktop"]
 fn page_header_layout() -> Result<(), Error> {
-    if !patina_test_desktop::run_case()? {
+    if !patina_test_support::run_case()? {
         return Ok(());
     }
     let _com = ComApartment::init()?;

@@ -4,7 +4,7 @@ use super::*;
 #[test]
 #[ignore = "isolated Win32 desktop"]
 fn classification_app_web_switch_preserves_drafts() -> Result<(), Error> {
-    if !patina_test_desktop::run_case()? {
+    if !patina_test_support::run_case()? {
         return Ok(());
     }
     let _com = ComApartment::init()?;

@@ -199,7 +199,7 @@ fn profile(fixture: &Path, out: &Path, uia: bool) -> Result<(), Error> {
 #[test]
 #[ignore = "dedicated Windows session: paired handle baseline"]
 fn window_handles() -> Result<(), Error> {
-    patina_test_desktop::dedicated_session()?;
+    patina_test_support::dedicated_session()?;
     let out = run_path("handles")?;
     fs::create_dir(&out)?;
     let db = out.join("fixture.db");
@@ -214,7 +214,7 @@ fn window_handles() -> Result<(), Error> {
 #[test]
 #[ignore = "isolated Win32 desktop"]
 fn renderer_recovery() -> Result<(), Error> {
-    if !patina_test_desktop::run_case()? {
+    if !patina_test_support::run_case()? {
         return Ok(());
     }
     use windows::Win32::UI::Shell::{NIN_SELECT, NINF_KEY};
@@ -291,7 +291,7 @@ fn renderer_recovery() -> Result<(), Error> {
 #[test]
 #[ignore = "isolated Win32 desktop"]
 fn mini_window_handles() -> Result<(), Error> {
-    if !patina_test_desktop::run_case()? {
+    if !patina_test_support::run_case()? {
         return Ok(());
     }
     use windows::Win32::{

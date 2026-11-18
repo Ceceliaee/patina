@@ -4,7 +4,7 @@ use chrono::Datelike;
 #[test]
 #[ignore = "isolated Win32 desktop"]
 fn settings_storage_card() -> Result<(), Error> {
-    if !patina_test_desktop::run_case()? {
+    if !patina_test_support::run_case()? {
         return Ok(());
     }
     let _com = ComApartment::init()?;
@@ -67,7 +67,7 @@ fn settings_storage_card() -> Result<(), Error> {
         assert!(
             named(
                 hwnd,
-                &patina_recorder::text(patina_recorder::Locale::EnUs, "settings.dataExportTitle")
+                &patina_activity::text(patina_activity::Locale::EnUs, "settings.dataExportTitle")
             )
             .is_some(),
             "storage card replaced by dialog"
@@ -408,7 +408,7 @@ fn settings_storage_card() -> Result<(), Error> {
 #[test]
 #[ignore = "isolated Win32 desktop"]
 fn settings_webdav_layout() -> Result<(), Error> {
-    if !patina_test_desktop::run_case()? {
+    if !patina_test_support::run_case()? {
         return Ok(());
     }
     let _com = ComApartment::init()?;

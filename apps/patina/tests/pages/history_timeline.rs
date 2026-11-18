@@ -87,7 +87,7 @@ pub(super) fn check_records(hwnd: HWND) -> Result<(), Error> {
     wait("empty web list", || {
         named(
             hwnd,
-            &patina_recorder::text(patina_recorder::Locale::EnUs, "history.emptyDay"),
+            &patina_activity::text(patina_activity::Locale::EnUs, "history.emptyDay"),
         )
     })?;
     let after = unsafe {
@@ -110,7 +110,7 @@ pub(super) fn check_records(hwnd: HWND) -> Result<(), Error> {
 #[test]
 #[ignore = "isolated Win32 desktop"]
 fn website_history_navigation() -> Result<(), Error> {
-    if !patina_test_desktop::run_case()? {
+    if !patina_test_support::run_case()? {
         return Ok(());
     }
     let _com = ComApartment::init()?;

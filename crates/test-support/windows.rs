@@ -1,4 +1,4 @@
-pub use patina_test_desktop::polling::wait_observed;
+pub use patina_test_support::polling::wait_observed;
 use std::process::Child;
 use windows::{
     Win32::{

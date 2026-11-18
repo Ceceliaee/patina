@@ -39,7 +39,7 @@ fn edit(hwnd: HWND, name: &str, value: &str) -> Result<(), Error> {
 #[test]
 #[ignore = "isolated Win32 desktop"]
 fn settings_services() -> Result<(), Error> {
-    if !patina_test_desktop::run_case()? {
+    if !patina_test_support::run_case()? {
         return Ok(());
     }
     let _com = ComApartment::init()?;

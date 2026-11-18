@@ -121,7 +121,7 @@ fn name_dialog_closed(hwnd: HWND, trigger: &str) -> Result<(), Error> {
 #[test]
 #[ignore = "isolated Win32 desktop"]
 fn category_manager_content_width_and_narrow_layout() -> Result<(), Error> {
-    if !patina_test_desktop::run_case()? {
+    if !patina_test_support::run_case()? {
         return Ok(());
     }
     let _com = ComApartment::init()?;
@@ -172,14 +172,14 @@ fn category_manager_content_width_and_narrow_layout() -> Result<(), Error> {
         let hwnd = wait("Today", || {
             children::find(host.0.id(), |p| window(p, w!("Patina UI")))
         })?;
-        let locale = patina_recorder::Locale::from_tag(Some(tag));
+        let locale = patina_activity::Locale::from_tag(Some(tag));
         navigate_sidebar(hwnd, locale, "mapping.title")?;
         click(
             hwnd,
-            &patina_recorder::text(locale, "mapping.categoryControl"),
+            &patina_activity::text(locale, "mapping.categoryControl"),
         )?;
         let action = |key, label: &str| {
-            patina_recorder::format_text(locale, key, &[("label", label.to_owned())])
+            patina_activity::format_text(locale, key, &[("label", label.to_owned())])
         };
         let bounds = |name: &str| -> Option<RECT> {
             unsafe { button(hwnd, name)?.CurrentBoundingRectangle().ok() }
@@ -189,7 +189,7 @@ fn category_manager_content_width_and_narrow_layout() -> Result<(), Error> {
         let delete_name = action("mapping.deleteCategory", labels[0]);
         let color_name = format!(
             "{} · {}",
-            patina_recorder::text(locale, "mapping.color"),
+            patina_activity::text(locale, "mapping.color"),
             labels[0]
         );
         let dpi = unsafe { GetDpiForWindow(hwnd) } as i32;
@@ -213,7 +213,7 @@ fn category_manager_content_width_and_narrow_layout() -> Result<(), Error> {
                 let color = bounds(&color_name)?;
                 let second_color = bounds(&format!(
                     "{} · {}",
-                    patina_recorder::text(locale, "mapping.color"),
+                    patina_activity::text(locale, "mapping.color"),
                     labels[1]
                 ))?;
                 let delete = bounds(&delete_name)?;
@@ -269,7 +269,7 @@ fn category_manager_content_width_and_narrow_layout() -> Result<(), Error> {
 #[test]
 #[ignore = "isolated Win32 desktop"]
 fn category_manager_drafts_and_persistence() -> Result<(), Error> {
-    if !patina_test_desktop::run_case()? {
+    if !patina_test_support::run_case()? {
         return Ok(());
     }
     let _com = ComApartment::init()?;
@@ -319,10 +319,10 @@ fn category_manager_drafts_and_persistence() -> Result<(), Error> {
     let close = bounds("Close")?;
     assert_eq!(create.top, close.top);
     assert!(create.left < close.left);
-    let first = bounds("Rename category: Browser")?;
+    let first = bounds("Color · Browser")?;
     assert!(close.bottom < first.top);
-    let second = bounds("Rename category: Creation")?;
-    let third = bounds("Rename category: Development")?;
+    let second = bounds("Color · Creation")?;
+    let third = bounds("Color · Development")?;
     assert_eq!(first.top, second.top);
     assert!(first.left < second.left);
     assert!(third.top > first.top);

@@ -194,10 +194,14 @@ jobs:
           $env:PATINA_TEST_MAKENSIS = "${env:ProgramFiles(x86)}/NSIS/makensis.exe"
           cargo build --locked -p patina --bin patina
           if ($LASTEXITCODE -ne 0) { throw "Desktop program build failed" }
-          foreach ($case in @("tools::preference_segments_persist_and_support_keyboard", "tools::mini_opens_the_selected_tool_and_keeps_dirty_settings", "tools::in_window_reminder_uses_the_selected_delivery", "tools::separate_reminder_survives_window_release")) {
+          foreach ($case in @("tools::tool_dropdown_and_reminder_preferences_keep_keyboard_selections", "tools::mini_opens_the_selected_tool_and_keeps_dirty_settings", "tools::in_window_reminder_uses_the_selected_delivery", "tools::separate_reminder_survives_window_release")) {
             cargo test --locked -p patina --features native-tests --test pages $case -- --ignored --exact --test-threads=1
             if ($LASTEXITCODE -ne 0) { throw "Native tool interaction failed: $case" }
           }
+          cargo test --locked -p patina --features native-tests --test pages resident::settings_compensate_and_reopen -- --ignored --exact --test-threads=1
+          if ($LASTEXITCODE -ne 0) { throw "Native settings recovery failed" }
+          cargo test --locked -p patina --features native-tests --test today mini::top_dock_pin_keyboard_and_reopen -- --ignored --exact --test-threads=1
+          if ($LASTEXITCODE -ne 0) { throw "Native Mini placement failed" }
           cargo test --locked -p patina --features native-tests --test lifecycle -- --ignored --test-threads=1
           if ($LASTEXITCODE -ne 0) { throw "Desktop process recovery failed" }
           cargo test --locked -p patina --features native-tests --test updater native_update_download_confirmation_and_navigation -- --ignored --exact --test-threads=1
