@@ -10,7 +10,6 @@ pub mod export_schedule;
 pub mod focus_history;
 pub mod free_focus;
 pub mod icon_color;
-pub mod mini_window;
 pub mod reminder_schedule;
 pub mod settings;
 pub mod tool_notifications;
@@ -19,15 +18,10 @@ pub mod tracking;
 pub mod views;
 pub mod web_activity;
 pub mod web_links;
-pub mod window_geometry;
 
 pub use classification::default_category_color;
 pub use color::{app_color as default_app_color, icon_color, icon_png, icon_png_from_bgra};
 pub use localization::{format_text, localized_data, text, Locale};
-pub use mini_window::{
-    bounds as mini_bounds, Interaction, Placement, Rect as MiniRect, LEAVE_DELAY, PANEL_HEIGHT,
-    PANEL_WIDTH,
-};
 pub use settings::{
     CloseBehavior, DesktopBehaviorSettings, RemoteStatusBridgeSettings, WebActivityBridgeSettings,
 };
@@ -37,14 +31,14 @@ pub use tool_notifications::{
 };
 pub use views::{
     analysis::{Series, SeriesKind, Trends},
-    classification::{AppLinkEdit, AppRule, CategoryEdit, Rules},
+    classification::{AppLinkEdit, AppRule, CategoryEdit, ClassificationRules},
     deletion::Impact as DeletionImpact,
-    draft::{WebDraft, WebRule},
     history::{HistoryDay, HistoryRecord},
-    preferences::{Theme, TrackingPreferences},
+    preferences::{AppPreferences, Theme},
     recent::Recent,
     shortcuts::{Shortcut, ToolTarget},
     storage::{ExportDataRequest, StorageRequest, ALL_EXPORT_FIELDS, DEFAULT_EXPORT_FIELDS},
-    today::{AppEdit, AppUsage, Category, DaySummary},
-    tracking::Activity,
+    today::{AppEdit, AppUsage, CategoryUsage, DaySummary},
+    tracking::CurrentActivity,
+    website_rules::{WebsiteRule, WebsiteRuleDraft},
 };
