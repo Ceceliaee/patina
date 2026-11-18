@@ -27,8 +27,7 @@ fn selected(file: &str, archives: bool) -> bool {
     ENTRY.contains(&file)
         || file == "CHANGELOG.md"
         || file.starts_with("docs/") && !file.starts_with("docs/archive/")
-        || (file.starts_with("tests/fixtures/")
-            || file.starts_with("examples/")
+        || (file.starts_with("examples/")
             || file.starts_with("plugins/")
             || file.starts_with("vendor/gpui-platform/"))
             && file.ends_with("/README.md")

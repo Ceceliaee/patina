@@ -242,7 +242,7 @@ Patina 语义变量映射
 
 | 项目 | 实际结果 |
 | --- | --- |
-| 参考包版本、平台与摘要 | Windows 包 `26.901.6511.0`，内部 `26.901.51231`；包及资产 SHA-256、函数定位见 [参考夹具说明](../../tests/fixtures/theme/README.md) |
+| 参考包版本、平台与摘要 | Windows 包 `26.901.6511.0`，内部 `26.901.51231`；包及资产 SHA-256、函数定位见 [参考夹具说明](codex-theme-contrast/README.md) |
 | 预设默认值来源与无对应项决定 | 全部现有选项已核对；Vercel 显式浅 40 / 深 50，其他匹配项继承浅 45 / 深 60。Patina default 保留自身 surface/ink/accent，使用模式默认；Xcode 使用 chromeTheme 的不透明 ink，Ayu 使用加载后的背景 |
 | token 对照与计算验证 | [纯计算与映射](../../src/shared/theme/deriveTheme.ts)；37 组独立夹具精确比较 19 项输出，包含用户 Catppuccin 40、边界及拐点。参考说明区分直接对应与 Patina 业务色 |
 | 快速测试、浏览器测试 | `npm run test:settings` 通过；完整浏览器回归及 `--theme-only` 定向验证通过。覆盖零写入、取消/遮罩/Escape、方向键/Home/End/Tab、独立确认、其他草稿保留、失败重试、重复提交、浅深独立及系统切换 |

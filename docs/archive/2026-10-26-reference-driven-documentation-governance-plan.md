@@ -93,7 +93,7 @@
 | [Project 维护](../github-project-maintenance.md) | 维护者管理私有队列 | 维护步骤与字段参考分开，私有 live state 仍只在 Project |
 | [Web Activity 协议](../web-activity-protocol.md) | 接收端与扩展实现者查协议 | 按生命周期和字段组织完整外部契约，保留拒绝与兼容条件 |
 | [远程状态桥指南](../examples/remote-status-bridge.md) / [Worker README](../examples/remote-status-bridge-worker/README.md) | 用户配置接收端，开发者部署或排障示例 | 使用、协议和示例部署各有入口，统一重复字段和示例归属 |
-| [主题 fixture 说明](../../tests/fixtures/theme/README.md) | 维护者理解测试数据来源与更新方式 | 保留独立来源、版本摘要和再生成限制，区分历史取样与当前操作 |
+| [主题 fixture 说明](codex-theme-contrast/README.md) | 维护者理解测试数据来源与更新方式 | 保留独立来源、版本摘要和再生成限制，区分历史取样与当前操作 |
 
 CHANGELOG 的发布历史不在本轮重写范围；只检查被本轮移动内容影响的链接或说明归属。工作记录、相关归档及其他入站引用按迁移和事实依赖处理，不对全部历史档案套用新写作结构。
 

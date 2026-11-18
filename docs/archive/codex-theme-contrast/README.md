@@ -2,15 +2,7 @@
 
 `codex-colors.json` contains independent expected outputs for the mapped theme colors. The fixture covers Catppuccin, Vercel and Xcode in both modes at zero, 100, preset defaults and around the contrast shaping breakpoint. The Catppuccin light case at 40 preserves the supplied user example; its preset default is 45.
 
-## Use and update
-
-From the desktop workspace, run the QuietPro theme unit tests with the following command.
-
-```sh
-cargo test --locked -p quietpro --lib theme::tests
-```
-
-The native tests exercise the current catalog, scheme selection and fallback. The JSON fixtures below record independent reference values and the historical CSS output. Recalculate reference data from its stated source when that source changes.
+These files preserve the reference values used to verify Patina's former web interface. The [theme migration record](../codex-theme-contrast-execution-plan.md) lists the comparisons performed at the time. Current GPUI palette and fallback tests live in [QuietPro](../../../crates/quietpro/src/theme.rs).
 
 ## Independent reference and provenance
 
