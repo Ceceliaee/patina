@@ -1,4 +1,6 @@
 use async_channel::Sender;
+mod icon;
+use icon::TrayIcon;
 use patina_recorder::Recorder;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -72,7 +74,7 @@ thread_local! {
 #[derive(Clone)]
 struct Dispatch {
     send: Sender<Action>,
-    icon: HICON,
+    icon: Rc<TrayIcon>,
     restart: u32,
     recorder: Rc<Recorder>,
     visible: Rc<Cell<bool>>,
@@ -84,7 +86,7 @@ pub struct Tray {
     pub(super) behavior: Cell<patina_recorder::DesktopBehaviorSettings>,
     silent_start: Cell<bool>,
     hwnd: HWND,
-    icon: HICON,
+    icon: Rc<TrayIcon>,
     instance: HINSTANCE,
 }
 
@@ -157,15 +159,8 @@ impl Tray {
                     return Err(e);
                 }
             };
-            let icon = match CreateIconFromResourceEx(
-                include_bytes!("../assets/icons/32x32.png"),
-                true,
-                0x30000,
-                GetSystemMetrics(SM_CXSMICON),
-                GetSystemMetrics(SM_CYSMICON),
-                LR_DEFAULTCOLOR,
-            ) {
-                Ok(icon) => icon,
+            let icon = match TrayIcon::new(recorder.paused()) {
+                Ok(icon) => Rc::new(icon),
                 Err(e) => {
                     let _ = DestroyWindow(hwnd);
                     let _ = UnregisterClassW(&name, Some(instance));
@@ -178,7 +173,7 @@ impl Tray {
                 behavior: Cell::new(behavior),
                 silent_start: Cell::new(silent),
                 hwnd,
-                icon,
+                icon: icon.clone(),
                 instance,
             };
             let restart = RegisterWindowMessageW(w!("TaskbarCreated"));
@@ -205,6 +200,11 @@ impl Tray {
         self.apply_visibility(self.behavior.get())
     }
 
+    pub(super) fn update_recording(&self, paused: bool) -> Result<()> {
+        self.icon
+            .update(self.hwnd, self.visible.get(), None, paused)
+    }
+
     pub(super) fn apply_visibility(
         &self,
         behavior: patina_recorder::DesktopBehaviorSettings,
@@ -213,9 +213,11 @@ impl Tray {
             || (self.silent_start.get() && behavior.show_tray_icon);
         if visible != self.visible.get() {
             if visible {
-                register_icon(self.hwnd, self.icon)?;
+                register_icon(self.hwnd, self.icon.handle())?;
             } else {
-                unsafe { Shell_NotifyIconW(NIM_DELETE, &data(self.hwnd, self.icon)).ok()? };
+                unsafe {
+                    Shell_NotifyIconW(NIM_DELETE, &data(self.hwnd, self.icon.handle())).ok()?
+                };
             }
             self.visible.set(visible);
         }
@@ -228,9 +230,8 @@ impl Drop for Tray {
         STATE.with(|state| state.borrow_mut().take());
         unsafe {
             let _ = WTSUnRegisterSessionNotification(self.hwnd);
-            let _ = Shell_NotifyIconW(NIM_DELETE, &data(self.hwnd, self.icon));
+            let _ = Shell_NotifyIconW(NIM_DELETE, &data(self.hwnd, self.icon.handle()));
             let _ = DestroyWindow(self.hwnd);
-            let _ = DestroyIcon(self.icon);
             let _ = UnregisterClassW(&self.class, Some(self.instance));
         }
     }
@@ -301,9 +302,19 @@ unsafe extern "system" fn dispatch(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -
         if msg == WM_TIMECHANGE {
             let _ = tx.try_send(Action::WakeTools);
         }
+        if (matches!(msg, WM_SETTINGCHANGE | WM_THEMECHANGED) || msg == restart)
+            && let Err(e) = icon.update(
+                hwnd,
+                visible.get() && msg != restart,
+                icon::light_taskbar(),
+                recorder.paused(),
+            )
+        {
+            eprintln!("tray appearance: {e}");
+        }
         if msg == restart {
             if visible.get()
-                && let Err(e) = register_icon(hwnd, icon)
+                && let Err(e) = register_icon(hwnd, icon.handle())
             {
                 eprintln!("tray restore: {e}");
                 let _ = tx.try_send(Action::Exit);

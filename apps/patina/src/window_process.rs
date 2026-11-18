@@ -343,6 +343,9 @@ pub(super) async fn serve(
                     {
                         eprintln!("tracking: {e}");
                     }
+                    if let Err(e) = tray.update_recording(recorder.paused()) {
+                        eprintln!("tray recording state: {e}");
+                    }
                     if let Some(w) = &worker {
                         let _ = w.tx.send(ToWindow::Changed {
                             revision: revision.load(Ordering::Acquire),
