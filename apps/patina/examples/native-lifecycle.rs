@@ -1,7 +1,7 @@
 //! Opt-in smoke check on a Windows desktop. Only sends actions to this process.
-#[path = "../../test-support/children.rs"]
+#[path = "../../../crates/test-support/children.rs"]
 mod children;
-use patina_gpui::Action;
+use patina::Action;
 use sqlx::{
     SqlitePool,
     sqlite::{SqliteConnectOptions, SqlitePoolOptions},
@@ -283,7 +283,7 @@ fn exercise(
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
-    let path = root.join(patina_gpui::APP_ID).join("patina.db");
+    let path = root.join(patina::APP_ID).join("patina.db");
     wait("database", || path.is_file())?;
     let pool = open_read_only(&path, &rt)?;
     let active = |exe: &str| {
@@ -401,21 +401,41 @@ fn exercise(
 
 fn main() -> Outcome {
     patina_test_desktop::dedicated_session()?;
-    if let Some(result) = patina_gpui::run_window_process_if_requested() {
-        return result.map_err(|e| e.to_string().into());
+    // Cargo places examples below the directory containing the two desktop companions.
+    let executable = env::current_exe()?;
+    let example_dir = executable.parent().ok_or("example directory missing")?;
+    if example_dir
+        .file_name()
+        .is_some_and(|name| name == "examples")
+    {
+        let binaries = example_dir.parent().ok_or("target directory missing")?;
+        let group = tempfile::tempdir()?;
+        for (from, name) in [
+            (executable.as_path(), "patina.exe"),
+            (&binaries.join("patina-ui.exe"), "patina-ui.exe"),
+            (&binaries.join("patina-probe.exe"), "patina-probe.exe"),
+        ] {
+            std::fs::copy(from, group.path().join(name))?;
+        }
+        let status = process::Command::new(group.path().join("patina.exe"))
+            .args(env::args_os().skip(1))
+            .status()?;
+        return if status.success() {
+            Ok(())
+        } else {
+            Err(format!("lifecycle worker exited with {status}").into())
+        };
     }
-    if let Some(code) = patina_recorder::run_probe_if_requested() {
-        process::exit(code);
-    }
+
     if env::args().any(|a| a == "--invalid-root") {
         let (tx, rx) = async_channel::unbounded();
-        let e = patina_gpui::run(tx, rx).expect_err("relative profile parent");
+        let e = patina::run(tx, rx).expect_err("relative profile parent");
         assert!(e.to_string().contains("absolute directory"));
         return Ok(());
     }
     if env::args().any(|a| a == "--duplicate") {
         let (tx, rx) = async_channel::unbounded();
-        let e = patina_gpui::run(tx, rx).expect_err("second recorder unexpectedly started");
+        let e = patina::run(tx, rx).expect_err("second recorder unexpectedly started");
         assert_eq!(
             e.downcast_ref::<std::io::Error>()
                 .and_then(|v| v.raw_os_error()),
@@ -447,16 +467,13 @@ fn main() -> Outcome {
             result.unwrap_or_else(|_| Err("native smoke assertion failed".into()))
         })
     };
-    patina_gpui::run(tx, rx).map_err(|e| e.to_string())?;
+    patina::run(tx, rx).map_err(|e| e.to_string())?;
     let _ = stopped.send(());
     thread.join().expect("smoke thread")?;
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
-    let pool = open_read_only(
-        &root.path().join(patina_gpui::APP_ID).join("patina.db"),
-        &rt,
-    )?;
+    let pool = open_read_only(&root.path().join(patina::APP_ID).join("patina.db"), &rt)?;
     assert_eq!(
         rt.block_on(
             sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM sessions WHERE end_time IS NULL")

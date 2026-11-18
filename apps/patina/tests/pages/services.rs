@@ -45,7 +45,7 @@ fn settings_services() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina_gpui::APP_ID);
+    let profile = root.path().join(patina::APP_ID);
     fs::create_dir(&profile)?;
     let db = profile.join("patina.db");
     seed(&db)?;
@@ -62,7 +62,7 @@ fn settings_services() -> Result<(), Error> {
         }))?,
     )?;
     let launch = || {
-        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+        Command::new(env!("CARGO_BIN_EXE_patina"))
             .arg("--today")
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
             .env("PATINA_E2E_DATA_ROOT", root.path())

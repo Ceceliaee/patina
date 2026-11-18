@@ -1,5 +1,14 @@
 use super::*;
 
+pub(super) async fn enable_web_history(db: &mut SqliteConnection) -> Result<(), Error> {
+    let port = std::net::TcpListener::bind(("127.0.0.1", 0))?
+        .local_addr()?
+        .port();
+    sqlx::query("INSERT OR REPLACE INTO settings(key,value) VALUES ('web_activity_enabled','1'),('web_activity_token','history-fixture'),('web_activity_port',?)")
+        .bind(port.to_string()).execute(db).await?;
+    Ok(())
+}
+
 pub(super) fn open_icon_details(hwnd: HWND, name: &str) -> Result<(), Error> {
     let icon = wait("detail icon", || {
         button(hwnd, &format!("View details for {name}"))
@@ -107,7 +116,7 @@ fn website_history_navigation() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina_gpui::APP_ID);
+    let profile = root.path().join(patina::APP_ID);
     fs::create_dir(&profile)?;
     let db = profile.join("patina.db");
     seed(&db)?;
@@ -124,6 +133,7 @@ fn website_history_navigation() -> Result<(), Error> {
         .build()?;
     rt.block_on(async {
         let mut c = SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&db)).await?;
+        enable_web_history(&mut c).await?;
         sqlx::query("INSERT INTO web_activity_segments(browser_client_id,browser_kind,browser_exe_name,domain,normalized_domain,title,start_time,end_time,duration,created_at,updated_at) VALUES('fixture','chromium','chrome.exe','docs.example.com','docs.example.com','Web fixture',?,?,600000,?,?)")
             .bind(start).bind(start+600000).bind(start).bind(start+600000).execute(&mut c).await?;
         sqlx::query("INSERT INTO web_favicon_cache(normalized_domain,favicon_url,updated_at) VALUES('docs.example.com','data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGNQSDjwH4QZYAwASvQI/dnllI8AAAAASUVORK5CYII=',?)")
@@ -131,7 +141,7 @@ fn website_history_navigation() -> Result<(), Error> {
         Ok::<_, Error>(())
     })?;
     let mut child = TestChild(
-        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+        Command::new(env!("CARGO_BIN_EXE_patina"))
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
             .arg("--today")
             .spawn()?,
@@ -159,6 +169,7 @@ fn website_history_navigation() -> Result<(), Error> {
     assert!(button(hwnd, "View details for Studio").is_none());
     press(hwnd, "Open timeline zoom")?;
     wait("website lanes", || named(hwnd, "Web lanes"))?;
+    pan_to_start(hwnd, "zoom-overview")?;
     wait("website lane duration", || named(hwnd, "example.com · 10m"))?;
     key(hwnd, 27)?;
     press(hwnd, "Open timeline")?;
@@ -202,6 +213,20 @@ fn website_history_navigation() -> Result<(), Error> {
     assert!(button(hwnd, "View details for example.com").is_none());
     command(tray, 2)?;
     assert!(wait("exit", || child.0.try_wait().ok().flatten())?.success());
+    Ok(())
+}
+
+pub(super) fn pan_to_start(hwnd: HWND, track_id: &str) -> Result<(), Error> {
+    let track = wait("timeline track", || {
+        controls(hwnd)
+            .ok()?
+            .into_iter()
+            .find(|element| unsafe { element.CurrentAutomationId().is_ok_and(|id| id == track_id) })
+    })?;
+    unsafe {
+        track.SetFocus()?;
+    }
+    key(hwnd, 36)?;
     Ok(())
 }
 

@@ -1,6 +1,6 @@
-#[path = "../../test-support/children.rs"]
+#[path = "../../../crates/test-support/children.rs"]
 mod children;
-#[path = "../../test-support/windows.rs"]
+#[path = "../../../crates/test-support/windows.rs"]
 mod desktop;
 
 use chrono::Utc;
@@ -72,7 +72,7 @@ struct Run<'a> {
 }
 
 impl Run<'_> {
-    fn measure(&self, scenario: &str, round: u32) -> Result<Value, Error> {
+    fn measure(&self, scenario: &str, round: u32, isolated: bool) -> Result<Value, Error> {
         let root = tempfile::tempdir()?;
         let exe = r"C:\fixture\fixture.exe";
         let fixture = json!({"foreground":{"hwnd":"0x42","root_owner_hwnd":"0x42","process_id":42,
@@ -82,6 +82,21 @@ impl Run<'_> {
             root.path().join("native-probe-fixture.json"),
             serde_json::to_vec(&fixture)?,
         )?;
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+        if isolated {
+            // A private desktop has no Explorer notification area. Exercise the real tray owner
+            // through its callback and use the same resident preferences for both revisions.
+            let profile = root.path().join(patina::APP_ID);
+            fs::create_dir(&profile)?;
+            rt.block_on(async {
+                let pool=patina_recorder::open_database(&profile.join("patina.db")).await?;
+                sqlx::query("INSERT OR REPLACE INTO settings(key,value) VALUES ('show_tray_icon','0'),('start_minimized','1'),('close_behavior','tray'),('language','en-US')").execute(&pool).await?;
+                pool.close().await;
+                Ok::<_, Error>(())
+            })?;
+        }
         let mut cmd = Command::new(self.binary);
         if scenario != "tray" {
             cmd.arg("--mini");
@@ -95,11 +110,9 @@ impl Run<'_> {
         );
         let pid = app.0.id();
         let tray = wait("tray owner", || window(pid, w!("Patina GPUI")))?;
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()?;
+        let dpi = unsafe { GetDpiForWindow(tray) };
         let db = SqliteConnectOptions::new()
-            .filename(root.path().join(patina_gpui::APP_ID).join("patina.db"))
+            .filename(root.path().join(patina::APP_ID).join("patina.db"))
             .read_only(true);
         let mut conn = rt.block_on(SqliteConnection::connect_with(&db))?;
         wait("fixture recording", || {
@@ -129,6 +142,13 @@ impl Run<'_> {
             let scale = f64::from(unsafe { GetDpiForWindow(hwnd) }) / 96.;
             Some(dip.map(|n| (f64::from(n) * scale).round() as i32))
         };
+        let ui_pid = mini().map(|hwnd| {
+            let mut owner = 0;
+            unsafe {
+                GetWindowThreadProcessId(hwnd, Some(&mut owner));
+            }
+            owner
+        });
         let state_ok = || match expected {
             None => mini().is_none(),
             Some(dim) => mini().and_then(size) == Some(dim),
@@ -184,6 +204,49 @@ impl Run<'_> {
         {
             return Err(format!("incomplete sample: {end}").into());
         }
+        let mut reopen_ms = Vec::new();
+        if isolated {
+            if let Some(hwnd) = mini() {
+                unsafe {
+                    PostMessageW(Some(hwnd), WM_CLOSE, WPARAM(0), LPARAM(0))?;
+                }
+                wait("closed Mini", || mini().is_none().then_some(()))?;
+            }
+            let main = || children::find(pid, |child| window(child, w!("Patina")));
+            if let Some(hwnd) = main() {
+                unsafe {
+                    PostMessageW(Some(hwnd), WM_CLOSE, WPARAM(0), LPARAM(0))?;
+                }
+                wait("closed main window", || main().is_none().then_some(()))?;
+            }
+            for _ in 0..3 {
+                let started = Instant::now();
+                unsafe {
+                    PostMessageW(
+                        Some(tray),
+                        WM_APP + 1,
+                        WPARAM(0),
+                        LPARAM(windows::Win32::UI::Shell::NIN_SELECT as isize),
+                    )?;
+                }
+                let hwnd = wait("primary tray activation opens Today", main)?;
+                wait("Today UI ready", || {
+                    (!controls(hwnd).ok()?.is_empty()).then_some(())
+                })?;
+                reopen_ms.push(started.elapsed().as_millis() as u64);
+                unsafe {
+                    PostMessageW(Some(hwnd), WM_CLOSE, WPARAM(0), LPARAM(0))?;
+                }
+                wait("last window closed", || main().is_none().then_some(()))?;
+            }
+            let recorded_after_close = after.1;
+            wait("sampling after last window closes", || {
+                rt.block_on(recording(&mut conn))
+                    .ok()
+                    .flatten()
+                    .filter(|row| row.1 > recorded_after_close)
+            })?;
+        }
         rt.block_on(conn.close())?;
         unsafe {
             PostMessageW(Some(tray), WM_COMMAND, WPARAM(2), LPARAM(0))?;
@@ -192,7 +255,7 @@ impl Run<'_> {
             return Err("GPUI exit failed".into());
         }
         Ok(
-            json!({"scenario":scenario,"round":round,"pid":pid,"size":expected,"sampleCount":end["sampleCount"],
+            json!({"scenario":scenario,"round":round,"pid":pid,"uiPid":ui_pid,"size":expected,"reopenMs":reopen_ms,"dpi":dpi,"sampleCount":end["sampleCount"],
             "sessionId":after.0,"beforeMs":before.1,"afterMs":after.1}),
         )
     }
@@ -204,7 +267,7 @@ fn sha(path: &Path) -> io::Result<String> {
     Ok(format!("{:x}", digest.finalize()))
 }
 
-fn run(smoke: bool) -> Result<(), Error> {
+fn run(smoke: bool, isolated: bool) -> Result<(), Error> {
     let _com = ComApartment::init()?;
     if unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) }
         .is_invalid()
@@ -214,15 +277,53 @@ fn run(smoke: bool) -> Result<(), Error> {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()?;
-    let binary = Path::new(env!("CARGO_BIN_EXE_patina-gpui"));
+    let baseline = if isolated {
+        env::var_os("PATINA_RESOURCE_BASELINE").map(PathBuf::from)
+    } else {
+        None
+    };
+    let binary = baseline
+        .as_deref()
+        .unwrap_or(Path::new(env!("CARGO_BIN_EXE_patina")));
     let sampler = env::var_os("PATINA_RESOURCE_SAMPLER")
         .map(PathBuf::from)
-        .unwrap_or_else(|| repo.join("desktop/target/debug/examples/windows-resource-sample.exe"));
-    let hashes =
-        || -> io::Result<Value> { Ok(json!({"binary":sha(binary)?,"sampler":sha(&sampler)?})) };
+        .unwrap_or_else(|| repo.join("target/debug/examples/windows-resource-sample.exe"));
+    // Keep each trial on the same build even if Cargo produces another test target.
+    let mut group = vec![binary.to_owned()];
+    if baseline.is_none() {
+        group.extend(["patina-ui.exe", "patina-probe.exe"].map(|name| binary.with_file_name(name)));
+    }
+    let stage = tempfile::tempdir()?;
+    for file in &group {
+        fs::copy(
+            file,
+            stage
+                .path()
+                .join(file.file_name().ok_or("missing binary filename")?),
+        )?;
+    }
+    let binary = stage
+        .path()
+        .join(binary.file_name().ok_or("missing host filename")?);
+    let hashes = || -> io::Result<Value> {
+        let mut result = json!({"sampler": sha(&sampler)?});
+        for file in &group {
+            let name = file.file_name().unwrap().to_string_lossy();
+            result[&*name] = json!(sha(&stage.path().join(&*name))?);
+        }
+        Ok(result)
+    };
     let initial = hashes()?;
     let now = Utc::now();
-    let label = if smoke { "smoke" } else { "baseline" };
+    let label = if isolated && baseline.is_some() {
+        "previous-isolated"
+    } else if isolated {
+        "isolated"
+    } else if smoke {
+        "smoke"
+    } else {
+        "baseline"
+    };
     let output = repo
         .join("artifacts/runtime-smoke")
         .join(format!("gpui-{label}-{}", now.format("%Y%m%dT%H%M%S%.3fZ")));
@@ -230,7 +331,7 @@ fn run(smoke: bool) -> Result<(), Error> {
     fs::create_dir(&output)?;
     println!("Writing {label} to {}", output.display());
     let run = Run {
-        binary,
+        binary: &binary,
         sampler: &sampler,
         output: &output,
         seconds: if smoke { 15 } else { 600 },
@@ -246,11 +347,11 @@ fn run(smoke: bool) -> Result<(), Error> {
         Ok(())
     };
     let measured = (|| -> Result<(), Error> {
-        for round in 1..=if smoke { 1 } else { 3 } {
+        for round in 1..=if smoke && !isolated { 1 } else { 3 } {
             for scenario in ["tray", "collapsed", "expanded"] {
                 report["current"] = json!(format!("{scenario}-{round}"));
                 save(&report)?;
-                let result = run.measure(scenario, round)?;
+                let result = run.measure(scenario, round, isolated)?;
                 report["rounds"].as_array_mut().unwrap().push(result);
             }
         }
@@ -271,12 +372,21 @@ fn run(smoke: bool) -> Result<(), Error> {
 #[ignore = "dedicated Windows session: three ten-minute resource rounds"]
 fn tray_mini_baseline() -> Result<(), Error> {
     patina_test_desktop::dedicated_session()?;
-    run(false)
+    run(false, false)
 }
 
 #[test]
 #[ignore = "dedicated Windows session: resource sampler"]
 fn sampler_smoke() -> Result<(), Error> {
     patina_test_desktop::dedicated_session()?;
-    run(true)
+    run(true, false)
+}
+
+#[test]
+#[ignore = "isolated Windows desktop, environment-dependent resource measurements"]
+fn isolated_resource_comparison() -> Result<(), Error> {
+    if !patina_test_desktop::run_case()? {
+        return Ok(());
+    }
+    run(true, true)
 }

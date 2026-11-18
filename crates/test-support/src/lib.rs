@@ -15,8 +15,7 @@ use windows::{
     core::{HSTRING, Owned, PCWSTR, PWSTR},
 };
 
-#[path = "../../recorder/src/platform/windows/job.rs"]
-mod job;
+use patina_windows_integration::windows::job;
 
 const PREFIX: &str = "Patina-Test-";
 const DEDICATED: &str = "PATINA_DEDICATED_TEST_SESSION";

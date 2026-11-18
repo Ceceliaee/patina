@@ -16,7 +16,7 @@ impl TestLoginEntry {
         let mut class = [0u16; 256];
         let n = unsafe { GetClassNameW(hwnd, &mut class) };
         let name = String::from_utf16(&class[..n as usize])?;
-        assert!(name.starts_with(patina_gpui::APP_ID));
+        assert!(name.starts_with(patina::APP_ID));
         let key = RegKey::predef(HKEY_CURRENT_USER).open_subkey_with_flags(
             r"Software\Microsoft\Windows\CurrentVersion\Run",
             KEY_QUERY_VALUE | KEY_SET_VALUE,
@@ -82,12 +82,12 @@ fn resident_preferences() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let dir = root.path().join(patina_gpui::APP_ID);
+    let dir = root.path().join(patina::APP_ID);
     fs::create_dir(&dir)?;
     let db = dir.join("patina.db");
     seed_profile(&db, true)?;
     let launch = || {
-        let mut cmd = Command::new(env!("CARGO_BIN_EXE_patina-gpui"));
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_patina"));
         cmd.env("PATINA_GPUI_PROFILE_PARENT", root.path());
         cmd
     };
@@ -163,14 +163,14 @@ fn resident_preferences() -> Result<(), Error> {
     command(tray, 2)?;
     assert!(wait("tray exit", || host.0.try_wait().ok().flatten())?.success());
 
-    let mut registered = Command::new(env!("CARGO_BIN_EXE_patina-gpui"));
+    let mut registered = Command::new(env!("CARGO_BIN_EXE_patina"));
     let command = login_command
         .strip_prefix('"')
         .ok_or("unquoted login executable")?;
     let (exe, args) = command.split_once('"').ok_or("missing login arguments")?;
     assert_eq!(
         Path::new(exe).canonicalize()?,
-        Path::new(env!("CARGO_BIN_EXE_patina-gpui")).canonicalize()?
+        Path::new(env!("CARGO_BIN_EXE_patina")).canonicalize()?
     );
     registered
         .raw_arg(args.trim_start())

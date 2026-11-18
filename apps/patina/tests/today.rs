@@ -1,6 +1,6 @@
-#[path = "../../test-support/children.rs"]
+#[path = "../../../crates/test-support/children.rs"]
 mod children;
-#[path = "../../test-support/windows.rs"]
+#[path = "../../../crates/test-support/windows.rs"]
 mod desktop;
 #[path = "today/handles.rs"]
 mod handles;
@@ -484,7 +484,7 @@ fn main_window_lifecycle() -> Result<(), Error> {
     let fixture = out.join("fixture.db");
     seed_profile(&fixture, true)?;
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina_gpui::APP_ID);
+    let profile = root.path().join(patina::APP_ID);
     fs::create_dir(&profile)?;
     fs::copy(&fixture, profile.join("patina.db"))?;
     let exe = r"C:\fixture\fixture.exe";
@@ -496,7 +496,7 @@ fn main_window_lifecycle() -> Result<(), Error> {
         }))?,
     )?;
     let mut child = TestChild(
-        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+        Command::new(env!("CARGO_BIN_EXE_patina"))
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
             .env("PATINA_E2E_DATA_ROOT", root.path())
             .env("PATINA_E2E", "1")
@@ -507,7 +507,7 @@ fn main_window_lifecycle() -> Result<(), Error> {
     let tray = wait("tray", || window(pid, w!("Patina GPUI")))?;
     let main = || children::find(pid, |p| window(p, w!("Patina")));
     let sample = |state: &str| -> Result<u64, Error> {
-        let sampler = repo.join("desktop/target/debug/examples/windows-resource-sample.exe");
+        let sampler = repo.join("target/debug/examples/windows-resource-sample.exe");
         let status = Command::new(sampler)
             .arg(pid.to_string())
             .arg(out.join(format!("{state}.jsonl")))
@@ -558,7 +558,7 @@ fn main_window_lifecycle() -> Result<(), Error> {
         out.join("gpui.json"),
         serde_json::to_vec_pretty(
             &serde_json::json!({"labels":labels,"headings":headings(hwnd)?,"client":[rect.right,rect.bottom],"dpi":unsafe{GetDpiForWindow(hwnd)},
-                "fixtureHash":hash(&fixture)?,"binaryHash":hash(Path::new(env!("CARGO_BIN_EXE_patina-gpui")))?}),
+                "fixtureHash":hash(&fixture)?,"binaryHash":hash(Path::new(env!("CARGO_BIN_EXE_patina")))?}),
         )?,
     )?;
     for label in [
@@ -736,11 +736,11 @@ fn ranked_app_actions() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina_gpui::APP_ID);
+    let profile = root.path().join(patina::APP_ID);
     fs::create_dir(&profile)?;
     seed(&profile.join("patina.db"))?;
     let mut child = TestChild(
-        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+        Command::new(env!("CARGO_BIN_EXE_patina"))
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
             .env("RUST_BACKTRACE", "1")
             .stderr(fs::File::create(root.path().join("stderr.log"))?)

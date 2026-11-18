@@ -9,13 +9,13 @@ fn settings_color_schemes() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let dir = root.path().join(patina_gpui::APP_ID);
+    let dir = root.path().join(patina::APP_ID);
     fs::create_dir(&dir)?;
     let path = dir.join("patina.db");
     seed(&path)?;
     let start = || -> Result<_, Error> {
         let host = TestChild(
-            Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+            Command::new(env!("CARGO_BIN_EXE_patina"))
                 .env("PATINA_GPUI_PROFILE_PARENT", root.path())
                 .arg("--today")
                 .spawn()?,

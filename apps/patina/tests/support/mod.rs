@@ -1,6 +1,6 @@
 use super::*;
 
-#[path = "../../../test-support/recording.rs"]
+#[path = "../../../../crates/test-support/recording.rs"]
 mod fixture;
 pub(super) use fixture::{seed, seed_profile};
 

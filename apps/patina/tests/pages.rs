@@ -1,6 +1,6 @@
 #[path = "pages/category_manager.rs"]
 mod category_manager;
-#[path = "../../test-support/children.rs"]
+#[path = "../../../crates/test-support/children.rs"]
 mod children;
 #[path = "pages/classification_color.rs"]
 mod classification_color;
@@ -10,7 +10,7 @@ mod classification_delete;
 mod classification_web;
 #[path = "pages/data_range.rs"]
 mod data_range;
-#[path = "../../test-support/windows.rs"]
+#[path = "../../../crates/test-support/windows.rs"]
 mod desktop;
 #[path = "pages/history_calendar.rs"]
 mod history_calendar;
@@ -188,7 +188,7 @@ fn sidebar_opens_empty_history() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina_gpui::APP_ID);
+    let profile = root.path().join(patina::APP_ID);
     fs::create_dir(&profile)?;
     let db = profile.join("patina.db");
     let rt = tokio::runtime::Builder::new_current_thread()
@@ -203,7 +203,7 @@ fn sidebar_opens_empty_history() -> Result<(), Error> {
     })?;
     let stderr = root.path().join("renderer.log");
     let mut host = TestChild(
-        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+        Command::new(env!("CARGO_BIN_EXE_patina"))
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
             .stderr(fs::File::create(&stderr)?)
             .arg("--today")
@@ -228,7 +228,7 @@ fn sidebar_opens_empty_history() -> Result<(), Error> {
 fn sample(dir: &Option<PathBuf>, pid: u32, name: &str) -> Result<(), Error> {
     if let Some(dir) = dir {
         let exe = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../desktop/target/debug/examples/windows-resource-sample.exe");
+            .join("../../target/debug/examples/windows-resource-sample.exe");
         let status = Command::new(exe)
             .arg(pid.to_string())
             .arg(dir.join(format!("{name}.jsonl")))
@@ -255,7 +255,7 @@ fn repeated_sidebar_navigation_keeps_window_alive() -> Result<(), Error> {
 
 fn navigate_in_locale(tag: &str) -> Result<(), Error> {
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina_gpui::APP_ID);
+    let profile = root.path().join(patina::APP_ID);
     fs::create_dir(&profile)?;
     seed(&profile.join("patina.db"))?;
     let rt = tokio::runtime::Builder::new_current_thread()
@@ -275,7 +275,7 @@ fn navigate_in_locale(tag: &str) -> Result<(), Error> {
     let locale = patina_recorder::Locale::from_tag(Some(tag));
     let stderr = root.path().join("renderer.log");
     let mut host = TestChild(
-        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+        Command::new(env!("CARGO_BIN_EXE_patina"))
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
             .env_remove("PATINA_GPUI_DEV_SESSION")
             .env("RUST_BACKTRACE", "1")
@@ -317,13 +317,19 @@ fn navigate_in_locale(tag: &str) -> Result<(), Error> {
                 }
             }
         }
-        click(hwnd, &patina_recorder::text(locale, "settings.title"))?;
+        navigate_sidebar(hwnd, locale, "settings.title")?;
         let language_name = patina_recorder::text(locale, "settings.languageLabel");
         let language = wait("language selector", || {
             controls(hwnd).ok()?.into_iter().find(|el| unsafe {
                 el.CurrentControlType().ok() == Some(UIA_ComboBoxControlTypeId)
                     && el.CurrentName().is_ok_and(|n| n == language_name.as_str())
             })
+        })
+        .map_err(|e| {
+            format!(
+                "{e}; expected {language_name:?}; Settings nodes {:?}",
+                names(hwnd)
+            )
         })?;
         activate_control(hwnd, &language, false)?;
         let (next_tag, next_name) = match tag {
@@ -460,7 +466,7 @@ fn history_navigation() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina_gpui::APP_ID);
+    let profile = root.path().join(patina::APP_ID);
     fs::create_dir(&profile)?;
     let db = profile.join("patina.db");
     seed(&db)?;
@@ -478,13 +484,14 @@ fn history_navigation() -> Result<(), Error> {
         .build()?;
     rt.block_on(async{
         let mut c=SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(db)).await?;
+        history_timeline::enable_web_history(&mut c).await?;
         sqlx::query("INSERT OR REPLACE INTO settings(key,value) VALUES ('min_session_secs','60')").execute(&mut c).await?;
         sqlx::query("INSERT INTO session_title_samples(session_id,title,start_time,end_time) SELECT id,'Design fixture',?,? FROM sessions WHERE exe_name='studio.exe'").bind(midnight).bind(midnight+120000).execute(&mut c).await?;
         sqlx::query("INSERT INTO sessions(exe_name,app_name,start_time,end_time,duration) VALUES('brief.exe','Brief',?,?,30000)").bind(midnight+71*60000).bind(midnight+71*60000+30000).execute(&mut c).await?;
         Ok::<_,Error>(())
     })?;
     let mut child = TestChild(
-        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+        Command::new(env!("CARGO_BIN_EXE_patina"))
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
             .arg("--today")
             .spawn()?,
@@ -560,6 +567,10 @@ fn history_navigation() -> Result<(), Error> {
         open.Invoke()?;
     }
     wait("detail remembers zoom", || named(hwnd, "23.0 h"))?;
+    history_timeline::pan_to_start(hwnd, "detail-timeline-track")?;
+    wait("restored detail starts at midnight", || {
+        named(hwnd, "00:00 – 23:00")
+    })?;
     press(hwnd, "Title details · Studio")?;
     wait("same detail from Today", || {
         includes("Design fixture").then_some(())
@@ -593,11 +604,11 @@ fn data_navigation() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina_gpui::APP_ID);
+    let profile = root.path().join(patina::APP_ID);
     fs::create_dir(&profile)?;
     seed(&profile.join("patina.db"))?;
     let mut host = TestChild(
-        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+        Command::new(env!("CARGO_BIN_EXE_patina"))
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
             .arg("--today")
             .spawn()?,
@@ -747,7 +758,7 @@ fn classification_navigation() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let dir = root.path().join(patina_gpui::APP_ID);
+    let dir = root.path().join(patina::APP_ID);
     fs::create_dir(&dir)?;
     let db = dir.join("patina.db");
     seed(&db)?;
@@ -765,7 +776,7 @@ fn classification_navigation() -> Result<(), Error> {
     })?;
     let stderr = root.path().join("classification.log");
     let mut host = TestChild(
-        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+        Command::new(env!("CARGO_BIN_EXE_patina"))
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
             .stderr(fs::File::create(&stderr)?)
             .arg("--today")
@@ -1268,11 +1279,11 @@ fn classification_totals() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let dir = root.path().join(patina_gpui::APP_ID);
+    let dir = root.path().join(patina::APP_ID);
     fs::create_dir(&dir)?;
     seed(&dir.join("patina.db"))?;
     let mut host = TestChild(
-        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+        Command::new(env!("CARGO_BIN_EXE_patina"))
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
             .env_remove("PATINA_GPUI_DEV_SESSION")
             .arg("--today")
@@ -1337,12 +1348,12 @@ fn settings_navigation() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let dir = root.path().join(patina_gpui::APP_ID);
+    let dir = root.path().join(patina::APP_ID);
     fs::create_dir(&dir)?;
     let path = dir.join("patina.db");
     seed(&path)?;
     let mut host = TestChild(
-        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+        Command::new(env!("CARGO_BIN_EXE_patina"))
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
             .arg("--today")
             .spawn()?,
@@ -1503,11 +1514,11 @@ fn about_navigation() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let dir = root.path().join(patina_gpui::APP_ID);
+    let dir = root.path().join(patina::APP_ID);
     fs::create_dir(&dir)?;
     seed(&dir.join("patina.db"))?;
     let mut host = TestChild(
-        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+        Command::new(env!("CARGO_BIN_EXE_patina"))
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
             .arg("--today")
             .spawn()?,
@@ -1543,11 +1554,11 @@ fn page_header_layout() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let dir = root.path().join(patina_gpui::APP_ID);
+    let dir = root.path().join(patina::APP_ID);
     fs::create_dir(&dir)?;
     seed(&dir.join("patina.db"))?;
     let mut host = TestChild(
-        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+        Command::new(env!("CARGO_BIN_EXE_patina"))
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
             .arg("--today")
             .spawn()?,

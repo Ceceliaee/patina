@@ -122,12 +122,12 @@ fn profile(fixture: &Path, out: &Path, uia: bool) -> Result<(), Error> {
         None
     };
     let root = tempfile::tempdir()?;
-    let dir = root.path().join(patina_gpui::APP_ID);
+    let dir = root.path().join(patina::APP_ID);
     fs::create_dir(&dir)?;
     fs::copy(fixture, dir.join("patina.db"))?;
     let diagnostics = out.with_extension("stderr.log");
     let mut child = TestChild(
-        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+        Command::new(env!("CARGO_BIN_EXE_patina"))
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
             .stderr(fs::File::create(&diagnostics)?)
             .spawn()?,
@@ -220,13 +220,13 @@ fn renderer_recovery() -> Result<(), Error> {
     use windows::Win32::UI::Shell::{NIN_SELECT, NINF_KEY};
     let _com = ComApartment::init()?;
     let root = tempfile::tempdir()?;
-    let dir = root.path().join(patina_gpui::APP_ID);
+    let dir = root.path().join(patina::APP_ID);
     fs::create_dir(&dir)?;
     seed(&dir.join("patina.db"))?;
     let mut diagnostics = run_path("recovery")?;
     diagnostics.add_extension("stderr.log");
     let mut host = TestChild(
-        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+        Command::new(env!("CARGO_BIN_EXE_patina"))
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
             .stderr(fs::File::create(&diagnostics)?)
             .spawn()?,
@@ -302,13 +302,13 @@ fn mini_window_handles() -> Result<(), Error> {
     };
     let _com = ComApartment::init()?;
     let root = tempfile::tempdir()?;
-    let dir = root.path().join(patina_gpui::APP_ID);
+    let dir = root.path().join(patina::APP_ID);
     fs::create_dir(&dir)?;
     seed(&dir.join("patina.db"))?;
     let mut diagnostics = run_path("mini-handles")?;
     diagnostics.add_extension("stderr.log");
     let mut host = TestChild(
-        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+        Command::new(env!("CARGO_BIN_EXE_patina"))
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
             .arg("--mini")
             .stderr(fs::File::create(&diagnostics)?)

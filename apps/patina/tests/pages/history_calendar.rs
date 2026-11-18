@@ -24,11 +24,11 @@ fn anchored_calendar() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina_gpui::APP_ID);
+    let profile = root.path().join(patina::APP_ID);
     fs::create_dir(&profile)?;
     seed(&profile.join("patina.db"))?;
     let mut app = TestChild(
-        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+        Command::new(env!("CARGO_BIN_EXE_patina"))
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
             .arg("--today")
             .spawn()?,

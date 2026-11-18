@@ -24,11 +24,11 @@ fn preference_segments_persist_and_support_keyboard() -> Result<(), Error> {
     }
     let _com = ComApartment::init()?;
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina_gpui::APP_ID);
+    let profile = root.path().join(patina::APP_ID);
     fs::create_dir(&profile)?;
     seed(&profile.join("patina.db"))?;
     let mut app = TestChild(
-        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+        Command::new(env!("CARGO_BIN_EXE_patina"))
             .arg("--today")
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
             .spawn()?,
@@ -91,7 +91,7 @@ fn mini_opens_the_selected_tool_and_keeps_dirty_settings() -> Result<(), Error> 
     }
     let _com = ComApartment::init()?;
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina_gpui::APP_ID);
+    let profile = root.path().join(patina::APP_ID);
     fs::create_dir(&profile)?;
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -106,7 +106,7 @@ fn mini_opens_the_selected_tool_and_keeps_dirty_settings() -> Result<(), Error> 
         pool.close().await;Ok::<_,Error>(())
     })?;
     let mut app = TestChild(
-        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+        Command::new(env!("CARGO_BIN_EXE_patina"))
             .arg("--mini")
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
             .spawn()?,
@@ -179,7 +179,7 @@ fn navigation_and_consent_keyboard() -> Result<(), Error> {
         .build()?;
     for (locale, theme, compat) in [("en-US", "dark", false), ("zh-CN", "light", true)] {
         let root = tempfile::tempdir()?;
-        let profile = root.path().join(patina_gpui::APP_ID);
+        let profile = root.path().join(patina::APP_ID);
         fs::create_dir(&profile)?;
         let local = patina_recorder::Locale::from_tag(Some(locale));
         let tr = |k| patina_recorder::text(local, k);
@@ -188,7 +188,7 @@ fn navigation_and_consent_keyboard() -> Result<(), Error> {
             sqlx::query("INSERT OR REPLACE INTO settings(key,value) VALUES ('language',?),('theme_mode',?),('tracking_paused','1')")
                 .bind(locale).bind(theme).execute(&pool).await?;pool.close().await;Ok::<_,Error>(())
         })?;
-        let mut command_line = Command::new(env!("CARGO_BIN_EXE_patina-gpui"));
+        let mut command_line = Command::new(env!("CARGO_BIN_EXE_patina"));
         command_line
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
             .arg("--today");
@@ -339,7 +339,7 @@ fn bundled_tools_can_be_removed_independently() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina_gpui::APP_ID);
+    let profile = root.path().join(patina::APP_ID);
     fs::create_dir(&profile)?;
     let db = profile.join("patina.db");
     let rt = tokio::runtime::Builder::new_current_thread()
@@ -354,7 +354,7 @@ fn bundled_tools_can_be_removed_independently() -> Result<(), Error> {
     })?;
     let launch = || -> Result<_, Error> {
         let app = TestChild(
-            Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+            Command::new(env!("CARGO_BIN_EXE_patina"))
                 .env("PATINA_GPUI_PROFILE_PARENT", root.path())
                 .arg("--today")
                 .spawn()?,
@@ -436,6 +436,15 @@ fn timed_reminder_survives_window_release() -> Result<(), Error> {
 
 #[test]
 #[ignore = "isolated Win32 desktop"]
+fn separate_reminder_survives_window_release() -> Result<(), Error> {
+    if !patina_test_desktop::run_case()? {
+        return Ok(());
+    }
+    verify_reminder_delivery(false)
+}
+
+#[test]
+#[ignore = "isolated Win32 desktop"]
 fn in_window_reminder_uses_the_selected_delivery() -> Result<(), Error> {
     if !patina_test_desktop::run_case()? {
         return Ok(());
@@ -446,7 +455,7 @@ fn in_window_reminder_uses_the_selected_delivery() -> Result<(), Error> {
 fn verify_reminder_delivery(dialog: bool) -> Result<(), Error> {
     let _com = ComApartment::init()?;
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina_gpui::APP_ID);
+    let profile = root.path().join(patina::APP_ID);
     fs::create_dir(&profile)?;
     let db = profile.join("patina.db");
     let rt = tokio::runtime::Builder::new_current_thread()
@@ -461,7 +470,7 @@ fn verify_reminder_delivery(dialog: bool) -> Result<(), Error> {
         Ok::<_,Error>(())
     })?;
     let mut app = TestChild(
-        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+        Command::new(env!("CARGO_BIN_EXE_patina"))
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
             .arg("--today")
             .spawn()?,
@@ -529,7 +538,7 @@ fn tool_tray_resources() -> Result<(), Error> {
             .ok_or("Set PATINA_TOOL_SAMPLES to the run output directory")?,
     );
     fs::create_dir_all(&out)?;
-    let profile = root.path().join(patina_gpui::APP_ID);
+    let profile = root.path().join(patina::APP_ID);
     fs::create_dir(&profile)?;
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -544,7 +553,7 @@ fn tool_tray_resources() -> Result<(), Error> {
             "exe_name":"fixture.exe","process_path":exe,"is_afk":false,"idle_time_ms":0},"names":{(exe):"Fixture"}}))?,
     )?;
     let mut app = TestChild(
-        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+        Command::new(env!("CARGO_BIN_EXE_patina"))
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
             .env("PATINA_E2E_DATA_ROOT", root.path())
             .env("PATINA_E2E", "1")
@@ -653,7 +662,7 @@ fn focus_completes_in_tray_and_starts_break_from_notice() -> Result<(), Error> {
     }
     let _com = ComApartment::init()?;
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina_gpui::APP_ID);
+    let profile = root.path().join(patina::APP_ID);
     fs::create_dir(&profile)?;
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -661,7 +670,7 @@ fn focus_completes_in_tray_and_starts_break_from_notice() -> Result<(), Error> {
     let pool = rt.block_on(patina_recorder::open_database(&profile.join("patina.db")))?;
     rt.block_on(sqlx::query("INSERT OR REPLACE INTO settings(key,value) VALUES ('language','en-US'),('show_tray_icon','0'),('tracking_paused','1'),('tools_notification_preferences','{\"delivery\":\"notification\",\"sound\":\"none\"}')").execute(&pool))?;
     let mut app = TestChild(
-        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+        Command::new(env!("CARGO_BIN_EXE_patina"))
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
             .arg("--today")
             .spawn()?,
@@ -737,7 +746,7 @@ fn install_update_uninstall_counter() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina_gpui::APP_ID);
+    let profile = root.path().join(patina::APP_ID);
     fs::create_dir(&profile)?;
     tokio::runtime::Builder::new_current_thread().enable_all().build()?.block_on(async {
         let pool = patina_recorder::open_database(&profile.join("patina.db")).await?;
@@ -746,7 +755,7 @@ fn install_update_uninstall_counter() -> Result<(), Error> {
         Ok::<_, Error>(())
     })?;
     let mut host = TestChild(
-        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+        Command::new(env!("CARGO_BIN_EXE_patina"))
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
             .arg("--today")
             .spawn()?,

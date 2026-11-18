@@ -67,7 +67,7 @@ fn classification_color_editor() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina_gpui::APP_ID);
+    let profile = root.path().join(patina::APP_ID);
     fs::create_dir(&profile)?;
     let db = profile.join("patina.db");
     seed(&db)?;
@@ -81,7 +81,7 @@ fn classification_color_editor() -> Result<(), Error> {
         Ok::<_,Error>(())
     })?;
     let mut host = TestChild(
-        Command::new(env!("CARGO_BIN_EXE_patina-gpui"))
+        Command::new(env!("CARGO_BIN_EXE_patina"))
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
             .env_remove("PATINA_GPUI_DEV_SESSION")
             .stderr(fs::File::create(root.path().join("renderer.log"))?)
