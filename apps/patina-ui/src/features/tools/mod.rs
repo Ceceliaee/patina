@@ -37,8 +37,6 @@ pub(crate) struct Tools {
     target: Option<patina_activity_model::ToolTarget>,
     pending: Option<Confirm>,
     modal_focus: Option<FocusHandle>,
-    section_focus: Vec<FocusHandle>,
-    pub(crate) labels: bool,
     manager_focus: FocusHandle,
     confirm_focus: FocusHandle,
     cancel_focus: FocusHandle,
@@ -52,7 +50,6 @@ impl Tools {
     pub fn new(
         client: Rc<Client>,
         target: Option<patina_activity_model::ToolTarget>,
-        labels: bool,
         cx: &mut Context<Self>,
     ) -> Self {
         let mut page = Self {
@@ -69,8 +66,6 @@ impl Tools {
             target,
             pending: None,
             modal_focus: None,
-            section_focus: Vec::new(),
-            labels,
             manager_focus: cx.focus_handle(),
             confirm_focus: cx.focus_handle(),
             cancel_focus: cx.focus_handle(),
@@ -140,8 +135,6 @@ impl Tools {
                     .find(|p| Some(p.manifest.id.as_str()) == preferred)
                     .or_else(|| tools.first())
                     .cloned();
-                this.section_focus
-                    .resize_with(tools.len(), || cx.focus_handle());
                 this.tools = tools;
                 if !this.manager {
                     this.load(None, cx);
@@ -283,26 +276,17 @@ impl Render for Tools {
                 .position(|tool| tool.manifest.id == selected.manifest.id)
         });
         let view = cx.weak_entity();
-        let selector = quietpro::section_rail(
-            ("tool-select", tr("tools.title")),
+        let selector = quietpro::Dropdown::new(
+            "tool-select",
+            tr("tools.title"),
             self.tools.iter().enumerate().map(|(index, tool)| {
                 (
                     index,
                     tool_name(&tool.manifest.id, &tool.manifest.name, locale),
-                    Some(match tool.manifest.id.as_str() {
-                        "patina.reminders" => quietpro::Icon::Bell,
-                        "patina.focus" => quietpro::Icon::Clock,
-                        _ => quietpro::Icon::ToolCase,
-                    }),
-                    self.section_focus[index].clone(),
                 )
             }),
-            selected
-                .filter(|_| !self.manager && self.preferences.is_none())
-                .unwrap_or(usize::MAX),
-            ready,
+            selected.unwrap_or(0),
             colors,
-            self.labels,
             move |index, _, cx| {
                 let _ = view.update(cx, |this, cx| {
                     if this.busy || this.pending.is_some() {
@@ -318,9 +302,14 @@ impl Render for Tools {
                     this.load(None, cx);
                 });
             },
+        )
+        .disabled(!ready);
+        let top = page_title_row(tr("tools.title"), quietpro::Icon::ToolCase, colors).child(
+            page_actions()
+                .when(!self.tools.is_empty(), |actions| actions.child(selector))
+                .child(manager)
+                .child(preferences),
         );
-        let top = page_title_row(tr("tools.title"), quietpro::Icon::ToolCase, colors)
-            .child(page_actions().child(manager).child(preferences));
         if let Some(p) = &self.preferences {
             use patina_activity_model::{
                 NoticeDelivery as D, NoticePreferencesPatch as Patch, NoticeSound as S,
@@ -646,23 +635,7 @@ impl Render for Tools {
             .min_h_0()
             .overflow_y_scroll()
             .child(content);
-        let workspace = div()
-            .flex()
-            .flex_1()
-            .min_h_0()
-            .gap(px(quietpro::APP_CARD_GAP))
-            .when(!self.tools.is_empty(), |this| {
-                this.child(
-                    div()
-                        .id("tool-sections")
-                        .flex_none()
-                        .min_h_0()
-                        .overflow_y_scroll()
-                        .child(selector),
-                )
-            })
-            .child(panel);
-        let shell = page(colors).child(top).child(workspace);
+        let shell = page(colors).child(top).child(panel);
         if let Some(confirm) = &self.pending {
             let mut content = div()
                 .id("tool-consent-body")

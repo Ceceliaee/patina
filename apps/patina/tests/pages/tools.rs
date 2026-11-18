@@ -1,6 +1,26 @@
 use super::*;
 use windows::core::{BSTR, Interface};
 
+fn tool_selector(hwnd: HWND) -> Option<IUIAutomationElement> {
+    controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+        el.CurrentControlType().ok() == Some(UIA_ComboBoxControlTypeId)
+            && el.CurrentName().is_ok_and(|n| n == "Tools")
+    })
+}
+
+fn choose_tool(hwnd: HWND, name: &str) -> Result<(), Error> {
+    let selector = wait("tool selector", || tool_selector(hwnd))?;
+    activate_control(hwnd, &selector, false)?;
+    let item = wait(name, || {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentControlType().ok() == Some(UIA_ListItemControlTypeId)
+                && el.CurrentName().is_ok_and(|n| n == name)
+        })
+    })?;
+    activate_control(hwnd, &item, false)?;
+    Ok(())
+}
+
 fn picker(owner: HWND) -> Option<HWND> {
     let mut pid = 0;
     unsafe { GetWindowThreadProcessId(owner, Some(&mut pid)) };
@@ -34,27 +54,30 @@ fn preference_segments_persist_and_support_keyboard() -> Result<(), Error> {
             .spawn()?,
     );
     let pid = app.0.id();
-    let hwnd = wait("main", || children::find(pid, |p| window(p, w!("Patina"))))?;
-    click(hwnd, "Tools")?;
-    let reminder = wait("default reminder section", || {
-        selected_segment(hwnd, "Reminder")?;
-        segment(hwnd, "Reminder")
+    let hwnd = wait("main", || {
+        children::find(pid, |p| window(p, w!("Patina UI")))
     })?;
-    let focus = wait("focus section", || segment(hwnd, "Focus"))?;
-    let create = wait("reminder content", || button(hwnd, "New reminder"))?;
+    click(hwnd, "Tools")?;
+    let selector = wait("tool selector", || tool_selector(hwnd))?;
+    let manage = wait("manage tools", || button(hwnd, "Manage tools"))?;
+    wait("reminder content", || button(hwnd, "New reminder"))?;
     unsafe {
-        let top = reminder.CurrentBoundingRectangle()?;
-        let bottom = focus.CurrentBoundingRectangle()?;
-        assert!(top.bottom <= bottom.top && top.left == bottom.left);
-        assert!(top.right <= create.CurrentBoundingRectangle()?.left);
-        reminder.SetFocus()?;
+        let trigger = selector.CurrentBoundingRectangle()?;
+        let next = manage.CurrentBoundingRectangle()?;
+        assert!(
+            trigger.right <= next.left && trigger.top < next.bottom && next.top < trigger.bottom
+        );
+        selector.SetFocus()?;
     }
+    key(hwnd, 13)?;
     key(hwnd, 40)?;
-    wait("keyboard selects focus", || selected_segment(hwnd, "Focus"))?;
+    key(hwnd, 13)?;
     wait("focus content", || button(hwnd, "New focus session"))?;
     click(hwnd, "Today")?;
     click(hwnd, "Tools")?;
-    wait("focus section restored", || selected_segment(hwnd, "Focus"))?;
+    wait("focus section restored", || {
+        button(hwnd, "New focus session")
+    })?;
     click(hwnd, "Tools settings")?;
     select_segment(hwnd, "Reminder dialog")?;
     select_segment(hwnd, "Soft bell")?;
@@ -112,9 +135,9 @@ fn mini_opens_the_selected_tool_and_keeps_dirty_settings() -> Result<(), Error> 
             .spawn()?,
     );
     let pid = app.0.id();
-    let main = || children::find(pid, |p| window(p, w!("Patina")));
+    let main = || children::find(pid, |p| window(p, w!("Patina UI")));
     let mini = wait("Mini", || {
-        children::find(pid, |p| window(p, w!("Patina GPUI Mini")))
+        children::find(pid, |p| window(p, w!("Patina Mini")))
     })?;
     let pin = wait("Mini pin", || {
         controls(mini).ok()?.into_iter().find_map(|el| unsafe {
@@ -198,7 +221,7 @@ fn navigation_and_consent_keyboard() -> Result<(), Error> {
         let mut host = TestChild(command_line.spawn()?);
         let pid = host.0.id();
         let hwnd = wait("main window", || {
-            children::find(pid, |p| window(p, w!("Patina")))
+            children::find(pid, |p| window(p, w!("Patina UI")))
         })?;
         let dpi = unsafe { GetDpiForWindow(hwnd) };
         observed.insert(dpi);
@@ -361,7 +384,7 @@ fn bundled_tools_can_be_removed_independently() -> Result<(), Error> {
         );
         let pid = app.0.id();
         let hwnd = wait("main window", || {
-            children::find(pid, |p| window(p, w!("Patina")))
+            children::find(pid, |p| window(p, w!("Patina UI")))
         })?;
         click(hwnd, "Tools")?;
         Ok((app, hwnd, pid))
@@ -382,16 +405,16 @@ fn bundled_tools_can_be_removed_independently() -> Result<(), Error> {
         Ok(())
     };
     let (app, hwnd, pid) = launch()?;
-    select_segment(hwnd, "Focus")?;
+    choose_tool(hwnd, "Focus")?;
     press(hwnd, "New focus session")?;
     click(hwnd, "Start")?;
     wait("running focus", || button(hwnd, "Pause"))?;
-    select_segment(hwnd, "Reminder")?;
+    choose_tool(hwnd, "Reminder")?;
     press(hwnd, "New reminder")?;
     wait("scheduled", || button(hwnd, "Pause"))?;
     click(hwnd, "Manage tools")?;
     remove(hwnd, "Reminder")?;
-    select_segment(hwnd, "Focus")?;
+    choose_tool(hwnd, "Focus")?;
     wait("focus still running", || button(hwnd, "Pause"))?;
     click(hwnd, "Manage tools")?;
     remove(hwnd, "Focus")?;
@@ -477,11 +500,11 @@ fn verify_reminder_delivery(dialog: bool) -> Result<(), Error> {
     );
     let pid = app.0.id();
     let main = wait("main window", || {
-        children::find(pid, |p| window(p, w!("Patina")))
+        children::find(pid, |p| window(p, w!("Patina UI")))
     })?;
     press(main, "Close window")?;
     wait("main released before expiry", || {
-        children::find(pid, |p| window(p, w!("Patina")))
+        children::find(pid, |p| window(p, w!("Patina UI")))
             .is_none()
             .then_some(())
     })?;
@@ -490,7 +513,7 @@ fn verify_reminder_delivery(dialog: bool) -> Result<(), Error> {
             window(
                 p,
                 if dialog {
-                    w!("Patina")
+                    w!("Patina UI")
                 } else {
                     w!("Patina · Tools")
                 },
@@ -502,7 +525,7 @@ fn verify_reminder_delivery(dialog: bool) -> Result<(), Error> {
         assert!(children::find(pid, |p| window(p, w!("Patina · Tools"))).is_none());
     } else {
         assert_ne!(unsafe { GetForegroundWindow() }, notice);
-        assert!(children::find(pid, |p| window(p, w!("Patina"))).is_none());
+        assert!(children::find(pid, |p| window(p, w!("Patina UI"))).is_none());
     }
     click(notice, "Confirm")?;
     wait("notification released", || {
@@ -596,7 +619,9 @@ fn tool_tray_resources() -> Result<(), Error> {
     };
     let open = || -> Result<_, Error> {
         command(tray, 4)?;
-        let hwnd = wait("main", || children::find(pid, |p| window(p, w!("Patina"))))?;
+        let hwnd = wait("main", || {
+            children::find(pid, |p| window(p, w!("Patina UI")))
+        })?;
         click(hwnd, "Tools")?;
         wait("tools loaded", || {
             button(hwnd, "Manage tools")
@@ -607,7 +632,7 @@ fn tool_tray_resources() -> Result<(), Error> {
     let close = |hwnd| -> Result<(), Error> {
         click(hwnd, "Close window")?;
         wait("renderer exited", || {
-            children::find(pid, |p| window(p, w!("Patina")))
+            children::find(pid, |p| window(p, w!("Patina UI")))
                 .is_none()
                 .then_some(())
         })?;
@@ -636,7 +661,7 @@ fn tool_tray_resources() -> Result<(), Error> {
     let hwnd = open()?;
     for _ in 0..5 {
         click(hwnd, "Reinstall · Reminder")?;
-        wait("restored tool", || selected_segment(hwnd, "Reminder"))?;
+        wait("restored tool", || button(hwnd, "New reminder"))?;
         click(hwnd, "Manage tools")?;
         click(hwnd, "Uninstall tool Reminder")?;
         click(hwnd, "Confirm")?;
@@ -676,10 +701,10 @@ fn focus_completes_in_tray_and_starts_break_from_notice() -> Result<(), Error> {
             .spawn()?,
     );
     let pid = app.0.id();
-    let main = || children::find(pid, |p| window(p, w!("Patina")));
+    let main = || children::find(pid, |p| window(p, w!("Patina UI")));
     let hwnd = wait("main", main)?;
     click(hwnd, "Tools")?;
-    select_segment(hwnd, "Focus")?;
+    choose_tool(hwnd, "Focus")?;
     wait("focus duration set to one minute", || {
         let field = controls(hwnd).ok()?.into_iter().find_map(|e| unsafe {
             if e.CurrentControlType().ok()? != UIA_EditControlTypeId
@@ -724,7 +749,7 @@ fn focus_completes_in_tray_and_starts_break_from_notice() -> Result<(), Error> {
     command(tray, 4)?;
     let hwnd = wait("main rebuilt", main)?;
     click(hwnd, "Tools")?;
-    select_segment(hwnd, "Focus")?;
+    choose_tool(hwnd, "Focus")?;
     wait("break running", || button(hwnd, "Pause"))?;
     let state: (String, String, i64) = rt.block_on(
         sqlx::query_as("SELECT status,phase,completed_focus_count FROM tool_pomodoro_runs")
@@ -761,7 +786,9 @@ fn install_update_uninstall_counter() -> Result<(), Error> {
             .spawn()?,
     );
     let pid = host.0.id();
-    let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
+    let hwnd = wait("Today", || {
+        children::find(pid, |p| window(p, w!("Patina UI")))
+    })?;
     click(hwnd, "Tools")?;
     let file = |name| -> Result<PathBuf, Error> {
         Ok(std::path::absolute(PathBuf::from(
@@ -773,7 +800,7 @@ fn install_update_uninstall_counter() -> Result<(), Error> {
         pick_file(hwnd, path)?;
         click(hwnd, "Confirm")
     };
-    wait("tool registry", || segment(hwnd, "Focus"))?;
+    wait("tool registry", || tool_selector(hwnd))?;
     click(hwnd, "Manage tools")?;
     install(&file("PATINA_COUNTER_PACKAGE")?)?;
     click(hwnd, "Add one")?;
@@ -782,7 +809,7 @@ fn install_update_uninstall_counter() -> Result<(), Error> {
     wait("counter after keyboard", || named(hwnd, "2"))?;
     click(hwnd, "Today")?;
     click(hwnd, "Tools")?;
-    select_segment(hwnd, "Counter")?;
+    choose_tool(hwnd, "Counter")?;
     wait("saved counter", || named(hwnd, "2"))?;
     click(hwnd, "Manage tools")?;
     install(&file("PATINA_COUNTER_UPDATE")?)?;

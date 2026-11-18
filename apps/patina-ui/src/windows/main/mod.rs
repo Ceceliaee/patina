@@ -140,12 +140,7 @@ impl MainWindow {
         self.page_subscription = None;
         self.page = match section {
             Section::Tools => Page::Tools(cx.new(|cx| {
-                crate::features::tools::Tools::new(
-                    self.client.clone(),
-                    self.tool_target.take(),
-                    self.labels,
-                    cx,
-                )
+                crate::features::tools::Tools::new(self.client.clone(), self.tool_target.take(), cx)
             })),
             Section::About => Page::About(
                 cx.new(|cx| crate::features::about::About::new(self.client.clone(), cx)),
@@ -239,7 +234,7 @@ impl MainWindow {
             ..Default::default()
         };
         let (handle, view) = gpui_kit::open_window(options, cx, |window, cx| {
-            window.set_window_title("Patina");
+            window.set_window_title("Patina UI");
             window
                 .observe_window_appearance(|_, cx| cx.refresh_windows())
                 .detach();
@@ -403,12 +398,6 @@ impl Render for MainWindow {
                     move |next, _, _, cx| {
                         let _ = view.update(cx, |this, cx| {
                             this.labels = next;
-                            if let Page::Tools(tools) = &this.page {
-                                tools.update(cx, |t, cx| {
-                                    t.labels = next;
-                                    cx.notify();
-                                });
-                            }
                             cx.notify();
                         });
                     }
