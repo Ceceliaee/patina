@@ -2,56 +2,27 @@ import assert from "node:assert/strict";
 import { requireMainVerification } from "../scripts/release-verification.ts";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import path from "node:path";
 import {
   WINDOWS_RELEASE_TARGETS,
   buildMirrorManifest,
   verifyPeArchitecture,
-  verifyUpdaterSignature,
   buildReleaseInstallerName,
-  buildUpdaterEndpoints,
   fieldValue,
   parseSha256SumsText,
-  prepareReleaseAssets,
   renderSha256Sums,
   renderReleaseNotes,
   renderUpdaterNotes,
-  selectSignedInstallerCandidates,
-  sha256File,
-  validatePreparedReleaseAssetValues,
   validateReleaseNoteVisibleChangeCount,
   validateReleaseVersionFilesText,
-  verifyReleaseAssets,
 } from "../scripts/release.ts";
 
 function versionFileFixture(version = "1.6.0") {
   return {
     packageJson: JSON.stringify({ version }),
-    tauriConfig: JSON.stringify({ version }),
-    tauriDevConfig: JSON.stringify({ version }),
-    tauriLocalConfig: JSON.stringify({ version }),
-    cargoToml: [
-      "[package]",
-      'name = "patina"',
-      `version = "${version}"`,
-      "",
-      "[dependencies]",
-    ].join("\n"),
-    cargoLock: [
-      "version = 4",
-      "",
-      "[[package]]",
-      'name = "other"',
-      'version = "0.1.0"',
-      "",
-      "[[package]]",
-      'name = "patina"',
-      `version = "${version}"`,
-      "dependencies = []",
-    ].join("\n"),
+
     changelog: [
       "# Changelog",
       "",
@@ -140,19 +111,6 @@ async function testChangelogSummaryLengthDoesNotBlockPublication() {
   }
 }
 
-function testUpdaterEndpointsKeepGithubFirstAndPreserveMirrors() {
-  const endpoints = buildUpdaterEndpoints([
-    "https://pub-example.r2.dev/latest.json",
-    "https://github.com/Ceceliaee/patina/releases/latest/download/latest.json",
-    "https://pub-example.r2.dev/latest.json",
-  ]);
-
-  assert.deepEqual(endpoints, [
-    "https://github.com/Ceceliaee/patina/releases/latest/download/latest.json",
-    "https://pub-example.r2.dev/latest.json",
-  ]);
-}
-
 function testReleaseInstallerNamesStayStable() {
   assert.equal(buildReleaseInstallerName("1.9.3"), "Patina_1.9.3_x64-setup.exe");
   assert.equal(buildReleaseInstallerName("2.0.0-rc.1"), "Patina_2.0.0-rc.1_x64-setup.exe");
@@ -183,22 +141,6 @@ function testSha256SumsRejectInvalidContent() {
   );
 }
 
-function testSignedInstallerSelectionRequiresOnePair() {
-  const installer = path.join("bundle", "Patina.exe");
-  assert.deepEqual(
-    selectSignedInstallerCandidates([`${installer}.sig`, installer]),
-    { installerFilePath: installer, signatureFilePath: `${installer}.sig` },
-  );
-
-  assert.throws(() => selectSignedInstallerCandidates([]), /could not find/);
-  assert.throws(
-    () => selectSignedInstallerCandidates([installer, `${installer}.sig`, "bundle/Other.exe", "bundle/Other.exe.sig"]),
-    /multiple/,
-  );
-  assert.throws(() => selectSignedInstallerCandidates([`${installer}.sig`]), /matching/);
-  assert.throws(() => selectSignedInstallerCandidates([installer, `${installer}.sig`, "extra.exe"]), /exactly one/);
-}
-
 function preparedReleaseValues() {
   const version = "1.9.3";
   const assets = WINDOWS_RELEASE_TARGETS.map(({ platform }, index) => ({
@@ -212,25 +154,6 @@ function preparedReleaseValues() {
       url: `https://github.com/Ceceliaee/patina/releases/download/v${version}/${buildReleaseInstallerName(version, asset.platform)}`,
     }])) },
   };
-}
-
-function testPreparedReleaseValuesPassWhenAligned() {
-  assert.deepEqual(validatePreparedReleaseAssetValues(preparedReleaseValues()), []);
-}
-
-function testPreparedReleaseValuesReportDrift() {
-  const values = preparedReleaseValues();
-  values.assets[0].finalDigest = "c".repeat(64);
-  values.latest.version = "1.9.2";
-  values.latest.platforms["windows-x86_64"].signature = "wrong-signature";
-  values.latest.platforms["windows-x86_64"].url = "https://example.com/wrong.exe";
-
-  const errors = validatePreparedReleaseAssetValues(values);
-  assert.ok(errors.some((error) => error.includes("does not match source installer")));
-  assert.ok(errors.some((error) => error.includes("SHA256SUMS.txt records SHA-256")));
-  assert.ok(errors.some((error) => error.includes("latest.json version")));
-  assert.ok(errors.some((error) => error.includes("updater signature")));
-  assert.ok(errors.some((error) => error.includes("expected https://github.com")));
 }
 
 function testReleaseNotesIncludeAllVisibleBullets() {
@@ -378,7 +301,7 @@ function testReleaseRequiresGreenMainPush() {
     head_branch: "main", head_sha: sha, status: "completed", conclusion: "success",
   };
   const verifyWorkflow = readFileSync(".github/workflows/verify.yml", "utf8").replaceAll("\r\n", "\n");
-  const jobNames = ["Resolve and verify immutable candidate", "Frontend checks", "Rust checks (x64)", "Rust checks (arm64)", "Tauri runtime smoke", "Native desktop checks (x64)", "Native desktop checks (arm64)"];
+  const jobNames = ["Resolve and verify immutable candidate", "Repository tooling checks", "Native desktop checks (x64)", "Native desktop checks (arm64)", "Native Windows acceptance (x64)", "Native Windows acceptance (arm64)"];
   for (const name of jobNames) {
     assert.ok(verifyWorkflow.includes(`name: ${name.replace(/\((x64|arm64)\)/, "(${{ matrix.arch }})")}`));
   }
@@ -473,7 +396,6 @@ function testToolchainContractsStayAligned() {
   const nodeMajor = nodeVersion.split(".")[0];
   const nodeTypesMajor = packageJson.devDependencies["@types/node"].match(/\d+/)?.[0];
   assert.equal(nodeTypesMajor, nodeMajor);
-
 
 }
 
@@ -592,34 +514,6 @@ function testVersionFilesValidationCatchesPackageJsonMismatch() {
   ]);
 }
 
-function testVersionFilesValidationCatchesTauriConfigMismatch() {
-  const files = versionFileFixture();
-  files.tauriDevConfig = JSON.stringify({ version: "1.5.9" });
-
-  assert.deepEqual(validateReleaseVersionFilesText(files, "1.6.0"), [
-    "src-tauri/tauri.dev.conf.json version is 1.5.9, expected 1.6.0",
-  ]);
-}
-
-function testVersionFilesValidationCatchesCargoMismatch() {
-  const files = versionFileFixture();
-  files.cargoToml = [
-    "[package]",
-    'name = "patina"',
-    'version = "1.5.9"',
-  ].join("\n");
-  files.cargoLock = [
-    "[[package]]",
-    'name = "patina"',
-    'version = "1.5.8"',
-  ].join("\n");
-
-  assert.deepEqual(validateReleaseVersionFilesText(files, "1.6.0"), [
-    "src-tauri/Cargo.toml [package].version is 1.5.9, expected 1.6.0",
-    "src-tauri/Cargo.lock package patina version is 1.5.8, expected 1.6.0",
-  ]);
-}
-
 function testVersionFilesValidationCatchesMissingChangelogSection() {
   const files = versionFileFixture();
   files.changelog = "# Changelog\n\n## [1.5.9] - 2026-06-12";
@@ -649,22 +543,6 @@ function peFixture(platform: string) {
   return bytes;
 }
 
-function signingFixture() {
-  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
-  const keyId = Buffer.alloc(8, 7);
-  const key = Buffer.concat([Buffer.from("Ed"), keyId, publicKey.export({ format: "der", type: "spki" }).subarray(-32)]);
-  return {
-    publicKey: Buffer.from(`untrusted comment: test key\n${key.toString("base64")}\n`).toString("base64"),
-    signature(bytes: Buffer) {
-      const sig = sign(null, createHash("blake2b512").update(bytes).digest(), privateKey);
-      const packet = Buffer.concat([Buffer.from("ED"), keyId, sig]);
-      const comment = "timestamp:0";
-      const global = sign(null, Buffer.concat([sig, Buffer.from(comment)]), privateKey);
-      return Buffer.from(`untrusted comment: test\n${packet.toString("base64")}\ntrusted comment: ${comment}\n${global.toString("base64")}\n`).toString("base64");
-    },
-  };
-}
-
 function testArchitectureAndMirrorContracts() {
   assert.equal(buildReleaseInstallerName("1.9.3", "windows-aarch64"), "Patina_1.9.3_arm64-setup.exe");
   assert.throws(() => buildReleaseInstallerName("1.9.3", "linux-x86_64"), /unsupported/);
@@ -682,85 +560,16 @@ function testArchitectureAndMirrorContracts() {
   }
   assert.throws(() => buildMirrorManifest(values.latest, values.repository, "http://example.com"), /HTTPS/);
   delete values.latest.platforms["windows-aarch64"];
-  assert.ok(validatePreparedReleaseAssetValues(values).some((error) => error.includes("platforms")));
   assert.throws(() => buildMirrorManifest(values.latest, values.repository, "https://example.com"), /both/);
-}
-
-async function testPrepareAndVerifyReleaseAssetsDetectTampering() {
-  const version = JSON.parse(readFileSync("package.json", "utf8")).version;
-  const testRoot = await mkdtemp(path.join(os.tmpdir(), "patina-release-assets-"));
-  const bundleDir = path.join(testRoot, "bundle");
-  const outputDir = path.join(testRoot, "dist-release");
-  const signing = signingFixture();
-  const prepare = () => prepareReleaseAssets(version, bundleDir, outputDir, "Ceceliaee/patina");
-  const verifyAssets = () => verifyReleaseAssets(version, bundleDir, outputDir, "Ceceliaee/patina", signing.publicKey);
-  try {
-    for (const { arch, platform } of WINDOWS_RELEASE_TARGETS) {
-      const dir = path.join(bundleDir, arch, "nsis");
-      await mkdir(dir, { recursive: true });
-      const bytes = Buffer.from(`installer payload ${platform}`);
-      await writeFile(path.join(dir, "Patina-setup.exe"), bytes);
-      await writeFile(path.join(dir, "Patina-setup.exe.sig"), signing.signature(bytes));
-      await writeFile(path.join(bundleDir, arch, "Patina.exe"), peFixture(platform));
-    }
-    await prepare(); await verifyAssets();
-    const latestPath = path.join(outputDir, "latest.json");
-    const goodLatest = JSON.parse(await readFile(latestPath, "utf8"));
-    const sums = parseSha256SumsText(await readFile(path.join(outputDir, "SHA256SUMS.txt"), "utf8"));
-    assert.equal(sums.length, 2);
-    for (const { platform } of WINDOWS_RELEASE_TARGETS) {
-      const installer = path.join(outputDir, buildReleaseInstallerName(version, platform));
-      assert.equal(sums.find((entry) => entry.fileName === path.basename(installer))?.digest, await sha256File(installer));
-      await writeFile(installer, "tampered");
-      await assert.rejects(verifyAssets(), /signature verification failed/);
-      await prepare();
-    }
-    const armFile = path.join(outputDir, buildReleaseInstallerName(version, "windows-aarch64"));
-    await assert.rejects(verifyUpdaterSignature(armFile, goodLatest.platforms["windows-x86_64"].signature, signing.publicKey), /verification failed/);
-    await assert.rejects(verifyUpdaterSignature(armFile, goodLatest.platforms["windows-aarch64"].signature, signingFixture().publicKey), /verification failed/);
-    for (const mutate of [
-      (latest) => { delete latest.platforms["windows-aarch64"]; },
-      (latest) => { latest.platforms.extra = latest.platforms["windows-x86_64"]; },
-      (latest) => { latest.platforms["windows-aarch64"].url = latest.platforms["windows-x86_64"].url; },
-      (latest) => { latest.platforms["windows-aarch64"].signature = latest.platforms["windows-x86_64"].signature; },
-      (latest) => { latest.version = "0.0.1"; },
-    ]) {
-      const changed = structuredClone(goodLatest); mutate(changed);
-      await writeFile(latestPath, JSON.stringify(changed));
-      await assert.rejects(verifyAssets(), /validation failed/);
-    }
-    await prepare();
-    await writeFile(path.join(outputDir, "SHA256SUMS.txt"), renderSha256Sums("0".repeat(64), "wrong.exe"));
-    await assert.rejects(verifyAssets(), /canonical order/);
-    await prepare();
-    await writeFile(path.join(outputDir, "extra.exe"), "extra");
-    await assert.rejects(verifyAssets(), /exactly the two/);
-    await rm(path.join(outputDir, "extra.exe"));
-    await writeFile(path.join(bundleDir, "arm64", "Patina.exe"), peFixture("windows-x86_64"));
-    await assert.rejects(prepare(), /architecture/);
-    await writeFile(path.join(bundleDir, "arm64", "Patina.exe"), peFixture("windows-aarch64"));
-    await writeFile(path.join(bundleDir, "arm64", "nsis", "Patina-setup.exe.sig"), "  \n");
-    await assert.rejects(prepare(), /signature file is empty/);
-    await rm(path.join(bundleDir, "arm64", "nsis", "Patina-setup.exe.sig"));
-    await assert.rejects(prepare(), /could not find/);
-  } finally {
-    const root = path.resolve(testRoot);
-    assert.ok(root.startsWith(`${path.resolve(os.tmpdir())}${path.sep}`));
-    await rm(root, { recursive: true, force: true });
-  }
 }
 
 testArchitectureAndMirrorContracts();
 testUpdaterNotesKeepLocalizedVariants();
 testUpdaterNotesFallsBackToAppNote();
 await testChangelogSummaryLengthDoesNotBlockPublication();
-testUpdaterEndpointsKeepGithubFirstAndPreserveMirrors();
 testReleaseInstallerNamesStayStable();
 testSha256SumsRoundTripUsesCanonicalFormat();
 testSha256SumsRejectInvalidContent();
-testSignedInstallerSelectionRequiresOnePair();
-testPreparedReleaseValuesPassWhenAligned();
-testPreparedReleaseValuesReportDrift();
 testReleaseNotesIncludeAllVisibleBullets();
 testReleaseNotesKeepVisibleSectionsAndSkipInternal();
 testReleaseNotesOnlyMentionPatinaInstaller();
@@ -778,11 +587,8 @@ testWorkflowsUseReviewedNode24ActionRevisions();
 testVersionFilesValidationPassesWhenAllVersionsMatch();
 testVersionFilesValidationCatchesPackageJsonMismatch();
 
-testVersionFilesValidationCatchesTauriConfigMismatch();
-testVersionFilesValidationCatchesCargoMismatch();
 testVersionFilesValidationCatchesMissingChangelogSection();
 testVersionFilesValidationRejectsInvalidVersion();
 testDependencyAuditKeepsOfflineModeExplicitAndNetworkFree();
-await testPrepareAndVerifyReleaseAssetsDetectTampering();
 
 console.log("Passed release policy tests");

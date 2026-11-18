@@ -71,7 +71,7 @@ fn manifest_rejects_wrong_product_architecture_and_unsafe_sources() {
     assert!(parse(&value, &config, "0.1.0", Target::Arm64).is_err());
     for (key, wrong) in [
         ("schema", json!(2)),
-        ("application", json!("patina-tauri")),
+        ("application", json!("unrelated-application")),
         ("version", json!("garbage")),
     ] {
         let mut bad = value.clone();

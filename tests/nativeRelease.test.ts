@@ -71,7 +71,7 @@ try {
   assert.throws(() => validateMirrorAdvance({ ...mirror, application: "other" }, mirror), /stable native manifests/);
   for (const mutate of [
     value => { delete value.platforms["windows-aarch64"]; },
-    value => { value.application = "tauri"; },
+    value => { value.application = "another-app"; },
     value => { value.version = "9.0.0"; },
     value => { value.platforms["windows-x86_64"].url = "https://example.org/setup.exe"; },
     value => { value.platforms["windows-x86_64"].size += 1; },

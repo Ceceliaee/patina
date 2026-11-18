@@ -254,8 +254,8 @@ jobs:
       - name: Build and sign installer
         shell: pwsh
         env:
-          SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          SIGNING_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          SIGNING_PRIVATE_KEY: ${{ secrets.PATINA_SIGNING_PRIVATE_KEY }}
+          SIGNING_PASSWORD: ${{ secrets.PATINA_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           if (-not $env:SIGNING_PRIVATE_KEY) { throw "Missing updater signing key" }
           $key = Join-Path $env:RUNNER_TEMP 'patina-update-signing.key'

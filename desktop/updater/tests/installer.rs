@@ -58,7 +58,10 @@ fn native_install_upgrade_shutdown_and_uninstall() -> Result<(), Error> {
     let nsis = env::var_os("PATINA_TEST_MAKENSIS")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
-            PathBuf::from(env::var_os("LOCALAPPDATA").unwrap()).join("tauri/NSIS/makensis.exe")
+            env::var_os("ProgramFiles(x86)")
+                .map(PathBuf::from)
+                .map(|dir| dir.join("NSIS/makensis.exe"))
+                .unwrap_or_else(|| PathBuf::from("makensis.exe"))
         });
     let source = root.path().join("fixture.rs");
     let binary = root.path().join("fixture.exe");

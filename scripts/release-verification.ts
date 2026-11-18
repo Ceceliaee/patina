@@ -5,12 +5,11 @@ import { fileURLToPath } from "node:url";
 
 const requiredJobs = [
   "Resolve and verify immutable candidate",
-  "Frontend checks",
-  "Rust checks (x64)",
-  "Rust checks (arm64)",
-  "Tauri runtime smoke",
+  "Repository tooling checks",
   "Native desktop checks (x64)",
   "Native desktop checks (arm64)",
+  "Native Windows acceptance (x64)",
+  "Native Windows acceptance (arm64)",
 ];
 
 function readApi(path: string) {

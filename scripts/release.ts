@@ -1,6 +1,6 @@
 import { createReadStream } from "node:fs";
 import { createHash, createPublicKey, verify } from "node:crypto";
-import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -8,18 +8,12 @@ import { fileURLToPath } from "node:url";
 const ROOT = process.cwd();
 const CHANGELOG_PATH = path.join(ROOT, "CHANGELOG.md");
 const PACKAGE_JSON_PATH = path.join(ROOT, "package.json");
-const TAURI_CONFIG_PATH = path.join(ROOT, "src-tauri", "tauri.conf.json");
-const TAURI_DEV_CONFIG_PATH = path.join(ROOT, "src-tauri", "tauri.dev.conf.json");
-const TAURI_LOCAL_CONFIG_PATH = path.join(ROOT, "src-tauri", "tauri.local.conf.json");
-const CARGO_TOML_PATH = path.join(ROOT, "src-tauri", "Cargo.toml");
-const CARGO_LOCK_PATH = path.join(ROOT, "src-tauri", "Cargo.lock");
 const NATIVE_CARGO_TOML_PATH = path.join(ROOT, "desktop", "patina", "Cargo.toml");
 const NATIVE_CARGO_LOCK_PATH = path.join(ROOT, "desktop", "Cargo.lock");
 
 const VERSION_PATTERN =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9A-Za-z-][0-9A-Za-z-]*))*))?$/;
-const GITHUB_UPDATER_ENDPOINT =
-  "https://github.com/Ceceliaee/patina/releases/latest/download/latest.json";
+
 const SHA256_SUMS_FILE_NAME = "SHA256SUMS.txt";
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const RELEASE_NOTE_SECTION_TITLES = {
@@ -117,30 +111,6 @@ export function parseSha256SumsText(content) {
   return records;
 }
 
-export function selectSignedInstallerCandidates(entries) {
-  const sortedEntries = [...entries].sort((left, right) => left.localeCompare(right, "en"));
-  const signatureFiles = sortedEntries.filter((entry) => /\.exe\.sig$/i.test(entry));
-
-  if (signatureFiles.length === 0) {
-    throw new Error("could not find an updater .exe.sig artifact");
-  }
-
-  if (signatureFiles.length > 1) {
-    throw new Error(`found multiple updater .exe.sig artifacts: ${signatureFiles.join(", ")}`);
-  }
-
-  const signatureFilePath = signatureFiles[0];
-  const installerFilePath = signatureFilePath.replace(/\.sig$/i, "");
-  if (!sortedEntries.includes(installerFilePath)) {
-    throw new Error(`could not find installer matching ${signatureFilePath}`);
-  }
-  if (sortedEntries.filter((entry) => /\.exe$/i.test(entry)).length !== 1) {
-    throw new Error("expected exactly one installer in bundle directory");
-  }
-
-  return { installerFilePath, signatureFilePath };
-}
-
 export async function sha256File(filePath) {
   const hash = createHash("sha256");
   const stream = createReadStream(filePath);
@@ -174,32 +144,6 @@ async function updateJsonVersion(filePath, version) {
   await writeJson(filePath, json);
 }
 
-function dedupeStrings(values) {
-  return [...new Set(values.filter((value) => typeof value === "string" && value.trim()).map((value) => value.trim()))];
-}
-
-export function buildUpdaterEndpoints(existingEndpoints = []) {
-  return dedupeStrings([
-    GITHUB_UPDATER_ENDPOINT,
-    ...existingEndpoints.filter((endpoint) => endpoint !== GITHUB_UPDATER_ENDPOINT),
-  ]);
-}
-
-function withUpdaterDefaults(config) {
-  return {
-    ...config,
-    plugins: {
-      ...config.plugins,
-      updater: {
-        ...config.plugins?.updater,
-        active: true,
-        dialog: false,
-        endpoints: buildUpdaterEndpoints(config.plugins?.updater?.endpoints ?? []),
-      },
-    },
-  };
-}
-
 function jsonValue(content, filePath, selector) {
   try {
     return selector(JSON.parse(content)) ?? null;
@@ -212,27 +156,6 @@ function jsonValue(content, filePath, selector) {
 
 export function readPackageJsonVersionText(content) {
   return jsonValue(content, "package.json", (json) => json.version);
-}
-
-export function readTauriConfigVersionText(content, filePath = "src-tauri/tauri.conf.json") {
-  return jsonValue(content, filePath, (json) => json.version);
-}
-
-export function readCargoTomlPackageVersionText(content) {
-  const match = /^\[package\][\s\S]*?^version\s*=\s*"([^"]+)"/m.exec(content);
-  return match?.[1] ?? null;
-}
-
-export function readCargoLockPackageVersionText(content, packageName = "patina") {
-  const blocks = content.split(/\r?\n(?=\[\[package\]\])/);
-  for (const block of blocks) {
-    const name = /^name\s*=\s*"([^"]+)"/m.exec(block)?.[1];
-    if (name === packageName) {
-      return /^version\s*=\s*"([^"]+)"/m.exec(block)?.[1] ?? null;
-    }
-  }
-
-  return null;
 }
 
 export function hasChangelogVersionSectionText(content, version) {
@@ -276,32 +199,6 @@ export function validateReleaseVersionFilesText(files, version) {
       readPackageJsonVersionText(files.packageJson ?? ""),
       version,
     ),
-    versionFileError(
-      "src-tauri/tauri.conf.json",
-      readTauriConfigVersionText(files.tauriConfig ?? "", "src-tauri/tauri.conf.json"),
-      version,
-    ),
-    versionFileError(
-      "src-tauri/tauri.dev.conf.json",
-      readTauriConfigVersionText(files.tauriDevConfig ?? "", "src-tauri/tauri.dev.conf.json"),
-      version,
-    ),
-    versionFileError(
-      "src-tauri/tauri.local.conf.json",
-      readTauriConfigVersionText(files.tauriLocalConfig ?? "", "src-tauri/tauri.local.conf.json"),
-      version,
-    ),
-    versionFileError(
-      "src-tauri/Cargo.toml",
-      readCargoTomlPackageVersionText(files.cargoToml ?? ""),
-      version,
-      "[package].version",
-    ),
-    versionFileError(
-      "src-tauri/Cargo.lock package patina",
-      readCargoLockPackageVersionText(files.cargoLock ?? "", "patina"),
-      version,
-    ),
     hasChangelogVersionSectionText(files.changelog ?? "", version)
       ? null
       : `CHANGELOG.md is missing "## [${version}] - YYYY-MM-DD"`,
@@ -321,11 +218,6 @@ async function validateReleaseVersionFiles(version) {
 
   const errors = validateReleaseVersionFilesText({
     packageJson: await readText(PACKAGE_JSON_PATH),
-    tauriConfig: await readText(TAURI_CONFIG_PATH),
-    tauriDevConfig: await readText(TAURI_DEV_CONFIG_PATH),
-    tauriLocalConfig: await readText(TAURI_LOCAL_CONFIG_PATH),
-    cargoToml: await readText(CARGO_TOML_PATH),
-    cargoLock: await readText(CARGO_LOCK_PATH),
     changelog: await readText(CHANGELOG_PATH),
   }, version);
 
@@ -343,34 +235,6 @@ async function syncVersion(version) {
 
   await updateJsonVersion(PACKAGE_JSON_PATH, version);
 
-  const tauriConfig = withUpdaterDefaults(JSON.parse(await readText(TAURI_CONFIG_PATH)));
-  tauriConfig.version = version;
-  tauriConfig.bundle = {
-    ...tauriConfig.bundle,
-    createUpdaterArtifacts: true,
-  };
-  await writeJson(TAURI_CONFIG_PATH, tauriConfig);
-
-  const tauriDevConfig = withUpdaterDefaults(JSON.parse(await readText(TAURI_DEV_CONFIG_PATH)));
-  tauriDevConfig.version = version;
-  await writeJson(TAURI_DEV_CONFIG_PATH, tauriDevConfig);
-
-  const tauriLocalConfig = withUpdaterDefaults(JSON.parse(await readText(TAURI_LOCAL_CONFIG_PATH)));
-  tauriLocalConfig.version = version;
-  await writeJson(TAURI_LOCAL_CONFIG_PATH, tauriLocalConfig);
-
-  const cargoToml = await readText(CARGO_TOML_PATH);
-  const cargoPackageVersionPattern = /(\[package\][\s\S]*?^version\s*=\s*")[^"]+(")/m;
-  if (!cargoPackageVersionPattern.test(cargoToml)) {
-    fail("could not find [package] version in src-tauri/Cargo.toml");
-  }
-
-  const updatedCargoToml = cargoToml.replace(
-    cargoPackageVersionPattern,
-    `$1${version}$2`,
-  );
-
-  await writeFile(CARGO_TOML_PATH, updatedCargoToml, "utf8");
   await writeFile(NATIVE_CARGO_TOML_PATH, native.manifest, "utf8");
   await writeFile(NATIVE_CARGO_LOCK_PATH, native.lock, "utf8");
 }
@@ -566,39 +430,6 @@ async function printReleaseNotes(version) {
   process.stdout.write(renderReleaseNotes(parsed));
 }
 
-async function findSignedInstaller(bundleDir) {
-  const entries = await readDirRecursive(bundleDir);
-  let selected;
-  try {
-    selected = selectSignedInstallerCandidates(entries);
-  } catch (error) {
-    throw new Error(`${error.message} under ${bundleDir}`);
-  }
-
-  const signature = (await readText(selected.signatureFilePath)).trim();
-  if (!signature) {
-    throw new Error(`updater signature file is empty: ${selected.signatureFilePath}`);
-  }
-
-  return {
-    ...selected,
-    signature,
-  };
-}
-
-async function readDirRecursive(rootDir) {
-  const { readdir } = await import("node:fs/promises");
-  const entries = await readdir(rootDir, { withFileTypes: true });
-  const files = await Promise.all(entries.map(async (entry) => {
-    const absolutePath = path.join(rootDir, entry.name);
-    if (entry.isDirectory()) {
-      return readDirRecursive(absolutePath);
-    }
-    return entry.isFile() ? [absolutePath] : [];
-  }));
-  return files.flat();
-}
-
 export function buildReleaseInstallerUrl(version, repository, platform = "windows-x86_64") {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository ?? "")) {
     throw new Error("invalid release repository");
@@ -639,90 +470,6 @@ export async function verifyUpdaterSignature(installerPath: string, signature: s
   }
 }
 
-export function validatePreparedReleaseAssetValues({ version, repository, assets, checksumContent, latest }) {
-  const errors: string[] = [];
-  const expectedNames = WINDOWS_RELEASE_TARGETS.map(({ platform }) => buildReleaseInstallerName(version, platform));
-  let checksums: Array<{ digest: string; fileName: string }> = [];
-  try { checksums = parseSha256SumsText(checksumContent); } catch (error) { errors.push(error.message); }
-  if (JSON.stringify(checksums.map((entry) => entry.fileName)) !== JSON.stringify(expectedNames)) {
-    errors.push(`${SHA256_SUMS_FILE_NAME} must record exactly the two installers in canonical order`);
-  }
-  if (!latest || latest.version !== version) errors.push(`latest.json version must be ${version}`);
-  const platforms = WINDOWS_RELEASE_TARGETS.map((entry) => entry.platform);
-  if (JSON.stringify(Object.keys(latest?.platforms ?? {}).sort()) !== JSON.stringify([...platforms].sort())) {
-    errors.push("latest.json must contain exactly the supported platforms");
-  }
-  if (!Array.isArray(assets) || assets.length !== 2 || new Set(assets.map((asset) => asset.platform)).size !== 2) {
-    errors.push("expected exactly two distinct source assets");
-  }
-  for (const { platform } of WINDOWS_RELEASE_TARGETS) {
-    const asset = assets?.find((entry) => entry.platform === platform);
-    if (!asset) { errors.push(`missing source asset ${platform}`); continue; }
-    const name = buildReleaseInstallerName(version, platform);
-    if (!SHA256_PATTERN.test(asset.finalDigest) || asset.sourceDigest !== asset.finalDigest) {
-      errors.push(`${name} does not match source installer SHA-256`);
-    }
-    if (checksums.find((entry) => entry.fileName === name)?.digest !== asset.finalDigest) {
-      errors.push(`${SHA256_SUMS_FILE_NAME} records SHA-256 inconsistent with ${name}`);
-    }
-    if (!asset.signature || latest?.platforms?.[platform]?.signature !== asset.signature) {
-      errors.push(`${platform} updater signature does not match source`);
-    }
-    const url = buildReleaseInstallerUrl(version, repository, platform);
-    if (latest?.platforms?.[platform]?.url !== url) errors.push(`${platform} expected ${url}`);
-  }
-  return errors;
-}
-
-async function readReleaseInputs(version, bundleDir) {
-  return Promise.all(WINDOWS_RELEASE_TARGETS.map(async ({ arch, platform }) => {
-    const inputDir = path.join(bundleDir, arch);
-    const signed = await findSignedInstaller(path.join(inputDir, "nsis"));
-    await readFile(path.join(inputDir, "Patina.exe")).then((bytes) => verifyPeArchitecture(bytes, platform));
-    return { ...signed, platform, fileName: buildReleaseInstallerName(version, platform) };
-  }));
-}
-
-export async function verifyReleaseAssets(version, bundleDir, outputDir, repository, publicKey?: string) {
-  assertVersion(version);
-  const inputs = await readReleaseInputs(version, bundleDir);
-  const key = publicKey ?? JSON.parse(await readText(TAURI_CONFIG_PATH)).plugins.updater.pubkey;
-  const assets = await Promise.all(inputs.map(async (input) => {
-    const finalPath = path.join(outputDir, input.fileName);
-    await verifyUpdaterSignature(finalPath, input.signature, key);
-    return { ...input, sourceDigest: await sha256File(input.installerFilePath), finalDigest: await sha256File(finalPath) };
-  }));
-  const latest = JSON.parse(await readText(path.join(outputDir, "latest.json")));
-  const checksumContent = await readText(path.join(outputDir, SHA256_SUMS_FILE_NAME));
-  const errors = validatePreparedReleaseAssetValues({ version, repository, assets, checksumContent, latest });
-  const exeNames = (await readDirRecursive(outputDir)).filter((file) => /\.exe$/i.test(file));
-  if (exeNames.length !== 2 || exeNames.some((file) => !inputs.some((input) => path.resolve(file) === path.resolve(outputDir, input.fileName)))) {
-    errors.push("output must contain exactly the two final installers");
-  }
-  if (errors.length) throw new Error(`release asset validation failed:\n- ${errors.join("\n- ")}`);
-  console.log(`release: verified both Windows architectures for ${version}`);
-}
-
-export async function prepareReleaseAssets(version, bundleDir, outputDir, repository) {
-  assertVersion(version);
-  await validateChangelog(version);
-  const inputs = await readReleaseInputs(version, bundleDir);
-  const parsed = await parseChangelog(version);
-  const latest = { version, notes: renderUpdaterNotes(parsed), pub_date: new Date().toISOString(), platforms: {} };
-  const sums: string[] = [];
-  await mkdir(outputDir, { recursive: true });
-  for (const input of inputs) {
-    const finalPath = path.join(outputDir, input.fileName);
-    await copyFile(input.installerFilePath, finalPath);
-    const digest = await sha256File(finalPath);
-    if (digest !== await sha256File(input.installerFilePath)) throw new Error(`copied installer differs: ${input.fileName}`);
-    sums.push(renderSha256Sums(digest, input.fileName));
-    latest.platforms[input.platform] = { signature: input.signature, url: buildReleaseInstallerUrl(version, repository, input.platform) };
-  }
-  await writeFile(path.join(outputDir, SHA256_SUMS_FILE_NAME), sums.join(""), "utf8");
-  await writeJson(path.join(outputDir, "latest.json"), latest);
-}
-
 export function buildMirrorManifest(latest, repository, baseUrl: string) {
   const base = new URL(baseUrl);
   if (base.protocol !== "https:" || base.username || base.password || base.search || base.hash) throw new Error("mirror base must be a plain HTTPS URL");
@@ -746,9 +493,6 @@ function help() {
   node --experimental-strip-types scripts/release.ts validate-changelog <version>
   node --experimental-strip-types scripts/release.ts print-release-notes <version>
   node --experimental-strip-types scripts/release.ts write-release-notes <version> <output>
-  node --experimental-strip-types scripts/release.ts mirror-manifest <github-latest> <repository> <base-url> <output>
-  node --experimental-strip-types scripts/release.ts prepare-release-assets <version> <bundle-dir> <output-dir> <repository>
-  node --experimental-strip-types scripts/release.ts verify-release-assets <version> <bundle-dir> <output-dir> <repository>
 `);
 }
 
@@ -771,15 +515,7 @@ async function main() {
     case "write-release-notes":
       await writeReleaseNotes(args[0], args[1]);
       break;
-    case "mirror-manifest":
-      await writeJson(args[3], buildMirrorManifest(JSON.parse(await readText(args[0])), args[1], args[2]));
-      break;
-    case "prepare-release-assets":
-      await prepareReleaseAssets(args[0], args[1], args[2], args[3]);
-      break;
-    case "verify-release-assets":
-      await verifyReleaseAssets(args[0], args[1], args[2], args[3]);
-      break;
+
     default:
       help();
       process.exit(command ? 1 : 0);
