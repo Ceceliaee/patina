@@ -1,5 +1,5 @@
-use patina_desktop_protocol::Reply;
-use patina_tool_host::{Host, now_ms};
+use patina_desktop_protocol::{Reply, RequestError};
+use patina_plugin_host::{Host, now_ms};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
@@ -8,7 +8,7 @@ use std::{path::PathBuf, sync::mpsc, time::Duration};
 
 use patina_desktop_protocol::tools::ToolRequest;
 
-type ResultValue = Result<Reply, String>;
+type ResultValue = Result<Reply, RequestError>;
 type Job = (ToolRequest, String, async_channel::Sender<ResultValue>);
 enum Message {
     Job(Box<Job>),
@@ -32,7 +32,7 @@ impl ToolWorker {
 impl ToolService {
     pub fn start(
         root: PathBuf,
-        storage: patina_recorder::NativeToolData,
+        storage: patina_activity::NativeToolData,
         mut language: String,
         actions: async_channel::Sender<crate::Action>,
         usage_active: Arc<AtomicBool>,
@@ -43,26 +43,21 @@ impl ToolService {
         let worker = std::thread::Builder::new()
             .name("patina-tools".into())
             .spawn(move || {
-                let open = || -> Result<Host, String> {
-                    let mut host = Host::open(root.clone())?;
-                    host.bind(Box::new(crate::bundled_tools::Storage(storage.clone())))?;
-                    for id in crate::bundled_tools::IDS {
-                        if let Err(error) = host.seed(crate::bundled_tools::package(id)?, "en-US") {
-                            eprintln!("Install bundled tool {id}: {error}");
-                        }
-                    }
-                    Ok(host)
-                };
-                let mut host = open();
-                if let Ok(h) = host.as_mut() {
-                    for installed in h.list() {
-                        let id = &installed.manifest.id;
-                        if storage.has_scheduled_work(id).unwrap_or(false)
-                            && let Err(e) = h.panel(id, &installed.generation, None, &language)
+                let mut pending = crate::bundled_tools::IDS.to_vec();
+                let mut bind_pending = |host: &mut Host, locale: &str| {
+                    pending.retain(|id| {
+                        if let Err(error) = crate::bundled_tools::start(host, &storage, id, locale)
                         {
-                            eprintln!("Restore tool {id}: {e}");
+                            eprintln!("Bind bundled tool {id}: {error}");
+                            true
+                        } else {
+                            false
                         }
-                    }
+                    });
+                };
+                let mut host = Host::open(root.clone());
+                if let Ok(h) = host.as_mut() {
+                    bind_pending(h, &language);
                 }
                 let mut events = crate::tool_events::ToolEvents::default();
                 let mut display_failures = 0u8;
@@ -162,9 +157,10 @@ impl ToolService {
                     language.clone_from(&locale);
                     let result = (|| {
                         if host.is_err() {
-                            host = open();
+                            host = Host::open(root.clone());
                         }
                         let host = host.as_mut().map_err(|e| e.clone())?;
+                        bind_pending(host, &locale);
                         let response = match request {
                             ToolRequest::List => Reply::Tools((
                                 host.list(),
@@ -183,12 +179,11 @@ impl ToolService {
                                 notify(&mut events, host);
                                 Reply::Done
                             }
-                            ToolRequest::Stopping(id, gen_id) => {
-                                Reply::Stopping(host.stopping(&id, &gen_id, &locale)?)
-                            }
+                            ToolRequest::Stopping(id, gen_id) => Reply::Stopping(
+                                host.uninstall_impact_labels(&id, &gen_id, &locale)?,
+                            ),
                             ToolRequest::Shortcuts => {
-                                let installed = host.list();
-                                let has = |id: &str| installed.iter().any(|t| t.manifest.id == id);
+                                let has = |id: &str| host.bound_installation(id).is_some();
                                 Reply::Shortcuts(storage.shortcuts(
                                     has("patina.focus"),
                                     has("patina.reminders"),
@@ -236,7 +231,16 @@ impl ToolService {
                             }
                             ToolRequest::Inspect(path) => Reply::Preview(host.inspect(&path)?),
                             ToolRequest::Install(path, preview) => {
-                                Reply::Installed(host.install(&path, &preview, &locale)?)
+                                Reply::Installed(host.install(&path, &preview, &locale).map_err(
+                                    |error| match error {
+                                        patina_plugin_host::InstallError::StalePreview => {
+                                            RequestError::Conflict(error.to_string())
+                                        }
+                                        patina_plugin_host::InstallError::Rejected(message) => {
+                                            RequestError::Rejected(message)
+                                        }
+                                    },
+                                )?)
                             }
                             ToolRequest::Panel {
                                 id,
@@ -244,7 +248,8 @@ impl ToolService {
                                 action,
                                 remember,
                             } => {
-                                let panel = host.panel(&id, &generation, action, &locale)?;
+                                let panel =
+                                    host.dispatch_panel_event(&id, &generation, action, &locale)?;
                                 if remember && let Err(error) = storage.remember_section(&id) {
                                     eprintln!("Save selected tool: {error}");
                                 }
@@ -280,11 +285,14 @@ impl ToolService {
         let (reply, receiver) = async_channel::bounded(1);
         self.0
             .try_send(Message::Job(Box::new((request, locale.to_owned(), reply))))
-            .map_err(|_| "Tool host unavailable")?;
+            .map_err(|error| match error {
+                mpsc::TrySendError::Full(_) => RequestError::Busy,
+                mpsc::TrySendError::Disconnected(_) => RequestError::Disconnected,
+            })?;
         receiver
             .recv()
             .await
-            .map_err(|_| "Tool host disconnected")?
+            .map_err(|_| RequestError::Disconnected)?
     }
 }
 
@@ -292,20 +300,62 @@ impl ToolService {
 mod tests {
     use super::*;
     #[test]
+    #[ignore = "requires the two compiled Rust counter packages"]
+    fn replaced_package_returns_a_desktop_conflict() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = tempfile::tempdir()?;
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .enable_all()
+            .build()?;
+        let pool = runtime.block_on(patina_activity::open_database(
+            &tmp.path().join("patina.db"),
+        ))?;
+        let storage = patina_activity::NativeToolData::new(pool, runtime.handle().clone());
+        let (sender, _receiver) = async_channel::unbounded();
+        let (tools, worker) = ToolService::start(
+            tmp.path().join("tools"),
+            storage,
+            "en-US".into(),
+            sender,
+            Arc::new(AtomicBool::new(false)),
+        )?;
+        let file = tmp.path().join("counter.patina-tool");
+        std::fs::copy(std::env::var("PATINA_COUNTER_PACKAGE")?, &file)?;
+        let Reply::Preview(preview) =
+            runtime.block_on(tools.request(ToolRequest::Inspect(file.clone()), "en-US"))?
+        else {
+            panic!("missing inspect response")
+        };
+        std::fs::copy(std::env::var("PATINA_COUNTER_UPDATE")?, &file)?;
+        assert!(matches!(
+            runtime.block_on(tools.request(ToolRequest::Install(file, preview), "en-US")),
+            Err(RequestError::Conflict(_))
+        ));
+        worker.stop()?;
+        Ok(())
+    }
+
+    #[test]
     fn delivery_is_sticky_and_failed_presentation_can_retry()
     -> Result<(), Box<dyn std::error::Error>> {
-        use patina_recorder::{
+        use patina_activity::{
             NoticeDelivery as D, NoticePreferencesPatch as Patch, NoticeSound as S,
         };
         let tmp = tempfile::tempdir()?;
-        let recorder = patina_recorder::Recorder::start(&tmp.path().join("patina.db"), || {})?;
-        let storage = recorder.tools();
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .enable_all()
+            .build()?;
+        let pool = runtime.block_on(patina_activity::open_database(
+            &tmp.path().join("patina.db"),
+        ))?;
+        let storage = patina_activity::NativeToolData::new(pool, runtime.handle().clone());
         storage.save_preferences(Patch {
             delivery: Some(D::Dialog),
             sound: Some(S::None),
         })?;
         let past = now_ms() - 120000;
-        storage.apply("patina.reminders",serde_json::json!({"kind":"create","at":past+60000,"label":"Pending","recurrence":null}),past)?;
+        storage.reminders().apply(serde_json::json!({"kind":"create","at":past+60000,"label":"Pending","recurrence":null}),past)?;
         let (sender, receiver) = async_channel::unbounded();
         let (tools, worker) = ToolService::start(
             tmp.path().join("tools"),
@@ -314,9 +364,6 @@ mod tests {
             sender,
             Arc::new(AtomicBool::new(false)),
         )?;
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()?;
         let request = |q| runtime.block_on(tools.request(q, "en-US"));
         let wait_dialog = || -> Result<(), Box<dyn std::error::Error>> {
             runtime.block_on(async {
@@ -337,7 +384,7 @@ mod tests {
             sound: None,
         }))?;
         assert!(matches!(request(ToolRequest::Notices(false))?, Reply::Notices(n) if n.is_empty()));
-        let mut notices: Vec<patina_tool_host::Notice> =
+        let mut notices: Vec<patina_desktop_protocol::tools::Notice> =
             patina_desktop_protocol::FromReply::from_reply(request(ToolRequest::Notices(true))?)?;
         let notice = notices.pop().unwrap();
         for _ in 0..3 {
@@ -360,7 +407,6 @@ mod tests {
             Reply::Tools((_, false, _))
         ));
         worker.stop()?;
-        recorder.shutdown()?;
         Ok(())
     }
 }

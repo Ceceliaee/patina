@@ -1,5 +1,6 @@
-use patina_recorder::NativeToolData;
-use patina_tool_host::{Host, Notice, now_ms};
+use patina_activity::NativeToolData;
+use patina_desktop_protocol::tools::Notice;
+use patina_plugin_host::{Host, now_ms};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Default)]
@@ -12,13 +13,13 @@ pub(super) struct ToolEvents {
         Option<i64>,
         bool,
         i64,
-        patina_recorder::NoticePreferences,
+        patina_activity::NoticePreferences,
     )>,
 }
 
 impl ToolEvents {
     fn current_usage(&self, storage: &NativeToolData, now: i64) -> Result<Vec<i64>, String> {
-        storage.current_usage(
+        storage.reminders().current_usage(
             &self.usage.iter().map(|(id, n)| (*id, n.at_ms)).collect(),
             now,
         )
@@ -46,14 +47,10 @@ impl ToolEvents {
         Ok(self
             .assignment
             .as_ref()
-            .map(|(_, _, _, _, p)| p.delivery == patina_recorder::NoticeDelivery::Dialog))
+            .map(|(_, _, _, _, p)| p.delivery == patina_activity::NoticeDelivery::Dialog))
     }
     pub fn evaluate(&mut self, host: &Host, storage: &NativeToolData) -> Result<bool, String> {
-        let Some(tool) = host
-            .list()
-            .into_iter()
-            .find(|t| t.manifest.id == "patina.reminders")
-        else {
+        let Some(tool) = host.bound_installation("patina.reminders") else {
             self.usage.clear();
             self.next_usage = None;
             return Ok(false);
@@ -62,7 +59,7 @@ impl ToolEvents {
         let now = now_ms();
         let pending = self.current_usage(storage, now)?;
         self.usage.retain(|id, _| pending.contains(id));
-        let evaluation = storage.usage(now, &pending)?;
+        let evaluation = storage.reminders().usage(now, &pending)?;
         self.usage.retain(|id, _| evaluation.watched.contains(id));
         self.next_usage = evaluation.next;
         let changed = !evaluation.alerts.is_empty();
@@ -84,32 +81,48 @@ impl ToolEvents {
     }
 
     pub fn list(&self, host: &Host, storage: &NativeToolData) -> Result<Vec<Notice>, String> {
-        let mut items = host.notices();
+        let mut items: Vec<_> = host
+            .notices()
+            .into_iter()
+            .map(|n| Notice {
+                focus_task: if n.id == "patina.focus"
+                    && host
+                        .bound_installation(&n.id)
+                        .is_some_and(|t| t.generation == n.generation)
+                {
+                    n.task
+                } else {
+                    None
+                },
+                id: n.id,
+                generation: n.generation,
+                at_ms: n.at_ms,
+                label: n.label,
+                source: None,
+                usage: false,
+            })
+            .collect();
         items.retain(|n| {
             n.id != "patina.reminders"
                 && n.focus_task.as_ref().is_none_or(|(kind, id, rev)| {
-                    storage.current_focus(kind, *id, *rev).unwrap_or(false)
+                    storage
+                        .focus()
+                        .current_focus(kind, *id, *rev)
+                        .unwrap_or(false)
                 })
         });
-        if let Some(tool) = host
-            .list()
-            .into_iter()
-            .find(|t| t.manifest.id == "patina.reminders")
-        {
-            items.extend(
-                storage
-                    .pending()?
-                    .into_iter()
-                    .map(|(source, at_ms, label)| Notice {
-                        id: tool.manifest.id.clone(),
-                        generation: tool.generation.clone(),
-                        at_ms,
-                        label,
-                        source: Some(source),
-                        usage: false,
-                        focus_task: None,
-                    }),
-            );
+        if let Some(tool) = host.bound_installation("patina.reminders") {
+            items.extend(storage.reminders().pending()?.into_iter().map(
+                |(source, at_ms, label)| Notice {
+                    id: tool.manifest.id.clone(),
+                    generation: tool.generation.clone(),
+                    at_ms,
+                    label,
+                    source: Some(source),
+                    usage: false,
+                    focus_task: None,
+                },
+            ));
             for id in self.current_usage(storage, now_ms())? {
                 if let Some(n) = self
                     .usage
@@ -184,7 +197,7 @@ impl ToolEvents {
         if let Some(id) = n.source {
             if n.usage {
                 if choice != "dismiss" {
-                    storage.apply(&n.id,serde_json::json!({"kind":"extend","id":id,"at":n.at_ms,"extension":choice}),now_ms())?;
+                    storage.reminders().apply(serde_json::json!({"kind":"extend","id":id,"at":n.at_ms,"extension":choice}),now_ms())?;
                 }
                 self.usage.remove(&id);
             } else {
@@ -195,23 +208,22 @@ impl ToolEvents {
                     "30" => Some(30),
                     _ => return Err("Invalid reminder action".into()),
                 };
-                storage.apply(
-                    &n.id,
+                storage.reminders().apply(
                     serde_json::json!({"kind":"confirm","id":id,"fired_at":n.at_ms,"delay":delay}),
                     now_ms(),
                 )?;
-                host.panel(&n.id, &n.generation, None, locale)?;
+                host.dispatch_panel_event(&n.id, &n.generation, None, locale)?;
             }
             Ok(())
         } else {
             if choice == "start" && n.id == "patina.focus" {
                 let (kind, id, rev) = n.focus_task.as_ref().ok_or("No task assigned")?;
-                storage.apply(&n.id,serde_json::json!({"kind":kind,"action":{"kind":"start_next","id":id,"expectedUpdatedAt":rev}}),now_ms())?;
-                host.panel(&n.id, &n.generation, None, locale)?;
+                storage.focus().apply(serde_json::json!({"kind":kind,"action":{"kind":"start_next","id":id,"expectedUpdatedAt":rev}}),now_ms())?;
+                host.dispatch_panel_event(&n.id, &n.generation, None, locale)?;
             } else if choice != "dismiss" {
                 return Err("Invalid notification action".into());
             }
-            host.acknowledge(&n)
+            host.acknowledge(&n.id, &n.generation, n.at_ms)
         }
     }
 }
