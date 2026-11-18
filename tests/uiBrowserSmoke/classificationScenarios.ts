@@ -8,6 +8,7 @@ import { runClassificationWebLayoutScenarios } from "./classificationWebLayoutSc
 import { runClassificationAppLayoutScenarios } from "./classificationAppLayoutScenarios.ts";
 import { runClassificationCategoryFilterScenarios } from "./classificationCategoryFilterScenarios.ts";
 import type { BrowserSmokeContext } from "./scenarioTypes.ts";
+import { getLocaleText } from "../../src/shared/i18n/runtime.ts";
 import { delay, evaluate, jsonString, waitForExpression, waitForStableExpression, withFixedBrowserClock } from "./browserHarness.ts";
 
 export async function runClassificationScenarios(context: BrowserSmokeContext) {
@@ -15,6 +16,7 @@ export async function runClassificationScenarios(context: BrowserSmokeContext) {
 }
 
 async function runClassificationCases(context: BrowserSmokeContext) {
+  await runAiClassificationScenario(context);
   await runClassificationLinkLayoutScenarios(context);
   await runClassificationLinkLayoutMatrix(context);
   await runWebLinkLayoutScenario(context);
@@ -1286,6 +1288,31 @@ async function runClassificationCases(context: BrowserSmokeContext) {
       })()`);
       await waitForExpression(client!, sessionId, `performance.timeOrigin !== ${origin} && Boolean(document.querySelector('main'))`,
         15_000, "restore the original classification fixture and its runtime caches");
+    }
+  });
+}
+
+async function runAiClassificationScenario({ client, sessionId, runTest }: BrowserSmokeContext) {
+  const { settings, mapping } = getLocaleText("zh-CN");
+  const button = (label: string) => `Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === ${jsonString(label)})`;
+  const ai = button(settings.aiClassification);
+  const cancel = button(mapping.cancel);
+  await runTest("AI classification waits for the provider and only updates the existing draft", async () => {
+    await evaluate(client, sessionId, `(() => {
+      window.__PATINA_AI_CONFIG = { url: 'https://example.invalid/v1', model: 'fixture-model' };
+      document.querySelector('[aria-label="分类"]').click();
+    })()`);
+    try {
+      await waitForExpression(client, sessionId, `${ai}?.disabled === false`);
+      await evaluate(client, sessionId, `${ai}.click()`);
+      await waitForExpression(client, sessionId, `typeof window.__PATINA_FINISH_AI === 'function'`);
+      assert.equal(await evaluate(client, sessionId, `${ai}.disabled`), true);
+      await evaluate(client, sessionId, `window.__PATINA_FINISH_AI()`);
+      await waitForExpression(client, sessionId, `document.body.textContent.includes(${jsonString(mapping.unsaved)})`);
+      await evaluate(client, sessionId, `${cancel}.click()`);
+      await waitForExpression(client, sessionId, `!document.body.textContent.includes(${jsonString(mapping.unsaved)})`);
+    } finally {
+      await evaluate(client, sessionId, `delete window.__PATINA_AI_CONFIG; delete window.__PATINA_FINISH_AI;`);
     }
   });
 }

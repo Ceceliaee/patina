@@ -7,6 +7,7 @@ import type { AppLanguage } from "../../../shared/settings/appSettings.ts";
 import QuietPageHeader from "../../../shared/components/QuietPageHeader";
 import QuietButton from "../../../shared/components/QuietButton";
 import SettingsAppearancePanel from "./SettingsAppearancePanel";
+import SettingsAiClassificationPanel from "./SettingsAiClassificationPanel.tsx";
 import SettingsDataSafetyPanel from "./SettingsDataSafetyPanel";
 import SettingsInterfacePanel from "./SettingsInterfacePanel";
 import SettingsResidentPanel from "./SettingsResidentPanel";
@@ -285,6 +286,8 @@ export default function Settings({
             onRemoteStatusBridgeUrlChange={(nextUrl) => handleChange("remoteStatusBridgeUrl", nextUrl)}
             onRemoteStatusBridgeTokenChange={(nextToken) => handleChange("remoteStatusBridgeToken", nextToken)}
           />
+
+          <SettingsAiClassificationPanel />
 
           <SettingsDataSafetyPanel
             cleanupRange={cleanupRange}

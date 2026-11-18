@@ -216,12 +216,16 @@ export function cancelAppMappingNameEdit(
   const snapshot = hasSnapshot
     ? state.nameEditSnapshots[candidate.exeName]
     : (state.draftState.overrides[candidate.exeName] ?? null);
+  const current = state.draftState.overrides[candidate.exeName];
+  const restored = current && current.category !== snapshot?.category
+    ? { ...current, displayName: snapshot?.displayName }
+    : snapshot;
   const nextNameEditSnapshots = { ...state.nameEditSnapshots };
   delete nextNameEditSnapshots[candidate.exeName];
 
   return {
     ...state,
-    draftState: withUpdatedOverride(state.draftState, candidate.exeName, snapshot),
+    draftState: withUpdatedOverride(state.draftState, candidate.exeName, restored),
     nameDrafts: {
       ...state.nameDrafts,
       [candidate.exeName]: resolvedDisplayName,
