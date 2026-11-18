@@ -10,7 +10,7 @@ name = "patina-dev"
 path = "scripts/gpui-dev/main.rs"
 
 [workspace]
-exclude = ["src-tauri", "desktop"]
+exclude = ["desktop"]
 
 [dependencies]
 serde_json = "1"
