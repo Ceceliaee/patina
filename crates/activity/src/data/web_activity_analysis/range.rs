@@ -768,9 +768,10 @@ mod tests {
             now: i64,
             expected_buckets: Vec<i64>,
         }
-        let fixtures: Vec<Facts> = serde_json::from_str(include_str!(
-            "../../../../../tests/fixtures/activity-timing-facts.json"
-        ))
+        let fixtures: Vec<Facts> = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/activity-timing-facts.json"
+        )))
         .unwrap();
         tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(async {
             for facts in fixtures {

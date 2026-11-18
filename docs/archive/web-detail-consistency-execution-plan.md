@@ -90,7 +90,7 @@ G = 从 I 构造的显示组，每份有效时间只在所属计量集合中贡�
 
 应用与网页计时修复提供有效片段、有效截止和事实变更通知。本方案消费这些结果，不用浏览器应用总量替代网页有效事实。
 
-复用现有[计时事实 fixture](../../tests/fixtures/activity-timing-facts.json)作为联调输入。实施前按当前代码和长期协议核对其语义，归档方案不作为当前执行规则。
+复用现有[计时事实 fixture](../../crates/activity/tests/fixtures/activity-timing-facts.json)作为联调输入。实施前按当前代码和长期协议核对其语义，归档方案不作为当前执行规则。
 
 ## 3. 当前实现证据
 

@@ -615,7 +615,7 @@ A01–A10 的实施证据见第 8 节；第 2.2 节保留修复前的调查基�
 - 真实 Windows 前台链已跑通：先让浏览器产生原生记录，再从 Patina 排除后台浏览器，进入浏览器后立即检查前驱封口，返回同一 Patina 时产生新 ID。测试使用实际分类命令、前台采样和 SQLite 行；未修改产品的排除或窗口激活规则。预设尚无历史的浏览器会被既有 orphan 清理移除，因此测试前置条件与产品的已记录应用目录保持一致。
 - 真实锁屏第一次收到 `1788424825799` 的 lock 与 `1788424845301` 的 unlock，共 19502ms；应用和测试网页均无区间跨越该空档，恢复后新会话起点为 `1788424846539`。等待期间旧会话已经结束，因此该次结果证明不补空档，尚不单独证明活动中锁屏的精确收口。
 - 原生电源监听窗口另有缺口：`HWND_MESSAGE` 不接收系统广播。旧隔离实例的 `EnumWindows` 检查为 0 个可接收广播的电源窗口；修复为一个不可见顶层窗口。新实例已完成真实锁屏与 S3 睡眠复验。此机 `powercfg /a` 仅支持 S3，未启用 S4，不改变其系统电源配置。
-- 新增 [固定活动事实 fixture](../../tests/fixtures/activity-timing-facts.json)。`data::web_activity_analysis::tests::handoff_facts_preserve_gaps_zero_fragments_and_fixed_cutoffs_in_the_sql_reader` 直接插入合成行并调用生产 SQLite 聚合读取：排除空档为 3000/4000；回溯总量 8000；watchdog/电源空档桶为 6000/0/2000；开放观察截止总量 46000；午夜两桶各 30000。该 fixture 是源事实交付，不将展示分组视为计时事实。
+- 新增 [固定活动事实 fixture](../../crates/activity/tests/fixtures/activity-timing-facts.json)。`data::web_activity_analysis::tests::handoff_facts_preserve_gaps_zero_fragments_and_fixed_cutoffs_in_the_sql_reader` 直接插入合成行并调用生产 SQLite 聚合读取：排除空档为 3000/4000；回溯总量 8000；watchdog/电源空档桶为 6000/0/2000；开放观察截止总量 46000；午夜两桶各 30000。该 fixture 是源事实交付，不将展示分组视为计时事实。
 - HTTP 请求在第一次设置读取之前捕获生命周期代次，避免慢设置读取或恢复期间的旧请求取得新代次。恢复同时重新加载全局标题隐私并使应用标题缓存失效；读取失败时先关闭标题采集。
 - 已再次通过 700 项 Rust 测试、1 项原有忽略；其后新增 fixture SQL 读取测试单独通过。最终总数及完整门槛在后续记录中确认。
 
