@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
 #[derive(Clone, Copy)]
-pub(crate) enum Phase {
+pub enum Phase {
     Acquire,
     Statement,
     Commit,
@@ -26,7 +26,7 @@ struct Counter {
 static COUNTERS: std::sync::LazyLock<[Counter; 7]> =
     std::sync::LazyLock::new(|| std::array::from_fn(|_| Counter::default()));
 
-pub(crate) struct Timer<'a> {
+pub struct Timer<'a> {
     counter: &'a Counter,
     started: Instant,
 }
@@ -51,17 +51,17 @@ impl Drop for Timer<'_> {
     }
 }
 
-pub(crate) fn start(phase: Phase) -> Timer<'static> {
+pub fn start(phase: Phase) -> Timer<'static> {
     Timer::new(&COUNTERS[phase as usize])
 }
 
-pub(crate) async fn measure<T>(phase: Phase, work: impl std::future::Future<Output = T>) -> T {
+pub async fn measure<T>(phase: Phase, work: impl std::future::Future<Output = T>) -> T {
     let _timer = start(phase);
     work.await
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub(crate) struct Snapshot {
+pub struct Snapshot {
     phase: &'static str,
     in_flight: u64,
     ended: u64,
@@ -69,7 +69,7 @@ pub(crate) struct Snapshot {
     max_us: u64,
 }
 
-pub(crate) fn snapshot() -> Vec<Snapshot> {
+pub fn snapshot() -> Vec<Snapshot> {
     [
         "connection-acquire",
         "sql-including-lock-wait",

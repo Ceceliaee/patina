@@ -1,4 +1,4 @@
-use crate::data::schema;
+use crate::schema;
 use futures_util::future::BoxFuture;
 use sqlx::error::BoxDynError;
 use sqlx::migrate::{Migration as SqlxMigration, MigrationSource, MigrationType, Migrator};
@@ -8,7 +8,7 @@ use sqlx::{
 };
 use std::path::Path;
 
-pub(crate) async fn open_single_connection_sqlite_pool(
+pub async fn open_single_connection_sqlite_pool(
     db_path: &Path,
     create_if_missing: bool,
 ) -> Result<Pool<Sqlite>, String> {
@@ -46,7 +46,7 @@ impl MigrationSource<'static> for InlineMigrationList {
     }
 }
 
-pub(crate) fn expected_migration_metadata() -> Vec<(i64, &'static str, Vec<u8>)> {
+pub fn expected_migration_metadata() -> Vec<(i64, &'static str, Vec<u8>)> {
     schema::tracker_migrations()
         .into_iter()
         .map(|migration| {
@@ -66,7 +66,7 @@ pub(crate) fn expected_migration_metadata() -> Vec<(i64, &'static str, Vec<u8>)>
         .collect()
 }
 
-pub(crate) async fn run_current_migrations(pool: &Pool<Sqlite>) -> Result<(), String> {
+pub async fn run_current_migrations(pool: &Pool<Sqlite>) -> Result<(), String> {
     let migrator = Migrator::new(InlineMigrationList(schema::tracker_migrations()))
         .await
         .map_err(|error| format!("failed to prepare sqlite migrations: {error}"))?;

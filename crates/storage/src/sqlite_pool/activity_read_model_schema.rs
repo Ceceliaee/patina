@@ -24,9 +24,7 @@ async fn trigger_uses_euclidean_hour_boundaries(
     .map_err(|error| format!("failed to inspect sqlite trigger SQL `{trigger_name}`: {error}"))
 }
 
-pub(in crate::data) async fn has_activity_read_models_schema(
-    pool: &Pool<Sqlite>,
-) -> Result<bool, String> {
+pub async fn has_activity_read_models_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
     for table_name in [
         "read_model_revision",
         "read_model_state",

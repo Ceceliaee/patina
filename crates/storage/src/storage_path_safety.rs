@@ -29,7 +29,7 @@ impl Drop for WriteProbeGuard {
     }
 }
 
-pub(super) fn probe_directory_writable(directory: &Path, label: &str) -> Result<(), String> {
+pub fn probe_directory_writable(directory: &Path, label: &str) -> Result<(), String> {
     for _ in 0..16 {
         let sequence = WRITE_PROBE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         let probe = directory.join(format!(
@@ -57,14 +57,11 @@ pub(super) fn probe_directory_writable(directory: &Path, label: &str) -> Result<
     ))
 }
 
-pub(super) fn same_path(left: &Path, right: &Path) -> bool {
+pub fn same_path(left: &Path, right: &Path) -> bool {
     path_key(left) == path_key(right)
 }
 
-pub(super) fn ensure_destructive_paths_are_disjoint(
-    source: &Path,
-    target: &Path,
-) -> Result<(), String> {
+pub fn ensure_destructive_paths_are_disjoint(source: &Path, target: &Path) -> Result<(), String> {
     if resolved_path_is_same_or_child(source, target)?
         || resolved_path_is_same_or_child(target, source)?
     {
@@ -77,11 +74,11 @@ pub(super) fn ensure_destructive_paths_are_disjoint(
     Ok(())
 }
 
-pub(super) fn resolved_paths_equal(left: &Path, right: &Path) -> Result<bool, String> {
+pub fn resolved_paths_equal(left: &Path, right: &Path) -> Result<bool, String> {
     Ok(resolved_path_key(left)? == resolved_path_key(right)?)
 }
 
-pub(crate) fn resolved_path_is_same_or_child(child: &Path, parent: &Path) -> Result<bool, String> {
+pub fn resolved_path_is_same_or_child(child: &Path, parent: &Path) -> Result<bool, String> {
     let child_key = resolved_path_key(child)?;
     let parent_key = resolved_path_key(parent)?;
     Ok(child_key == parent_key || child_key.starts_with(&format!("{parent_key}/")))
@@ -135,7 +132,7 @@ fn normalize_path_lexically(path: &Path) -> PathBuf {
     normalized
 }
 
-pub(super) fn path_key(path: &Path) -> String {
+pub fn path_key(path: &Path) -> String {
     let mut key = normalize_path_lexically(path)
         .to_string_lossy()
         .replace('\\', "/");

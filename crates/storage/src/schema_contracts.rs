@@ -2,7 +2,7 @@ use sqlx::{Pool, Row, Sqlite};
 use std::collections::BTreeSet;
 
 pub async fn has_unique_activity_reminder_targets(pool: &Pool<Sqlite>) -> Result<bool, String> {
-    let expected = crate::data::schema::ACTIVITY_REMINDER_UNIQUE_TARGET_SQL
+    let expected = crate::schema::ACTIVITY_REMINDER_UNIQUE_TARGET_SQL
         .split_once("CREATE UNIQUE INDEX IF NOT EXISTS")
         .expect("unique target index migration")
         .1;
@@ -111,8 +111,7 @@ pub async fn has_pomodoro_completions_schema(pool: &Pool<Sqlite>) -> Result<bool
 
 pub async fn has_retired_widget_preferences(pool: &Pool<Sqlite>) -> Result<bool, String> {
     // Reuse the migration predicate so history repair and execution share the same data contract.
-    let query =
-        crate::data::schema::WIDGET_RETIREMENT_SQL.replace("DELETE FROM", "SELECT COUNT(*) FROM");
+    let query = crate::schema::WIDGET_RETIREMENT_SQL.replace("DELETE FROM", "SELECT COUNT(*) FROM");
     let count: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(query))
         .fetch_one(pool)
         .await
@@ -367,7 +366,7 @@ pub async fn has_local_only_scheduled_backup_schema(pool: &Pool<Sqlite>) -> Resu
         && run_indexes.contains("idx_scheduled_backup_runs_status_retry"))
 }
 
-pub(super) async fn has_retired_timer(pool: &Pool<Sqlite>) -> Result<bool, String> {
+pub async fn has_retired_timer(pool: &Pool<Sqlite>) -> Result<bool, String> {
     let remaining: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'
          AND name IN ('tool_timers', 'tool_timer_laps')",
@@ -386,7 +385,7 @@ pub(super) async fn schema_revision_limit(pool: &Pool<Sqlite>) -> Result<usize, 
     } else {
         0
     };
-    let revision_limit = crate::data::schema::ACTIVITY_READ_MODELS_MIGRATION_VERSION as usize
+    let revision_limit = crate::schema::ACTIVITY_READ_MODELS_MIGRATION_VERSION as usize
         + usize::from(has_web_activity_revision_schema(pool).await?)
         + scheduled_backup_migration_count
         + usize::from(has_scheduled_export_schema(pool).await?)
@@ -398,60 +397,58 @@ pub(super) async fn schema_revision_limit(pool: &Pool<Sqlite>) -> Result<usize, 
     // while its removed preferences remain in the database.
     let revision_limit = revision_limit
         + usize::from(
-            revision_limit == crate::data::schema::ANONYMOUS_ACTIVITY_MIGRATION_VERSION as usize
+            revision_limit == crate::schema::ANONYMOUS_ACTIVITY_MIGRATION_VERSION as usize
                 && has_retired_widget_preferences(pool).await?,
         );
     let revision_limit = revision_limit
         + usize::from(
-            revision_limit == crate::data::schema::WIDGET_RETIREMENT_MIGRATION_VERSION as usize
+            revision_limit == crate::schema::WIDGET_RETIREMENT_MIGRATION_VERSION as usize
                 && has_activity_reminder_extensions_schema(pool).await?,
         );
     let revision_limit = revision_limit
         + usize::from(
-            revision_limit
-                == crate::data::schema::ACTIVITY_REMINDER_EXTENSION_MIGRATION_VERSION as usize
+            revision_limit == crate::schema::ACTIVITY_REMINDER_EXTENSION_MIGRATION_VERSION as usize
                 && has_activity_reminder_enabled_schema(pool).await?,
         );
     let revision_limit = revision_limit
         + usize::from(
-            revision_limit
-                == crate::data::schema::ACTIVITY_REMINDER_ENABLED_MIGRATION_VERSION as usize
+            revision_limit == crate::schema::ACTIVITY_REMINDER_ENABLED_MIGRATION_VERSION as usize
                 && has_reminder_recurrence_schema(pool).await?,
         );
     let revision_limit = revision_limit
         + usize::from(
-            revision_limit == crate::data::schema::REMINDER_RECURRENCE_MIGRATION_VERSION as usize
+            revision_limit == crate::schema::REMINDER_RECURRENCE_MIGRATION_VERSION as usize
                 && has_unique_activity_reminder_targets(pool).await?,
         );
     let revision_limit = revision_limit
         + usize::from(
             revision_limit
-                == crate::data::schema::ACTIVITY_REMINDER_UNIQUE_TARGET_MIGRATION_VERSION as usize
+                == crate::schema::ACTIVITY_REMINDER_UNIQUE_TARGET_MIGRATION_VERSION as usize
                 && has_retired_timer(pool).await?,
         );
     let revision_limit = revision_limit
         + usize::from(
-            revision_limit == crate::data::schema::TIMER_RETIREMENT_MIGRATION_VERSION as usize
+            revision_limit == crate::schema::TIMER_RETIREMENT_MIGRATION_VERSION as usize
                 && has_pomodoro_tasks_schema(pool).await?,
         );
     let revision_limit = revision_limit
         + usize::from(
-            revision_limit == crate::data::schema::POMODORO_TASKS_MIGRATION_VERSION as usize
+            revision_limit == crate::schema::POMODORO_TASKS_MIGRATION_VERSION as usize
                 && has_pomodoro_completions_schema(pool).await?,
         );
     let revision_limit = revision_limit
         + usize::from(
-            revision_limit == crate::data::schema::POMODORO_COMPLETIONS_MIGRATION_VERSION as usize
+            revision_limit == crate::schema::POMODORO_COMPLETIONS_MIGRATION_VERSION as usize
                 && has_free_focus_schema(pool).await?,
         );
     let revision_limit = revision_limit
         + usize::from(
-            revision_limit == crate::data::schema::FREE_FOCUS_MIGRATION_VERSION as usize
+            revision_limit == crate::schema::FREE_FOCUS_MIGRATION_VERSION as usize
                 && has_reminder_identity_schema(pool).await?,
         );
     Ok(revision_limit
         + usize::from(
-            revision_limit == crate::data::schema::REMINDER_IDENTITY_MIGRATION_VERSION as usize
+            revision_limit == crate::schema::REMINDER_IDENTITY_MIGRATION_VERSION as usize
                 && has_focus_history(pool).await?,
         ))
 }
@@ -459,7 +456,7 @@ pub(super) async fn schema_revision_limit(pool: &Pool<Sqlite>) -> Result<usize, 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data::schema::{SCHEDULED_BACKUP_SCHEMA_SQL, SCHEDULED_BACKUP_TARGETS_SCHEMA_SQL};
+    use crate::schema::{SCHEDULED_BACKUP_SCHEMA_SQL, SCHEDULED_BACKUP_TARGETS_SCHEMA_SQL};
     use sqlx::{Executor, SqlitePool};
 
     #[tokio::test]
@@ -475,7 +472,7 @@ mod tests {
     #[tokio::test]
     async fn scheduled_export_contract_matches_migration_schema() {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-        pool.execute(crate::data::schema::SCHEDULED_EXPORT_SCHEMA_SQL)
+        pool.execute(crate::schema::SCHEDULED_EXPORT_SCHEMA_SQL)
             .await
             .unwrap();
         assert!(has_scheduled_export_schema(&pool).await.unwrap());

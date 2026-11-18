@@ -17,7 +17,7 @@ fn regular(path: &Path) -> Result<fs::Metadata, String> {
     Ok(meta)
 }
 
-pub(super) fn destination(profile: &Path, selected: Option<&Path>) -> Result<PathBuf, String> {
+pub fn destination(profile: &Path, selected: Option<&Path>) -> Result<PathBuf, String> {
     let Some(selected) = selected else {
         return Ok(profile.to_owned());
     };
@@ -194,7 +194,7 @@ pub(super) fn finish_backups(source: &Path, target: &Path, stage: Option<&Path>)
     }
 }
 
-pub(super) fn directory_size(root: &Path, excluded: &[&Path]) -> u64 {
+pub fn directory_size(root: &Path, excluded: &[&Path]) -> u64 {
     let Ok(entries) = fs::read_dir(root) else {
         return 0;
     };

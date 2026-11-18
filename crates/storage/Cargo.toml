@@ -1,0 +1,19 @@
+[package]
+name = "patina-storage"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+libsqlite3-sys = { version = "0.39.1", default-features = false }
+same-file = "1"
+serde_json = "1"
+tempfile = "3"
+tokio = { version = "1", features = ["sync", "rt", "time"] }
+sqlx.workspace = true
+serde = { version = "1", features = ["derive"] }
+futures-util = "0.3"
+
+[dev-dependencies]
+patina-activity-model = { path = "../activity-model" }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

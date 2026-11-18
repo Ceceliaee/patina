@@ -1,4 +1,4 @@
-use crate::domain::mini_window::Preferences;
+use patina_activity_model::mini_window::Preferences;
 use sqlx::{Pool, Sqlite};
 
 const KEY: &str = "mini_window_preferences";

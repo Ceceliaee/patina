@@ -2,9 +2,9 @@ use sqlx::{Pool, Row, Sqlite};
 use tokio::sync::{Mutex, MutexGuard};
 
 static SQLITE_MAINTENANCE: Mutex<()> = Mutex::const_new(());
-pub(crate) const QUERY_STATISTICS_OPTIMIZE_MASK: u32 = 0x2;
+pub const QUERY_STATISTICS_OPTIMIZE_MASK: u32 = 0x2;
 
-pub(crate) async fn optimize_query_statistics(pool: &Pool<Sqlite>) -> Result<(), String> {
+pub async fn optimize_query_statistics(pool: &Pool<Sqlite>) -> Result<(), String> {
     let _timing = super::diagnostics::start(super::diagnostics::Phase::Maintenance);
     // Check queried tables and indexes without statistics. Retain STAT4 by omitting
     // the analysis-limit flag, and avoid blind analysis of untouched singleton tables.
@@ -17,11 +17,11 @@ pub(crate) async fn optimize_query_statistics(pool: &Pool<Sqlite>) -> Result<(),
     .map_err(|error| format!("failed to optimize sqlite query statistics: {error}"))
 }
 
-pub(crate) async fn acquire_sqlite_maintenance() -> MutexGuard<'static, ()> {
+pub async fn acquire_sqlite_maintenance() -> MutexGuard<'static, ()> {
     SQLITE_MAINTENANCE.lock().await
 }
 
-pub(crate) async fn checkpoint_sqlite_pool(pool: &Pool<Sqlite>) -> Result<(), String> {
+pub async fn checkpoint_sqlite_pool(pool: &Pool<Sqlite>) -> Result<(), String> {
     let _timing = super::diagnostics::start(super::diagnostics::Phase::Maintenance);
     let row = sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
         .fetch_one(pool)

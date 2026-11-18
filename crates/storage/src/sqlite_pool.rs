@@ -1,24 +1,23 @@
-use crate::data::{schema, schema_contracts};
+use crate::{schema, schema_contracts};
 #[cfg(test)]
 use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::{Pool, Row, Sqlite};
 use std::path::Path;
-pub(crate) mod bootstrap;
-pub(crate) mod diagnostics;
-pub(crate) mod maintenance;
+pub mod bootstrap;
+pub mod diagnostics;
+pub mod maintenance;
 use bootstrap::run_current_migrations;
-pub(crate) use bootstrap::{expected_migration_metadata, open_single_connection_sqlite_pool};
-pub(crate) use maintenance::checkpoint_sqlite_pool;
+pub use bootstrap::{expected_migration_metadata, open_single_connection_sqlite_pool};
+pub use maintenance::checkpoint_sqlite_pool;
 #[cfg(test)]
 mod widget_retirement_tests;
 const VALIDATED_SCHEMA_MIGRATION_HEAD: i64 = schema::FOCUS_HISTORY_VERSION;
 mod activity_read_model_schema;
-pub(super) mod import_schema;
-pub(super) use activity_read_model_schema::has_activity_read_models_schema;
+pub mod import_schema;
+pub use activity_read_model_schema::has_activity_read_models_schema;
 use import_schema::{has_import_data_schema, has_import_data_v6_schema};
-#[cfg(test)]
-pub(crate) use maintenance::QUERY_STATISTICS_OPTIMIZE_MASK;
-pub(crate) async fn prepare_pool_schema(pool: &Pool<Sqlite>, db_path: &Path) -> Result<(), String> {
+pub use maintenance::QUERY_STATISTICS_OPTIMIZE_MASK;
+pub async fn prepare_pool_schema(pool: &Pool<Sqlite>, db_path: &Path) -> Result<(), String> {
     validate_schema_inspection_coverage()?;
 
     if repair_legacy_schema_before_baseline_normalization(pool).await? {
@@ -368,7 +367,7 @@ async fn repair_legacy_schema_before_baseline_normalization(
     Ok(changed)
 }
 
-pub(super) async fn has_current_baseline_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+pub async fn has_current_baseline_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
     if !table_exists(pool, "sessions").await?
         || !table_exists(pool, "settings").await?
         || !table_exists(pool, "icon_cache").await?
@@ -429,7 +428,7 @@ pub(super) async fn has_current_baseline_schema(pool: &Pool<Sqlite>) -> Result<b
         && title_sample_time_index_ready)
 }
 
-pub(super) async fn has_base_tools_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+pub async fn has_base_tools_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
     if !table_exists(pool, "tool_reminders").await?
         || !table_exists(pool, "tool_pomodoro_runs").await?
         || !table_exists(pool, "tool_daily_stats").await?
@@ -497,9 +496,7 @@ pub(super) async fn has_base_tools_schema(pool: &Pool<Sqlite>) -> Result<bool, S
         && daily_index_ready)
 }
 
-pub(super) async fn has_software_reminder_rules_schema(
-    pool: &Pool<Sqlite>,
-) -> Result<bool, String> {
+pub async fn has_software_reminder_rules_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
     if !table_exists(pool, "tool_software_reminder_rules").await? {
         return Ok(false);
     }
@@ -537,7 +534,7 @@ pub(super) async fn has_software_reminder_rules_schema(
         && sessions_exe_usage_index_ready)
 }
 
-pub(super) async fn has_web_activity_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+pub async fn has_web_activity_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
     if !table_exists(pool, "web_activity_segments").await? {
         return Ok(false);
     }
@@ -585,7 +582,7 @@ pub(super) async fn has_web_activity_schema(pool: &Pool<Sqlite>) -> Result<bool,
     Ok(segments_ready && time_index_ready && domain_time_index_ready && single_active_index_ready)
 }
 
-pub(super) async fn has_web_favicon_cache_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
+pub async fn has_web_favicon_cache_schema(pool: &Pool<Sqlite>) -> Result<bool, String> {
     if !table_exists(pool, "web_favicon_cache").await? {
         return Ok(false);
     }
