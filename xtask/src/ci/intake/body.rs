@@ -3,10 +3,11 @@ use regex::Regex;
 use std::collections::BTreeMap;
 use url::Url;
 
-const GOVERNANCE: [&str; 4] = [
+const GOVERNANCE: [&str; 5] = [
     "AGENTS.md",
     "CONTRIBUTING.md",
-    "docs/engineering-quality.md",
+    "docs/quality.md",
+    "docs/documentation.md",
     ".github/pull_request_template.md",
 ];
 fn is_documentation_path(path: &str) -> bool {

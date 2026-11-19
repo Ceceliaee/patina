@@ -55,12 +55,19 @@ fn intake_requires_accepted_scope_complete_visible_fields_and_external_evidence(
 fn docs_only_and_governance_evidence_match_actual_file_types() {
     let docs = BODY.replace("cargo xtask check", "cargo xtask docs check");
     assert!(!body_fails(&docs, &[change("docs/guide.md")]));
-    assert!(body_fails(&docs, &[change("CONTRIBUTING.md")]));
     let governed = docs.replace(
         "## Screenshots",
         "- [x] \x60cargo test -p xtask docs::\x60\n## Screenshots",
     );
-    assert!(!body_fails(&governed, &[change("CONTRIBUTING.md")]));
+    for path in [
+        "CONTRIBUTING.md",
+        "docs/documentation.md",
+        "docs/quality.md",
+    ] {
+        assert!(body_fails(&docs, &[change(path)]), "{path}");
+        assert!(!body_fails(&governed, &[change(path)]), "{path}");
+        assert!(!body_fails(BODY, &[change(path)]), "{path}");
+    }
     assert!(body_fails(
         &docs,
         &[Change {

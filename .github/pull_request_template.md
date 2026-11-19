@@ -71,16 +71,16 @@ Call out changes to tracking, local data, privacy, security, migrations, backup,
 ## Validation
 
 <!--
-Check the commands that were run. Select required validation under docs/engineering-quality.md §5 and CONTRIBUTING.md §6.
+Check the commands that were run. Select required validation under [validation scope](../docs/quality.md#验证范围) and [contributor checks](../CONTRIBUTING.md#6-validation-requirements).
 Documentation-only changes still require checks for changed governance, operational claims, or other affected risks.
-Follow docs/versioning-and-release-policy.md for version, tag, updater, packaging, and formal release acceptance.
+Follow docs/release.md for version, tag, updater, packaging, and formal release acceptance.
 Focused tests must match the changed risk area; unrelated tests do not satisfy the intake gate.
 -->
 
 - [ ] `cargo xtask docs check` for documentation-only changes
 - [ ] `cargo test -p xtask docs::` for documentation-governance or validation-policy changes
 - [ ] `cargo xtask check tools` for repository tooling changes
-- [ ] `cargo xtask check` when required by engineering-quality.md §5
+- [ ] `cargo xtask check` when required by the [validation scope](../docs/quality.md#验证范围)
 - [ ] Named native Windows tests for window, process, desktop integration, or installer changes
 - [ ] Related performance benchmarks for affected read-model, SQLite-query, or navigation behavior (list actual commands below)
 - [ ] `cargo xtask release validate-changelog` for release, changelog, or updater changes
