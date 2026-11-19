@@ -7,9 +7,9 @@
 它不是长期母文档，也不替代：
 
 - [`../architecture.md`](../architecture.md)
-- [`../engineering-quality.md`](../engineering-quality.md)
-- [`../issue-fix-boundary-guardrails.md`](../issue-fix-boundary-guardrails.md)
-- [`../roadmap-and-prioritization.md`](../roadmap-and-prioritization.md)
+- [`../engineering-quality.md`](../quality.md)
+- [`../issue-fix-boundary-guardrails.md`](../quality.md#修复与回归证据)
+- [`../roadmap-and-prioritization.md`](../product.md#优先级)
 
 本文只回答 4 件事：
 

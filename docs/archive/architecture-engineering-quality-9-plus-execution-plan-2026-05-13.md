@@ -14,7 +14,7 @@
 - [x] 本文曾作为当前一轮架构与工程质量提升的执行依据；归档后只保留为完成记录。
 - [x] 完成后已移动到 `docs/archive/`，不再长期留在 `docs/working/`。
 - [x] 未把本文当作长期母文档；只有长期规则或真实架构事实变化时才更新顶层 `docs/`。
-- [x] 执行中优先遵守顶层长期文档：[`../architecture.md`](../architecture.md)、[`../engineering-quality.md`](../engineering-quality.md)、[`../quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md)、[`../product-principles-and-scope.md`](../product-principles-and-scope.md)、[`../roadmap-and-prioritization.md`](../roadmap-and-prioritization.md)、[`../issue-fix-boundary-guardrails.md`](../issue-fix-boundary-guardrails.md)、[`../versioning-and-release-policy.md`](../versioning-and-release-policy.md)。
+- [x] 执行中优先遵守顶层长期文档：[`../architecture.md`](../architecture.md)、[`../engineering-quality.md`](../quality.md)、[`../quiet-pro-component-guidelines.md`](../ui.md)、[`../product-principles-and-scope.md`](../product.md)、[`../roadmap-and-prioritization.md`](../product.md#优先级)、[`../issue-fix-boundary-guardrails.md`](../quality.md#修复与回归证据)、[`../versioning-and-release-policy.md`](../release.md)。
 - [x] 所有 Markdown 文件保持 UTF-8。
 - [x] 未通过 PowerShell `>`, `>>`, `Set-Content`, `Out-File` 改写 Markdown 或源码文件。
 - [x] 每个阶段先判断 owner，再决定文件位置和实现方式。
@@ -444,10 +444,10 @@ rg -n "from .*platform/persistence|platform/persistence" src/features
 
 ### 文档回写清单
 
-- [x] clippy 进入默认门槛后，已更新 [`../engineering-quality.md`](../engineering-quality.md)。
+- [x] clippy 进入默认门槛后，已更新 [`../engineering-quality.md`](../quality.md)。
 - [x] Rust engine/data 边界发生长期事实变化后，已更新 [`../architecture.md`](../architecture.md)。
-- [x] CSS/主题 owner 发生长期事实变化后，已更新 [`../quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md)。
-- [x] release gate 增加新验证后，已更新 [`../versioning-and-release-policy.md`](../versioning-and-release-policy.md)。
+- [x] CSS/主题 owner 发生长期事实变化后，已更新 [`../quiet-pro-component-guidelines.md`](../ui.md)。
+- [x] release gate 增加新验证后，已更新 [`../versioning-and-release-policy.md`](../release.md)。
 - [x] 未把本文的阶段步骤复制进长期文档。
 - [x] 已将本文完成状态、验证结果、最终评分写入执行证据区。
 - [x] 已将本文移动到 `docs/archive/`。

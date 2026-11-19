@@ -2,7 +2,7 @@
 
 创建及归档日期：2026-09-11。状态：本地实施、验证和对抗式复核完成；原生 ARM64 与远端发布验证转交后续发布执行者。
 
-本轮继续上一轮迁移中因体积门槛暂缓的三个依赖组。用户已授权依据实际产物调整预算；按[工程质量](../engineering-quality.md#52-bundle-长期治理与预算变更)记录增长来源、加载阶段和有限缓冲，不统一抬高门槛。此前的[迁移记录](../archive/pnpm-toolchain-migration-execution-plan.md)保留历史结果。
+本轮继续上一轮迁移中因体积门槛暂缓的三个依赖组。用户已授权依据实际产物调整预算；按[工程质量](../quality.md#性能与资源生命周期)记录增长来源、加载阶段和有限缓冲，不统一抬高门槛。此前的[迁移记录](../archive/pnpm-toolchain-migration-execution-plan.md)保留历史结果。
 
 - [x] 保存当前输入、既有改动和构建归因报告，核查官方 registry 与 peer 范围。
 - [x] 逐组升级 React/类型声明、Vite、Lucide，定位产物变化。

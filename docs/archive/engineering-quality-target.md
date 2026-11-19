@@ -166,9 +166,9 @@
 
 不过在当前仓库里，这些内容已经分别由现有文档覆盖：
 
-- 发布质量见 [`versioning-and-release-policy.md`](../versioning-and-release-policy.md)
+- 发布质量见 [`versioning-and-release-policy.md`](../release.md)
 - 文档和协作规则见 [`AGENTS.md`](../../AGENTS.md) 以及其他长期文档
-- 产品边界见 [`product-principles-and-scope.md`](../product-principles-and-scope.md)
+- 产品边界见 [`product-principles-and-scope.md`](../product.md)
 
 因此，当前工程质量文档体系里，最值得单独站出来的，仍然是这 3 个核心维度：
 

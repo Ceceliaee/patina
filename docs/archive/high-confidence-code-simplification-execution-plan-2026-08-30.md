@@ -10,7 +10,7 @@
 
 ## 0. 文档定位与执行纪律
 
-本文记录 2026-08-30 全仓只读审计所得简化候选的已完成执行历史。长期规则仍由 [`AGENTS.md`](../../AGENTS.md)、[`architecture.md`](../architecture.md)、[`engineering-quality.md`](../engineering-quality.md)、[`issue-fix-boundary-guardrails.md`](../issue-fix-boundary-guardrails.md) 和 [`versioning-and-release-policy.md`](../versioning-and-release-policy.md) 持有。
+本文记录 2026-08-30 全仓只读审计所得简化候选的已完成执行历史。长期规则仍由 [`AGENTS.md`](../../AGENTS.md)、[`architecture.md`](../architecture.md)、[`engineering-quality.md`](../quality.md)、[`issue-fix-boundary-guardrails.md`](../quality.md#修复与回归证据) 和 [`versioning-and-release-policy.md`](../release.md) 持有。
 
 - [x] 本文被归类为 working execution plan，而不是顶层长期文档。
 - [x] 本文没有建立新的产品、架构、兼容、发布或 GitHub Project 规则。
@@ -134,7 +134,7 @@
 ### 4.1 受保护兼容边界
 
 - [x] 旧结构化备份 reader 的兼容截止事实由 [`CHANGELOG.md`](../../CHANGELOG.md) 记录为 2026-10-18；在该日期前不进入本计划。
-- [x] 旧 reader 的删除还必须满足 [`versioning-and-release-policy.md`](../versioning-and-release-policy.md) 的正式发布与退出条件，不能仅按日期自动执行。
+- [x] 旧 reader 的删除还必须满足 [`versioning-and-release-policy.md`](../release.md) 的正式发布与退出条件，不能仅按日期自动执行。
 - [x] `software -> app` 偏好迁移随 1.9.4 于 2026-08-13 发布；最早复核日为 2026-11-11，届时仍需重新核对发布事实、消费者和 owner。
 - [x] Web Activity protocol、backup format、database schema 和 updater contract 均不因本次内部清扫发生变化。
 
@@ -571,11 +571,11 @@ try {
 
 本计划预计不改变任何长期规则，因此默认不修改顶层 `docs/`。如果实施证明长期事实已经变化，必须更新真实 owner，而不是把新规则永久留在本文。
 
-- [x] 产品范围仍由 [`product-principles-and-scope.md`](../product-principles-and-scope.md) 持有。
-- [x] 优先级与 stable-period 取舍仍由 [`roadmap-and-prioritization.md`](../roadmap-and-prioritization.md) 和 [`issue-fix-boundary-guardrails.md`](../issue-fix-boundary-guardrails.md) 持有。
+- [x] 产品范围仍由 [`product-principles-and-scope.md`](../product.md) 持有。
+- [x] 优先级与 stable-period 取舍仍由 [`roadmap-and-prioritization.md`](../product.md#优先级) 和 [`issue-fix-boundary-guardrails.md`](../quality.md#修复与回归证据) 持有。
 - [x] 架构 owner 与允许依赖方向仍由 [`architecture.md`](../architecture.md) 持有。
-- [x] 验证命令与风险覆盖仍由 [`engineering-quality.md`](../engineering-quality.md) 和 [`package.json`](../../package.json) 持有。
-- [x] 兼容退出、版本与 release 规则仍由 [`versioning-and-release-policy.md`](../versioning-and-release-policy.md) 持有。
+- [x] 验证命令与风险覆盖仍由 [`engineering-quality.md`](../quality.md) 和 [`package.json`](../../package.json) 持有。
+- [x] 兼容退出、版本与 release 规则仍由 [`versioning-and-release-policy.md`](../release.md) 持有。
 - [x] 本次没有把候选符号清单、审计工具输出或本地 agent workflow 提升为长期 repository policy。
 - [x] 归档移动后运行 `npm run check:docs:self-test` 和 `npm run check:docs`，均通过。
 - [x] 归档移动后验证本文为 UTF-8 无 BOM、标题层级连续、6 个代码 fence 成对闭合、34 个相对链接有效。

@@ -22,7 +22,7 @@
 | 常驻工具每天重复承担资源成本 | 需要同时约束延迟、后台 CPU、全进程内存和资源回收 | 本轮以隔离本地运行的固定场景、短时样本和生命周期反例验证；正式运行和长期样本列范围外 |
 | 自动检查只证明实际执行的对象 | 检查代码、执行代码和交付代码必须可追溯 | 入场检查与下游任务绑定不可变提交；结果能由反例推翻 |
 
-优化顺序由 [产品范围](../product-principles-and-scope.md)、[路线图](../roadmap-and-prioritization.md) 和 [工程质量](../engineering-quality.md) 约束。结构落点见 [架构](../architecture.md)，多阶段修复见 [边界守则](../issue-fix-boundary-guardrails.md)，交互与文案分别见 [Quiet Pro](../quiet-pro-component-guidelines.md) 和 [本地化](../localization.md)。这些文档持有长期契约，本方案只持有本轮任务与证据。
+优化顺序由 [产品范围](../product.md)、[路线图](../product.md#优先级) 和 [工程质量](../quality.md) 约束。结构落点见 [架构](../architecture.md)，多阶段修复见 [边界守则](../quality.md#修复与回归证据)，交互与文案分别见 [Quiet Pro](../ui.md) 和 [本地化](../localization.md)。这些文档持有长期契约，本方案只持有本轮任务与证据。
 
 ## 2. 起点、目标与评分方法
 
@@ -325,7 +325,7 @@ S1 与 S2 可以分别推进，S3 的证据调查也可先做。涉及同一 Dat
 pnpm run tauri build --config src-tauri/tauri.local.conf.json --no-bundle
 ```
 
-该命令只构建，不启动应用，也不构成正式安装包验收。当前 local 配置与正式身份和安全配置存在差异；release 不支持测试数据目录覆盖，配置身份并不使当前账户的既有 Local 数据自动隔离。本机预检已发现既有数据，因此运行验收需要独立 Windows 测试账户或等价隔离环境。此类正式运行按用户最新要求列为本轮评分范围外；维护者在具备隔离环境及发布授权后，按 [发布政策](../versioning-and-release-policy.md) 验证安装包、签名与 updater 资产。
+该命令只构建，不启动应用，也不构成正式安装包验收。当前 local 配置与正式身份和安全配置存在差异；release 不支持测试数据目录覆盖，配置身份并不使当前账户的既有 Local 数据自动隔离。本机预检已发现既有数据，因此运行验收需要独立 Windows 测试账户或等价隔离环境。此类正式运行按用户最新要求列为本轮评分范围外；维护者在具备隔离环境及发布授权后，按 [发布政策](../release.md) 验证安装包、签名与 updater 资产。
 
 最后查询修复后的候选于 12:46 UTC 构建成功：PatinaLocal.exe 为 41,421,824 B，SHA-256 为 `8fa0871173467bdbb06d86853831086e007c96e4483a1484b9d7155fd92b9ae1`。产品输入保持；期间仅测量工具与其测试变化，不进入产品构建，详情见 `artifacts/quality95/local-release-90-closeout-identity.json`。可执行程序未启动，S7.7 的构建部分完成，release 运行与正式安装未执行、范围外，原混合条目保持未勾选。先前构建的产物身份保留为历史记录。
 

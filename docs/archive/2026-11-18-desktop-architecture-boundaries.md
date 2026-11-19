@@ -1,6 +1,6 @@
 # Patina 桌面架构优化执行与验收
 
-2026-11-18 · 已完成并归档。本文以当前 GPUI 工作树为起点，覆盖录制器、桌面请求、插件宿主和共享模型四个方向。最终仍交付一个 `patina.exe`，后台常驻，主窗口和 Mini 共用按需启动的 GPUI 进程，系统探测继续在独立工作进程中运行。[当前运行架构](../architecture.md#2-系统现实)
+2026-11-18 · 已完成并归档。本文以当前 GPUI 工作树为起点，覆盖录制器、桌面请求、插件宿主和共享模型四个方向。最终仍交付一个 `patina.exe`，后台常驻，主窗口和 Mini 共用按需启动的 GPUI 进程，系统探测继续在独立工作进程中运行。[当前运行架构](../architecture.md#桌面进程)
 
 ## 1. 从四个变化判断边界
 
@@ -28,7 +28,7 @@
 
 - [x] 记录执行时的提交、工作树差异及测试工具链，把已完成的命名调整和安装器修复计入基线。列出四条路径的真实调用方、持有的状态、持久化键及现有测试名。测试名或位置在实施中变化时保留前后对应关系。[归档的命名与更新交接验收](../archive/2026-11-18-repository-naming-plan.md)
 - [x] 准备可重复使用的临时资料目录。用已有 fixture 建立带跨日会话、应用与网站分类、设置值的 SQLite 库。另保留旧桌面消息、Mini 历史设置、已安装插件状态和两版签名 Counter 包。记录预期行值、序列化字段及重开结果。资料与签名均使用测试身份。[活动 fixture](../../crates/test-support/recording.rs) · [旧资料验收](../../crates/updater/tests/installer/handoff.rs)
-- [x] 对照四条路径各跑最接近的现有用例，或复用输入、代码和环境均匹配的既有验收。记录哪些操作仍只能经完整宿主测试，以及已经存在的环境限制。所有原生验收使用隔离的 Windows 资料和测试桌面。[工程验证要求](../engineering-quality.md#5-默认验证门槛)
+- [x] 对照四条路径各跑最接近的现有用例，或复用输入、代码和环境均匹配的既有验收。记录哪些操作仍只能经完整宿主测试，以及已经存在的环境限制。所有原生验收使用隔离的 Windows 资料和测试桌面。[工程验证要求](../quality.md#验证范围)
 
 对照提交为 `8dcc3249`，工具链为 Windows x64 Rust 1.100.0。开始时记录了工作树中 970 个受维护文件的 SHA-256，包含未提交的全仓命名和安装器路径修复。沿用命名验收的 SQLite fixture、原生窗口生命周期、Counter 两版签名包和含空格中文路径安装交接结果。实施前另冻结了桌面 EXE，用于同屏比较 Mini。默认无头基线为 784 项通过，11 项需显式运行。原生专项使用临时资料和测试身份。
 
@@ -88,14 +88,14 @@
 | 范围 | 验证入口与判据 |
 | --- | --- |
 | 活动与分类 | `cargo test --locked -p patina-activity --test contracts`。覆盖跨日、精确历史、网站归组、过期编辑零部分写入及备份恢复。另从独立查询、分类入口运行临时库用例。 |
-| 协议与宿主 | `cargo test --locked -p patina-desktop-protocol`。再运行 `cargo test --locked -p patina --features native-tests --test lifecycle -- --ignored --test-threads=1`。检查真实进程退出、重新握手和重开后的已提交快照。本机用 `resident::settings_compensate_and_reopen` 验证设置，使用真实 Patina 窗口和签名 NSIS 包验证更新。该机器已记录独立更新测试程序的安全告警，具名 `updater` 测试继续由 Windows CI 运行。[更新窗口本机验收方式](../engineering-quality.md#5-默认验证门槛) |
+| 协议与宿主 | `cargo test --locked -p patina-desktop-protocol`。再运行 `cargo test --locked -p patina --features native-tests --test lifecycle -- --ignored --test-threads=1`。检查真实进程退出、重新握手和重开后的已提交快照。本机用 `resident::settings_compensate_and_reopen` 验证设置，使用真实 Patina 窗口和签名 NSIS 包验证更新。该机器已记录独立更新测试程序的安全告警，具名 `updater` 测试继续由 Windows CI 运行。[更新窗口本机验收方式](../quality.md#验证范围) |
 | 插件 | `cargo test --locked -p patina-plugin-host`。使用两版已编译并签名的 Counter 包及同一临时测试签名密钥，按签名包测试设置 `PATINA_COUNTER_PACKAGE`、`PATINA_COUNTER_UPDATE` 和 `PATINA_COUNTER_SIGNING_KEY`，再执行 `cargo test --locked -p patina-plugin-host --test packages install_update_restart_uninstall -- --ignored --exact`。同时执行官方工具及窗口端用例。 |
 | Mini 与持久化 | `cargo test --locked -p patina-storage widget_retirement` 检查历史样本。原生入口示例为 `cargo test --locked -p patina --features native-tests --test pages tools::mini_opens_the_selected_tool_and_keeps_dirty_settings -- --ignored --exact --test-threads=1`。补跑迁移后的纯几何、动画及实际窗口定位用例。 |
 | 跨模块收尾 | `cargo xtask check native` 覆盖工作区无头测试、格式和严格 Clippy。`cargo xtask check tools` 覆盖依赖边界、仓库工具和独立 Wasm 构建。安装交接在已安装 NSIS 的 Windows 隔离桌面运行，核对缺失回执拒绝及含空格资料路径重启。环境参数沿用[仓库验收工作流](../../.github/workflows/verify.yml)。 |
 
 - [x] 完成四项独立性演练，留下每项的实际依赖、输入、观察结果和对应测试入口。对照最初的消费者清单和测试清单，解释仍跨模块的引用。跨域写入标明事务或失败恢复所有者。
-- [x] 检查最终 Cargo 依赖树和模块公开接口。重点核实查询与分类可独立使用，窗口管理无需实现业务补偿，插件运行时与桌面消息可独立消费，录制与存储生产代码无需引用 Mini 交互。主窗口和 Mini 仍共用一个进程。若调度方式发生变化，按相同托盘空闲与 Mini 收起场景对照进程数、唤醒和内存，并解释新增的常驻开销。[资源测量约定](../engineering-quality.md#53-性能测量与资源生命周期)
-- [x] 将已验证的职责、依赖方向和新增代码落点更新到[架构文档](../architecture.md#7-新增代码-owner-与落点)。测试入口确实变化时同步[工程质量文档](../engineering-quality.md#51-测试分层与稳定性治理)和 CI 精确筛选。运行文档检查并核对 UTF-8、源文件链接和归档后的相对路径。
+- [x] 检查最终 Cargo 依赖树和模块公开接口。重点核实查询与分类可独立使用，窗口管理无需实现业务补偿，插件运行时与桌面消息可独立消费，录制与存储生产代码无需引用 Mini 交互。主窗口和 Mini 仍共用一个进程。若调度方式发生变化，按相同托盘空闲与 Mini 收起场景对照进程数、唤醒和内存，并解释新增的常驻开销。[资源测量约定](../quality.md#性能与资源生命周期)
+- [x] 将已验证的职责、依赖方向和新增代码落点更新到[架构文档](../architecture.md#代码落点)。测试入口确实变化时同步[工程质量文档](../quality.md#测试分层)和 CI 精确筛选。运行文档检查并核对 UTF-8、源文件链接和归档后的相对路径。
 - [x] 在下表填入各阶段实际结果。失败项记录复现场景及负责模块。未执行的专项注明环境和受影响的结论。完成项逐一勾选。剩余工作完成、有依据关闭或转交到明确后续事项后，将状态改为已完成并移入 `docs/archive/`。
 
 | 阶段 | 实际改动与验证结果 | 遗留项及归属 |

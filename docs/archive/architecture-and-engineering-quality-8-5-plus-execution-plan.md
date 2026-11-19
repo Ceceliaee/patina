@@ -12,9 +12,9 @@
 它不是长期母文档，也不替代：
 
 - [`../architecture.md`](../architecture.md)
-- [`../engineering-quality.md`](../engineering-quality.md)
-- [`../issue-fix-boundary-guardrails.md`](../issue-fix-boundary-guardrails.md)
-- [`../roadmap-and-prioritization.md`](../roadmap-and-prioritization.md)
+- [`../engineering-quality.md`](../quality.md)
+- [`../issue-fix-boundary-guardrails.md`](../quality.md#修复与回归证据)
+- [`../roadmap-and-prioritization.md`](../product.md#优先级)
 
 本文只回答 4 件事：
 
@@ -373,8 +373,8 @@ npm run check
 
 执行清单：
 
-- [x] 将 Rust 测试进入默认 gate 的事实回写到 [`../engineering-quality.md`](../engineering-quality.md)
-- [x] 如 release gate 发生变化，回写到 [`../versioning-and-release-policy.md`](../versioning-and-release-policy.md)
+- [x] 将 Rust 测试进入默认 gate 的事实回写到 [`../engineering-quality.md`](../quality.md)
+- [x] 如 release gate 发生变化，回写到 [`../versioning-and-release-policy.md`](../release.md)
 - [x] 如 settings owner 口径发生稳定变化，回写到 [`../architecture.md`](../architecture.md)
 - [x] 重新运行完整验证链
 - [x] 重新做一次架构与工程质量复评

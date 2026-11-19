@@ -4,9 +4,9 @@
 > 原方案创建：2026-10-25；拆分 / 更新：2026-10-26。
 > 决策与验收责任：维护者 Ceceliaee；获批后的执行者记录实际结果。
 > 顺序：明确本地、CI 与发布职责 → 逐层核实入口、覆盖范围与成本 → 补齐必要反馈和隔离能力 → 新增功能贯通 → 完整验收。
-> 当前验证规则归 [工程质量](../engineering-quality.md#5-默认验证门槛)，命令归 package；本文保留实施与验收历史。
+> 当前验证规则归 [工程质量](../quality.md#验证范围)，命令归 package；本文保留实施与验收历史。
 
-本文负责让后续各类功能在开发中尽早得到有效反馈，并在交付前保留必要完整证据。本测试任务归档时，文档治理尚未实施；后续处置由[文档治理记录](2026-10-26-documentation-governance-plan.md)持有，本方案不以其完成为前置。现行 [AGENTS.md](../../AGENTS.md)、[工程质量](../engineering-quality.md)、[贡献指南](../../CONTRIBUTING.md)、[架构](../architecture.md)与[发布政策](../versioning-and-release-policy.md)继续有效，本文是已完成的临时执行计划。
+本文负责让后续各类功能在开发中尽早得到有效反馈，并在交付前保留必要完整证据。本测试任务归档时，文档治理尚未实施；后续处置由[文档治理记录](2026-10-26-documentation-governance-plan.md)持有，本方案不以其完成为前置。现行 [AGENTS.md](../../AGENTS.md)、[工程质量](../quality.md)、[贡献指南](../../CONTRIBUTING.md)、[架构](../architecture.md)与[发布政策](../release.md)继续有效，本文是已完成的临时执行计划。
 
 本次先实施本方案，优先改善后续新增功能的反馈速度；文档治理独立安排，不阻塞各层验证路径落地。
 
@@ -35,7 +35,7 @@ owner 指事实或行为的权威归属；消费者指依赖它的模块、页�
 | 各层不能互相替代 | browser 默认 headless、IPC 为 stub；Rust 还有 [native probe 集成](../../src-tauri/tests/native_probe_lifecycle.rs)。全仓 coverage、native/runtime mutation 与 benchmark 各有专项用途 |
 | CI 与发布已有独立责任 | [Verify](../../.github/workflows/verify.yml)的可信 candidate、frontend、双架构 Rust/依赖、独立 runtime，以及[发布 workflow](../../.github/workflows/prepare-release.yml)的正式资产校验继续保留 |
 | 耗时只能按可比场景解释 | [此前反馈整改记录](../archive/2026-10-25-test-feedback-and-desktop-isolation-plan.md)中一次最终 `check:full` 为 429.55 秒；原合并稿曾核对对应本地结果退出 0，未重新绑定全部输入。不能据此声称当前工作树通过，或推断每次小改都必须同样耗时 |
-| 内容不变也可能使证据失效 | [工程质量](../engineering-quality.md#5-默认验证门槛)与 [pnpm 审计实现](../../scripts/pnpm-audit.ts)要求 JS 离线审计使用最近 24 小时的成功联网报告；新鲜度和执行场景也须满足原 owner |
+| 内容不变也可能使证据失效 | [工程质量](../quality.md#验证范围)与 [pnpm 审计实现](../../scripts/pnpm-audit.ts)要求 JS 离线审计使用最近 24 小时的成功联网报告；新鲜度和执行场景也须满足原 owner |
 
 早期方法采纳来源与拆分前文档检查记录见[文档治理记录第 5 节](2026-10-26-documentation-governance-plan.md#5-方案来源与修订记录)；本轮测试参考单独记录如下，不依赖该方案作为验收证据。
 
@@ -68,7 +68,7 @@ DSH 的逐文件 100% coverage、Session 回放、真实模型 API 和插件组�
 
 必须保留：
 
-- [个人、本地优先 Windows 范围](../product-principles-and-scope.md)、tracking 正确性、原数据保护与失败恢复。已发布数据库、备份、协议和升级边界继续受支持，UI 退役不取消迁移保护。
+- [个人、本地优先 Windows 范围](../product.md)、tracking 正确性、原数据保护与失败恢复。已发布数据库、备份、协议和升级边界继续受支持，UI 退役不取消迁移保护。
 - main/Mini caller guard、ACL/plugin 拒绝、跨 profile 隔离、敏感凭据边界和真实落盘证据；mock 成功不能冒充真实边界通过。
 - 候选 `check` / `check:full`、适用完整 runtime、风险追加、CI 与发布的现有保护集合。双架构、版本、签名、摘要与独立资产校验不削弱；x64、消息注入或开发 profile 各有证明边界。
 - 未被维护者明确取消或调整的断言、样本数、观察时长和阈值。不得擅自删断言、skip、无理由 ignore、放宽预算或自动重试到绿制造提速；保留原始失败、取消与未执行项。
