@@ -29,7 +29,7 @@
 - 为另一个 StyleX 应用实现适配器；纯计算边界不依赖 Tailwind 即可。
 - 修改 tracking 行为、发布版本、提交、推送、Issue 或 Project 状态。
 
-本方案遵守 [架构规范](../architecture.md)、[Quiet Pro](../quiet-pro-component-guidelines.md)、[产品范围](../product-principles-and-scope.md)、[工程质量](../engineering-quality.md) 与 [本地化契约](../localization.md)。本文持有执行步骤和验证记录，长期规则仍由这些文档持有。
+本方案遵守 [架构规范](../architecture.md)、[Quiet Pro](../ui.md)、[产品范围](../product.md)、[工程质量](../quality.md) 与 [本地化契约](../localization.md)。本文持有执行步骤和验证记录，长期规则仍由这些文档持有。
 
 ## 2. 从第一性原理确定边界
 
@@ -214,7 +214,7 @@ Patina 语义变量映射
 - [x] 验证 Dashboard、History、Data、Settings 的代表性表面及菜单、输入、选中、禁用、焦点和滚动条，无颜色路径遗漏。
 - [x] 在隔离的 Tauri 开发身份验证真实 settings IPC、数据库落盘、重启和 Widget；浏览器 mock 不替代这些证据。
 
-验证命令按 [工程质量](../engineering-quality.md) 与 [package.json](../../package.json) 的当前风险路由选择。本方案预期修改 Rust 设置与跨窗口快照，因此最终需要 `npm run check:full`，并追加 `npm run test:tauri-runtime-smoke` 覆盖真实桌面边界。完整门禁已经包含的确定性检查不重复执行，只有输入变化或失败定位需要时才追加。
+验证命令按 [工程质量](../quality.md) 与 [package.json](../../package.json) 的当前风险路由选择。本方案预期修改 Rust 设置与跨窗口快照，因此最终需要 `npm run check:full`，并追加 `npm run test:tauri-runtime-smoke` 覆盖真实桌面边界。完整门禁已经包含的确定性检查不重复执行，只有输入变化或失败定位需要时才追加。
 
 如果极端对比度下的参考值存在可读性问题，记录具体 token、组件和背景；不得静默改变公式后继续声称精确等价。先检查映射与叠加错误，再将确实需要产品取舍的残余问题交给维护者。
 

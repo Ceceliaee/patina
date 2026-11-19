@@ -13,7 +13,7 @@
 
 纳入七页主内容、共享页头、相关弹窗、菜单、按钮、输入框、徽标、状态文字、图表文字和数值。窗口标题栏、侧栏、桌面挂件等共享消费者需要影响检查，但不主动重设计。品牌图片与第三方 SVG 内置文字属于资产，不按普通界面文字批量替换。
 
-长期规范由 [Quiet Pro](../quiet-pro-component-guidelines.md) 持有；实现归属遵循 [架构规范](../architecture.md)；验证遵循 [工程质量](../engineering-quality.md)；语言与文案遵循 [本地化规范](../localization.md)。本文件是临时执行方案，不取代这些 owner。
+长期规范由 [Quiet Pro](../ui.md) 持有；实现归属遵循 [架构规范](../architecture.md)；验证遵循 [工程质量](../quality.md)；语言与文案遵循 [本地化规范](../localization.md)。本文件是临时执行方案，不取代这些 owner。
 
 与 [字号执行方案](./typography-unification-execution-plan.md) 分开验收。实施前先处理两轮改动混杂的问题，不能把尚未恢复的字重误当成字号轮次已确认的结果。
 

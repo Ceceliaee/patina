@@ -20,7 +20,7 @@
 5. **消除复杂度，而非转移复杂度。** 不把 CSS 重复换成大量 JSX 类组合、跨页面选择器列表、全局覆盖或新的包装组件。
 6. **先取得低风险收益，再判断抽象。** 先删无效覆盖，再复用现有类；只有已证明的剩余问题才进入结构调整。
 
-本方案服从 [Quiet Pro](../quiet-pro-component-guidelines.md)、[架构规范](../architecture.md)、[工程质量](../engineering-quality.md) 和 [修复边界守则](../issue-fix-boundary-guardrails.md)。这里只记录一次性执行步骤，不另设长期样式规范。
+本方案服从 [Quiet Pro](../ui.md)、[架构规范](../architecture.md)、[工程质量](../quality.md) 和 [修复边界守则](../quality.md#修复与回归证据)。这里只记录一次性执行步骤，不另设长期样式规范。
 
 ## 2. 已确认事实与待验证问题
 

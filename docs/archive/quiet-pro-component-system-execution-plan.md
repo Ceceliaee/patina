@@ -3,7 +3,7 @@
 > 状态：已完成  
 > 文档类型：一次性执行型 How-to  
 > 适用对象：Patina 维护者与后续编码代理  
-> 长期依据：[`quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md)、[`architecture.md`](../architecture.md)、[`engineering-quality.md`](../engineering-quality.md)  
+> 长期依据：[`quiet-pro-component-guidelines.md`](../ui.md)、[`architecture.md`](../architecture.md)、[`engineering-quality.md`](../quality.md)<br>
 > 完成去向：执行、验收和对抗式审查全部完成后移入 `docs/archive/`
 
 ## 1. 任务定义

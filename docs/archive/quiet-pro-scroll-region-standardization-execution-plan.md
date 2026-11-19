@@ -11,16 +11,16 @@
 
 本文把“统一 Patina 中多处滚动条，并讨论采用上下小三角与无溢出时归还空间”转化为一份可以逐项执行、逐项验收、逐项归档的实施合同。
 
-它不是一次给 Dashboard 补样式的小修，也不是单纯把 `::-webkit-scrollbar` 复制到更多页面。当前仓库已经存在页面级、卡片级、列表级、Dialog、Popover、Select 和图表等多种滚动容器；这些容器对空间稳定、键盘可达、滚动链、DPI 和高对比度的要求并不完全相同。因此本事项按 [`../issue-fix-boundary-guardrails.md`](../issue-fix-boundary-guardrails.md) 中的“执行单模式”处理。
+它不是一次给 Dashboard 补样式的小修，也不是单纯把 `::-webkit-scrollbar` 复制到更多页面。当前仓库已经存在页面级、卡片级、列表级、Dialog、Popover、Select 和图表等多种滚动容器；这些容器对空间稳定、键盘可达、滚动链、DPI 和高对比度的要求并不完全相同。因此本事项按 [`../issue-fix-boundary-guardrails.md`](../quality.md#修复与回归证据) 中的“执行单模式”处理。
 
 本文不替代以下长期规范，发生冲突时以长期规范为准：
 
-- [`../product-principles-and-scope.md`](../product-principles-and-scope.md)
-- [`../roadmap-and-prioritization.md`](../roadmap-and-prioritization.md)
-- [`../engineering-quality.md`](../engineering-quality.md)
-- [`../quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md)
+- [`../product-principles-and-scope.md`](../product.md)
+- [`../roadmap-and-prioritization.md`](../product.md#优先级)
+- [`../engineering-quality.md`](../quality.md)
+- [`../quiet-pro-component-guidelines.md`](../ui.md)
 - [`../architecture.md`](../architecture.md)
-- [`../issue-fix-boundary-guardrails.md`](../issue-fix-boundary-guardrails.md)
+- [`../issue-fix-boundary-guardrails.md`](../quality.md#修复与回归证据)
 
 执行规则：
 
@@ -48,7 +48,7 @@
 - [x] 滚动区域专项 12/12、完整浏览器 UI 101/101、UI smoke 3/3、tracking replay 15/15、lint、style-debt self-test/gate 与 `git diff --check` 通过。
 - [x] 真实 Tauri debug build 完成 WebView2 `page-load-finished` 与 `frontend-ready`；启动到托盘策略保持窗口隐藏，视觉、DPI、forced-colors 和输入合同由同内核 Edge/CDP 行为测试与截图验证。
 - [x] 对抗式审查完成，并修复“横向 scrollbar 生成透明 button 槽”风险；门禁新增 vertical-only 与 stable-base 对抗样本。
-- [x] [`../quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md) 与 [`../engineering-quality.md`](../engineering-quality.md) 已更新长期合同和门禁说明。
+- [x] [`../quiet-pro-component-guidelines.md`](../ui.md) 与 [`../engineering-quality.md`](../quality.md) 已更新长期合同和门禁说明。
 - [x] 执行单已移入 `docs/archive/`。
 
 ### 1.2 最终执行证据
@@ -779,7 +779,7 @@ qp-scroll-region-stable
 - [x] 把 checker 逻辑拆为可对虚拟内容运行的纯函数，并增加 `--self-test` 对抗样本。
 - [x] self-test 至少覆盖：旧 class、feature direct stable、feature pseudo、canonical 合法、普通 overflow 合法。
 - [x] 把 self-test 接入默认 `npm run check`，不建立不可达测试入口。
-- [x] 更新 [`../engineering-quality.md`](../engineering-quality.md) 对 Quiet Pro style debt gate 的说明。
+- [x] 更新 [`../engineering-quality.md`](../quality.md) 对 Quiet Pro style debt gate 的说明。
 - [x] 不通过放宽 allowlist 或文件级通配豁免让迁移“先过关”。
 
 退出条件：旧路径物理删除，门禁能主动阻止三类回流。
@@ -788,7 +788,7 @@ qp-scroll-region-stable
 
 目标：把已确认、已验证的结果写入长期 source of truth。
 
-- [x] 在 [`../quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md) 新增“滚动容器与滚动条”稳定章节。
+- [x] 在 [`../quiet-pro-component-guidelines.md`](../ui.md) 新增“滚动容器与滚动条”稳定章节。
 - [x] 写明 `.qp-scroll-region` 与 stable modifier 的职责。
 - [x] 写明 auto 默认、stable 举证例外。
 - [x] 写明竖向 button 是渐进增强，不是唯一输入路径。

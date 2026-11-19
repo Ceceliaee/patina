@@ -72,7 +72,7 @@
 执行时必须优先遵循：
 
 1. [`docs/time-tracker-app-icon-design-brief.md`](time-tracker-app-icon-design-brief.md)
-2. [`docs/quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md)
+2. [`docs/quiet-pro-component-guidelines.md`](../ui.md)
 
 执行时必须牢记：
 
@@ -369,7 +369,7 @@
 请严格遵守以下要求：
 
 - 先读 [`docs/time-tracker-app-icon-design-brief.md`](time-tracker-app-icon-design-brief.md)
-- 再读 [`docs/quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md)
+- 再读 [`docs/quiet-pro-component-guidelines.md`](../ui.md)
 - 不要沿用旧 Tauri 图标
 - 不要把图标做成普通时钟
 - 不要依赖渐变、发光、玻璃感、复杂装饰
