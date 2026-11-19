@@ -16,13 +16,13 @@
 
 长期规则仍以这些文档为准：
 
-- [产品原则与范围](../product-principles-and-scope.md)
-- [路线图与优先级](../roadmap-and-prioritization.md)
-- [工程质量](../engineering-quality.md)
-- [Quiet Pro 组件规范](../quiet-pro-component-guidelines.md)
+- [产品原则与范围](../product.md)
+- [路线图与优先级](../product.md#优先级)
+- [工程质量](../quality.md)
+- [Quiet Pro 组件规范](../ui.md)
 - [架构](../architecture.md)
-- [稳定期问题修复边界](../issue-fix-boundary-guardrails.md)
-- [版本与发布策略](../versioning-and-release-policy.md)
+- [稳定期问题修复边界](../quality.md#修复与回归证据)
+- [版本与发布策略](../release.md)
 - [本地化](../localization.md)
 
 执行规则：

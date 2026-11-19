@@ -28,9 +28,9 @@
 
 长期规则由以下文档持有，本文只规定本次实施步骤：
 
-- [产品原则](../product-principles-and-scope.md)、[优先级](../roadmap-and-prioritization.md)、[架构](../architecture.md)、[修复边界](../issue-fix-boundary-guardrails.md)。
-- [本地化契约](../localization.md)、[工程质量](../engineering-quality.md)、[Quiet Pro](../quiet-pro-component-guidelines.md)。
-- [发布规范](../versioning-and-release-policy.md)、[Web Activity 协议](../web-activity-protocol.md)、《GitHub Project 维护指南》。
+- [产品原则](../product.md)、[优先级](../product.md#优先级)、[架构](../architecture.md)、[修复边界](../quality.md#修复与回归证据)。
+- [本地化契约](../localization.md)、[工程质量](../quality.md)、[Quiet Pro](../ui.md)。
+- [发布规范](../release.md)、[Web Activity 协议](../web-sync-protocol.md)、《GitHub Project 维护指南》。
 - 扩展仓库根 `AGENTS.md` 及其 `docs/localization.md`、`docs/architecture.md`、`docs/engineering-quality.md`、`docs/quiet-pro-component-guidelines.md`、`docs/versioning-and-release-policy.md`、`docs/web-activity-protocol.md`。
 
 编写方案时已读取两仓当前源文件和脚本。以下是代码事实，不是运行验收结果：

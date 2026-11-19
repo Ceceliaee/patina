@@ -16,15 +16,15 @@
 
 本文不替代以下长期规范，发生冲突时以长期规范为准：
 
-- [`../product-principles-and-scope.md`](../product-principles-and-scope.md)
-- [`../roadmap-and-prioritization.md`](../roadmap-and-prioritization.md)
-- [`../engineering-quality.md`](../engineering-quality.md)
-- [`../quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md)
+- [`../product-principles-and-scope.md`](../product.md)
+- [`../roadmap-and-prioritization.md`](../product.md#优先级)
+- [`../engineering-quality.md`](../quality.md)
+- [`../quiet-pro-component-guidelines.md`](../ui.md)
 - [`../architecture.md`](../architecture.md)
-- [`../issue-fix-boundary-guardrails.md`](../issue-fix-boundary-guardrails.md)
-- [`../versioning-and-release-policy.md`](../versioning-and-release-policy.md)
+- [`../issue-fix-boundary-guardrails.md`](../quality.md#修复与回归证据)
+- [`../versioning-and-release-policy.md`](../release.md)
 - [`../localization.md`](../localization.md)
-- [`../web-activity-protocol.md`](../web-activity-protocol.md)
+- [`../web-activity-protocol.md`](../web-sync-protocol.md)
 
 执行规则：
 

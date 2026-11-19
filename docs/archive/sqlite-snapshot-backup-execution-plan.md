@@ -1,6 +1,6 @@
 # SQLite 一致快照备份与恢复执行方案
 
-> 归档状态：实现、仓库级自动化验证和完成后的对抗式审查已于 2026-07-15 完成。本文件不再作为当前执行入口；长期 owner、质量门槛和旧 reader 丢弃窗口分别见 [`../architecture.md`](../architecture.md)、[`../engineering-quality.md`](../engineering-quality.md) 和 [`../versioning-and-release-policy.md`](../versioning-and-release-policy.md)。第 23 节是本次任务的已勾选完成记录。前文未勾选项是冻结的原始风险清单，其中真实 WebDAV 凭据、安装包 Windows smoke、性能采样和丢弃窗口结束后删除旧 reader 属于发布阶段，不能用仓库自动化结果冒充已执行。
+> 归档状态：实现、仓库级自动化验证和完成后的对抗式审查已于 2026-07-15 完成。本文件不再作为当前执行入口；长期 owner、质量门槛和旧 reader 丢弃窗口分别见 [`../architecture.md`](../architecture.md)、[`../engineering-quality.md`](../quality.md) 和 [`../versioning-and-release-policy.md`](../release.md)。第 23 节是本次任务的已勾选完成记录。前文未勾选项是冻结的原始风险清单，其中真实 WebDAV 凭据、安装包 Windows smoke、性能采样和丢弃窗口结束后删除旧 reader 属于发布阶段，不能用仓库自动化结果冒充已执行。
 
 ## 0. 文档状态
 

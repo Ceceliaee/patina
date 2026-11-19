@@ -37,7 +37,7 @@
 - 新目录创建失败可能留下本次已经创建的空父目录。报告失败，不递归删除目录“回滚”。
 - 方案完成与代码实现完成分别记录；文档勾选不能代替运行证据。
 
-长期规则引用：[架构](../architecture.md)、[修复边界](../issue-fix-boundary-guardrails.md)、[Quiet Pro](../quiet-pro-component-guidelines.md)、[本地化](../localization.md)、[工程质量](../engineering-quality.md)、《GitHub Project 维护指南》。
+长期规则引用：[架构](../architecture.md)、[修复边界](../quality.md#修复与回归证据)、[Quiet Pro](../ui.md)、[本地化](../localization.md)、[工程质量](../quality.md)、《GitHub Project 维护指南》。
 
 ## 2. 实施前基线与证据限制
 
@@ -143,7 +143,7 @@
 
 ### 6.1 远端备份列表关闭入口
 
-依据 [Quiet Pro §9.8](../quiet-pro-component-guidelines.md#98-dialogpopover-与复合输入契约) 和 [§9.11](../quiet-pro-component-guidelines.md#911-跨页面交互原型与机器-owner)，复用弹窗原型的焦点、键盘和关闭状态机。右上角 × 的具体组合沿用 SettingsBackupDialog 的现有用法，并落实维护者确认的列表行为；母文档没有规定所有弹窗都必须移除底部操作区，不将此调整扩散到配置或上传确认表单。
+依据 [Quiet Pro §9.8](../ui.md#dialogpopover-与复合输入契约) 和 [§9.11](../ui.md#跨页面交互)，复用弹窗原型的焦点、键盘和关闭状态机。右上角 × 的具体组合沿用 SettingsBackupDialog 的现有用法，并落实维护者确认的列表行为；母文档没有规定所有弹窗都必须移除底部操作区，不将此调整扩散到配置或上传确认表单。
 
 - [x] D12：在 SettingsRemoteBackupPanel 的远端列表 QuietDialog 中移除仅含“关闭”的 `actions` 参数；依靠 QuietDialog 的条件渲染去掉 footer，不用 CSS 隐藏按钮或保留空白占位栏。
 - [x] D13：通过 `headerAside` 接入现有标题操作容器、`.qp-dialog-close-button` 与 `X` 图标，沿用现有尺寸、hover、focus-visible 和 disabled 样式，不复制 CSS 或新建弹窗外壳。

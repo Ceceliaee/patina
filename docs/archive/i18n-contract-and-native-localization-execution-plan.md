@@ -28,12 +28,12 @@
 
 长期产品、架构、质量和稳定期边界继续以以下文档为准：
 
-- [`product-principles-and-scope.md`](../product-principles-and-scope.md)
-- [`roadmap-and-prioritization.md`](../roadmap-and-prioritization.md)
-- [`engineering-quality.md`](../engineering-quality.md)
+- [`product-principles-and-scope.md`](../product.md)
+- [`roadmap-and-prioritization.md`](../product.md#优先级)
+- [`engineering-quality.md`](../quality.md)
 - [`architecture.md`](../architecture.md)
-- [`issue-fix-boundary-guardrails.md`](../issue-fix-boundary-guardrails.md)
-- [`quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md)
+- [`issue-fix-boundary-guardrails.md`](../quality.md#修复与回归证据)
+- [`quiet-pro-component-guidelines.md`](../ui.md)
 
 ## 2. 最终目标
 
@@ -1217,7 +1217,7 @@ Rust 复数专项测试应提供可单独运行的明确目标；最终名称以
 实施完成前至少评估以下更新：
 
 - [x] [`architecture.md`](../architecture.md)：仓库级 locale 资源、前端 shared runtime、Rust localization owner、generated boundary。
-- [x] [`engineering-quality.md`](../engineering-quality.md)：i18n 门禁、硬编码例外、双端 parity 和 generated stale check。
+- [x] [`engineering-quality.md`](../quality.md)：i18n 门禁、硬编码例外、双端 parity 和 generated stale check。
 - [x] 新增长期本地化贡献文档：新增 key、修改 source、复核翻译、新增 locale、原生表面与 CLDR 复数。
 - [x] 如默认语言、产品支持语言承诺发生变化，再评估产品或 README 更新；本项不提前声明俄语已支持。
 

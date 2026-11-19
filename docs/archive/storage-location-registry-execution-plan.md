@@ -20,7 +20,7 @@
 - 数据库内容、计时语义、备份格式及已有恢复流程保持原契约。
 - 本机路径不随跨电脑备份恢复而覆盖目标电脑的路径配置。
 - 保留现有目录预览、安全写探针、数据库 checkpoint、staging、重启、路径身份比较与清理保护。
-- 设置页面继续使用现有目录操作入口；失败提示遵循[Quiet Pro](../quiet-pro-component-guidelines.md)和[本地化契约](../localization.md)。
+- 设置页面继续使用现有目录操作入口；失败提示遵循[Quiet Pro](../ui.md)和[本地化契约](../localization.md)。
 - 不增加便携版、全盘找库、通用配置框架或永久双写。缓存清理范围不在本项修改范围内。
 - 本文件不授权代码实施、提交、推送、Issue/Project 写入或发布；这些动作遵循[仓库授权规则](../../AGENTS.md)。
 
@@ -227,7 +227,7 @@
 
 - [x] 当前文档改动运行 `pnpm run check:docs`，另核对 UTF-8、链接和命令事实。
 - [x] 实施后先运行能区分旧行为与新行为的 focused tests；为新增 Rust 测试确认 Cargo module tree 可达。
-- [x] Rust 与架构改动完成后执行 `pnpm run check:full`，依[工程质量](../engineering-quality.md)完成默认门槛；命令图以 [package.json](../../package.json) 为准。
+- [x] Rust 与架构改动完成后执行 `pnpm run check:full`，依[工程质量](../quality.md)完成默认门槛；命令图以 [package.json](../../package.json) 为准。
 - [x] 对真实启动、IPC 和落盘边界运行 `pnpm run test:tauri-runtime-smoke`，补入目录操作、六阶段进程终止和主动失焦测试；安装/升级按用户决定排除。
 - [x] 已移出本次验收或交由正式发布阶段处理（未运行）：涉及发布说明时执行 `pnpm run release:validate-changelog`；正式发布阶段执行 `pnpm run release:check`，不在本次实施中构建或发布安装包。
 - [x] 每组证据记录基线/候选提交、环境、输入、命令或操作、预期与实际结果。失败或未运行项写明原因和验证责任，不勾选通过。
@@ -250,7 +250,7 @@
 - [x] 若未来删除导入器需要中间版本升级，先确认安装器/updater 能执行并有恢复方案；未形成方案时不得删除后让用户静默落入默认库。
 - [x] 不将安装旧二进制当作本方案的自动回滚措施：旧版不认识新配置。需要回退时制定独立恢复步骤并保护新旧数据，不能恢复永久双写。
 - [x] 更新真正变化的长期契约：架构中的持久化 owner、已有用户存储说明和发布升级边界。不存在变化的母文档不为完成任务而添加规则。
-- [x] 已移出本次验收或交由正式发布阶段处理（未运行）：按[发布策略](../versioning-and-release-policy.md)在实际发布范围确定后选择版本，不由本方案预定 PATCH/MINOR。
+- [x] 已移出本次验收或交由正式发布阶段处理（未运行）：按[发布策略](../release.md)在实际发布范围确定后选择版本，不由本方案预定 PATCH/MINOR。
 
 ## 8. 完成与归档
 

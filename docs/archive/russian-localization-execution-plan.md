@@ -44,10 +44,10 @@
 规则 owner：
 
 - [本地化契约](../localization.md)：资源、DSL、生成、加载与翻译包。
-- [工程质量](../engineering-quality.md)：风险匹配验证、测试和体积预算。
-- [Quiet Pro](../quiet-pro-component-guidelines.md)：现有布局、交互与可访问性。
-- [架构](../architecture.md)、[修复边界](../issue-fix-boundary-guardrails.md)：仅在实际需要改变 owner 或新增能力时按其约束重新判断。
-- [版本与发布](../versioning-and-release-policy.md)、[协作规则](../../AGENTS.md)：changelog、提交及发布边界。
+- [工程质量](../quality.md)：风险匹配验证、测试和体积预算。
+- [Quiet Pro](../ui.md)：现有布局、交互与可访问性。
+- [架构](../architecture.md)、[修复边界](../quality.md#修复与回归证据)：仅在实际需要改变 owner 或新增能力时按其约束重新判断。
+- [版本与发布](../release.md)、[协作规则](../../AGENTS.md)：changelog、提交及发布边界。
 - 《GitHub Project 维护指南》：读取实时事项与报告建议；本方案不保存其私有正文、字段或排序。
 
 长期文档只在其事实或契约确实需要修改时更新。满足既有本地化契约，不要求为本次语言接入再增加规则。

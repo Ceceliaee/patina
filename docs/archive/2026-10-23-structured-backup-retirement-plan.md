@@ -13,15 +13,15 @@
 
 本次“旧兼容代码”特指旧结构化备份格式及其专用适配。已安装 SQLite 数据库升级、历史 SQLite 快照的受支持 migration、存储位置迁移、WebDAV 凭据升级、网页分组迁移属于各自仍受保护的契约；不能用全仓搜索 `legacy` 后批量删除的方式处理。若进一步退出这些边界，需要分别证明其支持责任已结束。
 
-本方案采用[问题修复边界守则](../issue-fix-boundary-guardrails.md)中的执行单模式：涉及数据恢复、前后端契约、远端索引和发布接受条件，不能只删一条提示。
+本方案采用[问题修复边界守则](../quality.md#修复与回归证据)中的执行单模式：涉及数据恢复、前后端契约、远端索引和发布接受条件，不能只删一条提示。
 
 长期依据：
 
-- [发布规范 §7.1](../versioning-and-release-policy.md#71-旧备份读取器的丢弃窗口)：旧读取器退出条件。
+- [发布规范 §7.1](../release.md#旧备份读取器的丢弃窗口)：旧读取器退出条件。
 - [架构](../architecture.md)：备份、SQLite pool、repositories、IPC 和应用协调的所有权。
-- [工程质量](../engineering-quality.md#5-默认验证门槛)：数据安全、测试有效性和验证路由。
-- [Quiet Pro](../quiet-pro-component-guidelines.md)与[本地化契约](../localization.md)：界面和消息资源。
-- [产品原则](../product-principles-and-scope.md)：用户拥有本地记录，恢复结果必须可信且可控制。
+- [工程质量](../quality.md#验证范围)：数据安全、测试有效性和验证路由。
+- [Quiet Pro](../ui.md)与[本地化契约](../localization.md)：界面和消息资源。
+- [产品原则](../product.md)：用户拥有本地记录，恢复结果必须可信且可控制。
 
 ## 2. 从第一性原理确定方案
 
@@ -139,9 +139,9 @@
 - [x] **A02** 核对截图对应的实际文案及问号消费位置，确认当前旧 reader 仍可达。
 - [x] **A03** 实施前记录当前 HEAD、工作树和涉及 owner 的并行改动；已有用户改动不得覆盖。未获要求时沿用当前 checkout，不创建分支或 PR。
 - [x] **A04（不适用）** 本次请求未提供或识别到关联的 Issue / Project item，未使用私有项目状态做决策，也未修改项目。
-- [x] **A05** 重新核对最新正式 Release 为 v1.9.10，窗口后尚无新正式版本；本次说明写入 `Unreleased`，没有预定下一版本号。有限兼容窗口的退出与正式版本决策仍遵守[发布规范](../versioning-and-release-policy.md)。
+- [x] **A05** 重新核对最新正式 Release 为 v1.9.10，窗口后尚无新正式版本；本次说明写入 `Unreleased`，没有预定下一版本号。有限兼容窗口的退出与正式版本决策仍遵守[发布规范](../release.md)。
 - [x] **A06** 核实正式发布 v1.9.10 对应提交的 CI 三路径验证，记录提交、运行环境和实际断言，见 §9.2。这是发布源码的真实 Tauri 运行证据，不是下载的安装资产验收。
-- [x] **A07（转交）** 正式安装包的独立账户 / VM 验收由发布维护者在下一次 release acceptance 执行，归属[发布规范](../versioning-and-release-policy.md)。本任务未安装旧版本或覆盖生产 profile。
+- [x] **A07（转交）** 正式安装包的独立账户 / VM 验收由发布维护者在下一次 release acceptance 执行，归属[发布规范](../release.md)。本任务未安装旧版本或覆盖生产 profile。
 - [x] **A08** 核实 v1.9.10 保有旧读取器，并以删除前源码跑通旧样本转换、候选源码读取。正式二进制端到端迁移试验并入 A07；不得将本地源码实验记作安装包实验。
 - [x] **A09** 代码退役依据为到期窗口、已发布提醒、精确 release 提交的三路径 CI，以及删除前 / 后源码的迁移闭环。正式安装与发布验收另由 A07、H06 承担；本任务不宣称已发布。§9.2 说明对初稿证据要求的修订及边界。
 
@@ -257,7 +257,7 @@
 - [x] **H02** 复核架构和发布规范中已经完成的旧 reader 状态；若成为过时现状，更新其事实 owner。退出政策仍有解释价值时保留适当历史语义或链接，不新增另一份长期步骤清单。
 - [x] **H03** 为 B09 的用户迁移方法确定一个长期公开 owner，优先使用对应 Release 说明；若需要独立 how-to，则包含已验证版本、隔离要求、可观察成功结果及失败处理，并由发布说明链接。
 - [x] **H04** `pnpm run release:validate-changelog` 通过。本任务未准备正式发布，不执行或声称通过 `release:check`；其归属为 H05、H06 的发布任务。
-- [x] **H05（转交）** 提交、推送、版本号、tag、安装资产和 updater 属于后续获授权的发布任务，由发布维护者按[发布规范](../versioning-and-release-policy.md)处理。本任务未执行这些操作。
+- [x] **H05（转交）** 提交、推送、版本号、tag、安装资产和 updater 属于后续获授权的发布任务，由发布维护者按[发布规范](../release.md)处理。本任务未执行这些操作。
 - [x] **H06（转交）** 正式安装产物的隔离验收归发布维护者：验证问号不存在、旧文件拒绝、SQLite 三路径及安装升级，并记录资产摘要与 Release。当前仅完成源码交付，不能标记正式发布接受完成。
 - [x] **H07（不适用）** 无关联 Issue / Project，未变更其状态，未使用关闭关键词。
 - [x] **H08** 实现工作完成，运行时环境复验与正式安装接受已按 §9.4 明确转交；本文移入 `docs/archive/`。归档仅关闭本次退役实施记录，不授予发布接受；文档链接与检查结果见 §9.3。
@@ -378,7 +378,7 @@ rg -n 'crc32fast' src-tauri/src src-tauri/Cargo.toml
 
 **发布源码证据。** 只读复核 v1.9.10 的正式 Release 对应提交为 `24d25fe571264d6e152be63ed9eb2b55d9fb0cd9`。[Verify 运行 38127130371](https://github.com/Ceceliaee/patina/actions/runs/38127130371) 成功；其中真实 Tauri runtime job `114433748441` 的日志记录了 SQLite 导出、hash 预览、合并、覆盖后 pool 可用、历史视图刷新、目标独有事实消失、暂停设置恢复及继续计时。该提交的 [Publish 运行 38128304499](https://github.com/Ceceliaee/patina/actions/runs/38128304499) 也成功。证据绑定正式 release 的源码，但 runtime 是隔离的 debug Tauri/WebView2 构建，不能写成“本机已验证正式安装包”。
 
-初稿 A06—A09 将“正式版本验证”进一步展开为下载资产摘要和本机安装实验。本次把代码层退役与发布安装接受明确分开：代码层采用精确发布提交的三路径 CI，加本地删除前 / 后源码迁移实验；安装资产、独立账户 / VM、updater 和最终发版交给发布维护者，长期 owner 为[发布规范](../versioning-and-release-policy.md)。这项处置不降低正式发布接受要求，也不把转交项记成已运行。
+初稿 A06—A09 将“正式版本验证”进一步展开为下载资产摘要和本机安装实验。本次把代码层退役与发布安装接受明确分开：代码层采用精确发布提交的三路径 CI，加本地删除前 / 后源码迁移实验；安装资产、独立账户 / VM、updater 和最终发版交给发布维护者，长期 owner 为[发布规范](../release.md)。这项处置不降低正式发布接受要求，也不把转交项记成已运行。
 
 **迁移实验。** 删除前基线的 36 项 backup 测试通过。临时 probe 用该基线的旧 reader 恢复合成结构化样本，校验会话、标题、设置、图标、网页关系后导出 SQLite 快照。删除后的候选 probe 对转换结果完成当前预览、覆盖候选准备、带 ID 冲突的合并与重复合并，验证关联、幂等和原文件哈希未变。实际目标库切换由完整 Tauri runtime 的当前快照场景验证；未将“候选准备”当作文件切换。
 
@@ -419,7 +419,7 @@ rg -n 'crc32fast' src-tauri/src src-tauri/Cargo.toml
 
 | 责任 owner | 未完成事项 | 完成条件与限制 |
 | --- | --- | --- |
-| 运行时验收维护者（`tests/tauriRuntimeSmoke.test.ts` / `app/widget.rs` owner，归[工程质量](../engineering-quality.md)） | 当前 Windows 桌面拒绝主窗口及 Widget 的程序前台焦点，完整 runtime 入口退出 1 | 在可获得真实原生焦点的交互式桌面重跑完整命令并保留出口 0；不能删除 / 跳过焦点断言，也不能拿 browser DOM focus 代替 native focus。本次代码实现已经完成，发布前仍须解决此验收阻断 |
-| 发布维护者（[发布规范](../versioning-and-release-policy.md) owner） | 正式中间版本安装包迁移实验、候选正式安装 / updater 验收、版本号与发布动作 | 隔离账户 / VM 中核对资产摘要、迁移与 SQLite 三路径，并按 release policy 获授权后发布；精确 release 源码 CI 不能冒充安装接受 |
+| 运行时验收维护者（`tests/tauriRuntimeSmoke.test.ts` / `app/widget.rs` owner，归[工程质量](../quality.md)） | 当前 Windows 桌面拒绝主窗口及 Widget 的程序前台焦点，完整 runtime 入口退出 1 | 在可获得真实原生焦点的交互式桌面重跑完整命令并保留出口 0；不能删除 / 跳过焦点断言，也不能拿 browser DOM focus 代替 native focus。本次代码实现已经完成，发布前仍须解决此验收阻断 |
+| 发布维护者（[发布规范](../release.md) owner） | 正式中间版本安装包迁移实验、候选正式安装 / updater 验收、版本号与发布动作 | 隔离账户 / VM 中核对资产摘要、迁移与 SQLite 三路径，并按 release policy 获授权后发布；精确 release 源码 CI 不能冒充安装接受 |
 
 本文归档后，后续验收结论应由上述 owner 的实际验收记录持有；如用户继续本次桌面复验，可补充本节结果。归档不是“所有发布条件均满足”的声明。
