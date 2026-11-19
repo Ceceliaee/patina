@@ -43,7 +43,7 @@ Related: [Ceceliaee/patina#56](https://github.com/Ceceliaee/patina/issues/56)。
 
 产品与优先级遵循 [产品范围](../product-principles-and-scope.md) 和 [路线图](../roadmap-and-prioritization.md)；实现落点遵循 [架构](../architecture.md)；本次采用 [执行单模式](../issue-fix-boundary-guardrails.md)。验证和文档契约由 [工程质量](../engineering-quality.md) 拥有，版本、双架构资产及更新验证由 [发布规范](../versioning-and-release-policy.md) 拥有。
 
-实施时依 [Project 维护规则](../github-project-maintenance.md) 读取实时队列；本文不保存其正文、字段或排序。配置和脚本拥有机器事实，下面的文件表是迁移调查入口，不是永久命令清单。
+实施时依 《GitHub Project 维护指南》 读取实时队列；本文不保存其正文、字段或排序。配置和脚本拥有机器事实，下面的文件表是迁移调查入口，不是永久命令清单。
 
 ## 3. 当前仓库事实与影响面
 

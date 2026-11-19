@@ -62,7 +62,7 @@
 - [x] P0-01 记录实施开始时的 `git status --short`、当前提交和相关文件差异；将已有 mini 变更与本次退役新增变更区分清楚。
 - [x] P0-02 确认工作区未被其他正在执行的任务并发改写；发生重叠时先协调受影响文件，继续不冲突的工作。
 - [x] P0-03 重读[架构](../architecture.md)、[修复边界](../issue-fix-boundary-guardrails.md)、[工程质量](../engineering-quality.md)、[Quiet Pro](../quiet-pro-component-guidelines.md)和[本地化](../localization.md)的相关条款。
-- [x] P0-04 【不适用：本次没有指定或明确映射的 Project item】如果实施任务明确对应现有 Project item，按[Project 维护](../github-project-maintenance.md)读取已登录的 live state；访问失败如实报告，不把私有条目复制到本文件。
+- [x] P0-04 【不适用：本次没有指定或明确映射的 Project item】如果实施任务明确对应现有 Project item，按《GitHub Project 维护指南》读取已登录的 live state；访问失败如实报告，不把私有条目复制到本文件。
 - [x] P0-05 使用隔离测试 profile 和合成数据库准备升级 / 恢复夹具；记录真实数据目录与测试目录的隔离边界。
 - [x] P0-06 根据实际源码建立调用清单，覆盖静态 import、动态 import、Rust module tree、IPC 字符串、capability、事件、生成配置和测试入口。
 

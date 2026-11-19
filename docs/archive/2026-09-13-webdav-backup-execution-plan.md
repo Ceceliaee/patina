@@ -37,7 +37,7 @@
 - 新目录创建失败可能留下本次已经创建的空父目录。报告失败，不递归删除目录“回滚”。
 - 方案完成与代码实现完成分别记录；文档勾选不能代替运行证据。
 
-长期规则引用：[架构](../architecture.md)、[修复边界](../issue-fix-boundary-guardrails.md)、[Quiet Pro](../quiet-pro-component-guidelines.md)、[本地化](../localization.md)、[工程质量](../engineering-quality.md)、[Project 维护](../github-project-maintenance.md)。
+长期规则引用：[架构](../architecture.md)、[修复边界](../issue-fix-boundary-guardrails.md)、[Quiet Pro](../quiet-pro-component-guidelines.md)、[本地化](../localization.md)、[工程质量](../engineering-quality.md)、《GitHub Project 维护指南》。
 
 ## 2. 实施前基线与证据限制
 

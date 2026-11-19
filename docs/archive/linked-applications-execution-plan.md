@@ -7,7 +7,7 @@
 
 本文将关联应用拆成可独立核对的实现步骤。勾选表示步骤已经完成且有对应证据；方案提出的设计不等于已经实现。本文不保存 Project 的字段、排序或正文快照，开始实施时重新读取 live Project。
 
-规则入口：[产品范围](../product-principles-and-scope.md)、[架构](../architecture.md)、[稳定期边界判断](../issue-fix-boundary-guardrails.md)、[Quiet Pro](../quiet-pro-component-guidelines.md)、[工程质量](../engineering-quality.md)、[本地化](../localization.md)、[备份兼容与发布](../versioning-and-release-policy.md)、[Project 维护](../github-project-maintenance.md)。
+规则入口：[产品范围](../product-principles-and-scope.md)、[架构](../architecture.md)、[稳定期边界判断](../issue-fix-boundary-guardrails.md)、[Quiet Pro](../quiet-pro-component-guidelines.md)、[工程质量](../engineering-quality.md)、[本地化](../localization.md)、[备份兼容与发布](../versioning-and-release-policy.md)、《GitHub Project 维护指南》。
 
 ## 1. 从原始事实推导实现边界
 

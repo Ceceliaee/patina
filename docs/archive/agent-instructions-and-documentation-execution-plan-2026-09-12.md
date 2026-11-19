@@ -70,7 +70,7 @@ commit、push、分支、PR、Issue、Project、tag 和 release 按 [GitHub Push
 | [工程质量](../engineering-quality.md) | 风险、验证政策和工程 prose 契约 | 默认门槛、风险追加和证据复用是否由同一口径解释 |
 | [Quiet Pro](../quiet-pro-component-guidelines.md)、[本地化](../localization.md) | UI 及产品文案契约 | 是否保留必要状态、可访问性、语义及支持边界 |
 | [版本与发布](../versioning-and-release-policy.md)、[Web Activity 协议](../web-activity-protocol.md) | 发布、升级、协议及跨仓库接受条件 | 普通修改与正式发布是否分清；当前机器事实是否有重复副本 |
-| [Project 维护](../github-project-maintenance.md) | 私有 Project 的维护流程和权限 | 活数据是否误入文档；只读与结构变更的边界是否准确 |
+| 《GitHub Project 维护指南》 | 私有 Project 的维护流程和权限 | 活数据是否误入文档；只读与结构变更的边界是否准确 |
 | 源码、schema、配置和 [package.json](../../package.json) | 可执行事实、字段、命令组合及工具链声明 | 文档是否重复维护容易变化的机器清单 |
 | 可选本地技能 | 针对具体任务的方法、误判防护和工具使用帮助 | 触发是否精准；是否提供增量价值；是否重复或扩大仓库规则 |
 | working 与 archive | 当前过程、证据、决策及历史 | 当前契约是否已写回归属文件；旧记录是否被当作执行前提 |

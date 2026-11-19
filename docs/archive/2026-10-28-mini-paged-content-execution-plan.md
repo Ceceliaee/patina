@@ -163,7 +163,7 @@ categoryShare = categoryDurationMs / sum(all categoryDurationMs)
 
 - [x] **A1 核对工作区。** 读取当前 `AGENTS.md`，检查差异与相关未跟踪文件；保留已有工作，记录实施基线，不自行建分支、提交或推送。
 - [x] **A2 确认所有者。** 按[架构落点](../architecture.md)、[Quiet Pro](../quiet-pro-component-guidelines.md)和[修复边界](../issue-fix-boundary-guardrails.md)复核本方案中的模块关系；新增共享代码必须有真实消费者。
-- [x] **A3 核对关联工作。** 如果实施对应已有 Project 项，按[Project 维护](../github-project-maintenance.md)读取认证后的实时状态；访问失败如实记录，不用本地旧副本替代，也不把私有内容写入仓库。
+- [x] **A3 核对关联工作。** 如果实施对应已有 Project 项，按《GitHub Project 维护指南》读取认证后的实时状态；访问失败如实记录，不用本地旧副本替代，也不把私有内容写入仓库。
 - [x] **A4 固定可复现输入。** 在现有测试 fixture 中准备日累计、最近一小时、空数据、匿名、网站与工具状态；注入可控时钟，使用合成身份，不复制用户实际活动。
 - [x] **A5 记录行为基线。** 用现有 Mini browser / runtime 场景确认贴边、浮动、展开、保持展开、关闭重开和主窗口恢复；新问题与既有失败分开记录。
 

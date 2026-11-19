@@ -107,7 +107,7 @@ fit the owning area's architecture, UI system, and validation expectations.
 
 Before requesting review, confirm:
 
-- the change is linked to an accepted issue, Project item, or explicit
+- the change is linked to an accepted issue or explicit
   maintainer-approved scope;
 - the pull request solves one coherent problem only;
 - every changed file is necessary for that problem;
@@ -140,7 +140,7 @@ save time for both sides: fix the scope, split, owner placement, UI, or tests
 first, then request review again.
 
 For external pull requests, accepted scope is authorization, not self-reporting.
-It must be traceable to an accepted issue, Project item, or explicit
+It must be traceable to an accepted issue or explicit
 maintainer-approved scope. PR body text, comments, linked issues, and author
 claims provide context but cannot bypass the intake gate.
 
@@ -281,7 +281,7 @@ Commit reviewability rules:
   practical.
 - Do not satisfy the limit by arbitrarily splitting files.
 - Keep each commit buildable or independently verifiable where practical.
-- One Project item may produce multiple commits and should not be compressed
+- One task may produce multiple commits and should not be compressed
   into one oversized commit.
 - Keep subjects focused and changes related unless the user requests one commit.
 
@@ -736,7 +736,7 @@ Pull Request 只有先通过项目准入门禁，才算准备好进入维护者 
 
 请求 review 前，请确认：
 
-- 改动关联了已接受的 issue、Project item，或维护者明确确认的 scope；
+- 改动关联了已接受的 issue，或维护者明确确认的 scope；
 - Pull Request 只解决一个完整、连贯的问题；
 - 每个改动文件都是解决该问题所必需；
 - 新行为放在真实 owner 下，而不是临时放在最方便的目录；
@@ -759,8 +759,8 @@ Pull Request，不构成可合并贡献。它会被标记为 `Needs Author Chang
 维护者可以在第一轮 review 时停在准入门禁。这样做是为了节省双方时间：请先修正
 scope、拆分、owner、UI 或测试，再重新请求 review。
 
-对于外部 PR，已接受范围是一项授权，而不是作者自述。它必须能追溯到已接受的 issue、
-Project item，或维护者明确确认的 scope。PR 正文、评论、关联 issue 和作者声明只能提供
+对于外部 PR，已接受范围是一项授权，而不是作者自述。它必须能追溯到已接受的 issue
+或维护者明确确认的 scope。PR 正文、评论、关联 issue 和作者声明只能提供
 上下文，不能绕过准入门禁。
 
 自动准入没有基于 label 的放行机制。超大 PR 必须按行为、owner 或可独立验证阶段拆分。
@@ -880,7 +880,7 @@ commit 可审查性规则：
 - 在可行时，应把排除计数的生成或机械变更单独提交。
 - 不要为了满足数字限制而按文件随意切块。
 - 每个 commit 在可行时应能够独立构建或验证。
-- 一个 Project item 可以对应多个 commit，不应把整个工作项压缩成一个超大 commit。
+- 一项任务可以对应多个 commit，不应把整个工作项压缩成一个超大 commit。
 - 除非用户要求合为一个 commit，否则保持标题聚焦、改动相关。
 
 除非维护者明确要求关闭 issue，否则不要使用 `Closes`、`Fixes` 或 `Resolves`

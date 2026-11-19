@@ -50,7 +50,7 @@ Patina 文档需要让未来维护者和执行代理在缺少历史会话的情�
 
 工作树已有其他任务修改与另一份工作计划。编写阶段只新增本方案；实施阶段以仓库外 SHA-256 快照保护其他任务文件，不能清理、暂存、覆盖或归档它们。
 
-没有在本次讨论中确认对应的现有 Project item。此处不记录或推测私有队列。后续若请求明确映射现有 item，实施前按 [Project 维护指南](../github-project-maintenance.md)读取 authenticated live state；访问失败要报告，不能用本方案替代。
+没有在本次讨论中确认对应的现有 Project item。此处不记录或推测私有队列。后续若请求明确映射现有 item，实施前按 《GitHub Project 维护指南》读取 authenticated live state；访问失败要报告，不能用本方案替代。
 
 ## 3. 范围、授权与不变量
 
@@ -85,7 +85,7 @@ Patina 文档需要让未来维护者和执行代理在缺少历史会话的情�
 | 代码职责、数据通道、长期兼容边界 | [architecture.md](../architecture.md) | 保留架构判断所需信息；具体实现细节回到已存在的真实 owner |
 | 修复模式升级与停止判断 | [issue-fix-boundary-guardrails.md](../issue-fix-boundary-guardrails.md) | 区分重新判断与请求授权，供 skills 引用 |
 | UI 与本地化规则 | [quiet-pro-component-guidelines.md](../quiet-pro-component-guidelines.md)、[localization.md](../localization.md) | 分别保留视觉交互和消息契约，避免重复 schema 或实现目录 |
-| 发布、协议与私有 Project 方法 | [versioning-and-release-policy.md](../versioning-and-release-policy.md)、[web-activity-protocol.md](../web-activity-protocol.md)、[github-project-maintenance.md](../github-project-maintenance.md) | 保留完整授权和受支持边界；不复制动态状态 |
+| 发布、协议与私有 Project 方法 | [versioning-and-release-policy.md](../versioning-and-release-policy.md)、[web-activity-protocol.md](../web-activity-protocol.md)、`github-project-maintenance.md` | 保留完整授权和受支持边界；不复制动态状态 |
 | 可重复的任务方法、触发条件、局部报告要求 | ignored 本地 skills | 对齐长期 owner；细节按需读取 |
 | 本轮进度、候选决策与验证结果 | 本方案 | 完成后归档；未来任务不依赖本文解释规则 |
 

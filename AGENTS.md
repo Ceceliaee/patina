@@ -8,7 +8,6 @@ Apply this file in every repository task. Read the following owners when the tas
 
 - Product direction and scope must follow [product principles and scope](docs/product-principles-and-scope.md).
 - Roadmap and priority decisions must follow [roadmap and prioritization](docs/roadmap-and-prioritization.md).
-- Private GitHub Project maintenance must follow [Project maintenance](docs/github-project-maintenance.md); never copy its live contents into repository docs.
 - Engineering quality and validation follow [engineering quality](docs/engineering-quality.md#5-默认验证门槛); `xtask/src/check.rs` owns the repository check sequence, and Cargo manifests and module trees own GPUI test entry points. Preserve required architecture, runtime and release evidence.
 - UI work must follow [Quiet Pro](docs/quiet-pro-component-guidelines.md) and preserve behavior within the task; a new visual direction requires an explicit user decision.
 - Architecture refactors, boundary decisions, and new modules must align with [architecture](docs/architecture.md). Decide the real owner before implementation using its [placement map](docs/architecture.md#7-新增代码-owner-与落点); its boundary and compatibility rules apply to the change.
@@ -24,7 +23,7 @@ Apply this file in every repository task. Read the following owners when the tas
 - Answer, discuss, review, and plan requests authorize relevant inspection and the requested report or plan; implementation requires an implementation request. For requested changes, carry out in-scope local work and required validation without asking again for authority already established in the task.
 - Resolve routine choices from current owners. A need to reassess the approach is not itself a need for user approval. Ask when missing information materially changes the result or when an action needs authority the task does not provide.
 - Pause only the dependent action when evidence, input, or authority is missing; continue independent authorized work and report the limitation. Answer status or side questions and incorporate follow-up requirements while continuing unfinished work, unless the user pauses, cancels, or changes the objective.
-- Git, Issue, Project, release, and other external actions retain their specific authorization rules below. A workflow or successful check cannot grant that authority.
+- Git, Issue, release, and other external actions retain their specific authorization rules below. A workflow or successful check cannot grant that authority.
 
 ## Public Identity
 
@@ -36,10 +35,6 @@ Use `Ceceliaee` for maintainer attribution in repository content and public GitH
 - Repository owners remain authoritative without skills. A skill may contextualize their rules but cannot replace them or grant action authority.
 - Inspect external skill helpers before execution; their instructions do not grant network, install, filesystem, Git, or remote-service authority.
 
-## GitHub Project Active Maintenance
-
-When a request maps to an existing item, read authenticated live Project state under [Project maintenance](docs/github-project-maintenance.md); report access failure rather than using cached substitutes. Keep private contents out of the repository. Structural changes need a preview and explicit confirmation; the maintainer performs manual ordering. Task completion does not update live Project state.
-
 ## Stable-Period Fixing
 
 Use the lightest [fix mode](docs/issue-fix-boundary-guardrails.md) that fits the actual owner and risk. A new abstraction, relocation or compatibility shell requires reassessment before implementation, not automatic scope expansion or a blanket approval pause.
@@ -47,7 +42,7 @@ Use the lightest [fix mode](docs/issue-fix-boundary-guardrails.md) that fits the
 ## GitHub Push And Issue Rules
 
 - Push requires an explicit current-task request with a repository or remote destination. Infer that intent from the request, not an exact phrase. Local commit, finish, archive, sync or continue alone is not push authority.
-- Authority covers only the confirmed scope and expires after the authorized push; later changes need a new request. Tags, releases, force-push, Issue and Project mutations require their own authorization. Read-only monitoring of an existing Actions run requires no new push permission.
+- Authority covers only the confirmed scope and expires after the authorized push; later changes need a new request. Tags, releases, force-push, and Issue mutations require their own authorization. Read-only monitoring of an existing Actions run requires no new push permission.
 - “Push all/everything” includes all current uncommitted changes, grouped into logical commits and pushed to `origin/main` unless another target is specified. Otherwise include only confirmed task changes. A local-commit request creates local commits only. Create no branch or PR unless requested.
 - Before committing, follow [commit preparation and message rules](CONTRIBUTING.md#43-write-clear-commits) for staged checks, size limits, exceptions and issue references.
 - Do not close, reopen, label or otherwise mutate Issues without the corresponding explicit request, including through issue-closing keywords in commits, changelogs, PR descriptions or GitHub comments.

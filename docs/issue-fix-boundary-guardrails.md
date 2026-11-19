@@ -4,7 +4,7 @@
 
 本文是稳定期修复的决策 how-to：先判断问题 owner，再选择足够轻的执行模式。长期分层与 owner 由 [`architecture.md`](./architecture.md) 定义，风险与验证由 [`engineering-quality.md`](./engineering-quality.md) 定义；本文不复制它们的完整清单。
 
-它不授权扩大范围、创建兼容壳、跨层搬迁、commit、push、Issue、Project 或发布操作。
+它不授权扩大范围、创建兼容壳、跨层搬迁、commit、push、Issue 或发布操作。
 
 先用[模式表](#3-三种处理模式)选择小修、边界判断或执行单；出现[升级信号](#7-必须先停下来的信号)时重新判断对应动作，按[完成条件](#9-完成判断)收尾。重新判断不自动要求新授权，独立且已授权的工作继续。
 

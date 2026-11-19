@@ -54,7 +54,7 @@ CPU 用于完成工作；内存用于保存正在使用或值得复用的数据�
 - [工程质量与验证](../engineering-quality.md)
 - [架构与 owner](../architecture.md)
 - [稳定期修复边界](../issue-fix-boundary-guardrails.md)
-- [GitHub Project 维护方法](../github-project-maintenance.md)
+- 《GitHub Project 维护指南》
 
 当前可用于选择排查入口的事实：
 

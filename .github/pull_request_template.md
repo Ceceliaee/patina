@@ -11,11 +11,11 @@ Refs #
 ## Accepted Scope
 
 <!--
-Link the accepted issue, Project item, or maintainer-approved scope.
+Link the accepted issue or the maintainer's explicit approval of the scope.
 The automated intake gate checks this section before normal verification runs.
 -->
 
-- Linked issue / Project item / maintainer approval:
+- Linked issue / maintainer approval:
 
 ## Changes
 
@@ -103,7 +103,7 @@ Write `N/A` if the change has no visible UI impact.
 ## Contributor Checklist
 
 - [ ] I read the relevant active project documents under `docs/`.
-- [ ] This pull request is linked to the Issue or Project item where its scope was agreed, or to an explicit maintainer-approved scope.
+- [ ] This pull request links to an accepted issue or the maintainer's explicit approval of its scope.
 - [ ] This pull request solves one coherent problem and excludes unrelated cleanup.
 - [ ] Every changed file is necessary for the accepted problem.
 - [ ] The commits are reviewable; oversized changes were split coherently by behavior, owner, or independently verifiable stage.

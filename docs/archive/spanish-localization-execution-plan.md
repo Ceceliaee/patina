@@ -30,7 +30,7 @@
 
 - [产品原则](../product-principles-and-scope.md)、[优先级](../roadmap-and-prioritization.md)、[架构](../architecture.md)、[修复边界](../issue-fix-boundary-guardrails.md)。
 - [本地化契约](../localization.md)、[工程质量](../engineering-quality.md)、[Quiet Pro](../quiet-pro-component-guidelines.md)。
-- [发布规范](../versioning-and-release-policy.md)、[Web Activity 协议](../web-activity-protocol.md)、[Project 维护规则](../github-project-maintenance.md)。
+- [发布规范](../versioning-and-release-policy.md)、[Web Activity 协议](../web-activity-protocol.md)、《GitHub Project 维护指南》。
 - 扩展仓库根 `AGENTS.md` 及其 `docs/localization.md`、`docs/architecture.md`、`docs/engineering-quality.md`、`docs/quiet-pro-component-guidelines.md`、`docs/versioning-and-release-policy.md`、`docs/web-activity-protocol.md`。
 
 编写方案时已读取两仓当前源文件和脚本。以下是代码事实，不是运行验收结果：

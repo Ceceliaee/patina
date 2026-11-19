@@ -20,7 +20,7 @@
 - [本地化](../localization.md)：消息源、生成及翻译复核。
 - [Web Activity 协议](../web-activity-protocol.md)：有效活动、原始 URL 和浏览器会话边界。
 - [版本与发布](../versioning-and-release-policy.md)：受支持恢复、升级与后续发布。
-- [Project 维护](../github-project-maintenance.md)：执行时读取实时事项及外部操作授权。
+- 《GitHub Project 维护指南》：执行时读取实时事项及外部操作授权。
 
 用户已授权实施、验证、勾选归档及完成后的对抗式审查。实现从第 5 节开始；每阶段完成后填写第 9 节的实际结果。下文标为“设计选择”的内容是实现基线，具体交付状态以勾选和验证记录为准。若实际代码证明需要改变产品范围，暂停该项并向维护者说明；其余已授权工作继续。
 

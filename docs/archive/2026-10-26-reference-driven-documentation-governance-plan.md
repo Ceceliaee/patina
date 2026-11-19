@@ -90,7 +90,7 @@
 | [本地化](../localization.md) | 改文案、加语言、查消息契约 | 日常操作与 schema/runtime 参考分层，保留复核和不可信输入保证 |
 | [发布规范](../versioning-and-release-policy.md) | 查版本规则并准备发布 | 兼容与不可变约束、格式参考、发布操作、证据责任分区 |
 | [修复边界](../issue-fix-boundary-guardrails.md) | 选择小修、边界判断或执行单 | 用实际决策解释升级与停顿，保留必要权限边界 |
-| [Project 维护](../github-project-maintenance.md) | 维护者管理私有队列 | 维护步骤与字段参考分开，私有 live state 仍只在 Project |
+| 《GitHub Project 维护指南》 | 维护者管理私有队列 | 维护步骤与字段参考分开，私有 live state 仍只在 Project |
 | [Web Activity 协议](../web-activity-protocol.md) | 接收端与扩展实现者查协议 | 按生命周期和字段组织完整外部契约，保留拒绝与兼容条件 |
 | [远程状态桥指南](../examples/remote-status-bridge.md) / [Worker README](../examples/remote-status-bridge-worker/README.md) | 用户配置接收端，开发者部署或排障示例 | 使用、协议和示例部署各有入口，统一重复字段和示例归属 |
 | [主题 fixture 说明](codex-theme-contrast/README.md) | 维护者理解测试数据来源与更新方式 | 保留独立来源、版本摘要和再生成限制，区分历史取样与当前操作 |

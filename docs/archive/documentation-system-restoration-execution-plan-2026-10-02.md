@@ -67,7 +67,7 @@
 
 Git 提交、push、tag、Release、Issue、Project、外部发布与部署分别遵守既有授权。文档里的示例命令不是执行这些动作的授权。若需要联网核对，先检查工具、环境与 Windows 系统代理，沿用适用配置，不输出凭据、不修改永久代理、不把 PAC URL 当作代理地址。
 
-未识别出对应现有 Project item 时不读取或推测私有队列。后续请求若明确映射某个 item，按 [Project 维护指南](../github-project-maintenance.md) 核对 live state；仓库不保存其当前内容。
+未识别出对应现有 Project item 时不读取或推测私有队列。后续请求若明确映射某个 item，按 《GitHub Project 维护指南》 核对 live state；仓库不保存其当前内容。
 
 ### 3.3 何时需要重新决定
 

@@ -252,7 +252,7 @@ App note: 一句话概括这个版本最值得用户知道的变化。
 - 准备正式版本时按[第 8.5 节](#85-发布对比基线)核对完整范围；摘要覆盖整段最终结果，不只总结最后一轮局部改动
 - 优先写用户能感知到的结果，不先写实现手段、模块名或重构过程
 - 如果条目修复了 GitHub issue，必须在对应 `Fixed` 条目中带上 issue 编号或链接，例如 `[#1](https://github.com/Ceceliaee/patina/issues/1)`，方便从发布说明追溯到问题上下文
-- changelog 的追踪引用只关联具体 GitHub issue 或 pull request，不关联 GitHub Project、项目看板或 Project item；如果没有对应 issue 或 pull request，则不为凑引用而误链、补建或关联看板
+- changelog 的追踪引用只指向与条目直接相关的 GitHub issue 或 pull request。没有对应记录时省略引用。
 - 当引用适用于整条 changelog 条目时，沿用 `1.9.3` 的格式：正文结束后另写 `Refs ...`，不加括号，例如 `- 修复……。Refs [#1](https://github.com/Ceceliaee/patina/issues/1)`
 - 只有当条目继续描述另一个独立结果、而引用必须明确限定在前一段结果时，才在对应句末使用括号形式 `(Refs ...)`；遇到这种情况应优先拆成两条，避免引用范围含混
 - 上述引用格式适用于 `Unreleased` 和后续版本；不得仅为统一格式改写已经发布的历史版本
