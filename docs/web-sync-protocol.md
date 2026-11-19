@@ -1,4 +1,4 @@
-# Patina Web Activity 协议
+# Web Sync 本机协议
 
 ## 目的
 

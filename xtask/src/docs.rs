@@ -242,7 +242,7 @@ fn validate(root: &Path, files: &BTreeSet<String>, archives: bool) -> Result<(),
         if policy && grammar.prohibited.is_match(&source) {
             errors.push(format!("{file}: local plugin in repository policy"));
         }
-        if file == "docs/versioning-and-release-policy.md" && grammar.version.is_match(&source) {
+        if file == "docs/release.md" && grammar.version.is_match(&source) {
             errors.push(format!(
                 "{file}: current code version belongs in Cargo.toml"
             ));
@@ -344,6 +344,22 @@ mod tests {
         assert_eq!(decoded("a%20b").unwrap(), "a b");
         assert!(decoded("%fg").is_err());
     }
+    #[test]
+    fn release_policy_keeps_the_version_in_the_workspace_manifest() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = "docs/release.md";
+        let files = BTreeSet::from([path.to_owned()]);
+        fs::create_dir(dir.path().join("docs")).unwrap();
+        fs::write(dir.path().join(path), "Current code version is 5.4.3").unwrap();
+        assert!(validate(dir.path(), &files, false).is_err());
+        fs::write(
+            dir.path().join(path),
+            "Use the workspace manifest for the version.",
+        )
+        .unwrap();
+        validate(dir.path(), &files, false).unwrap();
+    }
+
     #[test]
     fn validates_missing_outside_and_duplicate_anchors() {
         let temp = tempfile::tempdir().unwrap();

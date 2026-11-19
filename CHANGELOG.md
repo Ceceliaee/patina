@@ -2,7 +2,7 @@
 
 本文件是版本说明的唯一来源。
 
-格式遵循仓库内的 [`docs/versioning-and-release-policy.md`](docs/versioning-and-release-policy.md)。
+格式遵循仓库内的 [`docs/release.md`](docs/release.md)。
 
 每个正式版本应同时维护：
 

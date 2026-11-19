@@ -1,6 +1,6 @@
 # 远程状态接收协议
 
-本文供接收端开发者查询 Patina 的 WebSocket 鉴权、快照、图标、心跳和重连约定。用户配置见[使用指南](./remote-status-bridge.md)，示例部署与 HTTP 路由见[Worker README](../../examples/remote-status-bridge-worker/README.md)。本协议只传当前状态；本机浏览器网页采集另由 [Web Activity 协议](../web-activity-protocol.md)定义。
+本文供接收端开发者查询 Patina 的 WebSocket 鉴权、快照、图标、心跳和重连约定。用户配置见[使用指南](./remote-status-bridge.md)，示例部署与 HTTP 路由见[Worker README](../../examples/remote-status-bridge-worker/README.md)。本协议只传当前状态；本机浏览器网页采集另由 [Web Activity 协议](../web-sync-protocol.md)定义。
 
 [鉴权](#4-worker-侧最低要求) · [快照字段](#5-快照消息) · [图标](#6-图标发送规则) · [心跳](#7-发送时机) · [离线](#8-worker-离线判定) · [重连](#9-重连行为) · [接收端状态](#10-worker-状态建议) · [安全](#11-安全边界)
 

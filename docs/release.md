@@ -1,43 +1,38 @@
-# 版本与发布规范
-
-## 1. 文档定位
+# 版本与发布
 
 本文帮助维护者选择版本、维护 changelog、准备和验收发布；同时提供已发布资产、升级兼容和更新通道的长期约束。临时发布习惯不能覆盖这些约束。
 
 | 当前任务 | 阅读位置 |
 | --- | --- |
-| 只更新 changelog | [正文规则](#8-changelogmd-规则)、[完整对比基线](#85-发布对比基线)、[摘要与 i18n 边界](#83-release-与-app-note) |
-| 准备一个正式版本 | [发布流程](#11-默认发布流程)，按步骤查[SemVer](#6-当前阶段的升级策略)、[验收](#10-发布前的最低验证门槛)与[授权](#101-授权与事项引用) |
-| 处理失败发布 | [不可变规则](#7-已发布版本的不可变规则)和[补跑限制](#11-默认发布流程) |
-| 修改备份或存储升级路径 | [旧备份窗口](#71-旧备份读取器的丢弃窗口)、[存储升级](#72-存储位置配置的升级边界) |
-| 查附件、证明、镜像或伴生扩展 | [资产](#94-附件命名)、[跨仓签收](#patina-web-sync-跨仓签收契约)、[镜像](#95-更新源与镜像规则) |
+| 只更新 changelog | [正文规则](#changelogmd-规则)、[完整对比基线](#发布对比基线)、[摘要与 i18n 边界](#release-与-app-note) |
+| 准备一个正式版本 | [发布流程](#默认发布流程)，按步骤查[SemVer](#版本升级策略)、[验收](#发布前的最低验证门槛)与[授权](#授权与事项引用) |
+| 处理失败发布 | [不可变规则](#已发布版本的不可变规则)和[补跑限制](#默认发布流程) |
+| 修改备份或存储升级路径 | [旧备份窗口](#旧备份读取器的丢弃窗口)、[存储升级](#存储位置配置的升级边界) |
+| 查附件、证明、镜像或伴生扩展 | [资产](#附件命名)、[跨仓签收](#patina-web-sync-跨仓签收契约)、[镜像](#更新源与镜像规则) |
 
----
+## 默认发布流程
 
-## 2. 与其他长期文档的关系
+1. 找到最近已发布版本，审查其后完整 commit 与 diff，再按实际范围选择 SemVer；不能只看最后一轮局部改动。
+2. 在本地同步所有版本文件并整理 changelog。长期政策文档不保存当前版本值。
+3. 运行版本一致性、changelog 和 `cargo xtask check`；正式资产由 workflow 生成，本地默认不创建 `dist-release`、安装包或 updater 产物。
+4. 获得当前任务的远程 push 授权后推送准备提交。等该提交在 `main` 的 `Verify` 全绿，再依单独的 tag 或发布授权为该提交创建并推送 `vX.Y.Z`。
+5. [`prepare-release.yml`](../.github/workflows/prepare-release.yml) 从 tag 对应 commit 校验版本与 changelog，拒绝已有 Release，生成并独立验证安装包、校验和与 updater manifest，完成 attestation 后以禁止覆盖的方式创建 GitHub Release。
+6. GitHub Release 成立后再同步 R2 镜像；镜像失败不能撤销、覆盖或改变 GitHub Release 主事实，updater 继续优先使用 GitHub endpoint。
+7. 发布模式的 `workflow_dispatch` 只补跑已有 tag 且尚无 Release 的流程。补跑使用原 tag 的工作流和源码，仍需满足该工作流的发布门槛。Release 已存在时必须按不可变规则准备新版本。
 
-- [`architecture.md`](./architecture.md) 定义长期结构边界；[`engineering-quality.md`](./engineering-quality.md#5-默认验证门槛) 定义通用验证门槛。本文定义哪些变化可以形成正式版本，以及发布前的额外接受条件。
-- [`issue-fix-boundary-guardrails.md`](./issue-fix-boundary-guardrails.md) 约束日常修复的落点与边界；本文约束这些变化怎样稳定进入发布线。
-- [`roadmap-and-prioritization.md`](./roadmap-and-prioritization.md) 约束当前阶段的优先级；本文约束何时把优先主题固化进正式版本。
+补跑时使用目标 tag 对应的 workflow 版本，例如 `gh workflow run prepare-release.yml --ref v<version> -f version=<version>`。历史 tag 沿用该版本发布时的工作流和工具链。
 
----
+默认协作在 tag 推送并确认发布 workflow 已触发后即可结束；只有用户要求或正在排查失败时才持续监看。浏览器扩展商店与扩展 Release 由 `patina-web-sync` 仓库负责，不进入 Patina 主应用发布流程。
 
-## 3. 当前仓库现实
-
-当前发布线的长期事实：
+## 稳定发布线
 
 - 稳定发布线为 `1.x`
 - 仓库已进入公开稳定阶段，后续版本按标准 `SemVer` 管理
 - 默认通过推送 `vX.Y.Z` / `vX.Y.Z-prerelease` 版本 tag 自动触发 GitHub Actions 工作流 [prepare-release.yml](../.github/workflows/prepare-release.yml) 中的 `Publish Release` 流程；必要时也可手动触发已有 tag 的发布流程补跑
 
-这意味着当前发布策略应同时满足两件事：
-
-- 保持 `1.x` 稳定阶段的兼容性边界
-- 保持正式发布线的清晰、一致和可追踪
-
 ---
 
-## 4. 版本号的单一来源
+## 版本号的单一来源
 
 每次发布时，下列位置必须保持同一个版本语义：
 
@@ -63,13 +58,13 @@
 
 ---
 
-## 5. 版本格式规则
+## 版本格式规则
 
 长期采用 `SemVer`：
 
 `MAJOR.MINOR.PATCH`
 
-### 5.1 稳定版本
+### 稳定版本
 
 公开稳定版本使用：
 
@@ -77,7 +72,7 @@
 - `1.0.1`
 - `1.1.0`
 
-### 5.2 预发布版本
+### 预发布版本
 
 仅当明确需要测试版或候选版时，才使用预发布后缀：
 
@@ -89,7 +84,7 @@
 
 不应为了“先放着以后再改成 Latest”而默认把稳定 tag 做成预发布。GitHub Release 界面允许修改 `Pre-release / Latest` 标记，但本项目的长期默认是：稳定版本成熟后再发布稳定版本；如果确实需要预发布，就使用带语义后缀的版本号，例如 `1.6.0-rc.1`，正式发布再使用 `1.6.0`。
 
-### 5.3 不再推荐的格式
+### 不再推荐的格式
 
 不再新增类似 `1.1.0-1` 这种语义不清晰的后缀。
 
@@ -101,9 +96,9 @@
 
 ---
 
-## 6. 当前阶段的升级策略
+## 版本升级策略
 
-### 6.1 当前 `1.x` 策略
+### `1.x` 兼容承诺
 
 项目当前处于 `1.x` 稳定阶段，默认严格按标准 `SemVer` 判断版本号：
 
@@ -120,13 +115,13 @@
 
 版本号不应在看完发布范围前预设。
 
-准备发布时，先按[发布对比基线](#85-发布对比基线)检查最近已发布版本之后的完整 commit、diff 和待提交发布准备内容。
+准备发布时，先按[发布对比基线](#发布对比基线)检查最近已发布版本之后的完整 commit、diff 和待提交发布准备内容。
 
 看完范围后，再按最终进入发布的实际变化选择 `PATCH`、`MINOR` 或 `MAJOR`。
 如果这一段时间里包含用户可感知的新入口、重要行为变化、关键 UX 改进或发布级结构收口，即使最后一轮改动只是小修，也不应只按最后一轮改动决定为 `PATCH`。
 如果范围内只有向后兼容的小范围修复、回归修复、构建修复或非行为级 UI 微调，才使用 `PATCH`。
 
-## 7. 已发布版本的不可变规则
+## 已发布版本的不可变规则
 
 发布 tag 一旦存在，就冻结该版本的源码引用；即使 GitHub Release 尚未创建，也不得重指、强推或删除后重建该 tag 来替换源码。对应 GitHub Release 已公开时，才形成正式发布事实；`Publish Release` 工作流以成功创建该公开 Release 为发布完成边界。
 
@@ -137,11 +132,11 @@
 - 已发布的稳定版本不得为了补进后到的小修而被原地覆盖，也不得删除 Release 后重发同版本稳定版
 - 如果 `1.0.1` 已发布，后续修复默认进入 `1.0.2`
 - 只有目标版本尚无 tag 和 GitHub Release 时，才可继续沿用同一版本号更改发布内容
-- tag 已存在而 Release 不存在的失败发布，只能按[第 11 节](#11-默认发布流程) 从原 tag 补跑；源码变化必须使用新版本和新 tag。已有 Release 时不得补跑覆盖
+- tag 已存在而 Release 不存在的失败发布，只能按[发布流程](#默认发布流程) 从原 tag 补跑；源码变化必须使用新版本和新 tag。已有 Release 时不得补跑覆盖
 
 ---
 
-### 7.1 旧备份读取器的丢弃窗口
+### 旧备份读取器的丢弃窗口
 
 当正式备份写入器从结构化 JSON ZIP 切换为 SQLite 数据快照时：
 
@@ -167,25 +162,25 @@
 
 ---
 
-### 7.2 存储位置配置的升级边界
+### 存储位置配置的升级边界
 
 首次交付注册表存储配置时，发布说明必须告知旧定位文件自动转存、数据本身不搬动及配置异常的恢复方式。旧 JSON 格式只由首次导入入口读取，新运行时不双写、不回退。
 
 维护者在每次拟删除该导入器的发布中核对仍支持的直接升级来源。只要未迁移版本仍可直接更新到候选版本，就保留窄导入入口；删除前必须明确并验证替代升级路径、完成用户提醒和失败恢复验证。不能套用旧备份的 90 天窗口，也不能用客户端日期自动拒绝导入。卸载或安装旧版不构成本机路径配置的自动回滚方案。
 
-WebDAV 凭据引用的升级与恢复遵循[本地数据边界](architecture.md#43-本地数据读取通道)。首次交付该协议的发布说明须说明旧配置在首次保存时转换、备份恢复后的密码配置要求，以及旧程序无法读取新凭据引用的降级限制。只要无引用的旧配置仍属于支持中的直接升级来源，就保留窄凭据读取入口；删除前验证替代升级路径。不能把安装旧版当成跨资源保存协议的回滚操作。
+WebDAV 凭据引用的升级与恢复遵循[本地数据边界](architecture.md#本地数据读取通道)。首次交付该协议的发布说明须说明旧配置在首次保存时转换、备份恢复后的密码配置要求，以及旧程序无法读取新凭据引用的降级限制。只要无引用的旧配置仍属于支持中的直接升级来源，就保留窄凭据读取入口；删除前验证替代升级路径。不能把安装旧版当成跨资源保存协议的回滚操作。
 
 安装验收须覆盖旧正式版自定义目录升级、后续更新保留路径、普通用户权限以及发行架构。源代码或测试 profile 的验证不能代替正式安装/updater 证据；缺少这些证据时不得宣称该发布的升级验收完成。
 
-## 8. `CHANGELOG.md` 规则
+## `CHANGELOG.md` 规则
 
 `CHANGELOG.md` 是仓库内版本说明的长期单一来源。
 
-### 8.1 文件位置
+### 文件位置
 
 - 固定放在仓库根目录：[`CHANGELOG.md`](../CHANGELOG.md)
 
-### 8.2 基本结构
+### 基本结构
 
 长期使用以下结构：
 
@@ -214,7 +209,7 @@ App note: 一句话概括这个版本最值得用户知道的变化。
 ### Internal
 ```
 
-### 8.3 `Release:` 与 `App note:`
+### `Release:` 与 `App note:`
 
 每个正式版本节顶部必须包含以下摘要字段：
 
@@ -222,7 +217,7 @@ App note: 一句话概括这个版本最值得用户知道的变化。
 - `App note:`：给简体中文更新弹窗使用的同一句摘要
 - `App note en:`：该摘要的英文版本，供英文界面及其他非中文界面回退使用
 
-这些字段是随版本发布的正文数据：内容由 `CHANGELOG.md` 持有，解析与发布产物生成由 [`xtask/src/release`](../xtask/src/release) 持有，不进入 `locales/` 消息资源。仅修改正文按[工程质量的默认门槛与风险路由](./engineering-quality.md#5-默认验证门槛) 运行文档与 changelog 检查，不触发 i18n 生成。承载正文的界面标题、按钮和无障碍文案仍遵守[本地化契约](./localization.md)；修改正文解析、语言选择或展示行为时，仍须按实际代码与本地化风险验证。
+这些字段是随版本发布的正文数据：内容由 `CHANGELOG.md` 持有，解析与发布产物生成由 [`xtask/src/release`](../xtask/src/release) 持有，不进入 `locales/` 消息资源。仅修改正文按[工程质量的默认门槛与风险路由](./quality.md#验证范围) 运行文档与 changelog 检查，不触发 i18n 生成。承载正文的界面标题、按钮和无障碍文案仍遵守[本地化契约](./localization.md)；修改正文解析、语言选择或展示行为时，仍须按实际代码与本地化风险验证。
 
 写法要求：
 
@@ -232,7 +227,7 @@ App note: 一句话概括这个版本最值得用户知道的变化。
 - 新编写或修订的版本摘要中，`Release:` 与 `App note:` 默认使用完全相同的中文正文；精简时同步修改，已发布版本不追溯改写。
 - 中英文字段必须表达同一组发布事实；updater 按界面语言选择，俄语和西班牙语等没有独立字段的界面回退到英文
 
-### 8.4 分类规则
+### 分类规则
 
 推荐分类：
 
@@ -249,7 +244,7 @@ App note: 一句话概括这个版本最值得用户知道的变化。
 
 默认写作口径：
 - 只写“相对上一个已发布版本”的真实变化，不写本轮开发中出现过、但最终没有进入发布结果的中间尝试或回退
-- 准备正式版本时按[第 8.5 节](#85-发布对比基线)核对完整范围；摘要覆盖整段最终结果，不只总结最后一轮局部改动
+- 准备正式版本时按[发布对比基线](#发布对比基线)核对完整范围；摘要覆盖整段最终结果，不只总结最后一轮局部改动
 - 优先写用户能感知到的结果，不先写实现手段、模块名或重构过程
 - 如果条目修复了 GitHub issue，必须在对应 `Fixed` 条目中带上 issue 编号或链接，例如 `[#1](https://github.com/Ceceliaee/patina/issues/1)`，方便从发布说明追溯到问题上下文
 - changelog 的追踪引用只指向与条目直接相关的 GitHub issue 或 pull request。没有对应记录时省略引用。
@@ -265,7 +260,7 @@ App note: 一句话概括这个版本最值得用户知道的变化。
 - 每个正式版本默认优先保证 `Release:`、`App note:`、`Changed`、`Fixed` 可读，再决定是否真的需要写 `Added`、`Removed`、`Internal`
 - 如果一条内容需要用户先理解仓库结构、模块名或历史执行计划才看得懂，默认应该继续改写
 
-### 8.5 发布对比基线
+### 发布对比基线
 
 正式版本的 changelog 必须基于“上一个已发布版本到本次发布”的完整对比来写。
 
@@ -284,7 +279,7 @@ App note: 一句话概括这个版本最值得用户知道的变化。
 - 如果某项内部改动解释了本次发布的性能、稳定性或验证边界，可写进 `Internal`；否则不要把 commit 清单搬进 changelog。
 - 如果 changelog 与 `git diff vX.Y.Z..HEAD` 读出来的发布范围不一致，应先改 changelog，再继续发布。
 
-### 8.6 维护规则
+### 维护规则
 
 开发进行中：
 
@@ -301,16 +296,16 @@ App note: 一句话概括这个版本最值得用户知道的变化。
 
 ---
 
-## 9. GitHub Release 规则
+## GitHub Release 规则
 
-### 9.1 标题规则
+### 标题规则
 
 统一使用：
 
 - `Patina v1.0.1`
 - `Patina v1.1.0-beta.1`
 
-### 9.2 正文来源
+### 正文来源
 
 GitHub Release 正文必须来自 `CHANGELOG.md` 对应版本节，但不是机械整段复制。
 
@@ -328,11 +323,11 @@ GitHub Release 正文必须来自 `CHANGELOG.md` 对应版本节，但不是机�
 - 把 `Internal` 直接搬进 release 正文
 - 用内部重构术语替代用户语言
 
-### 9.3 应用内更新说明
+### 应用内更新说明
 
 应用内更新提示默认使用对应版本节的 `App note:` 或 `App note en:`，而不是完整 release 正文；简体中文使用中文字段，其他界面语言优先使用英文，旧版本缺少英文时再回退到中文。
 
-### 9.4 附件命名
+### 附件命名
 
 对外显示名称保持 `Patina`。
 
@@ -377,11 +372,11 @@ Patina Release 只发布 x64 与 ARM64 两个主应用安装包、`SHA256SUMS.tx
 4. Tag 自动工作流已经发布完整的 Patina Web Sync GitHub Release，tag、Release 标题与附件版本一致。
 5. Firefox Release 附件来自 AMO 的同版本公开 listed XPI，并已校验 AMO SHA-256、manifest version 与稳定 Gecko id。
 6. Chromium ZIP 与 Firefox XPI 已由 `SHA256SUMS` 和 GitHub Artifact Attestation 绑定；同 tag 重跑只可复用字节相同的既有资产或补齐缺失资产，同名哈希冲突必须失败，发布后必须回读远端资产验证。
-7. 若版本改变 Web Activity 协议，Patina 接收端兼容必须先落地，两仓的 `docs/web-activity-protocol.md` 必须保持一致。
+7. 若版本改变 Web Activity 协议，Patina 接收端兼容必须先落地，两仓的 `docs/web-sync-protocol.md` 必须保持一致。
 
 完成签收不绑定两个项目的版本号，也不要求 Patina 与 Patina Web Sync 同日发布。Patina Release 不携带扩展附件；Patina 只消费稳定商店入口、扩展 Release 和双方已对齐的本机协议。普通扩展发布不得依赖尚未发布的 Patina 接收端行为。
 
-### 9.5 更新源与镜像规则
+### 更新源与镜像规则
 
 GitHub Release 继续作为正式发布源、主下载入口和主更新清单来源。
 
@@ -399,7 +394,7 @@ GitHub Release 继续作为正式发布源、主下载入口和主更新清单�
 
 ---
 
-### 9.6 GPUI 原生更新包
+### GPUI 原生更新包
 
 原生更新使用独立的 `gpui-latest.json` 和 NSIS 安装包，不依赖 Tauri updater。[`prepare-release.yml`](../.github/workflows/prepare-release.yml) 已接入原生打包，沿用 `vX.Y.Z` 标签和 `Patina vX.Y.Z` 发布标题。当前程序仍使用独立安装身份及实验版资料目录；首次正式发布前必须完成旧安装版的安装身份、数据路径和版本衔接验收。工作流接线不代表迁移验收完成，也不能将原生包写入旧 `latest.json`。
 
@@ -418,7 +413,7 @@ cargo xtask release package --target arm64 --output target/bundles/arm64 --maken
 
 工作流在各架构的 Windows runner 上调用同一个打包工具，合并清单后独立验证，再为两个最终安装包生成证明。签名步骤使用 `PATINA_SIGNING_PRIVATE_KEY` 和 `PATINA_SIGNING_PRIVATE_KEY_PASSWORD`。前者保存 Base64 编码的 Minisign 私钥文件，后者经进程标准输入交给签名器。工具回收临时私钥文件。
 
-## 10. 发布前的最低验证门槛
+## 发布前的最低验证门槛
 
 正式发布前至少应完成以下验证：
 
@@ -426,7 +421,7 @@ cargo xtask release package --target arm64 --output target/bundles/arm64 --maken
 - `cargo xtask release validate-changelog <version>`
 - `cargo xtask check`
 
-通用质量门槛见[工程质量](./engineering-quality.md#5-默认验证门槛)。正式发布前，目标提交必须在本仓库 `main` 的 push 事件上通过 `Verify`。发布工作流按 tag 的完整提交 SHA 查验最近一次对应运行及其全部作业；记录缺失、运行未结束、作业未全绿或查询失败时停止。通过后，版本、changelog 和安装包均取自该提交。
+通用质量门槛见[工程质量](./quality.md#验证范围)。正式发布前，目标提交必须在本仓库 `main` 的 push 事件上通过 `Verify`。发布工作流按 tag 的完整提交 SHA 查验最近一次对应运行及其全部作业；记录缺失、运行未结束、作业未全绿或查询失败时停止。通过后，版本、changelog 和安装包均取自该提交。
 
 `Verify` 的双架构 `Native desktop checks` 运行 workspace 单元、契约和无头控件交互测试，以及 Clippy、格式与依赖审计；独立的 `Native Windows acceptance` 显式启用原生测试，运行隔离桌面中的更新交互和安装、升级、卸载验收。发布门禁要求同一候选的两组任务均成功，无头通过不能替代 Windows 原生验收。版本准备使用 `cargo xtask release sync-version <version>` 同步工作区与锁文件中的产品版本。
 
@@ -446,40 +441,6 @@ GitHub Actions 生成正式发布资产后、发布 GitHub Release 前，还必�
 
 ---
 
-### 10.1 授权与事项引用
+### 授权与事项引用
 
 远程 push、commit scope、Issue 引用和自动关闭关键词统一由根 [`AGENTS.md`](../AGENTS.md) 与 [`CONTRIBUTING.md`](../CONTRIBUTING.md) 拥有。发布流程只增加两项边界：普通分支 push 授权不包含创建或推送 tag，普通仓库 push 也不包含发布 GitHub Release；这两项必须在当前任务中获得各自明确授权。
-
-## 11. 默认发布流程
-
-1. 找到最近已发布版本，审查其后完整 commit 与 diff，再按实际范围选择 SemVer；不能只看最后一轮局部改动。
-2. 在本地同步所有版本文件并整理 changelog。长期政策文档不保存当前版本值。
-3. 运行版本一致性、changelog 和 `cargo xtask check`；正式资产由 workflow 生成，本地默认不创建 `dist-release`、安装包或 updater 产物。
-4. 获得当前任务的远程 push 授权后推送准备提交。等该提交在 `main` 的 `Verify` 全绿，再依单独的 tag 或发布授权为该提交创建并推送 `vX.Y.Z`。
-5. [`prepare-release.yml`](../.github/workflows/prepare-release.yml) 从 tag 对应 commit 校验版本与 changelog，拒绝已有 Release，生成并独立验证安装包、校验和与 updater manifest，完成 attestation 后以禁止覆盖的方式创建 GitHub Release。
-6. GitHub Release 成立后再同步 R2 镜像；镜像失败不能撤销、覆盖或改变 GitHub Release 主事实，updater 继续优先使用 GitHub endpoint。
-7. 发布模式的 `workflow_dispatch` 只补跑已有 tag 且尚无 Release 的流程。补跑使用原 tag 的工作流和源码，仍需满足该工作流的发布门槛。Release 已存在时必须按不可变规则准备新版本。
-
-补跑时使用目标 tag 对应的 workflow 版本，例如 `gh workflow run prepare-release.yml --ref v<version> -f version=<version>`。历史 tag 沿用该版本发布时的工作流和工具链。
-
-默认协作在 tag 推送并确认发布 workflow 已触发后即可结束；只有用户要求或正在排查失败时才持续监看。浏览器扩展商店与扩展 Release 由 `patina-web-sync` 仓库负责，不进入 Patina 主应用发布流程。
-
-## 12. 什么时候更新本文
-
-只有在以下情况发生时，才应更新本文：
-
-- 版本策略变化
-- 发布工作流变化
-- changelog 结构变化
-- 更新通道或安装包策略变化
-- 产品阶段或发布线再次变化，例如从当前 `1.x` 稳定期进入新的兼容阶段或维护模式
-
-一次具体发布只更新版本文件、changelog 和机器 owner，不修改本文。本文不保存当前版本。
-
----
-
-## 13. 长期维护门槛
-
-- 版本文件、tag、Release 标题、安装包与 updater manifest 保持同一版本语义。
-- changelog 和 release notes 面向用户解释实际变化，不写成 commit 清单。
-- 发布策略、资产契约、兼容窗口或 workflow 阶段变化时更新本文；单次发布状态只更新机器 owner。

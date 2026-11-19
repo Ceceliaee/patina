@@ -140,7 +140,7 @@ To see browsing time by website, install [Patina Web Sync](https://github.com/Ce
 
 - **Idle detection.** Patina distinguishes active time from periods of inactivity, screen lock, and sleep.
 - **Active time.** App rankings, category shares, and totals use time spent active.
-- **Title recording and anonymous statistics.** Choose whether to save titles for each app or website, or enable [anonymous statistics](docs/product-principles-and-scope.md#73-可管理的应用语义层).
+- **Title recording and anonymous statistics.** Choose whether to save titles for each app or website, or enable [anonymous statistics](docs/product.md#身份隐私与历史).
 - **Browsing privacy.** Web records store full URLs locally by default. Anonymous statistics retain only browsing time.
 - **History retention.** Clear activity records older than the retention period you choose.
 
@@ -171,7 +171,7 @@ Report problems or suggest improvements through GitHub Issues or the Patina QQ c
 <a id="run-in-development"></a>
 <a id="build-installer"></a>
 
-Follow the [first-run guide](CONTRIBUTING.md#34-install-dependencies) to set up the development environment and install dependencies, then run `pnpm run tauri dev`. The development build can run alongside the release build. Each uses its own data directory. To build a release installer, see the [release policy](docs/versioning-and-release-policy.md#10-发布前的最低验证门槛).
+Follow the [first-run guide](CONTRIBUTING.md#34-install-dependencies) to set up the development environment and install dependencies, then run `pnpm run tauri dev`. The development build can run alongside the release build. Each uses its own data directory. To build a release installer, see the [release policy](docs/release.md#发布前的最低验证门槛).
 
 ### Tech Stack
 

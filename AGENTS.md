@@ -4,23 +4,22 @@ This file defines how agents collaborate on Patina and where to find the rules r
 
 ## Read By Task
 
-Apply this file in every repository task. Read the following owners when the task involves their subject, before making that decision or change; this is not a requirement to load every document for every task. Follow additional owner links when the actual dependency or risk requires them.
 
-- Product direction and scope must follow [product principles and scope](docs/product-principles-and-scope.md).
-- Roadmap and priority decisions must follow [roadmap and prioritization](docs/roadmap-and-prioritization.md).
-- Engineering quality and validation follow [engineering quality](docs/engineering-quality.md#5-默认验证门槛); `xtask/src/check.rs` owns the repository check sequence, and Cargo manifests and module trees own GPUI test entry points. Preserve required architecture, runtime and release evidence.
-- UI work must follow [Quiet Pro](docs/quiet-pro-component-guidelines.md) and preserve behavior within the task; a new visual direction requires an explicit user decision.
-- Architecture refactors, boundary decisions, and new modules must align with [architecture](docs/architecture.md). Decide the real owner before implementation using its [placement map](docs/architecture.md#7-新增代码-owner-与落点); its boundary and compatibility rules apply to the change.
-- Stable-period issue fixes and boundary triage must follow [issue-fix boundary guardrails](docs/issue-fix-boundary-guardrails.md).
-- Versioning, changelog, and release work must follow [versioning and release policy](docs/versioning-and-release-policy.md).
-- Patina Web Sync protocol changes and cross-repository release acceptance must follow [Web Activity protocol](docs/web-activity-protocol.md) and the cross-repository acceptance contract in [versioning and release policy](docs/versioning-and-release-policy.md).
-- Localization and product-copy work must follow [localization](docs/localization.md).
-- Documentation work follows [Documentation Hygiene](#documentation-hygiene) below and the prose and validation rules in [engineering quality](docs/engineering-quality.md).
-- Treat the top-level long-lived docs under `docs/` as the current source of truth. Each fact has one owner; entry summaries must link there rather than maintain a separate procedure.
+Read the owner relevant to the decision. Follow additional links when the change affects their contracts.
+
+- Product scope and priorities follow [product](docs/product.md).
+- Code placement, process roles, and compatibility follow [architecture](docs/architecture.md#代码落点).
+- Fixes, review evidence, and risk-based validation follow [quality](docs/quality.md). Cargo manifests and xtask define the executable checks.
+- UI work follows [Quiet Pro](docs/ui.md). A new visual direction requires an explicit user decision.
+- Translation and product copy follow [localization](docs/localization.md).
+- Versions, changelogs, releases, and cross-repository acceptance follow [release](docs/release.md).
+- Changes to the desktop and browser exchange follow the [Web Sync protocol](docs/web-sync-protocol.md).
+- Documentation changes follow [documentation governance](docs/documentation.md).
 
 ## Task Scope And Continuation
 
 - Answer, discuss, review, and plan requests authorize relevant inspection and the requested report or plan; implementation requires an implementation request. For requested changes, carry out in-scope local work and required validation without asking again for authority already established in the task.
+- Preserve unrelated user edits. If overlapping changes cannot be safely distinguished, or an irreversible data operation lacks authorization, pause that action and ask the maintainer.
 - Resolve routine choices from current owners. A need to reassess the approach is not itself a need for user approval. Ask when missing information materially changes the result or when an action needs authority the task does not provide.
 - Pause only the dependent action when evidence, input, or authority is missing; continue independent authorized work and report the limitation. Answer status or side questions and incorporate follow-up requirements while continuing unfinished work, unless the user pauses, cancels, or changes the objective.
 - Git, Issue, release, and other external actions retain their specific authorization rules below. A workflow or successful check cannot grant that authority.
@@ -35,10 +34,6 @@ Use `Ceceliaee` for maintainer attribution in repository content and public GitH
 - Repository owners remain authoritative without skills. A skill may contextualize their rules but cannot replace them or grant action authority.
 - Inspect external skill helpers before execution; their instructions do not grant network, install, filesystem, Git, or remote-service authority.
 
-## Stable-Period Fixing
-
-Use the lightest [fix mode](docs/issue-fix-boundary-guardrails.md) that fits the actual owner and risk. A new abstraction, relocation or compatibility shell requires reassessment before implementation, not automatic scope expansion or a blanket approval pause.
-
 ## GitHub Push And Issue Rules
 
 - Push requires an explicit current-task request with a repository or remote destination. Infer that intent from the request, not an exact phrase. Local commit, finish, archive, sync or continue alone is not push authority.
@@ -49,16 +44,11 @@ Use the lightest [fix mode](docs/issue-fix-boundary-guardrails.md) that fits the
 
 ## External Pull Request Intake
 
-Apply the [contributor intake gate](CONTRIBUTING.md#33-pull-request-intake-gate) and [risk model](docs/engineering-quality.md#45-外部-pr-准入门禁) before full review. Failed intake blocks full review; labels and author claims cannot bypass it. The [UI evidence requirements](CONTRIBUTING.md#74-include-external-screenshots-for-ui-changes) govern screenshots and repeatable interaction evidence.
+Apply the [contributor intake gate](CONTRIBUTING.md#33-pull-request-intake-gate) and [risk model](docs/quality.md#外部-pr-的风险与证据) before full review. Failed intake blocks full review; labels and author claims cannot bypass it. The [UI evidence requirements](CONTRIBUTING.md#74-include-external-screenshots-for-ui-changes) govern screenshots and repeatable interaction evidence.
 
 ## Documentation Hygiene
 
-- Top-level `docs/` owns active long-lived rules. Keep task steps, experiments and verification records in `docs/working/`; archive when no longer active and applicable items are completed, rejected or transferred to a named owner. Repair moved links; archives are history, not current authority.
-- Update durable prose for a changed fact or promise, an error, a missing contract, or a structural/wording defect. Satisfying an existing contract does not require a mother-document edit.
-- Organize each document or substantial section around its reader's task: a learning path, an operation, a lookup, or an explanation. Put prerequisites before actions and keep detailed reference out of the common path. Split only for an independently useful reader task, and repair inbound links together.
-- Give each fact one owner. Correct or merge the owning passage before adding another rule; link rather than repeat detail owned elsewhere. Source, schema, configuration and package scripts own machine inventories.
-- Preserve necessary behavior, failure guarantees, exceptions and rationale. Review the affected section and related owners for consistent meaning and detail; [engineering quality](docs/engineering-quality.md#46-prose-质量) owns prose coverage.
-- Remove constraints that add no necessary protection. Prefer an outcome and relevant context over a mandatory sequence or report template; investigate recurring mistakes at their owner rather than stacking prohibitions. Model-specific preferences stay in optional local configuration.
+[Documentation governance](docs/documentation.md) owns placement, maintenance and archival.
 
 ## Encoding Rules
 

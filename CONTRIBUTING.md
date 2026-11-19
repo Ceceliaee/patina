@@ -27,16 +27,16 @@ Choose the path for your task:
 
 ## 1. Start Here
 
-Start with the product scope. Read the other owners when your change involves
-their subject; this is a task map, not an all-documents prerequisite:
+Read the owner for the change you are making.
 
-- [`docs/product-principles-and-scope.md`](docs/product-principles-and-scope.md)
-- [`docs/roadmap-and-prioritization.md`](docs/roadmap-and-prioritization.md)
-- [`docs/engineering-quality.md`](docs/engineering-quality.md)
+- [`docs/product.md`](docs/product.md)
+- [`docs/documentation.md`](docs/documentation.md)
+- [`docs/quality.md`](docs/quality.md)
 - [`docs/architecture.md`](docs/architecture.md)
-- [`docs/issue-fix-boundary-guardrails.md`](docs/issue-fix-boundary-guardrails.md)
-- [`docs/quiet-pro-component-guidelines.md`](docs/quiet-pro-component-guidelines.md) for UI work
-- [`docs/versioning-and-release-policy.md`](docs/versioning-and-release-policy.md) for release work
+- [`docs/localization.md`](docs/localization.md)
+- [`docs/web-sync-protocol.md`](docs/web-sync-protocol.md)
+- [`docs/ui.md`](docs/ui.md) for UI work
+- [`docs/release.md`](docs/release.md) for release work
 
 The active top-level files under `docs/` are the current sources of truth.
 Files under `docs/archive/` are historical context and should not be used as the
@@ -44,7 +44,7 @@ default implementation basis.
 
 ## 2. Project Priorities
 
-[Product scope](docs/product-principles-and-scope.md#9-新功能准入标准) decides whether a proposal belongs in Patina; [prioritization](docs/roadmap-and-prioritization.md#6-默认优先级顺序) decides its order. Protect tracking and data first, preserve ownership, and choose the smallest change that fully solves the accepted problem. A different product direction needs an explicit decision.
+[Product scope](docs/product.md#提案准入) decides whether a proposal belongs in Patina; [prioritization](docs/product.md#优先级) decides its order. Protect tracking and data first, preserve ownership, and choose the smallest change that fully solves the accepted problem. A different product direction needs an explicit decision.
 
 ## 3. Before You Start A Change
 
@@ -60,8 +60,7 @@ Before implementing a fix or feature:
 1. Search existing issues and pull requests for related work.
 2. Read the relevant active project documents.
 3. Identify the real owner of the behavior before choosing a file.
-4. Decide whether the task is a focused change or a broader boundary change.
-5. Keep unrelated cleanup out of the pull request.
+4. Keep unrelated cleanup out of the pull request.
 
 Before starting non-trivial or potentially overlapping work, coordinate with
 the maintainer to avoid duplicate or conflicting implementation.
@@ -69,7 +68,7 @@ the maintainer to avoid duplicate or conflicting implementation.
 If a fix requires a new shared abstraction, a cross-layer responsibility move,
 or a new compatibility wrapper, reassess the owner and discuss the design with
 the maintainer before implementation, following the
-[fix boundary guardrails](docs/issue-fix-boundary-guardrails.md).
+[architecture boundaries](docs/architecture.md#共享与兼容边界).
 
 ### 3.2 Choose A Suitable Issue
 
@@ -189,7 +188,7 @@ From the repository root, start the development app. Cargo builds the host, wind
 cargo xtask dev
 ```
 
-The development launcher uses a separate profile under LOCALAPPDATA. Use the [native build and release policy](docs/versioning-and-release-policy.md#96-gpui-原生更新包) when preparing an installer.
+The development launcher uses a separate profile under LOCALAPPDATA. Use the [native build and release policy](docs/release.md#gpui-原生更新包) when preparing an installer.
 
 ## 4. Branch And Commit Workflow
 
@@ -299,19 +298,19 @@ Refs #4
 
 ### 5.1 Use Owner-First Placement
 
-Choose the owner before choosing a file. Use the [placement map](docs/architecture.md#7-新增代码-owner-与落点); an unclear owner calls for [boundary triage](docs/issue-fix-boundary-guardrails.md#5-边界判断流程).
+Choose the owner before choosing a file. Use the [placement map](docs/architecture.md#代码落点).
 
-### 5.2 Frontend Rules
+### 5.2 GPUI Window Rules
 
-Keep page behavior with its GPUI owner, shared controls in QuietPro, and SQLite access in Recorder. See the [placement map](docs/architecture.md#7-新增代码-owner-与落点).
+Keep page behavior with its GPUI owner, shared controls in QuietPro, and SQLite access in Recorder. See the [placement map](docs/architecture.md#代码落点).
 
 ### 5.3 Rust Rules
 
-Follow the [Rust structure](docs/architecture.md#6-rust-长期结构). Keep assembly and command handlers thin; put domain decisions, runtime behavior, platform details, and data access in their actual owners.
+Follow the [Rust structure](docs/architecture.md#代码落点). Keep assembly and command handlers thin; put domain decisions, runtime behavior, platform details, and data access in their actual owners.
 
 ### 5.4 UI Rules
 
-Follow [Quiet Pro](docs/quiet-pro-component-guidelines.md) for tokens, reusable components, interaction states, keyboard and focus behavior. Place user-visible copy under [localization](docs/localization.md#4-修改或新增文案). Design-system escapes and incomplete interaction evidence block intake; a new visual direction needs agreement before implementation.
+Follow [Quiet Pro](docs/ui.md) for tokens, reusable components, interaction states, keyboard and focus behavior. Place user-visible copy under [localization](docs/localization.md#修改或新增文案). Design-system escapes and incomplete interaction evidence block intake; a new visual direction needs agreement before implementation.
 
 ### 5.5 External Interface Rules
 
@@ -336,18 +335,18 @@ For prose-only work, go directly to [documentation checks](#64-documentation-onl
 
 Run focused checks while implementing, then run the required validation before
 requesting review. Validation requirements are owned by
-[`docs/engineering-quality.md`](docs/engineering-quality.md#5-默认验证门槛);
+[`docs/quality.md`](docs/quality.md#验证范围);
 [xtask](xtask/src/check.rs) defines repository checks and execution order. The
 [root workspace](Cargo.toml) and its crate manifests and module trees
 define GPUI test entry points.
 
 For validation stages, evidence reuse and local/CI responsibilities, follow the
-[layered entry guide](docs/engineering-quality.md#51-测试分层与稳定性治理).
+[layered entry guide](docs/quality.md#测试分层).
 
 ### 6.1 Default Code Validation
 
 For local changes, run the related tests and static checks selected under
-[engineering quality §5](docs/engineering-quality.md#5-默认验证门槛).
+[validation scope](docs/quality.md#验证范围).
 For repository tooling:
 
 ```bash
@@ -358,16 +357,16 @@ cargo xtask check tools
 
 For GPUI, run Cargo from the repository root to use its pinned toolchain. Choose the crate,
 test target and named case through the
-[GPUI test guide](docs/engineering-quality.md#gpui-测试文件与定向入口).
+[GPUI test guide](docs/quality.md#gpui-测试文件与定向入口).
 Recorder data contracts do not require launching a GPUI window.
 
-From the repository root, run `cargo test-headless --locked` for the native workspace. Use cargo xtask check from the root when the change also affects shared tooling or the build chain. Select additional native and performance checks through the [desktop validation guide](docs/engineering-quality.md#gpui-测试文件与定向入口).
+From the repository root, run `cargo test-headless --locked` for the native workspace. Use cargo xtask check from the root when the change also affects shared tooling or the build chain. Select additional native and performance checks through the [desktop validation guide](docs/quality.md#gpui-测试文件与定向入口).
 
 ### 6.3 Release Validation
 
 For release, changelog, or updater changes, add this check to the default and
 risk-based validation required by
-[engineering quality](docs/engineering-quality.md#5-默认验证门槛):
+[engineering quality](docs/quality.md#验证范围):
 
 ```bash
 cargo xtask release validate-changelog
@@ -380,13 +379,15 @@ cargo xtask check
 cargo xtask release validate-changelog
 ```
 
-Follow the [release policy](docs/versioning-and-release-policy.md) and its
-[release validation requirements](docs/versioning-and-release-policy.md#10-发布前的最低验证门槛).
+Follow the [release policy](docs/release.md) and its
+[release validation requirements](docs/release.md#发布前的最低验证门槛).
 
 ### 6.4 Documentation-Only Changes
 
 Documentation-only pull requests use documentation checks and any validation required by changed policies or operational claims under
-[`docs/engineering-quality.md`](docs/engineering-quality.md#5-默认验证门槛).
+[`docs/quality.md`](docs/quality.md#验证范围).
+For a documentation-only PR that touches a governed path, intake also checks for the docs tests or a covering tool suite. The [intake implementation](xtask/src/ci/intake/body.rs) defines these paths and accepted commands.
+
 Check:
 
 - links;
@@ -549,7 +550,7 @@ When resolving conflicts:
 3. Reapply only the feature-specific behavior needed by the pull request.
 4. Remove unrelated changes that are already superseded by `main`.
 5. Reassess validation evidence under
-   [engineering quality](docs/engineering-quality.md#5-默认验证门槛), rerun checks
+   [engineering quality](docs/quality.md#验证范围), rerun checks
    whose evidence is no longer valid, and ensure valid evidence still covers
    every required gate for the change.
 
@@ -665,22 +666,23 @@ Patina 是一个面向个人使用、本地优先的 Windows 桌面时间追踪�
 
 ### 1. 开始之前
 
-先了解产品范围，再按改动涉及的主题读取相应 owner。以下是任务入口，不是所有任务的全量必读清单：
+按改动涉及的主题选择对应文档。
 
-- [`docs/product-principles-and-scope.md`](docs/product-principles-and-scope.md)
-- [`docs/roadmap-and-prioritization.md`](docs/roadmap-and-prioritization.md)
-- [`docs/engineering-quality.md`](docs/engineering-quality.md)
+- [`docs/product.md`](docs/product.md)
+- [`docs/documentation.md`](docs/documentation.md)
+- [`docs/quality.md`](docs/quality.md)
 - [`docs/architecture.md`](docs/architecture.md)
-- [`docs/issue-fix-boundary-guardrails.md`](docs/issue-fix-boundary-guardrails.md)
-- UI 改动请阅读 [`docs/quiet-pro-component-guidelines.md`](docs/quiet-pro-component-guidelines.md)
-- 发布改动请阅读 [`docs/versioning-and-release-policy.md`](docs/versioning-and-release-policy.md)
+- [`docs/localization.md`](docs/localization.md)
+- [`docs/web-sync-protocol.md`](docs/web-sync-protocol.md)
+- UI 改动请阅读 [`docs/ui.md`](docs/ui.md)
+- 发布改动请阅读 [`docs/release.md`](docs/release.md)
 
 `docs/` 顶层的有效文档是当前事实来源。`docs/archive/` 下的文件是历史背景，
 默认不应作为当前实现依据。
 
 ### 2. 项目优先级
 
-[产品范围](docs/product-principles-and-scope.md#9-新功能准入标准)决定提案是否属于 Patina，[优先级](docs/roadmap-and-prioritization.md#6-默认优先级顺序)决定先后。优先保护追踪与数据，保持 owner 清晰，采用完整解决已接受问题的最小改动。改变产品方向需要明确决策。
+[产品范围](docs/product.md#提案准入)决定提案是否属于 Patina，[优先级](docs/product.md#优先级)决定先后。优先保护追踪与数据，保持 owner 清晰，采用完整解决已接受问题的最小改动。改变产品方向需要明确决策。
 
 ### 3. 开始一项改动之前
 
@@ -694,13 +696,12 @@ Patina 是一个面向个人使用、本地优先的 Windows 桌面时间追踪�
 1. 搜索是否已有相关 issue 和 Pull Request。
 2. 阅读相关的有效项目文档。
 3. 先识别行为的真实 owner，再选择文件。
-4. 判断任务是聚焦的小改动，还是更广泛的边界调整。
-5. 不要在 Pull Request 中混入无关清理。
+4. 不要在 Pull Request 中混入无关清理。
 
 开始处理非平凡或可能与现有工作重叠的事项前，应先与维护者协调，避免重复或相互冲突的实现。
 
 如果一项修复需要新增共享抽象、跨层迁移职责或新增兼容壳，请按
-[修复边界守则](docs/issue-fix-boundary-guardrails.md) 重新判断 owner，
+[架构边界](docs/architecture.md#共享与兼容边界) 重新判断 owner，
 并在实现前与维护者讨论设计。
 
 #### 3.2 选择合适的 issue
@@ -796,7 +797,7 @@ Draft PR 不运行准入 job。请先完成模板并获得范围批准，再将 
 cargo xtask dev
 ```
 
-启动器在 LOCALAPPDATA 下使用开发专用资料目录。安装包按[原生发布规范](docs/versioning-and-release-policy.md#96-gpui-原生更新包)准备。
+启动器在 LOCALAPPDATA 下使用开发专用资料目录。安装包按[原生发布规范](docs/release.md#gpui-原生更新包)准备。
 
 ### 4. 分支与提交工作流
 
@@ -895,19 +896,19 @@ Refs #4
 
 #### 5.1 owner 优先
 
-先选 owner，再选文件。使用[落点表](docs/architecture.md#7-新增代码-owner-与落点)；owner 不清时先做[边界判断](docs/issue-fix-boundary-guardrails.md#5-边界判断流程)。
+先选 owner，再选文件。使用[落点表](docs/architecture.md#代码落点)。
 
-#### 5.2 前端规则
+#### 5.2 GPUI 窗口规则
 
-页面行为归 GPUI 页面，共享控件归 QuietPro，SQLite 访问归 Recorder。参见[落点表](docs/architecture.md#7-新增代码-owner-与落点)。
+页面行为归 GPUI 页面，共享控件归 QuietPro，SQLite 访问归 Recorder。参见[落点表](docs/architecture.md#代码落点)。
 
 #### 5.3 Rust 规则
 
-遵循 [Rust 结构](docs/architecture.md#6-rust-长期结构)。装配与 command handler 保持薄；领域判断、运行时行为、平台细节与数据访问分别留在真实 owner。
+遵循 [Rust 结构](docs/architecture.md#代码落点)。装配与 command handler 保持薄；领域判断、运行时行为、平台细节与数据访问分别留在真实 owner。
 
 #### 5.4 UI 规则
 
-[Quiet Pro](docs/quiet-pro-component-guidelines.md)拥有 token、共享组件、交互状态、键盘和焦点规则；用户文案按[本地化](docs/localization.md#4-修改或新增文案)维护。绕过设计系统或交互证据不完整会阻断准入；新视觉方向须在实现前确认。
+[Quiet Pro](docs/ui.md)拥有 token、共享组件、交互状态、键盘和焦点规则；用户文案按[本地化](docs/localization.md#修改或新增文案)维护。绕过设计系统或交互证据不完整会阻断准入；新视觉方向须在实现前确认。
 
 #### 5.5 外部接口规则
 
@@ -929,15 +930,15 @@ Refs #4
 纯文案工作可直接进入[文档检查](#64-仅文档改动)。
 
 实现和请求 review 时，按实际影响范围运行相关验证。验证要求由
-[`docs/engineering-quality.md`](docs/engineering-quality.md#5-默认验证门槛) 拥有；
+[`docs/quality.md`](docs/quality.md#验证范围) 拥有；
 各命令的检查组成和执行顺序以 [xtask](xtask/src/check.rs) 为准。
 
 验证阶段、证据复用和本地/CI 职责遵循
-[分层入口指引](docs/engineering-quality.md#51-测试分层与稳定性治理)。
+[分层入口指引](docs/quality.md#测试分层)。
 
 #### 6.1 默认代码验证
 
-局部改动按[工程质量第 5 节](docs/engineering-quality.md#5-默认验证门槛)运行相关测试和静态检查。
+局部改动按[验证范围](docs/quality.md#验证范围)运行相关测试和静态检查。
 仓库工具发生跨模块变化时运行：
 
 ```bash
@@ -946,19 +947,19 @@ cargo xtask check tools
 
 #### 6.2 Rust 与架构验证
 
-当[工程质量第 5 节](docs/engineering-quality.md#5-默认验证门槛)
+当[验证范围](docs/quality.md#验证范围)
 要求本次实际改动运行完整验证时，执行：
 
 ```bash
 cargo xtask check
 ```
 
-原生与性能追加检查按[风险追加与桌面验收](docs/engineering-quality.md#风险追加与桌面验收)选择。
+原生与性能追加检查按[风险追加与桌面验收](docs/quality.md#风险追加与桌面验收)选择。
 
 #### 6.3 发布验证
 
 对于 release、changelog 或 updater 改动，在
-[工程质量](docs/engineering-quality.md#5-默认验证门槛) 要求的默认门槛和风险追加验证之外运行：
+[工程质量](docs/quality.md#验证范围) 要求的默认门槛和风险追加验证之外运行：
 
 ```bash
 cargo xtask release validate-changelog
@@ -971,12 +972,12 @@ cargo xtask check
 cargo xtask release validate-changelog
 ```
 
-遵循[发布规范](docs/versioning-and-release-policy.md)及其
-[发布验证要求](docs/versioning-and-release-policy.md#10-发布前的最低验证门槛)。
+遵循[发布规范](docs/release.md)及其
+[发布验证要求](docs/release.md#发布前的最低验证门槛)。
 
 #### 6.4 仅文档改动
 
-仅文档改动按 [`docs/engineering-quality.md`](docs/engineering-quality.md#5-默认验证门槛) 运行文档检查，并验证改动涉及的政策或操作说明。另请检查：
+仅文档改动按 [`docs/quality.md`](docs/quality.md#验证范围) 运行文档检查，并验证改动涉及的政策或操作说明。纯文档 PR 触及治理文件时，准入还核对文档专项测试或覆盖它的工具检查；适用路径和命令由[准入实现](xtask/src/ci/intake/body.rs)定义。另请检查：
 
 - 链接；
 - 命令名称；
@@ -1129,7 +1130,7 @@ git rebase --abort
 2. 保留 `main` 中更新的正确性修复和架构方向。
 3. 只重新应用 Pull Request 真正需要的 feature 私有行为。
 4. 删除已经被 `main` 取代的无关修改。
-5. 按[工程质量](docs/engineering-quality.md#5-默认验证门槛) 重新评估验证证据，
+5. 按[工程质量](docs/quality.md#验证范围) 重新评估验证证据，
    重跑证据已失效的检查，并确保有效证据仍覆盖本次改动的全部所需门槛。
 
 如果冲突涉及 tracking 语义、SQLite migration、备份或恢复行为，
