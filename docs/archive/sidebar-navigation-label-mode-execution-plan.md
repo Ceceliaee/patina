@@ -9,12 +9,12 @@
 
 本文面向 Patina 维护者与后续执行实现的 Codex。它不是新的长期 UI 母规范，也不替代以下长期文档：
 
-- [`../product-principles-and-scope.md`](../product-principles-and-scope.md)
-- [`../roadmap-and-prioritization.md`](../roadmap-and-prioritization.md)
-- [`../engineering-quality.md`](../engineering-quality.md)
-- [`../quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md)
+- [`../product-principles-and-scope.md`](../product.md)
+- [`../roadmap-and-prioritization.md`](../product.md#优先级)
+- [`../engineering-quality.md`](../quality.md)
+- [`../quiet-pro-component-guidelines.md`](../ui.md)
 - [`../architecture.md`](../architecture.md)
-- [`../issue-fix-boundary-guardrails.md`](../issue-fix-boundary-guardrails.md)
+- [`../issue-fix-boundary-guardrails.md`](../quality.md#修复与回归证据)
 - [`../localization.md`](../localization.md)
 
 本文完成使命后应移入 `docs/archive/`，不能长期留在 `docs/working/`，也不能上移到顶层 `docs/` 充当长期规范。

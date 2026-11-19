@@ -29,7 +29,7 @@
 - 不将图标缓存从 exe 身份改成包或路径身份；同名 exe 的应用区分是另一项身份问题，不能靠刷新周期解决。
 - 实现、验证与归档已由维护者授权；本任务不包含提交、推送、发布或外部事项状态修改。
 
-长期约束以 [架构规范](../architecture.md)、[稳定期修复边界](../issue-fix-boundary-guardrails.md)、[工程质量](../engineering-quality.md) 和 [版本与发布政策](../versioning-and-release-policy.md) 为准。本文不保存外部开发队列的正文、字段或顺序。
+长期约束以 [架构规范](../architecture.md)、[稳定期修复边界](../quality.md#修复与回归证据)、[工程质量](../quality.md) 和 [版本与发布政策](../release.md) 为准。本文不保存外部开发队列的正文、字段或顺序。
 
 ## 2. 已核对的代码链路
 

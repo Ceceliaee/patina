@@ -12,4 +12,4 @@
 
 调整后 `pnpm run build` 与 `pnpm run check:bundle` 通过。初始 JS/CSS 为 202.23 KiB，总 JS/CSS 为 399.11 KiB；其余 owner 均通过现有预算。此处只确认预算及生产构建，不将它等同于完整门禁或原生桌面性能验收。
 
-具体预算由 [bundle checker](../../scripts/check-bundle-budget.ts) 持有；变更依据见[工程质量预算规则](../engineering-quality.md#52-bundle-长期治理与预算变更)。本记录只覆盖上述预算调整，后续交互修改按其实际风险另行验证。
+具体预算由 [bundle checker](../../scripts/check-bundle-budget.ts) 持有；变更依据见[工程质量预算规则](../quality.md#性能与资源生命周期)。本记录只覆盖上述预算调整，后续交互修改按其实际风险另行验证。
