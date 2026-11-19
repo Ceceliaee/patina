@@ -49,11 +49,11 @@ CPU 用于完成工作；内存用于保存正在使用或值得复用的数据�
 
 长期规则由以下文档拥有，本方案只安排本次工作：
 
-- [产品原则与范围](../product-principles-and-scope.md)
-- [路线图与优先级](../roadmap-and-prioritization.md)
-- [工程质量与验证](../engineering-quality.md)
+- [产品原则与范围](../product.md)
+- [路线图与优先级](../product.md#优先级)
+- [工程质量与验证](../quality.md)
 - [架构与 owner](../architecture.md)
-- [稳定期修复边界](../issue-fix-boundary-guardrails.md)
+- [稳定期修复边界](../quality.md#修复与回归证据)
 - 《GitHub Project 维护指南》
 
 当前可用于选择排查入口的事实：

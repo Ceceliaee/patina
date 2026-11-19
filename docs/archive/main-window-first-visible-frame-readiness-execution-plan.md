@@ -16,9 +16,9 @@
 
 - 只有在对应动作已经完成且证据可定位时才勾选，不能在开始阶段批量预勾选。
 - 每个阶段必须满足“阶段出口”后才能进入下一阶段；发现前置假设不成立时回到契约层修订，不在后续步骤打补丁掩盖。
-- 实施中的取舍以 [`docs/architecture.md`](../architecture.md)、[`docs/issue-fix-boundary-guardrails.md`](../issue-fix-boundary-guardrails.md) 和 [`docs/engineering-quality.md`](../engineering-quality.md) 为工程依据。
-- 产品与视觉边界以 [`docs/product-principles-and-scope.md`](../product-principles-and-scope.md) 和 [`docs/quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md) 为依据。
-- Project 状态和优先级维护以 [`docs/roadmap-and-prioritization.md`](../roadmap-and-prioritization.md) 为依据；发布收尾以 [`docs/versioning-and-release-policy.md`](../versioning-and-release-policy.md) 为依据。
+- 实施中的取舍以 [`docs/architecture.md`](../architecture.md)、[`docs/issue-fix-boundary-guardrails.md`](../quality.md#修复与回归证据) 和 [`docs/engineering-quality.md`](../quality.md) 为工程依据。
+- 产品与视觉边界以 [`docs/product-principles-and-scope.md`](../product.md) 和 [`docs/quiet-pro-component-guidelines.md`](../ui.md) 为依据。
+- Project 状态和优先级维护以 [`docs/roadmap-and-prioritization.md`](../product.md#优先级) 为依据；发布收尾以 [`docs/versioning-and-release-policy.md`](../release.md) 为依据。
 - 本文记录一次性实施顺序，不取代上述长期文档；实现结束后必须归档。
 
 ## 0.1 完成记录与勾选口径

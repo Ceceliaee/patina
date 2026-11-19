@@ -25,7 +25,7 @@
 
 **现场清理（2026-10-23）：** 已按用户要求清理第五轮和短测的隔离 WebView 目录、短测重复产物及 Python 字节码缓存，注销第五轮已完成的计划任务；原始证据和一套完整候选产物保留。删除前后 456 份保留文件哈希一致，详见清理记录 `artifacts/runtime-reliability/site-cleanup-20261023/review.md`。用户随后要求停止每小时跟进，自动任务 `patina` 已删除；后续有需要由用户另行安排，不重放已结束现场。停止提醒不改变其余事项的实际完成状态。
 
-事故时间线、既有修复和验证记录由[后台卡死与记录中断调查](2026-10-16-tracking-stall-investigation.md)持有；本文只拥有后续执行步骤、验收与收口。长期边界继续遵循[产品范围](../product-principles-and-scope.md)、[优先级](../roadmap-and-prioritization.md)、[架构](../architecture.md)、[问题修复边界](../issue-fix-boundary-guardrails.md)和[工程质量](../engineering-quality.md)。
+事故时间线、既有修复和验证记录由[后台卡死与记录中断调查](2026-10-16-tracking-stall-investigation.md)持有；本文只拥有后续执行步骤、验收与收口。长期边界继续遵循[产品范围](../product.md)、[优先级](../product.md#优先级)、[架构](../architecture.md)、[问题修复边界](../quality.md#修复与回归证据)和[工程质量](../quality.md)。
 
 长测结束后的 Node、pnpm、Tauri CLI 升级及 Rust 独立验证已完成，结果由[工具链升级执行记录](../archive/2026-10-22-post-soak-toolchain-upgrade-plan.md)持有，后续事项见[工具链维护](#9-后续工具链维护)。该事项不改变本轮长测候选、验收条件或收口范围。
 
@@ -318,7 +318,7 @@ Rust owner 的相对路径均从 `src-tauri/src/` 起算。进入具体改动前
 
 #### P8-A：故障矩阵
 
-每个测试都应在记录中填入入口、实际断言、运行结果和源码摘要。逻辑与计时规则用注入事件验证；真实 Windows 前台切换、播放媒体与电源操作不新增反复抢前台的自动化，按[工程质量测试边界](../engineering-quality.md#51-测试分层与稳定性治理)人工补充。
+每个测试都应在记录中填入入口、实际断言、运行结果和源码摘要。逻辑与计时规则用注入事件验证；真实 Windows 前台切换、播放媒体与电源操作不新增反复抢前台的自动化，按[工程质量测试边界](../quality.md#测试分层)人工补充。
 
 | ID | 输入 / 故障 | 必须观察到的结果 | 验证层 |
 | --- | --- | --- | --- |
@@ -382,7 +382,7 @@ Rust owner 的相对路径均从 `src-tauri/src/` 起算。进入具体改动前
 
 ### P9：最终验证、安装确认与收口
 
-**Owner：** 对应代码与测试 owner；安装、版本和回退遵循[发布策略](../versioning-and-release-policy.md)。本方案不授予推送、tag、Release、Issue / Project 修改权限。
+**Owner：** 对应代码与测试 owner；安装、版本和回退遵循[发布策略](../release.md)。本方案不授予推送、tag、Release、Issue / Project 修改权限。
 
 - [ ] **P9-01** 将本轮改动按可独立审查的范围整理：已有修复、诊断、原生隔离、恢复、资源 / 窗口及测试。删除试验代码和临时兼容实现；没有执行证据的阶段保持未勾选。
 - [ ] **P9-02** 按实际改动执行默认门槛与风险追加验证，使用下节当前入口。静态检查、Rust 单元、browser、真实 Tauri 与性能证据分别记录，互不替代。

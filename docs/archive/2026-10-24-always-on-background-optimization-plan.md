@@ -14,7 +14,7 @@
 
 本任务将主窗口销毁与前端页面缓存清理的等待均调整为 30 秒，两者分别检查适用的后台状态。主窗口销毁时，其 WebView 内存随窗口释放，无需等待缓存 timer 先执行。不新增 WebView 挂起方案，不重构 tracking、备份格式或窗口恢复框架。数据页布局修复和发布摘要长度调整是当前工作树中的其他已授权修改，实施时保留，不混入本项验收结论。
 
-长期边界由[架构](../architecture.md)、[工程质量](../engineering-quality.md)、[Quiet Pro](../quiet-pro-component-guidelines.md)、[本地化](../localization.md)和[发布规范](../versioning-and-release-policy.md)持有；本文只拥有 P7-11 的执行步骤与证据。原后台整改方案继续拥有事故调查、长测和整体安装交付状态。
+长期边界由[架构](../architecture.md)、[工程质量](../quality.md)、[Quiet Pro](../ui.md)、[本地化](../localization.md)和[发布规范](../release.md)持有；本文只拥有 P7-11 的执行步骤与证据。原后台整改方案继续拥有事故调查、长测和整体安装交付状态。
 
 ## 2. 从必要条件推导实施约束
 

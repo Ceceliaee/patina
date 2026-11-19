@@ -9,12 +9,12 @@
 - 当前阶段：已完成、已复审、已归档
 - 创建日期：2026-07-19
 - 长期依据：
-  - [`product-principles-and-scope.md`](../product-principles-and-scope.md)
-  - [`roadmap-and-prioritization.md`](../roadmap-and-prioritization.md)
-  - [`engineering-quality.md`](../engineering-quality.md)
+  - [`product-principles-and-scope.md`](../product.md)
+  - [`roadmap-and-prioritization.md`](../product.md#优先级)
+  - [`engineering-quality.md`](../quality.md)
   - [`architecture.md`](../architecture.md)
-  - [`issue-fix-boundary-guardrails.md`](../issue-fix-boundary-guardrails.md)
-  - [`quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md)
+  - [`issue-fix-boundary-guardrails.md`](../quality.md#修复与回归证据)
+  - [`quiet-pro-component-guidelines.md`](../ui.md)
 
 本文是本项实施期间的临时执行依据，不替代上述长期文档。实现与验证完成后，应按第 15 节将本文移入 `docs/archive/`。
 

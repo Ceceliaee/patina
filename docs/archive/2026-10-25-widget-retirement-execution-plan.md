@@ -38,7 +38,7 @@
 
 交付代码不得保留旧挂件窗口、旧命令别名、旧事件桥接、旧配置读写、双写路径、功能开关或回退到挂件的分支。内部调用方在同一交付范围内全部切换，旧模块和导出实际删除。
 
-旧设置名称可以出现在必要的数据清理 migration、升级 / 恢复测试和历史文档中。这些记录用于处理仍可能进入当前程序的旧数据库，不恢复旧功能。它们的保留和删除服从[架构中的兼容边界](../architecture.md#37-例外必须显式且尽量变薄)及[版本与发布政策](../versioning-and-release-policy.md)，不以字符串零命中为验收标准。
+旧设置名称可以出现在必要的数据清理 migration、升级 / 恢复测试和历史文档中。这些记录用于处理仍可能进入当前程序的旧数据库，不恢复旧功能。它们的保留和删除服从[架构中的兼容边界](../architecture.md#共享与兼容边界)及[版本与发布政策](../release.md)，不以字符串零命中为验收标准。
 
 `Chrome_WidgetWin_1`、第三方程序的 `widget` 后缀、分类别名与历史发布记录不属于 Patina 挂件实现，不得随关键词批量删除。
 
@@ -61,7 +61,7 @@
 
 - [x] P0-01 记录实施开始时的 `git status --short`、当前提交和相关文件差异；将已有 mini 变更与本次退役新增变更区分清楚。
 - [x] P0-02 确认工作区未被其他正在执行的任务并发改写；发生重叠时先协调受影响文件，继续不冲突的工作。
-- [x] P0-03 重读[架构](../architecture.md)、[修复边界](../issue-fix-boundary-guardrails.md)、[工程质量](../engineering-quality.md)、[Quiet Pro](../quiet-pro-component-guidelines.md)和[本地化](../localization.md)的相关条款。
+- [x] P0-03 重读[架构](../architecture.md)、[修复边界](../quality.md#修复与回归证据)、[工程质量](../quality.md)、[Quiet Pro](../ui.md)和[本地化](../localization.md)的相关条款。
 - [x] P0-04 【不适用：本次没有指定或明确映射的 Project item】如果实施任务明确对应现有 Project item，按《GitHub Project 维护指南》读取已登录的 live state；访问失败如实报告，不把私有条目复制到本文件。
 - [x] P0-05 使用隔离测试 profile 和合成数据库准备升级 / 恢复夹具；记录真实数据目录与测试目录的隔离边界。
 - [x] P0-06 根据实际源码建立调用清单，覆盖静态 import、动态 import、Rust module tree、IPC 字符串、capability、事件、生成配置和测试入口。
@@ -233,7 +233,7 @@ P3 完成条件：新装、直接升级、覆盖恢复和合并恢复都收敛�
 - [x] P4-13 删除 `app-shell.css` 中旧挂件选择器、专属动画和 `tokens.css` 中 `--qp-widget-*`；先核对共享主题 / 控件消费者，保留 mini 使用的 Quiet Pro token。
 - [x] P4-14 将 mini 仍用的 `widget.*` 和 `accessibility.widget.*` 消息归到 mini 对应契约，删除仅服务旧界面的消息。资源 bundle 采用 mini 名称，不保留旧 namespace 别名。
 - [x] P4-15 删除 `minimizeToWidget` 相关设置与无障碍消息。同步 `locales/schema.ts`、全部生产 locale、资源装载声明、翻译复核信息和翻译包术语。
-- [x] P4-16 按[本地化流程](../localization.md#4-修改或新增文案)复核文案并运行 `pnpm run i18n:generate`；禁止直接编辑 generated 资源或人工伪造复核 hash。
+- [x] P4-16 按[本地化流程](../localization.md#修改或新增文案)复核文案并运行 `pnpm run i18n:generate`；禁止直接编辑 generated 资源或人工伪造复核 hash。
 - [x] P4-17 删除旧 widget bundle 预算项、入口断言与诊断字段；为存续的 mini 入口保留相应预算，不通过扩大阈值掩盖回归。
 - [x] P4-18 梳理 `test:widget` 当前承载的旧 view-model 与 mini 测试，重命名 / 拆分为反映当前职责的叶子入口，更新默认测试图，确保每个测试仍有唯一可达 owner。
 - [x] P4-19 更新 browser fixture、subscription probe、Tauri runtime、background policy、resource lifecycle、mutation 和架构 / 命名 / intake 检查中的旧接线。保留这些工具对存续行为的独有保护。
@@ -272,7 +272,7 @@ P4 完成条件：旧文件与注册实际消失，生成产物和测试图与�
 
 ### 8.2 自动化执行
 
-命令均从仓库根目录运行，以实施时的 `package.json` 为准。阶段 focused checks 用来定位问题；最终完整门槛仍按[工程质量](../engineering-quality.md#5-默认验证门槛)执行。
+命令均从仓库根目录运行，以实施时的 `package.json` 为准。阶段 focused checks 用来定位问题；最终完整门槛仍按[工程质量](../quality.md#验证范围)执行。
 
 - [x] P5-01 运行受影响的 mini 内容、几何、设置与数据升级 focused tests；新测试通过实际 owner 行为断言，不使用源码字符串搜索冒充行为覆盖。
 - [x] P5-02 检查类型、IPC、架构、Rust 边界、命名、测试治理和对应自测；有规则变更时验证其正反场景，没有放宽目录级例外。
@@ -438,7 +438,7 @@ mini 首次打开从标题栏点击计至实际内容就绪约 565 ms；100 次�
 | `pnpm run check:hotspots`、`pnpm run check:docs`、`git diff --check` | 收尾检查通过；文本按 UTF-8 保存 |
 | `pnpm run release:validate-changelog` | 通过；仅核对 Unreleased 文本，未执行发布 |
 
-长期行为归属 [architecture](../architecture.md)、[engineering quality](../engineering-quality.md)、[Quiet Pro](../quiet-pro-component-guidelines.md) 和 [localization](../localization.md)。当前计划没有未处置的实施项；人工设备及产品签收按第 8.3 节继续由 Ceceliaee 在下一次安装版验收中完成。归档不扩大为生产数据升级、安装包验收或正式发布承诺。
+长期行为归属 [architecture](../architecture.md)、[engineering quality](../quality.md)、[Quiet Pro](../ui.md) 和 [localization](../localization.md)。当前计划没有未处置的实施项；人工设备及产品签收按第 8.3 节继续由 Ceceliaee 在下一次安装版验收中完成。归档不扩大为生产数据升级、安装包验收或正式发布承诺。
 
 ## 11. 归档后的对抗式审查
 

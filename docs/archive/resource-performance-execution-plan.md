@@ -24,12 +24,12 @@ Patina 的必要工作是观察活动、可信地保存时间、按需展示数�
 
 本专项遵守以下约束，具体长期规则由对应母文档拥有：
 
-- [产品原则](../product-principles-and-scope.md)与[优先级](../roadmap-and-prioritization.md)：追踪正确性和数据安全优先。
+- [产品原则](../product.md)与[优先级](../product.md#优先级)：追踪正确性和数据安全优先。
 - [架构](../architecture.md)：平台事实归 platform，计时行为归 engine，持久化归 data，页面读模型归 feature；app 与 command 保持薄编排。
-- [工程质量](../engineering-quality.md)：测量场景、验证层级、性能预算与体验保护。
-- [修复边界](../issue-fix-boundary-guardrails.md)：按实际 owner 和风险选择最轻实现；新共享抽象或跨层端口需要先重新判断边界。
-- [Web Activity 协议](../web-activity-protocol.md)：网页资格、观察有效期、匿名和标题隐私契约。
-- [Quiet Pro](../quiet-pro-component-guidelines.md)：维持窗口、焦点、加载与交互状态。
+- [工程质量](../quality.md)：测量场景、验证层级、性能预算与体验保护。
+- [修复边界](../quality.md#修复与回归证据)：按实际 owner 和风险选择最轻实现；新共享抽象或跨层端口需要先重新判断边界。
+- [Web Activity 协议](../web-sync-protocol.md)：网页资格、观察有效期、匿名和标题隐私契约。
+- [Quiet Pro](../ui.md)：维持窗口、焦点、加载与交互状态。
 
 不预设“CPU 必须降低某个百分比”或“线程必须少于某个数”。先建立受控基线与波动范围，再判断收益。没有测出收益的复杂方案可以被否决，否决本身是有效阶段结果。
 
@@ -99,7 +99,7 @@ Patina 的必要工作是观察活动、可信地保存时间、按需展示数�
 
 - [x] 记录 HEAD、当前差异摘要和依赖锁文件哈希；保存源码文件哈希清单与已有修改，见 13.1。
 - [x] 固定基线源码快照；性能实验不得用仍变化的工作区冒充冻结基线。
-- [ ] 按[运行身份隔离](../architecture.md#69-运行身份与持久化隔离)准备专用数据与 WebView 根目录，使用既有 local release 配置；记录二进制路径、SHA-256、构建模式与配置。
+- [ ] 按[运行身份隔离](../architecture.md#运行身份与持久化隔离)准备专用数据与 WebView 根目录，使用既有 local release 配置；记录二进制路径、SHA-256、构建模式与配置。
 - [ ] 不把 debug 构建接到正式数据库；需要用户数据规模时，通过正式备份/恢复路径准备隔离副本，不直接复制正在写入的 DB 主文件冒充一致快照。
 - [ ] 准备空库、常见规模库、大规模库；记录 schema、表行数、应用和域名数量、标题样本数量、文件大小、read model 状态与 dirty 数量，不把真实 URL、标题或密钥写入报告。
 - [ ] 记录 Windows、WebView2、CPU、内存、电源模式、屏幕缩放、显示器数量、语言、主题以及 Widget / 后台优化设置。

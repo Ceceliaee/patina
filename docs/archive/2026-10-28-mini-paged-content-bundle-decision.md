@@ -6,7 +6,7 @@
 
 ## 决策与适用范围
 
-三页 Mini 是已确认的产品能力，需要新增活动快照解析、刷新、图表和详情交互。History 与 Mini 共用时间线规则后，一部分代码从 History 移到共享惰性 chunk。按[工程质量的预算规则](../engineering-quality.md#52-bundle-长期治理与预算变更)，分别调整这些实际 owner 的局部上限，收紧 History，保持初始和总 JS / CSS 上限及 3% headroom 不变。
+三页 Mini 是已确认的产品能力，需要新增活动快照解析、刷新、图表和详情交互。History 与 Mini 共用时间线规则后，一部分代码从 History 移到共享惰性 chunk。按[工程质量的预算规则](../quality.md#性能与资源生命周期)，分别调整这些实际 owner 的局部上限，收紧 History，保持初始和总 JS / CSS 上限及 3% headroom 不变。
 
 浏览器存储原语仍在初始加载图中，由精确的 `browserStorage` chunk 持有。归属检查继续拒绝将其移到惰性导出对话框；不通过另造一个同名 `index` 小块绕过入口计量。分类规则固定在 `appClassification`，避免新增 gateway 消费者使它与读取仓储自动合包，失去独立预算。
 

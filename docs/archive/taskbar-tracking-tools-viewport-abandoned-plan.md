@@ -803,12 +803,12 @@ src-tauri/src/platform/windows/taskbar_viewport/
 
 仓库内部事实：
 
-- [`docs/product-principles-and-scope.md`](../product-principles-and-scope.md)
-- [`docs/roadmap-and-prioritization.md`](../roadmap-and-prioritization.md)
+- [`docs/product-principles-and-scope.md`](../product.md)
+- [`docs/roadmap-and-prioritization.md`](../product.md#优先级)
 - [`docs/architecture.md`](../architecture.md)
-- [`docs/engineering-quality.md`](../engineering-quality.md)
-- [`docs/quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md)
-- [`docs/issue-fix-boundary-guardrails.md`](../issue-fix-boundary-guardrails.md)
+- [`docs/engineering-quality.md`](../quality.md)
+- [`docs/quiet-pro-component-guidelines.md`](../ui.md)
+- [`docs/issue-fix-boundary-guardrails.md`](../quality.md#修复与回归证据)
 - [`docs/localization.md`](../localization.md)
 - `src-tauri/Cargo.toml` 当前使用 `windows = 0.62.2`，本地 crate 已确认提供所需 Win32、Direct2D、DirectWrite、Controls 与 Accessibility feature。
 

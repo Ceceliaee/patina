@@ -22,7 +22,7 @@ Mini 的任务是在用户继续使用其他应用时，用一次短暂查看回
 | 隐藏页面没有持续渲染价值 | 只刷新可见页所需内容，隐藏时停止内容轮询 | 折叠、切页、关闭后无遗留内容定时器或请求循环 |
 | 分类与时长涉及隐私与数据正确性 | 复用匿名、排除、应用关联、域名归并及有效片段口径 | 不能从悬浮提示、图标、辅助标签泄露已匿名身份 |
 
-产品范围以[产品原则](../product-principles-and-scope.md)为准；优先级以[路线与优先级](../roadmap-and-prioritization.md)为准。这里不增加任务管理、生产力评分、联网看板或新的计时工具。
+产品范围以[产品原则](../product.md)为准；优先级以[路线与优先级](../product.md#优先级)为准。这里不增加任务管理、生产力评分、联网看板或新的计时工具。
 
 ## 2. 已确定的界面合同
 
@@ -162,7 +162,7 @@ categoryShare = categoryDurationMs / sum(all categoryDurationMs)
 ### 阶段 A：建立可比较的基线
 
 - [x] **A1 核对工作区。** 读取当前 `AGENTS.md`，检查差异与相关未跟踪文件；保留已有工作，记录实施基线，不自行建分支、提交或推送。
-- [x] **A2 确认所有者。** 按[架构落点](../architecture.md)、[Quiet Pro](../quiet-pro-component-guidelines.md)和[修复边界](../issue-fix-boundary-guardrails.md)复核本方案中的模块关系；新增共享代码必须有真实消费者。
+- [x] **A2 确认所有者。** 按[架构落点](../architecture.md)、[Quiet Pro](../ui.md)和[修复边界](../quality.md#修复与回归证据)复核本方案中的模块关系；新增共享代码必须有真实消费者。
 - [x] **A3 核对关联工作。** 如果实施对应已有 Project 项，按《GitHub Project 维护指南》读取认证后的实时状态；访问失败如实记录，不用本地旧副本替代，也不把私有内容写入仓库。
 - [x] **A4 固定可复现输入。** 在现有测试 fixture 中准备日累计、最近一小时、空数据、匿名、网站与工具状态；注入可控时钟，使用合成身份，不复制用户实际活动。
 - [x] **A5 记录行为基线。** 用现有 Mini browser / runtime 场景确认贴边、浮动、展开、保持展开、关闭重开和主窗口恢复；新问题与既有失败分开记录。
@@ -299,7 +299,7 @@ categoryShare = categoryDurationMs / sum(all categoryDurationMs)
 
 ## 7. 验证入口与证据记录
 
-命令从仓库根目录执行。版本与脚本由 [.node-version](../../.node-version)、[package.json](../../package.json)、[Rust 工具链](../../rust-toolchain.toml)拥有；执行时重新核对，不把本方案当作另一份命令清单。默认门槛遵循[工程质量](../engineering-quality.md#5-默认验证门槛)。
+命令从仓库根目录执行。版本与脚本由 [.node-version](../../.node-version)、[package.json](../../package.json)、[Rust 工具链](../../rust-toolchain.toml)拥有；执行时重新核对，不把本方案当作另一份命令清单。默认门槛遵循[工程质量](../quality.md#验证范围)。
 
 ### 7.1 编辑与模块反馈
 

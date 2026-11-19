@@ -9,7 +9,7 @@
 本文遵循以下长期约束：
 
 - [`docs/architecture.md`](../architecture.md)
-- [`docs/engineering-quality.md`](../engineering-quality.md)
+- [`docs/engineering-quality.md`](../quality.md)
 - [`docs/archive/tracking-phase-2-sustained-participation-execution-plan.md`](tracking-phase-2-sustained-participation-execution-plan.md)
 - [`docs/archive/tracking-phase-2-gsmtc-primary-fallback-execution-plan.md`](tracking-phase-2-gsmtc-primary-fallback-execution-plan.md)
 

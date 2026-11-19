@@ -37,7 +37,7 @@
 
 不修改系统通知区域配置，不引入服务、快捷键或第二个追踪进程，不改变采样与统计算法，不重构整个设置系统，不修改备份格式或数据库 schema。若发现确实需要后两类变化，先在对应 owner 处重新判断范围与兼容风险。
 
-长期规则分别由[架构](../architecture.md)、[工程质量](../engineering-quality.md)、[稳定期边界守则](../issue-fix-boundary-guardrails.md)、[Quiet Pro](../quiet-pro-component-guidelines.md)和[本地化](../localization.md)拥有。本文完成后归档，不成为第二套长期规则。
+长期规则分别由[架构](../architecture.md)、[工程质量](../quality.md)、[稳定期边界守则](../quality.md#修复与回归证据)、[Quiet Pro](../ui.md)和[本地化](../localization.md)拥有。本文完成后归档，不成为第二套长期规则。
 
 ## 2. 已核实的实现起点
 

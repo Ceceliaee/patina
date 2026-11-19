@@ -7,7 +7,7 @@
 
 优先把“构建、准备数据、证明合约”和“独占 Windows 输入”分开，再减少重复准备和无效等待。先做运行归属、计时和小范围分组试点；真实 Windows 能力仍由真实环境证明。降低总耗时、缩短首次反馈和减少用户不能正常使用桌面的时间是三个不同目标，不能用其中一个冒充另一个。
 
-本方案已归档，只保留执行历史。长期规则仍由[工程质量](../engineering-quality.md#5-默认验证门槛)、[架构](../architecture.md)、[产品原则](../product-principles-and-scope.md)、[发布政策](../versioning-and-release-policy.md)和 [AGENTS.md](../../AGENTS.md#documentation-hygiene) 持有。下文设计保留编写时的决策依据；最终实施结果与结项处置以第 10 节为准。
+本方案已归档，只保留执行历史。长期规则仍由[工程质量](../quality.md#验证范围)、[架构](../architecture.md)、[产品原则](../product.md)、[发布政策](../release.md)和 [AGENTS.md](../../AGENTS.md#documentation-hygiene) 持有。下文设计保留编写时的决策依据；最终实施结果与结项处置以第 10 节为准。
 
 ## 1. 目标与边界
 
@@ -246,7 +246,7 @@ Microsoft 的 Azure Pipelines 指南强调桌面 UI agent 的交互会话要求�
 
 第二步在完整对照通过后，才提出长期路由调整：`test:tauri-runtime-smoke` 保留所有必需功能 / 合约组，统计性长循环由 `perf:desktop-lifecycle` 调用同一实现的资源组；新建明确的“完整桌面验收”聚合入口，单次 prepare 后执行功能与资源的并集、无重复场景。具体命令名在实施时由 package scripts 确认，本文不把拟名称写成现有操作说明。
 
-第二步改变了当前普通 runtime 中 100 次暖展开和 20 次重开的执行位置，必须先在[工程质量](../engineering-quality.md#51-测试分层与稳定性治理)说明保护依据、触发范围、完整验收入口和缺证据时的失败行为，再同步 package / workflow / 操作说明；同一个变更中验收，不允许先从实现里删循环、等以后补规则。当前质量与贡献者操作说明在此阶段前继续生效。
+第二步改变了当前普通 runtime 中 100 次暖展开和 20 次重开的执行位置，必须先在[工程质量](../quality.md#测试分层)说明保护依据、触发范围、完整验收入口和缺证据时的失败行为，再同步 package / workflow / 操作说明；同一个变更中验收，不允许先从实现里删循环、等以后补规则。当前质量与贡献者操作说明在此阶段前继续生效。
 
 拟触发规则如下，只有完成政策步骤后才可启用：
 

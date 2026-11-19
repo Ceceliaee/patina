@@ -5,7 +5,7 @@
 > Last updated: 2026-08-31
 > Execution owner: 获得 Issue #75 实施授权的 Patina 维护者或协作者
 > Related: [Ceceliaee/patina#75](https://github.com/Ceceliaee/patina/issues/75)
-> Long-term owners affected: [`product-principles-and-scope.md`](../product-principles-and-scope.md), [`architecture.md`](../architecture.md), [`engineering-quality.md`](../engineering-quality.md), [`issue-fix-boundary-guardrails.md`](../issue-fix-boundary-guardrails.md)
+> Long-term owners affected: [`product-principles-and-scope.md`](../product.md), [`architecture.md`](../architecture.md), [`engineering-quality.md`](../quality.md), [`issue-fix-boundary-guardrails.md`](../quality.md#修复与回归证据)
 
 ## 0. 文档定位与使用方式
 
