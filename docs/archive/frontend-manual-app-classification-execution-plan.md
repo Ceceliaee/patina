@@ -12,13 +12,13 @@ Document Type: One-off Execution Plan
 
 长期依据：
 
-- [`../product-principles-and-scope.md`](../product-principles-and-scope.md)
-- [`../roadmap-and-prioritization.md`](../roadmap-and-prioritization.md)
+- [`../product-principles-and-scope.md`](../product.md)
+- [`../roadmap-and-prioritization.md`](../product.md#优先级)
 - [`../architecture.md`](../architecture.md)
-- [`../engineering-quality.md`](../engineering-quality.md)
-- [`../issue-fix-boundary-guardrails.md`](../issue-fix-boundary-guardrails.md)
-- [`../quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md)
-- [`../versioning-and-release-policy.md`](../versioning-and-release-policy.md)
+- [`../engineering-quality.md`](../quality.md)
+- [`../issue-fix-boundary-guardrails.md`](../quality.md#修复与回归证据)
+- [`../quiet-pro-component-guidelines.md`](../ui.md)
+- [`../versioning-and-release-policy.md`](../release.md)
 
 ## 2. 背景
 
@@ -609,7 +609,7 @@ Classification feature：
 - 无法明确区分“系统进程排除”与“普通应用业务分类”。
 - 删除整卡重置后发现某项用户设置失去恢复路径，且不能在 classification feature 内补齐。
 
-遇到停止信号后，应重新按 [`../issue-fix-boundary-guardrails.md`](../issue-fix-boundary-guardrails.md) 判断是边界修正还是新的执行单。
+遇到停止信号后，应重新按 [`../issue-fix-boundary-guardrails.md`](../quality.md#修复与回归证据) 判断是边界修正还是新的执行单。
 
 ## 13. 非目标
 

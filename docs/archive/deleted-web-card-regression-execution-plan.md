@@ -27,7 +27,7 @@
 5. 新的真实活动可以使允许记录的域名重新出现；旧缓存、旧配置和升级过程不能制造这种新事实。
 6. 保留域名偏好与“彻底忘记这个网站”是不同的数据操作。本次修复现有“删除网页记录”的行为，不新增彻底清除所有设置的操作。
 
-这些约束沿用[产品范围](../product-principles-and-scope.md)、[架构](../architecture.md)和[稳定期修复规则](../issue-fix-boundary-guardrails.md)。若执行中发现现有管理入口无法同时满足上述行为，应记录具体冲突再决定交互，不直接扩大删除范围。
+这些约束沿用[产品范围](../product.md)、[架构](../architecture.md)和[稳定期修复规则](../quality.md#修复与回归证据)。若执行中发现现有管理入口无法同时满足上述行为，应记录具体冲突再决定交互，不直接扩大删除范围。
 
 ## 2. 修复前事实与证据限度
 
@@ -152,7 +152,7 @@
 
 - [x] 在 [网页关联 browser 场景](../../tests/uiBrowserSmoke/webLinksScenarios.ts) 或其现有 owner 中加入可重复的确认删除 → 卡片/计数刷新 → 再进入页面场景。
 - [x] 验证空列表、只剩排除项、关联主项无历史、长列表、搜索结果和分类切换，避免把管理占位项伪装成真实活动。
-- [x] 按 [Quiet Pro](../quiet-pro-component-guidelines.md) 验证键盘确认、取消、焦点去向、忙碌状态和失败反馈；复用现有组件，不改变视觉方向。
+- [x] 按 [Quiet Pro](../ui.md) 验证键盘确认、取消、焦点去向、忙碌状态和失败反馈；复用现有组件，不改变视觉方向。
 - [x] 检查截图中的网页删除成功提示是否复用了“应用记录”文案；若实际代码证实，按 [本地化规范](../localization.md) 修正文案与生成契约，不手改生成文件。
 - [x] 先运行命中 owner 的 focused tests；在修复完成后按实际 diff 选择默认门禁：前端行为用 `pnpm run check`，Rust 或架构实现边界用 `pnpm run check:full`。
 - [x] 若改变 IPC、SQLite plugin 或真实运行时，追加 `pnpm run test:tauri-runtime-smoke`，使用测试 profile；browser stub 不作为真实落盘证据。

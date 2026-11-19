@@ -8,7 +8,7 @@
 
 该 Node 基准不导入分类页 React 菜单，本次分类性能优化没有改变其计算路径。此前任务修改过共享分类逻辑；尚未做该修改前的配对基线，不能断言问题始于哪个提交。
 
-owner：[dataReadModel.ts](../../src/features/data/services/dataReadModel.ts) 与 [data-read-model-benchmark.ts](../../scripts/perf/data-read-model-benchmark.ts)。预算与验证遵循[工程质量](../engineering-quality.md)。原始失败保留于本机 ignored 的 `artifacts/classification-performance/stable.stderr.log`；独立复测见当前任务工具输出。
+owner：[dataReadModel.ts](../../src/features/data/services/dataReadModel.ts) 与 [data-read-model-benchmark.ts](../../scripts/perf/data-read-model-benchmark.ts)。预算与验证遵循[工程质量](../quality.md)。原始失败保留于本机 ignored 的 `artifacts/classification-performance/stable.stderr.log`；独立复测见当前任务工具输出。
 
 ## 阶段总览
 
@@ -55,7 +55,7 @@ owner：[dataReadModel.ts](../../src/features/data/services/dataReadModel.ts) �
 | [dataReadModel.test.ts](../../tests/dataReadModel.test.ts) | 输出正确性和共享上下文不变量 |
 | [dataCategoryTrendReadModel.test.ts](../../tests/dataCategoryTrendReadModel.test.ts) | 共用聚合的分类趋势消费者 |
 
-遵循[架构](../architecture.md)、[工程质量](../engineering-quality.md)和[修复边界](../issue-fix-boundary-guardrails.md)。默认在已有 owner 局部修复，不预先引入 Worker、数据库预聚合、全局缓存或跨层搬迁。若实际证据需要这些方案，先重新判断边界及验证范围。本项不修改已归档的悬浮窗任务，不授权提交、推送或发布。
+遵循[架构](../architecture.md)、[工程质量](../quality.md)和[修复边界](../quality.md#修复与回归证据)。默认在已有 owner 局部修复，不预先引入 Worker、数据库预聚合、全局缓存或跨层搬迁。若实际证据需要这些方案，先重新判断边界及验证范围。本项不修改已归档的悬浮窗任务，不授权提交、推送或发布。
 
 ## 3. 阶段 A：冻结环境与基线
 
@@ -146,7 +146,7 @@ owner：[dataReadModel.ts](../../src/features/data/services/dataReadModel.ts) �
 - [x] 已处置（实际执行或不适用范围见下文）： 审查发现逐条记录触发条件、影响、修复及验证；未解决项保持未勾选或明确转交具名 owner。
 - [x] 已处置（实际执行或不适用范围见下文）： 填写命令、版本/环境、输入、原始结果位置及对比表，区分已证明收益、未复现和未知根因。
 - [x] 已处置（实际执行或不适用范围见下文）： 清理临时探针，保留 ignored artifacts 中可复核样本；产品不携带诊断接口，仓库不加入真实用户数据。
-- [x] 已处置（实际执行或不适用范围见下文）： 验收后如有用户可感知收益，按[发布规范](../versioning-and-release-policy.md)更新 changelog，不用微基准承诺整页加速。只有契约改变才更新长期 owner。
+- [x] 已处置（实际执行或不适用范围见下文）： 验收后如有用户可感知收益，按[发布规范](../release.md)更新 changelog，不用微基准承诺整页加速。只有契约改变才更新长期 owner。
 - [x] 已处置（实际执行或不适用范围见下文）： 适用工作完成后移至 `docs/archive/`，修复引用并运行 `pnpm run check:docs`。若最终未复现，由用户决定是否据此结束，不能冒充修复。
 
 原方案保留如下处置标注。未复现后没有进入优化阶段，未运行的步骤不冒充已执行。

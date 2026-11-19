@@ -8,7 +8,7 @@
 
 在保留应用管理全部能力和数据语义的前提下，提高同一内容区内可扫读的应用数量。本文依据用户确认的交互方向和当前代码组织执行步骤，不保存私有 Project 的正文、字段、排序或截图。
 
-长期规则由 [Quiet Pro](../quiet-pro-component-guidelines.md)、[架构](../architecture.md)、[工程质量](../engineering-quality.md)、[产品范围](../product-principles-and-scope.md) 和 [本地化](../localization.md) 拥有。本文仅拥有本次实现步骤、验收口径和执行记录。
+长期规则由 [Quiet Pro](../ui.md)、[架构](../architecture.md)、[工程质量](../quality.md)、[产品范围](../product.md) 和 [本地化](../localization.md) 拥有。本文仅拥有本次实现步骤、验收口径和执行记录。
 
 ### 1.1 从基本任务推导布局
 
@@ -85,7 +85,7 @@ Tooltip 补充当前状态和下一步动作，按钮始终有独立可访问名
 | `locales/*/mapping.ts` 及本地化 schema | 当前状态、动作与禁用原因文案；生成产物通过生成器更新 |
 | `tests/uiBrowserSmoke/classificationScenarios.ts` | 应用行、颜色编辑、危险动作和焦点的真实浏览器证据 |
 
-分类快捷筛选已有独立 [执行方案](../archive/classification-category-filter-execution-plan.md)。实施前核对重叠文件 diff，保留其工具栏、筛选状态和新测试。文件名不必因为卡片变紧凑就改名，不新增平行实现或兼容壳。按 [边界 guardrails](../issue-fix-boundary-guardrails.md) 采用有执行单的局部 UI 调整；若需要迁移 owner 或改变数据边界，先重新评估风险。
+分类快捷筛选已有独立 [执行方案](../archive/classification-category-filter-execution-plan.md)。实施前核对重叠文件 diff，保留其工具栏、筛选状态和新测试。文件名不必因为卡片变紧凑就改名，不新增平行实现或兼容壳。按 [边界 guardrails](../quality.md#修复与回归证据) 采用有执行单的局部 UI 调整；若需要迁移 owner 或改变数据边界，先重新评估风险。
 
 ## 5. 可勾选执行步骤
 

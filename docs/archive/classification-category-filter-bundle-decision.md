@@ -28,4 +28,4 @@
 - Destination detail 的减少来自本次拆包，不能把迁出的代码当作删除；保持消费者上限，避免在尚未发布确认稳定前将一次分块结果当作新的长期基线。
 - 最终启动 JS+CSS 191.58 KiB、总产物 360.75 KiB、无主 support 6.25 KiB；相应全局上限均未改变。未发现初始加载图引入分类页；本次不构成需要原生启动性能测量的高风险增长。
 
-生产构建、`npm run check:bundle` 及最终 `npm run check:full` 通过。数字执行 owner 为 [预算脚本](../../scripts/check-bundle-budget.ts)，长期决策规则归 [工程质量](../engineering-quality.md#52-bundle-长期治理与预算变更)。功能及验证记录见 [执行方案](./classification-category-filter-execution-plan.md)。
+生产构建、`npm run check:bundle` 及最终 `npm run check:full` 通过。数字执行 owner 为 [预算脚本](../../scripts/check-bundle-budget.ts)，长期决策规则归 [工程质量](../quality.md#性能与资源生命周期)。功能及验证记录见 [执行方案](./classification-category-filter-execution-plan.md)。

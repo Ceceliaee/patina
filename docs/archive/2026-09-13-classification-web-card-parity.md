@@ -16,7 +16,7 @@
 
 ## 2. 范围和受保护边界
 
-依据：[Quiet Pro](../quiet-pro-component-guidelines.md)、[架构](../architecture.md)、[修复边界](../issue-fix-boundary-guardrails.md)、[工程验证](../engineering-quality.md)。
+依据：[Quiet Pro](../ui.md)、[架构](../architecture.md)、[修复边界](../quality.md#修复与回归证据)、[工程验证](../quality.md)。
 
 - 本次改变网页卡片布局、操作呈现、长文本可读性和键盘交互，并统一应用与网页的卡片实现。
 - 应用现有外观是对齐基准。颜色保持无外框色点；铅笔默认浅色，悬浮及键盘聚焦时加深；域名采用与文件名相同的普通文本样式。

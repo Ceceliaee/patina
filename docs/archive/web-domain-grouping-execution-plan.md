@@ -12,14 +12,14 @@
 
 执行依赖以下长期 owner：
 
-- [产品原则与范围](../product-principles-and-scope.md)：个人、本地优先、可解释的数据控制。
+- [产品原则与范围](../product.md)：个人、本地优先、可解释的数据控制。
 - [架构](../architecture.md)：事实、持久化、IPC 和页面读模型的所有权。
-- [稳定期边界](../issue-fix-boundary-guardrails.md)：跨 owner 执行及重新判断的条件。
-- [工程质量](../engineering-quality.md)：验证层级、风险证据和默认门槛。
-- [Quiet Pro](../quiet-pro-component-guidelines.md)：组件、焦点、状态和样式。
+- [稳定期边界](../quality.md#修复与回归证据)：跨 owner 执行及重新判断的条件。
+- [工程质量](../quality.md)：验证层级、风险证据和默认门槛。
+- [Quiet Pro](../ui.md)：组件、焦点、状态和样式。
 - [本地化](../localization.md)：消息源、生成及翻译复核。
-- [Web Activity 协议](../web-activity-protocol.md)：有效活动、原始 URL 和浏览器会话边界。
-- [版本与发布](../versioning-and-release-policy.md)：受支持恢复、升级与后续发布。
+- [Web Activity 协议](../web-sync-protocol.md)：有效活动、原始 URL 和浏览器会话边界。
+- [版本与发布](../release.md)：受支持恢复、升级与后续发布。
 - 《GitHub Project 维护指南》：执行时读取实时事项及外部操作授权。
 
 用户已授权实施、验证、勾选归档及完成后的对抗式审查。实现从第 5 节开始；每阶段完成后填写第 9 节的实际结果。下文标为“设计选择”的内容是实现基线，具体交付状态以勾选和验证记录为准。若实际代码证明需要改变产品范围，暂停该项并向维护者说明；其余已授权工作继续。

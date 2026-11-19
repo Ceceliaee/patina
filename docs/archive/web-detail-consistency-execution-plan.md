@@ -10,7 +10,7 @@
 
 目标是保留现有 UI 和短间隔合并体验，同时统一有效用时。控件范围调整是：**时间线与详情的最短活动时长均从 1～10 分钟扩展为 0～10 分钟**。不新增总量卡片、隐藏量说明、准确值弹层或“显示全部”按钮。
 
-长期约束见[产品原则](../product-principles-and-scope.md)、[路线与优先级](../roadmap-and-prioritization.md)、[架构](../architecture.md)、[稳定期修复边界](../issue-fix-boundary-guardrails.md)、[工程质量](../engineering-quality.md)、[Quiet Pro](../quiet-pro-component-guidelines.md)、[Web Activity 协议](../web-activity-protocol.md)、[本地化](../localization.md)及《GitHub Project 维护指南》。本文不保存私有 Project 内容、字段、排序、截图或真实浏览记录。
+长期约束见[产品原则](../product.md)、[路线与优先级](../product.md#优先级)、[架构](../architecture.md)、[稳定期修复边界](../quality.md#修复与回归证据)、[工程质量](../quality.md)、[Quiet Pro](../ui.md)、[Web Activity 协议](../web-sync-protocol.md)、[本地化](../localization.md)及《GitHub Project 维护指南》。本文不保存私有 Project 内容、字段、排序、截图或真实浏览记录。
 
 ## 1. 第一性原理
 

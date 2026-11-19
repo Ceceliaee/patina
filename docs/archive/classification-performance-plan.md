@@ -18,7 +18,7 @@
 
 正确结果：关联菜单关闭时不为每张卡片计算全量添加候选；打开时使用最新草稿；搜索、关联和保存保持现有行为，并在相同输入和环境下取得可解释的性能改善。
 
-长期依据：[架构](../architecture.md)、[工程质量](../engineering-quality.md)、[修复边界](../issue-fix-boundary-guardrails.md)、[Quiet Pro](../quiet-pro-component-guidelines.md)。命令与既有预算分别以 [package.json](../../package.json) 和性能脚本为准。
+长期依据：[架构](../architecture.md)、[工程质量](../quality.md)、[修复边界](../quality.md#修复与回归证据)、[Quiet Pro](../ui.md)。命令与既有预算分别以 [package.json](../../package.json) 和性能脚本为准。
 
 ## 2. 已有证据及其边界
 

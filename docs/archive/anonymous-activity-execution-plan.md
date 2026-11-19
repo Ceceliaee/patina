@@ -13,12 +13,12 @@
 
 长期依据：
 
-- [产品原则与范围](../product-principles-and-scope.md)：自动记录、可信统计与本地控制。
+- [产品原则与范围](../product.md)：自动记录、可信统计与本地控制。
 - [架构](../architecture.md)：Rust 写侧、持久化读模型、前端展示与 companion 边界。
-- [工程质量](../engineering-quality.md)：风险验证、升级保护与证据要求。
-- [问题修复边界](../issue-fix-boundary-guardrails.md)：本项采用跨 owner 执行单模式。
-- [Quiet Pro](../quiet-pro-component-guidelines.md)、[本地化](../localization.md)：现有组件和消息契约。
-- [Web Activity 协议](../web-activity-protocol.md)、[版本与发布](../versioning-and-release-policy.md)：网页资格、兼容与备份窗口。
+- [工程质量](../quality.md)：风险验证、升级保护与证据要求。
+- [问题修复边界](../quality.md#修复与回归证据)：本项采用跨 owner 执行单模式。
+- [Quiet Pro](../ui.md)、[本地化](../localization.md)：现有组件和消息契约。
+- [Web Activity 协议](../web-sync-protocol.md)、[版本与发布](../release.md)：网页资格、兼容与备份窗口。
 
 不增加第三种单项模式，不把匿名统计扩成任务计时，不重做页面布局，不匿名化已有具名历史，不补回过去漏记的空白，不改变正常导入来源的既有优先级。
 

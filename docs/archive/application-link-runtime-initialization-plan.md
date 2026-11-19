@@ -23,7 +23,7 @@
 
 本次恢复以下可观察结果：保存 `wechatappex.exe → weixin.exe` 后，完整退出并重启应用，首次打开今日排行即可看到合并后的微信；不需要先进入分类页或重新保存。解除关联后重启，两者恢复独立展示，总有效时长不因关联或解除而变化。
 
-长期行为以[产品原则](../product-principles-and-scope.md)、[架构](../architecture.md)、[修复边界](../issue-fix-boundary-guardrails.md)和[工程质量](../engineering-quality.md)为准。本文只保存本次执行步骤与证据，不建立新的产品规则。
+长期行为以[产品原则](../product.md)、[架构](../architecture.md)、[修复边界](../quality.md#修复与回归证据)和[工程质量](../quality.md)为准。本文只保存本次执行步骤与证据，不建立新的产品规则。
 
 ## 2. 已有证据与尚未确认的事实
 
@@ -143,7 +143,7 @@
 
 ### 阶段 E：验证门槛与改动审查
 
-- [x] 根据最终 diff 重新核对[工程质量验证门槛](../engineering-quality.md#5-默认验证门槛)及 `package.json` 命令图。本任务涉及真实桌面启动契约，执行 `pnpm run check:full`，并追加 `pnpm run test:tauri-runtime-smoke`。
+- [x] 根据最终 diff 重新核对[工程质量验证门槛](../quality.md#验证范围)及 `package.json` 命令图。本任务涉及真实桌面启动契约，执行 `pnpm run check:full`，并追加 `pnpm run test:tauri-runtime-smoke`。
 - [x] 开发中先运行新增回归所属叶子入口和现有关联测试，快速定位失败；默认门槛通过后，只有相关输入变化或新风险出现才重跑失效证据。
 - [x] 使用 `pnpm run perf:stable` 验证启动及读模型刷新敏感路径，关注增加的关系读取及与已有 override 读取的重复工作；如超出已有预算，在当前 owner 内分析，不能另建长期缓存掩盖。
 - [x] 涉及联网依赖审计时，先按本机指令检查工具配置、代理环境变量及 Windows 系统代理，沿用适用配置；记录无法运行项及风险，不将离线结果写成联网新鲜度验证通过。

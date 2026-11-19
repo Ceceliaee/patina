@@ -14,7 +14,7 @@
 
 执行默认路径：在现有数据库结构和协议内修复计时行为。新增持久化关联、migration、协议字段或兼容分支均不是预定交付；只有具体反例证明现有边界不能满足必要契约，才进入第 4.1 节的条件决策。
 
-长期规则参照[产品原则](../product-principles-and-scope.md)、[架构](../architecture.md)、[问题修复边界](../issue-fix-boundary-guardrails.md)、[工程质量](../engineering-quality.md)、[Web Activity 协议](../web-activity-protocol.md)及[版本与发布政策](../versioning-and-release-policy.md)。本文不保存私有 Project 内容，也不替代其当前状态。
+长期规则参照[产品原则](../product.md)、[架构](../architecture.md)、[问题修复边界](../quality.md#修复与回归证据)、[工程质量](../quality.md)、[Web Activity 协议](../web-sync-protocol.md)及[版本与发布政策](../release.md)。本文不保存私有 Project 内容，也不替代其当前状态。
 
 ## 1. 从第一性原理定义目标
 

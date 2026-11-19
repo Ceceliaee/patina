@@ -21,7 +21,7 @@
 
 时长沿用当前有效片段和来源去重规则：同一浏览器来源内按现有区间语义汇总，不用各卡片显示值简单相加替代；独立来源的累计规则不变。任何归属调整前后，按同一时间范围计算的网页总量必须守恒。
 
-长期依据：[产品原则](../product-principles-and-scope.md)、[架构](../architecture.md)、[修复边界](../issue-fix-boundary-guardrails.md)、[工程质量](../engineering-quality.md)、[Quiet Pro](../quiet-pro-component-guidelines.md)、[本地化](../localization.md)、[发布规范](../versioning-and-release-policy.md)。本文保留执行步骤和验收证据；现行契约由上述长期文档拥有。
+长期依据：[产品原则](../product.md)、[架构](../architecture.md)、[修复边界](../quality.md#修复与回归证据)、[工程质量](../quality.md)、[Quiet Pro](../ui.md)、[本地化](../localization.md)、[发布规范](../release.md)。本文保留执行步骤和验收证据；现行契约由上述长期文档拥有。
 
 ## 2. 已确定的范围与尚需收敛的细节
 
