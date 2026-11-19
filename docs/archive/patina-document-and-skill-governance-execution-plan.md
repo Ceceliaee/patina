@@ -38,9 +38,9 @@ Patina 文档需要让未来维护者和执行代理在缺少历史会话的情�
 
 | 编号 | 观察 | 证据 owner | 当前判断 |
 |---|---|---|---|
-| F1 | 长期规范将文档默认验证入口设为 `npm run check`；pre-push skill 将适用条件缩窄为政策或可执行检查变化 | [工程质量第 5 节](../engineering-quality.md)、本地 `patina-pre-push-checks` 的 Validation | 已确认文本不一致；采用哪个门槛仍需由长期 owner 决定 |
+| F1 | 长期规范将文档默认验证入口设为 `npm run check`；pre-push skill 将适用条件缩窄为政策或可执行检查变化 | [工程质量第 5 节](../quality.md)、本地 `patina-pre-push-checks` 的 Validation | 已确认文本不一致；采用哪个门槛仍需由长期 owner 决定 |
 | F2 | pre-push skill 在“提交或远程写入前停止”下列出缺少 push 等授权 | 本地 `patina-pre-push-checks` 的 Stop conditions；[根指令](../../AGENTS.md) | 已确认措辞混合不同动作；尚未证明实际任务一定误停 |
-| F3 | 已要求长期结论更新 active owner，但对“哪些结论值得进入长期文档”和“优先替换还是新增”规定不足 | [根指令的文档生命周期规则](../../AGENTS.md)、[工程质量第 8 节](../engineering-quality.md) | 更新准入需要补全；用户已报告后续任务偏离治理方向 |
+| F3 | 已要求长期结论更新 active owner，但对“哪些结论值得进入长期文档”和“优先替换还是新增”规定不足 | [根指令的文档生命周期规则](../../AGENTS.md)、[工程质量第 8 节](../quality.md) | 更新准入需要补全；用户已报告后续任务偏离治理方向 |
 | F4 | doc-hygiene 的发布验证 eval 将明确请求发布的 prompt 与一律不执行的 expectation 配对 | 本地 `patina-doc-hygiene/evals/evals.json` 的发布验证场景 | 授权语境不足；应拆分授权、凭据和实际操作边界后复评，不直接认定可用生产密钥发布 |
 | R1 | `Always Read First` 标题下同时列出按任务适用的文档 | [根指令](../../AGENTS.md) | 可能扩大读取范围，尚未测量实际成本 |
 | R2 | 多个 skills 使用统一的停止并询问表达 | 本地 skill 的 Stop conditions | 需要逐条分类，不能把所有停止条款都判为错误 |
@@ -80,12 +80,12 @@ Patina 文档需要让未来维护者和执行代理在缺少历史会话的情�
 | 内容 | 目标 owner | 本轮处理方式 |
 |---|---|---|
 | 常驻安全与协作底线、任务读取路由、文档生命周期与更新准入 | [AGENTS.md](../../AGENTS.md) | 保持简明；完整流程留给相应 owner 或本地 workflow |
-| 风险与验证门槛、工程 prose 的完整性要求 | [engineering-quality.md](../engineering-quality.md) | 统一验证争议；不复制 package scripts 执行图 |
-| 产品范围与优先级 | [product-principles-and-scope.md](../product-principles-and-scope.md)、[roadmap-and-prioritization.md](../roadmap-and-prioritization.md) | 保留独立职责；检查重复，不合并不同决策问题 |
+| 风险与验证门槛、工程 prose 的完整性要求 | [engineering-quality.md](../quality.md) | 统一验证争议；不复制 package scripts 执行图 |
+| 产品范围与优先级 | [product-principles-and-scope.md](../product.md)、[roadmap-and-prioritization.md](../product.md#优先级) | 保留独立职责；检查重复，不合并不同决策问题 |
 | 代码职责、数据通道、长期兼容边界 | [architecture.md](../architecture.md) | 保留架构判断所需信息；具体实现细节回到已存在的真实 owner |
-| 修复模式升级与停止判断 | [issue-fix-boundary-guardrails.md](../issue-fix-boundary-guardrails.md) | 区分重新判断与请求授权，供 skills 引用 |
-| UI 与本地化规则 | [quiet-pro-component-guidelines.md](../quiet-pro-component-guidelines.md)、[localization.md](../localization.md) | 分别保留视觉交互和消息契约，避免重复 schema 或实现目录 |
-| 发布、协议与私有 Project 方法 | [versioning-and-release-policy.md](../versioning-and-release-policy.md)、[web-activity-protocol.md](../web-activity-protocol.md)、`github-project-maintenance.md` | 保留完整授权和受支持边界；不复制动态状态 |
+| 修复模式升级与停止判断 | [issue-fix-boundary-guardrails.md](../quality.md#修复与回归证据) | 区分重新判断与请求授权，供 skills 引用 |
+| UI 与本地化规则 | [quiet-pro-component-guidelines.md](../ui.md)、[localization.md](../localization.md) | 分别保留视觉交互和消息契约，避免重复 schema 或实现目录 |
+| 发布、协议与私有 Project 方法 | [versioning-and-release-policy.md](../release.md)、[web-activity-protocol.md](../web-sync-protocol.md)、`github-project-maintenance.md` | 保留完整授权和受支持边界；不复制动态状态 |
 | 可重复的任务方法、触发条件、局部报告要求 | ignored 本地 skills | 对齐长期 owner；细节按需读取 |
 | 本轮进度、候选决策与验证结果 | 本方案 | 完成后归档；未来任务不依赖本文解释规则 |
 

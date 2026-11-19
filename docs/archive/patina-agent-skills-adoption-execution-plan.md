@@ -118,13 +118,13 @@ Patina 是 `1.x` 稳定期、本地优先的桌面数据产品。减少行数、
 
 执行前必须以这些当前文件为准：
 
-- [`../product-principles-and-scope.md`](../product-principles-and-scope.md)：产品范围、核心用户和非目标。
-- [`../roadmap-and-prioritization.md`](../roadmap-and-prioritization.md)：稳定期优先级与 GitHub Project 协作。
-- [`../engineering-quality.md`](../engineering-quality.md)：质量维度、验证入口、外部 PR intake 和归档规则。
+- [`../product-principles-and-scope.md`](../product.md)：产品范围、核心用户和非目标。
+- [`../roadmap-and-prioritization.md`](../product.md#优先级)：稳定期优先级与 GitHub Project 协作。
+- [`../engineering-quality.md`](../quality.md)：质量维度、验证入口、外部 PR intake 和归档规则。
 - [`../architecture.md`](../architecture.md)：前端与 Rust owner、边界、高吸力层和最低验证。
-- [`../issue-fix-boundary-guardrails.md`](../issue-fix-boundary-guardrails.md)：小修、边界判断和执行单分流。
-- [`../quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md)：Quiet Pro、组件 owner、状态与真实浏览器证据。
-- [`../versioning-and-release-policy.md`](../versioning-and-release-policy.md)：版本、提交、push、tag、Release 和发布验证。
+- [`../issue-fix-boundary-guardrails.md`](../quality.md#修复与回归证据)：小修、边界判断和执行单分流。
+- [`../quiet-pro-component-guidelines.md`](../ui.md)：Quiet Pro、组件 owner、状态与真实浏览器证据。
+- [`../versioning-and-release-policy.md`](../release.md)：版本、提交、push、tag、Release 和发布验证。
 - [`../localization.md`](../localization.md)：本地化 owner、生成、审查和导入边界。
 - [`../../AGENTS.md`](../../AGENTS.md)：每次任务必须遵守的常驻协作规则。
 

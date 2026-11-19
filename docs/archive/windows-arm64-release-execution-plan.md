@@ -73,11 +73,11 @@
 | [依赖审计](../../scripts/audit-dependencies.ts) | 两种 target 下审计豁免的不可达性证据 | ARM 上可达的依赖不能继续作为锁文件例外忽略 |
 | [发布测试](../../tests/releasePolicy.test.ts) | 文件系统级资产 fixture、错误输入和工作流顺序保护 | 测试能识别错配，不能只匹配实现中的字符串 |
 | [命令入口](../../package.json) | 必要的命令参数或新增验证入口 | 只在现有入口确实不足时修改 |
-| [发行规范](../versioning-and-release-policy.md) | 长期双架构资产与发布契约 | 当前版本、执行进展留在机器 owner 或本方案 |
+| [发行规范](../release.md) | 长期双架构资产与发布契约 | 当前版本、执行进展留在机器 owner 或本方案 |
 | [README](../../README.md) | 安装包选择与安装入口 | 引用规范，不复制发布内部流程 |
 | [Windows 平台模块](../../src-tauri/src/platform/windows/mod.rs) | 有复现证据时的局部平台适配 | 不预先改业务层或跨层搬迁 |
 
-结构遵循[架构规范](../architecture.md)，风险验证遵循[工程质量](../engineering-quality.md)，实施分流遵循[稳定期边界守则](../issue-fix-boundary-guardrails.md)。本方案不替代这些长期 owner。
+结构遵循[架构规范](../architecture.md)，风险验证遵循[工程质量](../quality.md)，实施分流遵循[稳定期边界守则](../quality.md#修复与回归证据)。本方案不替代这些长期 owner。
 
 ## 4. 目标资产契约
 

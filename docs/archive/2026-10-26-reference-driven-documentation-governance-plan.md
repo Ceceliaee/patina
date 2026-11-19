@@ -48,7 +48,7 @@
 | R6 | [Rethinking skills and prompts for GPT-6 Astra](https://developers.openai.com/blog/rethinking-skills-and-prompts-for-gpt-6-astra) | 按任务展开指引，检查过宽触发和不必要的停顿，提前说明完成条件 |
 | R7 | [GPT-6 指南的 Prompting best practices](https://developers.openai.com/api/docs/guides/latest-model?model=gpt-6-astra#prompting-best-practices) | 检查指令歧义、相互冲突和小改动验证过宽；模型专属建议不转成全仓强制规则 |
 
-这些资料是设计依据；Patina 的事实、操作权限和现行约束仍由用户请求、[AGENTS](../../AGENTS.md)、[工程质量](../engineering-quality.md)及对应 owner 决定。实施者使用已固定来源，无需每个小步骤重新检索上游。
+这些资料是设计依据；Patina 的事实、操作权限和现行约束仍由用户请求、[AGENTS](../../AGENTS.md)、[工程质量](../quality.md)及对应 owner 决定。实施者使用已固定来源，无需每个小步骤重新检索上游。
 
 ### 2.1 采用、适配与不采用
 
@@ -82,16 +82,16 @@
 | [README](../../README.md) / [中文 README](../../README.zh-CN.md) | 用户了解、下载、配置；开发者找到入门入口 | 用户路径在前，开发细节分层；两种语言承诺一致 |
 | [CONTRIBUTING](../../CONTRIBUTING.md) | 贡献者完成开发与提交准备，维护者判断准入 | 操作路径、政策参考、维护者审查分区；减少跨节往返 |
 | [PR 模板](../../.github/pull_request_template.md) | 提交者提供审查所需信息 | 字段与真实 intake parser 对齐，仅采集必要结果，不成为第二套政策 |
-| [产品范围](../product-principles-and-scope.md) | 判断是否属于 Patina | 用户价值、边界、非目标与准入的层次，和优先级规则分工 |
-| [路线与优先级](../roadmap-and-prioritization.md) | 对已接受方向排序 | 原则、风险分层与实际队列分开，避免重复产品范围 |
+| [产品范围](../product.md) | 判断是否属于 Patina | 用户价值、边界、非目标与准入的层次，和优先级规则分工 |
+| [路线与优先级](../product.md#优先级) | 对已接受方向排序 | 原则、风险分层与实际队列分开，避免重复产品范围 |
 | [架构](../architecture.md) | 理解系统并找到实现位置 | 系统图景、核心数据流、owner、关键保证、深入细节的顺序 |
-| [工程质量](../engineering-quality.md) | 选择质量要求与验证 | 原则、风险路由、默认门槛、专项细节、文档规则分区 |
-| [Quiet Pro](../quiet-pro-component-guidelines.md) | 设计与实现一致的界面 | 设计原则、token、共享组件和验证；分离 feature 局部细节 |
+| [工程质量](../quality.md) | 选择质量要求与验证 | 原则、风险路由、默认门槛、专项细节、文档规则分区 |
+| [Quiet Pro](../ui.md) | 设计与实现一致的界面 | 设计原则、token、共享组件和验证；分离 feature 局部细节 |
 | [本地化](../localization.md) | 改文案、加语言、查消息契约 | 日常操作与 schema/runtime 参考分层，保留复核和不可信输入保证 |
-| [发布规范](../versioning-and-release-policy.md) | 查版本规则并准备发布 | 兼容与不可变约束、格式参考、发布操作、证据责任分区 |
-| [修复边界](../issue-fix-boundary-guardrails.md) | 选择小修、边界判断或执行单 | 用实际决策解释升级与停顿，保留必要权限边界 |
+| [发布规范](../release.md) | 查版本规则并准备发布 | 兼容与不可变约束、格式参考、发布操作、证据责任分区 |
+| [修复边界](../quality.md#修复与回归证据) | 选择小修、边界判断或执行单 | 用实际决策解释升级与停顿，保留必要权限边界 |
 | 《GitHub Project 维护指南》 | 维护者管理私有队列 | 维护步骤与字段参考分开，私有 live state 仍只在 Project |
-| [Web Activity 协议](../web-activity-protocol.md) | 接收端与扩展实现者查协议 | 按生命周期和字段组织完整外部契约，保留拒绝与兼容条件 |
+| [Web Activity 协议](../web-sync-protocol.md) | 接收端与扩展实现者查协议 | 按生命周期和字段组织完整外部契约，保留拒绝与兼容条件 |
 | [远程状态桥指南](../examples/remote-status-bridge.md) / [Worker README](../examples/remote-status-bridge-worker/README.md) | 用户配置接收端，开发者部署或排障示例 | 使用、协议和示例部署各有入口，统一重复字段和示例归属 |
 | [主题 fixture 说明](codex-theme-contrast/README.md) | 维护者理解测试数据来源与更新方式 | 保留独立来源、版本摘要和再生成限制，区分历史取样与当前操作 |
 
@@ -338,7 +338,7 @@ CHANGELOG 的发布历史不在本轮重写范围；只检查被本轮移动内�
 | PR 模板或解析规则 | 真实 parser/CLI 的合法与拒绝案例，保持现有 intake 必需字段 | 文档扩展名可以豁免机器语义变化 |
 | 文档 checker 实现 | 精确正反例、真实 CLI、类型/lint，并按工程质量选实际代码门槛 | 自测通过就可取消原有默认门槛 |
 
-验证选择由[工程质量第 5 节](../engineering-quality.md#5-默认验证门槛)持有，实际命令定义由 [package.json](../../package.json)持有。本方案不把 DSH 的 `test:docs`、`doc-sync`、双语 sidecar 或覆盖率要求直接当作 Patina 命令。
+验证选择由[工程质量第 5 节](../quality.md#验证范围)持有，实际命令定义由 [package.json](../../package.json)持有。本方案不把 DSH 的 `test:docs`、`doc-sync`、双语 sidecar 或覆盖率要求直接当作 Patina 命令。
 
 操作事实核验遵循已授权范围。只影响文档的重排不触发产品完整构建、browser、Rust 或原生长测；有实际 checker/模板/命令行为变化时，按新增风险升级，不以“文档治理”为理由规避必要验证。无需为核验远端操作而索取或写入生产凭据。
 

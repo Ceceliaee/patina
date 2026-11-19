@@ -4,7 +4,7 @@
 > Created: 2026-08-30
 > Last updated: 2026-08-30
 > Execution owner: Codex（仅在用户明确授权执行后）
-> Long-term owners affected: [`AGENTS.md`](../../AGENTS.md)、[`docs/architecture.md`](../architecture.md)、[`docs/engineering-quality.md`](../engineering-quality.md)、[`docs/quiet-pro-component-guidelines.md`](../quiet-pro-component-guidelines.md)；这些 owner 本轮原则上不改动
+> Long-term owners affected: [`AGENTS.md`](../../AGENTS.md)、[`docs/architecture.md`](../architecture.md)、[`docs/engineering-quality.md`](../quality.md)、[`docs/quiet-pro-component-guidelines.md`](../ui.md)；这些 owner 本轮原则上不改动
 
 ## 0. 文档定位和使用方式
 
@@ -97,9 +97,9 @@ Skill 的价值不是“目录里有更多知识”，而是让 Codex 在一类�
 
 | 外部 Skill | 已验证问题 | 为什么不能只靠 registry 备注 | 退场后的真实替代路径 |
 |---|---|---|---|
-| `sqlite-database-expert` | Frontmatter 含当前系统校验器不支持的字段；固定 Claude model/persona；正文以 `rusqlite`、`sea-query`、`r2d2` 为核心，而 Patina 使用 `sqlx` 与 `tauri-plugin-sql`；触发边界宽且没有 Patina eval | registry 不参与 Skill 正文加载，无法阻止错误依赖和迁移模式进入建议 | [`architecture.md`](../architecture.md)、[`engineering-quality.md`](../engineering-quality.md)、`src-tauri/Cargo.toml`、`src-tauri/src/data/*` 和当前代码测试 |
+| `sqlite-database-expert` | Frontmatter 含当前系统校验器不支持的字段；固定 Claude model/persona；正文以 `rusqlite`、`sea-query`、`r2d2` 为核心，而 Patina 使用 `sqlx` 与 `tauri-plugin-sql`；触发边界宽且没有 Patina eval | registry 不参与 Skill 正文加载，无法阻止错误依赖和迁移模式进入建议 | [`architecture.md`](../architecture.md)、[`engineering-quality.md`](../quality.md)、`src-tauri/Cargo.toml`、`src-tauri/src/data/*` 和当前代码测试 |
 | `tauri-v2` | Frontmatter 含不受支持的 `version`；正文多次要求所有应用逻辑进入 `lib.rs`，直接违反 Patina thin-entry owner；包含大量通用初始化、安装、移动端和发布建议 | “以 Patina 为准”的 notes 不是运行时约束，宽泛 Tauri 任务仍可能加载冲突正文 | [`AGENTS.md`](../../AGENTS.md)、[`architecture.md`](../architecture.md)、实际 `src-tauri` owner；需要当前 API 事实时再查官方 Tauri 文档 |
-| `vercel-react-best-practices` | 约 230 KB；description 会吸引大量普通 React 任务；大量 Next.js、RSC、SSR、Server Action、`next/dynamic` 内容不适用于 React 19 + Vite；汇编文档有 3 个失效相对链接 | registry 的 “Next.js 不适用” notes 不会裁剪已加载内容，也不能避免过宽隐式触发 | 当前 `package.json`、React/Vite 源码、focused performance evidence 和 [`engineering-quality.md`](../engineering-quality.md) |
+| `vercel-react-best-practices` | 约 230 KB；description 会吸引大量普通 React 任务；大量 Next.js、RSC、SSR、Server Action、`next/dynamic` 内容不适用于 React 19 + Vite；汇编文档有 3 个失效相对链接 | registry 的 “Next.js 不适用” notes 不会裁剪已加载内容，也不能避免过宽隐式触发 | 当前 `package.json`、React/Vite 源码、focused performance evidence 和 [`engineering-quality.md`](../quality.md) |
 | `webapp-testing` | 指示把外部 helper 当黑盒直接运行，违反“执行前检查准确文件”；使用 `shell=True`；Windows 子进程清理不可靠；示例硬编码 Linux 输出路径、固定 sleep 和截图流程；当前能力与 Patina UI/browser 工作流重叠 | notes 只限制媒体落库，不能修复脚本安全、平台和稳定性问题 | `patina-quiet-pro-review`、仓库现有浏览器测试、当前可用浏览器工具；任何 helper 仍须先审查源码 |
 
 ### 2.3 已知评测和元数据债务

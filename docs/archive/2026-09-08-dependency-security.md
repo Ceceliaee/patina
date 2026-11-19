@@ -25,4 +25,4 @@
 - 审计回归测试通过；用升级前的真实 lockfile 运行新解析器，检出 Tauri、Thrift 两项 GitHub 公告，升级后均不命中。
 - 文档检查、changelog 校验和 `git diff --check` 通过。依赖与权限差异已按本地 diff 复核；无应用数据迁移或导出字段变化。
 
-glib 仍在跨平台 lockfile 中，GitHub 可能继续展示该告警；上游升级可移除该依赖后，应同时删除本地精确例外。本次未推送或更改 GitHub 告警状态。现有审计要求见 [工程质量](../engineering-quality.md#5-默认验证门槛)，不在此复制长期政策。
+glib 仍在跨平台 lockfile 中，GitHub 可能继续展示该告警；上游升级可移除该依赖后，应同时删除本地精确例外。本次未推送或更改 GitHub 告警状态。现有审计要求见 [工程质量](../quality.md#验证范围)，不在此复制长期政策。

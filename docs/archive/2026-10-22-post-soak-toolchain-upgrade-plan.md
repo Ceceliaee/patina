@@ -67,7 +67,7 @@
 | Rust 精确版本及组件 | [`rust-toolchain.toml`](../../rust-toolchain.toml) | 独立实验先不修改；采用时才修改 |
 | 应用 Rust 依赖图 | [`src-tauri/Cargo.toml`](../../src-tauri/Cargo.toml)、[`src-tauri/Cargo.lock`](../../src-tauri/Cargo.lock) | 工具链实验不更新依赖 |
 | 版本检查与 CLI 包装 | [`scripts/check-toolchain.ts`](../../scripts/check-toolchain.ts)、[`scripts/tauri-cli.ts`](../../scripts/tauri-cli.ts) | 使用现有契约，不放宽校验 |
-| 验证范围和 CI | [工程质量默认门槛](../engineering-quality.md#5-默认验证门槛)、`package.json`、[验证工作流](../../.github/workflows/verify.yml) | 核对 CI 继续从同一版本来源读取 |
+| 验证范围和 CI | [工程质量默认门槛](../quality.md#验证范围)、`package.json`、[验证工作流](../../.github/workflows/verify.yml) | 核对 CI 继续从同一版本来源读取 |
 
 ## 4. G0：启动门槛
 
@@ -201,7 +201,7 @@ pnpm run tauri build --no-bundle --target x86_64-pc-windows-msvc -- --locked
 - [x] **F-03** 执行 `pnpm run test:tauri-runtime-smoke`。检查测试确实使用临时数据根、独立应用标识和本次 runtime 构建目录；现有 harness 的隔离实现见 [runtime smoke](../../tests/tauriRuntimeSmoke.test.ts)。该入口实际调用项目内 CLI，覆盖真实启动、IPC、数据库与窗口生命周期。
 - [x] **F-04** 核对 runtime 日志中的候选路径、前端文件摘要、阶段结果与退出清理；记录恢复、重启、备份还原等已有断言的实际结果。失败先保留最后状态与原始日志，不自动重跑到成功、不提高超时或削弱断言。
 - [x] **F-05** 核对 x64 与 ARM64 的原生验证安排。现有 CI 已提供两种原生 Rust 宿主；在获准推送后的对应候选 CI 或其他已授权原生环境补齐结果。x64 交叉编译只算编译证据，没有 ARM64 原生结果时明确登记缺口，不声称双架构验收完成。
-- [x] **F-06** 对 CLI 的打包变化登记后续发布验收：两个架构的 NSIS、非管理员安装、保留数据路径、updater 签名及最终资产验证，按 [版本与发布规范](../versioning-and-release-policy.md) 执行。默认不在本地制造或安装正式包；没有发布 / 安装任务时将这些项目具名转交后续发布维护者，并注明尚未验证。
+- [x] **F-06** 对 CLI 的打包变化登记后续发布验收：两个架构的 NSIS、非管理员安装、保留数据路径、updater 签名及最终资产验证，按 [版本与发布规范](../release.md) 执行。默认不在本地制造或安装正式包；没有发布 / 安装任务时将这些项目具名转交后续发布维护者，并注明尚未验证。
 - [x] **F-07** 比较新旧结果，对二进制、依赖图、bundle 或资源指标的变化说明来源。若存在影响记录正确性或后台资源的信号，回到对应 owner 评估是否需要新增持续观察；没有证据时不声称升级后的长期稳定性已被旧长测证明。
 - [x] **F-08** 将隔离目录的已验证最小差异应用回实际工作目录前，重新比较共享文件是否被其他任务改动。逐片段合并并复核输入；只有相关输入仍一致时才能复用隔离验证，否则重跑失效部分。
 - [x] **F-09** 完成本机日常工具的采用：先记录当前安装方式、用户 / 系统 PATH 和回退入口，确认其他任务不再依赖旧工具路径；再按原有安装器或版本管理方式将默认 Node、pnpm 切到已验证的精确版本。Node 若仍由官方 Windows 安装器管理，使用已核验的对应架构安装包并保留原安装选项；pnpm 保持原生程序和一个明确入口。不要把临时证据目录长期加入 PATH，也不要遗留抢先解析的旧 shim。系统权限或其他任务占用使切换无法完成时，明确登记“隔离验证通过，本机默认工具待切换”。

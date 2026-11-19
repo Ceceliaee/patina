@@ -11,7 +11,7 @@
 
 本文面向 Patina 维护者和后续负责实施的 Codex。执行者应从顶部开始按阶段推进，只有当前阶段的退出条件全部满足，才勾选该阶段并进入下一阶段。
 
-本文不是新的长期规则来源。实施完成后，稳定规则必须同步到 [`../versioning-and-release-policy.md`](../versioning-and-release-policy.md)，本文随后移入 `docs/archive/`。
+本文不是新的长期规则来源。实施完成后，稳定规则必须同步到 [`../versioning-and-release-policy.md`](../release.md)，本文随后移入 `docs/archive/`。
 
 ### 1.1 当前状态
 
@@ -170,7 +170,7 @@ resolve tag
 - workflow 没有在最终文件形成后调用 `actions/attest@v4`。
 - GitHub Release 发布前没有独立的 release asset gate。
 - [`../../tests/releasePolicy.test.ts`](../../tests/releasePolicy.test.ts) 只检查当前附件与 job 结构，没有覆盖哈希格式、安装包候选歧义、manifest 对齐或 attestation 顺序。
-- [`../versioning-and-release-policy.md`](../versioning-and-release-policy.md) 仍把 Patina Release 描述为只发布安装包、`latest.json` 与 updater 所需资产，尚未登记 `SHA256SUMS.txt` 和来源证明规则。
+- [`../versioning-and-release-policy.md`](../release.md) 仍把 Patina Release 描述为只发布安装包、`latest.json` 与 updater 所需资产，尚未登记 `SHA256SUMS.txt` 和来源证明规则。
 
 ---
 

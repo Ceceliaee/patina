@@ -41,7 +41,7 @@
 - [9 月 6 日持续治理方案](../archive/patina-document-and-skill-governance-execution-plan.md)：整节复核、允许不改母文档、区分重新判断与请求授权、证据复用。该轮固定 DSH revision 为 `d347e703908d0406b7a7ef80e3a0e594d86b2215`，Astra 指南读取日期为 2026-09-06。
 - [9 月 12 日指令与文档方案](../archive/agent-instructions-and-documentation-execution-plan-2026-09-12.md)：按任务读取、精准触发、明确完成条件和贡献流程适用主体。
 
-这些归档仅用于解释本次修复的历史起点。当前执行规则仍由 [AGENTS.md](../../AGENTS.md)、[工程质量](../engineering-quality.md) 和相应领域文档拥有。不得把本方案或历史 DSH 快照变成未来任务必读材料，也不把外部方法原样复制成 Patina 政策。
+这些归档仅用于解释本次修复的历史起点。当前执行规则仍由 [AGENTS.md](../../AGENTS.md)、[工程质量](../quality.md) 和相应领域文档拥有。不得把本方案或历史 DSH 快照变成未来任务必读材料，也不把外部方法原样复制成 Patina 政策。
 
 ### 2.3 纠正审查时的假设
 
@@ -88,8 +88,8 @@ Git 提交、push、tag、Release、Issue、Project、外部发布与部署分�
 | --- | --- | --- | --- |
 | F1 | 示例声称仅内存保存，实际写入 Durable Object 存储 | [使用指南](../examples/remote-status-bridge.md)、[Worker README](../examples/remote-status-bridge-worker/README.md)、[实现](../examples/remote-status-bridge-worker/src/index.js)、[配置](../examples/remote-status-bridge-worker/wrangler.jsonc) | 修正留存、公开读取与关闭推送边界，不改远端行为 |
 | F2 | 贡献指南中英 PR 示例缺少必需章节及风险字段 | [贡献指南](../../CONTRIBUTING.md)、[真实模板](../../.github/pull_request_template.md)、[准入策略](../../scripts/pr-intake-policy.ts) | 模板只保留一个，指南提供填写说明和链接 |
-| F3 | README 仍描述旧排除统计语义 | [英文](../../README.md)、[中文](../../README.zh-CN.md)、[产品契约](../product-principles-and-scope.md)、[changelog](../../CHANGELOG.md) | 同步匿名统计与标题控制的用户可见含义 |
-| F4 | 验证触发范围在质量、贡献指南和模板中不同 | [工程质量](../engineering-quality.md)、贡献指南 §6、PR 模板 | 明确唯一政策及是否存在外部贡献专属要求，不暗中降低门槛 |
+| F3 | README 仍描述旧排除统计语义 | [英文](../../README.md)、[中文](../../README.zh-CN.md)、[产品契约](../product.md)、[changelog](../../CHANGELOG.md) | 同步匿名统计与标题控制的用户可见含义 |
+| F4 | 验证触发范围在质量、贡献指南和模板中不同 | [工程质量](../quality.md)、贡献指南 §6、PR 模板 | 明确唯一政策及是否存在外部贡献专属要求，不暗中降低门槛 |
 | F5 | 默认扫描遗漏中文 README 与示例，HTML 链接未检查 | [文档检查器](../../scripts/check-doc-governance.ts) | 扩展有用覆盖，按活跃文档与历史材料区分规则 |
 | F6 | 技术栈失效、存储恢复提醒缺少中文对应 | 中英 README、[包配置](../../package.json)、源码 | 修正已失效事实，同步安全相关入口 |
 | F7 | 归档搬迁后引用旧 working 或旧目录 | [旧质量清单](../archive/engineering-quality-stabilization-checklist.md)、[架构方案](../archive/patina-architecture-quality-9-plus-execution-plan.md) | 分类修复链接，不改写历史结论 |
@@ -235,7 +235,7 @@ F8、F9 不能用本轮模拟勾选。如果归档前尚未发生，保留未勾
 
 ## 11. 验证选择与证据管理
 
-具体命令图由 [package.json](../../package.json) 拥有，验证政策由 [工程质量 §5](../engineering-quality.md#5-默认验证门槛) 拥有。下表仅为本方案实际改动的路由，实施时按最终 diff 重评。
+具体命令图由 [package.json](../../package.json) 拥有，验证政策由 [工程质量 §5](../quality.md#验证范围) 拥有。下表仅为本方案实际改动的路由，实施时按最终 diff 重评。
 
 | 实际变化 | 本轮需要的证据 |
 | --- | --- |
