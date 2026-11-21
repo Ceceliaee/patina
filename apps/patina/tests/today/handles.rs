@@ -141,7 +141,7 @@ fn profile(fixture: &Path, out: &Path, uia: bool) -> Result<(), Error> {
         command(tray, 4)?;
         let (worker, hwnd) = wait("visible Today", || {
             children::find(pid, |p| {
-                window(p, w!("Patina UI"))
+                window(p, w!("Patina"))
                     .filter(|&w| unsafe { IsWindowVisible(w).as_bool() })
                     .map(|w| (p, w))
             })
@@ -235,7 +235,7 @@ fn renderer_recovery() -> Result<(), Error> {
     let tray = wait("tray", || window(pid, w!("Patina GPUI")))?;
     let ready = || {
         children::find(pid, |p| {
-            let hwnd = window(p, w!("Patina UI"))?;
+            let hwnd = window(p, w!("Patina"))?;
             named(hwnd, "Top 3").map(|_| (p, hwnd))
         })
     };
@@ -357,13 +357,11 @@ fn mini_window_handles() -> Result<(), Error> {
     let baseline = measure(0)?;
     for cycle in 1..=15 {
         command(tray, 4)?;
-        let today = wait("Today on Mini renderer", || {
-            window(renderer, w!("Patina UI"))
-        })?;
+        let today = wait("Today on Mini renderer", || window(renderer, w!("Patina")))?;
         wait("populated Today", || named(today, "Top 3"))?;
         unsafe { PostMessageW(Some(today), WM_CLOSE, WPARAM(0), LPARAM(0))? };
         wait("back to Mini", || {
-            (window(renderer, w!("Patina UI")).is_none()
+            (window(renderer, w!("Patina")).is_none()
                 && window(renderer, w!("Patina Mini")) == Some(mini))
             .then_some(())
         })?;

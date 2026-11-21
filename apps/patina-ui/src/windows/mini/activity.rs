@@ -8,8 +8,8 @@ pub(super) fn render(data: &Recent, colors: Palette) -> Div {
     let summary = div()
         .flex()
         .justify_between()
-        .items_start()
-        .pt(px(2.))
+        .items_baseline()
+        .pt(px(4.))
         .h(px(36.))
         .border_b_1()
         .border_color(colors.border)
@@ -21,7 +21,6 @@ pub(super) fn render(data: &Recent, colors: Palette) -> Div {
         )
         .child(
             div()
-                .pt(px(2.))
                 .text_color(colors.secondary)
                 .child(data.day_range.clone()),
         );
@@ -29,7 +28,6 @@ pub(super) fn render(data: &Recent, colors: Palette) -> Div {
         .relative()
         .w_full()
         .h(px(12.))
-        .my(px(6.))
         .rounded(px(3.))
         .overflow_hidden()
         .bg(colors.track)
@@ -52,7 +50,7 @@ pub(super) fn render(data: &Recent, colors: Palette) -> Div {
         div()
             .flex()
             .items_center()
-            .gap(px(6.))
+            .gap(px(8.))
             .h(px(32.))
             .child(
                 div()
@@ -74,9 +72,17 @@ pub(super) fn render(data: &Recent, colors: Palette) -> Div {
         .flex()
         .flex_col()
         .px(px(12.))
-        .py(px(10.))
+        .py(px(8.))
         .text_size(px(12.))
         .child(summary)
-        .child(div().mt(px(8.)).child(track).child(axis))
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .mt(px(12.))
+                .gap(px(8.))
+                .child(track)
+                .child(axis),
+        )
         .child(leaders)
 }

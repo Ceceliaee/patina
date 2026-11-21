@@ -1,8 +1,5 @@
 use super::*;
-use gpui_kit::base::{
-    Dialog,
-    input::{InputAccessibility, InputEvent, InputState},
-};
+use gpui_kit::base::input::{InputAccessibility, InputEvent, InputState};
 use patina_activity_model::AppEdit;
 mod menu;
 
@@ -26,19 +23,20 @@ impl Today {
             menu: None,
             detail: (!classify).then(|| {
                 cx.new(|cx| {
+                    let icon = self.snapshot.as_ref().and_then(|s| s.icons.get(key));
                     crate::features::history::History::new(
                         self.client.clone(),
                         chrono::Local::now().timestamp_millis(),
                         Some((
                             key.to_owned(),
-                            self.data
-                                .as_ref()
+                            self.summary()
                                 .and_then(|d| d.apps.iter().find(|a| a.key == key))
                                 .map_or_else(|| key.to_owned(), |a| a.name.clone()),
                         )),
                         window,
                         cx,
                     )
+                    .with_target_icon(icon.map(|icon| (icon.image.clone(), icon.color)))
                 })
             }),
             name: None,
@@ -71,7 +69,7 @@ impl Today {
         }
         let name = input.read(cx).value().trim().to_owned();
         if name.encode_utf16().count() > 80
-            || self.data.as_ref().is_some_and(|data| {
+            || self.summary().is_some_and(|data| {
                 data.apps
                     .iter()
                     .any(|app| app.key == popup.key && app.name == name)
@@ -119,7 +117,8 @@ impl Today {
         cx: &mut Context<Self>,
     ) -> Stateful<Div> {
         let key = app.key.clone();
-        let source_color = app.source_color(self.icons.get(&key).and_then(|icon| icon.color));
+        let app_icon = self.snapshot.as_ref().and_then(|s| s.icons.get(&key));
+        let source_color = app.source_color(app_icon.and_then(|icon| icon.color));
         let bar_color =
             quietpro::activity_display_color(source_color, colors.track, self.client.dark(window));
         let pointer = key.clone();
@@ -141,10 +140,11 @@ impl Today {
         let keyboard_focus = trigger.clone();
         let keyboard_bounds = bounds.clone();
         let share = (100. * app.duration_ms as f64 / total as f64).round();
+        let elapsed = duration(app.duration_ms);
         let face = quietpro::app_icon_frame(rgb(source_color), colors).child(if app.anonymous {
             super::anonymous::icon(rgb(source_color), app.name.clone(), 24.).into_any_element()
         } else {
-            match self.icons.get(&key) {
+            match app_icon {
                 Some(icon) => img(icon.image.clone()).size(px(24.)).into_any_element(),
                 None => glyph(Icon::AppWindow, rgb(source_color))
                     .size(px(24.))
@@ -217,10 +217,20 @@ impl Today {
                     .when_else(
                         app.anonymous,
                         |s| s.child(super::anonymous::name(colors.text)),
-                        |s| s.child(value(app.name.clone()).truncate()),
+                        |s| {
+                            s.child(
+                                label(app.name.clone())
+                                    .text_size(px(14.))
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .truncate(),
+                            )
+                        },
                     )
                     .when(!app.anonymous && app.category == "other", |s| {
-                        s.child(caption(self.label("mapping.quickUnclassified"), colors))
+                        s.child(regular_caption(
+                            self.label("mapping.quickUnclassified"),
+                            colors,
+                        ))
                     }),
             )
             .child(
@@ -229,7 +239,7 @@ impl Today {
                     .flex_col()
                     .items_end()
                     .gap(px(8.))
-                    .child(value(format!("{} · {share}%", duration(app.duration_ms))))
+                    .child(quietpro::duration_share(&elapsed, share, colors).text_size(px(14.)))
                     .child(
                         div()
                             .w(px(100.))
@@ -263,7 +273,7 @@ impl Today {
     ) -> impl IntoElement {
         if let Some(detail) = &popup.detail {
             let view = cx.weak_entity();
-            return crate::features::page_controls::detail_dialog(
+            return crate::features::history::History::detail_dialog(
                 detail.clone(),
                 &popup.focus,
                 self.label("common.close"),
@@ -289,37 +299,34 @@ impl Today {
                     .width,
             )
         };
-        let heading = self.label("mapping.quickRenameTitle");
-        let action_width =
-            measure(&self.label("common.cancel"), 14., FontWeight::SEMIBOLD)
-                + measure(&self.label("mapping.quickSave"), 14., FontWeight::SEMIBOLD).max(
-                    measure(&self.label("common.saving"), 14., FontWeight::SEMIBOLD),
-                )
-                + 2. * (24. + 2.)
-                + 8.;
+        let title = self.label("mapping.quickRenameTitle");
+        let action_width = measure(&self.label("common.cancel"), 14., FontWeight::BOLD)
+            + measure(&self.label("mapping.quickSave"), 14., FontWeight::BOLD).max(measure(
+                &self.label("common.saving"),
+                14.,
+                FontWeight::BOLD,
+            ))
+            + 2. * (24. + 2.)
+            + 8.;
         // Size from the original value, not the live draft, so typing cannot resize the dialog.
         let width = measure(&app.name, 14., FontWeight::NORMAL).ceil() + 24. + 2.;
         let width = width
-            .max(measure(&heading, 16., FontWeight::SEMIBOLD))
+            .max(measure(&title, 16., FontWeight::BOLD))
             .max(action_width)
-            + 2. * (CONTENT_INSET + 1.);
+            + 2. * quietpro::DIALOG_FRAME_INSET;
         let mut content = quietpro::dialog_surface(colors, window.viewport_size())
-            .gap_0()
             .id("quick-rename-dialog")
             .role(Role::Group)
             .accessibility_id("quick-rename-dialog")
             .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
             .w(px((width / 4.).ceil() * 4.))
-            .max_w((window.viewport_size().width - px(48.)).max(px(0.)))
-            .max_h((window.viewport_size().height - px(48.)).max(px(0.)))
             .child(
                 div()
                     .flex()
                     .flex_none()
                     .items_center()
                     .justify_between()
-                    .mb(px(CARD_TITLE_GAP))
-                    .child(title(heading).line_height(px(24.)))
+                    .child(heading(title.clone()).line_height(px(24.)))
                     .when(popup.name.is_none(), |header| {
                         header.child(
                             IconControl::new("dismiss", self.label("common.close"), Icon::X)
@@ -357,12 +364,7 @@ impl Today {
                     )
                 });
             content = content.child(body).child(
-                div()
-                    .flex()
-                    .flex_none()
-                    .mt(px(16.))
-                    .justify_end()
-                    .gap(px(8.))
+                quietpro::dialog_actions()
                     .child(
                         quietpro::text_button(
                             "cancel-name",
@@ -388,23 +390,21 @@ impl Today {
             );
         }
         let view = cx.weak_entity();
-        Dialog::new(cx)
-            .accessibility_label(if popup.name.is_some() {
-                self.label("mapping.quickRenameTitle")
+        quietpro::modal_dialog(
+            if popup.name.is_some() {
+                title
             } else {
                 app.name.clone()
-            })
-            .close_on_backdrop_press(!self.writing)
-            .close_on_escape(!self.writing)
-            .on_ok(|_, _, _| false)
-            .focus_handle(popup.focus.clone())
-            .backdrop(quietpro::dialog_backdrop())
-            .popup(gpui_kit::base::DialogPopup::new().child(content))
-            .on_open_change(move |open, _, win, cx| {
-                if !open {
-                    let _ = view.update(cx, |this, cx| this.dismiss(win, cx));
-                }
-            })
-            .into_any_element()
+            },
+            popup.focus.clone(),
+            content,
+            move |win, cx| {
+                let _ = view.update(cx, |this, cx| this.dismiss(win, cx));
+            },
+            cx,
+        )
+        .close_on_backdrop_press(!self.writing)
+        .close_on_escape(!self.writing)
+        .into_any_element()
     }
 }

@@ -1,6 +1,22 @@
 use super::*;
 
 pub(super) fn check(hwnd: HWND, db: &Path) -> Result<(), Error> {
+    wait("compact duration and percentage", || {
+        named(hwnd, "45m ･ 64%")
+    })?;
+    let count_badge = wait("ranking count badge", || {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentAutomationId()
+                .is_ok_and(|id| id == "today-ranking-count")
+        })
+    })?;
+    unsafe {
+        assert!(count_badge.CurrentName()?.to_string().starts_with("Top "));
+        assert!(!count_badge.CurrentIsKeyboardFocusable()?.as_bool());
+        let bounds = count_badge.CurrentBoundingRectangle()?;
+        let scale = f64::from(GetDpiForWindow(hwnd)) / 96.;
+        assert!((f64::from(bounds.bottom - bounds.top) / scale - 20.).abs() <= 1.);
+    }
     let anonymous = wait("anonymous activity indicator", || {
         controls(hwnd).ok()?.into_iter().find(|el| unsafe {
             el.CurrentControlType().ok() == Some(UIA_ImageControlTypeId)

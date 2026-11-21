@@ -99,7 +99,7 @@ fn top_dock_pin_keyboard_and_reopen() -> Result<(), Error> {
     );
     command(tray, 4)?;
     wait("main and Mini share a renderer", || {
-        window(pid, w!("Patina UI"))
+        window(pid, w!("Patina"))
     })?;
     let toggle = || {
         named(hwnd, "Keep expanded").and_then(|el| unsafe {
@@ -158,7 +158,7 @@ fn top_dock_pin_keyboard_and_reopen() -> Result<(), Error> {
         PostMessageW(Some(hwnd), WM_CLOSE, WPARAM(0), LPARAM(0))?;
     }
     wait("Mini closed while main remains", || {
-        (mini().is_none() && window(pid, w!("Patina UI")).is_some()).then_some(())
+        (mini().is_none() && window(pid, w!("Patina")).is_some()).then_some(())
     })?;
     command(tray, 1)?;
     let (reopened_pid, reopened) = wait("Mini reopens at the same dock", || {

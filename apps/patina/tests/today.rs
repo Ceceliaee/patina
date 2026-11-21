@@ -33,15 +33,18 @@ use windows::{
 fn hourly_keyboard(hwnd: HWND, toggle: &IUIAutomationElement, grouped: bool) -> Result<(), Error> {
     let tooltip = || -> Option<String> {
         controls(hwnd).ok()?.into_iter().find_map(|el| unsafe {
-            (el.CurrentControlType().ok()? == UIA_ToolTipControlTypeId)
-                .then(|| el.CurrentName().ok().map(|s| s.to_string()))
-                .flatten()
+            (el.CurrentControlType().ok()? == UIA_ToolTipControlTypeId
+                && el
+                    .CurrentAutomationId()
+                    .is_ok_and(|id| id == "hour-tooltip"))
+            .then(|| el.CurrentName().ok().map(|s| s.to_string()))
+            .flatten()
         })
     };
     let first_hour = wait("first hour", || {
         controls(hwnd).ok()?.into_iter().find(|el| unsafe {
             el.CurrentName()
-                .is_ok_and(|s| s.to_string().starts_with("00:00 · Active 60m"))
+                .is_ok_and(|s| s.to_string().starts_with("00:00 ･ Active 60m"))
                 && el.CurrentControlType().ok() != Some(UIA_ToolTipControlTypeId)
         })
     })?;
@@ -55,7 +58,7 @@ fn hourly_keyboard(hwnd: HWND, toggle: &IUIAutomationElement, grouped: bool) -> 
     move_to(toggle)?;
     move_to(&first_hour)?;
     wait("pointer opens the hour tooltip", || {
-        tooltip().filter(|s| s.starts_with("00:00 · Active 60m"))
+        tooltip().filter(|s| s.starts_with("00:00 ･ Active 60m"))
     })?;
     move_to(toggle)?;
     wait("pointer leaves the hour", || {
@@ -65,7 +68,7 @@ fn hourly_keyboard(hwnd: HWND, toggle: &IUIAutomationElement, grouped: bool) -> 
         first_hour.SetFocus()?;
     }
     wait("focus opens the first active hour tooltip", || {
-        tooltip().filter(|s| s.starts_with("00:00 · Active 60m"))
+        tooltip().filter(|s| s.starts_with("00:00 ･ Active 60m"))
     })?;
     unsafe {
         toggle.SetFocus()?;
@@ -75,7 +78,7 @@ fn hourly_keyboard(hwnd: HWND, toggle: &IUIAutomationElement, grouped: bool) -> 
     })?;
     key(hwnd, 9)?;
     let first = wait("Tab enters the first active hour", || {
-        tooltip().filter(|s| s.starts_with("00:00 · Active 60m"))
+        tooltip().filter(|s| s.starts_with("00:00 ･ Active 60m"))
     })?;
     if grouped {
         assert!(
@@ -83,7 +86,7 @@ fn hourly_keyboard(hwnd: HWND, toggle: &IUIAutomationElement, grouped: bool) -> 
             "{first}"
         );
     } else {
-        assert_eq!(first, "00:00 · Active 60m");
+        assert_eq!(first, "00:00 ･ Active 60m");
     }
     key(hwnd, 27)?;
     wait("Escape dismisses the tooltip", || {
@@ -91,7 +94,7 @@ fn hourly_keyboard(hwnd: HWND, toggle: &IUIAutomationElement, grouped: bool) -> 
     })?;
     key(hwnd, 9)?;
     let next = wait("Tab continues to the next active hour", || {
-        tooltip().filter(|s| s.starts_with("01:00 · Active 10m"))
+        tooltip().filter(|s| s.starts_with("01:00 ･ Active 10m"))
     })?;
     if grouped {
         assert!(
@@ -103,7 +106,7 @@ fn hourly_keyboard(hwnd: HWND, toggle: &IUIAutomationElement, grouped: bool) -> 
     wait("Tab skips empty hours and leaves the chart", || {
         tooltip().is_none().then_some(())
     })?;
-    let empty = named(hwnd, "02:00 · Active 0m").ok_or("missing empty hour")?;
+    let empty = named(hwnd, "02:00 ･ Active 0s").ok_or("missing empty hour")?;
     assert!(!unsafe { empty.CurrentIsKeyboardFocusable()? }.as_bool());
     Ok(())
 }
@@ -123,11 +126,45 @@ fn app_actions(hwnd: HWND, db: &Path) -> Result<(), Error> {
         trigger.SetFocus()?;
     }
     key(hwnd, 13)?;
-    wait("app detail dialog", || named(hwnd, "Close"))?;
+    wait("app detail dialog named for Studio", || {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentControlType().ok() == Some(UIA_WindowControlTypeId)
+                && el.CurrentName().is_ok_and(|name| name == "Studio")
+        })
+    })?;
     wait("detail activity records", || {
         named(hwnd, "Activity records")
     })?;
-    wait("full-day detail range", || named(hwnd, "00:00 – 24:00"))?;
+    let axis = wait("full-day detail range", || named(hwnd, "00:00 – 24:00"))?;
+    assert_eq!(
+        unsafe { axis.CurrentControlType()? },
+        UIA_GroupControlTypeId
+    );
+    let bounds = |label: &str| -> Result<RECT, Error> {
+        let item = wait(label, || named(hwnd, label))?;
+        Ok(unsafe { item.CurrentBoundingRectangle()? })
+    };
+    let minus = bounds("Decrease by one hour")?;
+    let plus = bounds("Increase by one hour")?;
+    let previous = bounds("Previous day")?;
+    let date = bounds(&chrono::Local::now().date_naive().to_string())?;
+    let next = bounds("Next day")?;
+    let axis_bounds = unsafe { axis.CurrentBoundingRectangle()? };
+    let scale = f64::from(unsafe { GetDpiForWindow(hwnd) }) / 96.;
+    for button in [previous, date, next] {
+        assert!((f64::from(button.bottom - button.top) / scale - 28.).abs() <= 1.);
+        assert!((button.top + button.bottom - minus.top - minus.bottom).abs() <= 2);
+    }
+    assert!((f64::from(plus.right - minus.left) / scale - 240.).abs() <= 1.);
+    assert!(
+        (minus.left - axis_bounds.left).abs() <= 1,
+        "zoom aligns with the start of the timeline"
+    );
+    assert!(
+        (next.right - axis_bounds.right).abs() <= 1,
+        "date navigation aligns with the end of the timeline"
+    );
+    assert!(plus.right <= previous.left);
     key(hwnd, 27)?;
     wait("app detail dismissed", || {
         named(hwnd, "Close").is_none().then_some(())
@@ -136,7 +173,7 @@ fn app_actions(hwnd: HWND, db: &Path) -> Result<(), Error> {
         let mut geometry = Vec::new();
         for element in controls(hwnd)? {
             let name = unsafe { element.CurrentName()? }.to_string();
-            if name.contains(" · Active ")
+            if name.contains(" ･ Active ")
                 && unsafe { element.CurrentControlType()? } != UIA_ToolTipControlTypeId
             {
                 let r = unsafe { element.CurrentBoundingRectangle()? };
@@ -507,7 +544,7 @@ fn main_window_lifecycle() -> Result<(), Error> {
     );
     let pid = child.0.id();
     let tray = wait("tray", || window(pid, w!("Patina GPUI")))?;
-    let main = || children::find(pid, |p| window(p, w!("Patina UI")));
+    let main = || children::find(pid, |p| window(p, w!("Patina")));
     let sample = |state: &str| -> Result<u64, Error> {
         let sampler = repo.join("target/debug/examples/windows-resource-sample.exe");
         let status = Command::new(sampler)
@@ -567,9 +604,9 @@ fn main_window_lifecycle() -> Result<(), Error> {
         "1h 10m",
         "Up 40m from yesterday",
         "Top 3",
-        "45m · 64%",
-        "20m · 29%",
-        "5m · 7%",
+        "45m ･ 64%",
+        "20m ･ 29%",
+        "5m ･ 7%",
     ] {
         assert!(labels.iter().any(|s| s == label), "{label}");
     }
@@ -749,7 +786,7 @@ fn ranked_app_actions() -> Result<(), Error> {
             .spawn()?,
     );
     let hwnd = wait("Today", || {
-        children::find(child.0.id(), |p| window(p, w!("Patina UI")))
+        children::find(child.0.id(), |p| window(p, w!("Patina")))
     })?;
     presentation::check(hwnd, &profile.join("patina.db"))?;
     let toggle = wait("chart toggle", || named(hwnd, "Show by category"))?;
@@ -770,7 +807,7 @@ fn ranked_app_actions() -> Result<(), Error> {
     let (focus, activity, ranking) = (focus?, activity?, ranking?);
     assert!(
         ((focus.bottom - focus.top) - (activity.bottom - activity.top)).abs() <= 1,
-        "overview cards must have equal heights"
+        "overview cards must have equal heights: {focus:?}, {activity:?}"
     );
     assert_eq!(focus.left, activity.left);
     assert_eq!(focus.right, activity.right);

@@ -36,8 +36,7 @@ impl Today {
     fn rename(&mut self, win: &mut Window, cx: &mut Context<Self>) {
         let Some(popup) = &self.popup else { return };
         let Some(app) = self
-            .data
-            .as_ref()
+            .summary()
             .and_then(|d| d.apps.iter().find(|a| a.key == popup.key))
         else {
             return;
@@ -76,11 +75,7 @@ impl Today {
             return;
         }
         let Some(popup) = &self.popup else { return };
-        let Some((id, _)) = self
-            .data
-            .as_ref()
-            .and_then(|d| d.category_choices.get(index))
-        else {
+        let Some((id, _)) = self.summary().and_then(|d| d.category_choices.get(index)) else {
             return;
         };
         let write = self
@@ -95,8 +90,9 @@ impl Today {
         let Some(menu) = &mut popup.menu else { return };
         menu.active = 1;
         menu.category = self
-            .data
+            .snapshot
             .as_ref()
+            .map(|s| &s.summary)
             .filter(|d| !d.category_choices.is_empty())
             .map(|d| {
                 let category = d
@@ -120,7 +116,9 @@ impl Today {
         let key = event.keystroke.key.as_str();
         let category = menu.category;
         let count = if category.is_some() {
-            self.data.as_ref().map_or(0, |d| d.category_choices.len())
+            self.snapshot
+                .as_ref()
+                .map_or(0, |s| s.summary.category_choices.len())
         } else {
             2
         };

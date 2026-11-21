@@ -233,6 +233,7 @@ impl Mini {
     fn header(&self, colors: Palette, cx: &Context<Self>) -> Div {
         let view = cx.weak_entity();
         let pin = IconControl::new("pin", self.text("miniWindow.hold"), Icon::Pin)
+            .with_tooltip()
             .selected_icon(quietpro::FILLED_PIN_ICON)
             .toggle(colors, self.pinned, move |held, _, window, cx| {
                 let _ = view.update(cx, |mini, cx| {
@@ -247,8 +248,11 @@ impl Mini {
             self.text("accessibility.miniWindow.openMainWindow"),
             Icon::SquareArrowOutUpRight,
         )
+        .with_tooltip()
         .action(colors, move |_, _, _| {
-            client.open(patina_desktop_protocol::Target::Today);
+            client.open(patina_desktop_protocol::Target::Main(
+                patina_desktop_protocol::MainTarget::Resume,
+            ));
         });
         let close = IconControl::new("close", self.text("common.close"), Icon::X)
             .action(colors, |_, window, _| window.remove_window());
@@ -306,7 +310,7 @@ impl Mini {
             StatusTone::Failed => "miniWindow.failed",
         });
         gpui_kit::base::Button::new("expand")
-            .accessibility_label(format!("{} · {status}", self.text("miniWindow.open")))
+            .accessibility_label(format!("{} ･ {status}", self.text("miniWindow.open")))
             .size_full()
             .flex()
             .items_center()
@@ -369,7 +373,6 @@ impl Render for Mini {
             .border_1()
             .border_color(colors.border)
             .overflow_hidden()
-            .font_family("Segoe UI")
             .text_size(px(14.))
             .text_color(colors.text)
             .on_hover(cx.listener(|this, _: &bool, win, cx| {
