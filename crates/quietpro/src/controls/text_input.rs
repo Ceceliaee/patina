@@ -18,6 +18,7 @@ pub struct TextInput {
     colors: Palette,
     disabled: bool,
     invalid: bool,
+    fixed_mask: bool,
     actions: Vec<AnyElement>,
 }
 
@@ -29,6 +30,7 @@ impl TextInput {
             colors,
             disabled: false,
             invalid: false,
+            fixed_mask: false,
             actions: Vec::new(),
         }
     }
@@ -43,9 +45,57 @@ impl TextInput {
         self
     }
 
+    pub fn fixed_mask(mut self) -> Self {
+        self.fixed_mask = true;
+        self
+    }
+
     pub fn suffix(mut self, action: impl IntoElement) -> Self {
         self.actions.push(action.into_any_element());
         self
+    }
+
+    fn editor(&self, focused: bool, cx: &App) -> AnyElement {
+        let input = Input::new(&self.input);
+        let state = self.input.read(cx);
+        if !self.fixed_mask || !state.presentation().is_masked() || state.text().len() == 0 {
+            return input.into_any_element();
+        }
+
+        let c = self.colors;
+        let selected = focused && !state.selected_range().is_empty();
+        let color = if self.disabled {
+            c.disabled_text
+        } else {
+            c.secondary
+        };
+        let dots = div()
+            .flex()
+            .items_center()
+            .h(px(16.))
+            .gap(px(4.))
+            .when(selected, |s| s.bg(c.secondary.opacity(0.2)))
+            .children((0..6).map(|_| div().flex_none().size(px(4.)).rounded_full().bg(color)));
+        div()
+            .relative()
+            .size_full()
+            .overflow_hidden()
+            .flex()
+            .items_center()
+            .child(dots)
+            .when(focused && !self.disabled && !selected, |s| {
+                s.child(div().ml(px(1.)).w(px(1.)).h(px(16.)).bg(c.text))
+            })
+            // Keep the native editor on top for pointer, keyboard, IME and accessibility.
+            .child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .size_full()
+                    .opacity(0.)
+                    .child(input),
+            )
+            .into_any_element()
     }
 }
 
@@ -77,6 +127,7 @@ impl RenderOnce for TextInput {
         });
         let outside_focus = focus.clone();
         let has_actions = !self.actions.is_empty();
+        let editor = self.editor(focused, cx);
         div()
             .id(self.id)
             .relative()
@@ -117,7 +168,7 @@ impl RenderOnce for TextInput {
                     .text_size(px(14.))
                     .line_height(px(20.))
                     .font_weight(FontWeight::NORMAL)
-                    .child(Input::new(&self.input)),
+                    .child(editor),
             )
             .when(has_actions, |s| {
                 s.child(

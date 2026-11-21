@@ -1,4 +1,6 @@
-use crate::{Icon, Palette, continuous_corner_layer, glyph, superellipse::superellipse_layer};
+use crate::{
+    ControlSize, Icon, Palette, continuous_corner_layer, glyph, superellipse::superellipse_layer,
+};
 use gpui_kit::{
     base::{Align, POPUP_PRIORITY, Placement, Positioner, Select},
     prelude::*,
@@ -8,22 +10,30 @@ use std::rc::Rc;
 
 struct MenuState {
     focus: FocusHandle,
+    scroll: ScrollHandle,
     bounds: Bounds<Pixels>,
     highlighted: Option<usize>,
 }
 
 type Choose<T> = Rc<dyn Fn(T, &mut Window, &mut App)>;
 const FRAME_RADIUS: f32 = 16.;
+const TRIGGER_INSET: f32 = 1. + super::CONTROL_HORIZONTAL_PADDING;
+const ARROW_SIZE: f32 = 12.;
 
 #[derive(IntoElement)]
 pub struct Dropdown<T: Copy + Eq + 'static> {
     id: ElementId,
     label: SharedString,
-    options: Vec<(T, SharedString)>,
+    options: Rc<[(T, SharedString)]>,
     selected: T,
     colors: Palette,
     disabled: bool,
     icon: Option<(Icon, bool)>,
+    trigger_size: Option<ControlSize>,
+    value_font_size: Pixels,
+    value_font_weight: FontWeight,
+    selected_option_color: Rgba,
+    fit_trigger_to_value: bool,
     choose: Choose<T>,
 }
 
@@ -36,14 +46,37 @@ impl<T: Copy + Eq> Dropdown<T> {
         colors: Palette,
         choose: impl Fn(T, &mut Window, &mut App) + 'static,
     ) -> Self {
+        Self::with_shared_options(
+            id,
+            label,
+            options.into_iter().map(|(v, n)| (v, n.into())).collect(),
+            selected,
+            colors,
+            choose,
+        )
+    }
+
+    pub fn with_shared_options(
+        id: impl Into<ElementId>,
+        label: impl Into<SharedString>,
+        options: Rc<[(T, SharedString)]>,
+        selected: T,
+        colors: Palette,
+        choose: impl Fn(T, &mut Window, &mut App) + 'static,
+    ) -> Self {
         Self {
             id: id.into(),
             label: label.into(),
-            options: options.into_iter().map(|(v, n)| (v, n.into())).collect(),
+            options,
             selected,
             colors,
             disabled: false,
             icon: None,
+            trigger_size: None,
+            value_font_size: px(12.),
+            value_font_weight: FontWeight::BOLD,
+            selected_option_color: colors.secondary,
+            fit_trigger_to_value: false,
             choose: Rc::new(choose),
         }
     }
@@ -54,6 +87,27 @@ impl<T: Copy + Eq> Dropdown<T> {
 
     pub fn icon(mut self, icon: Icon, active: bool) -> Self {
         self.icon = Some((icon, active));
+        self
+    }
+
+    pub fn trigger_size(mut self, size: ControlSize) -> Self {
+        self.trigger_size = Some(size);
+        self
+    }
+
+    pub fn fit_trigger_to_value(mut self) -> Self {
+        self.fit_trigger_to_value = true;
+        self
+    }
+
+    pub fn value_typography(mut self, size: Pixels, weight: FontWeight) -> Self {
+        self.value_font_size = size;
+        self.value_font_weight = weight;
+        self
+    }
+
+    pub fn selected_option_color(mut self, color: Rgba) -> Self {
+        self.selected_option_color = color;
         self
     }
 }
@@ -70,6 +124,9 @@ fn highlight(state: &Entity<MenuState>, index: Option<usize>, cx: &mut App) {
     state.update(cx, |s, cx| {
         if s.highlighted != index {
             s.highlighted = index;
+            if let Some(index) = index {
+                s.scroll.scroll_to_item(index);
+            }
             cx.notify();
         }
     });
@@ -87,6 +144,7 @@ impl<T: Copy + Eq> RenderOnce for Dropdown<T> {
             .detach();
             MenuState {
                 focus,
+                scroll: ScrollHandle::new(),
                 bounds: Bounds::default(),
                 highlighted: None,
             }
@@ -104,23 +162,37 @@ impl<T: Copy + Eq> RenderOnce for Dropdown<T> {
         let c = self.colors;
         let disabled = self.disabled || self.options.is_empty();
         let icon = self.icon;
+        let width_for = |name: &SharedString| {
+            let mut run = win.text_style().to_run(name.len());
+            run.font.weight = self.value_font_weight;
+            win.text_system()
+                .shape_line(name.clone(), self.value_font_size, &[run], None)
+                .width
+                .ceil()
+                + px(2. * TRIGGER_INSET + super::LABEL_ARROW_GAP + ARROW_SIZE)
+        };
         let width = self
             .options
             .iter()
-            .map(|(_, name)| {
-                let mut run = win.text_style().to_run(name.len());
-                run.font.weight = FontWeight::SEMIBOLD;
-                win.text_system()
-                    .shape_line(name.clone(), px(12.), &[run], None)
-                    .width
-                    .ceil()
-            })
+            .map(|(_, name)| width_for(name))
             .max()
-            .unwrap_or_default()
-            + px(2. + 24. + 8. + 12.);
+            .unwrap_or_else(|| width_for(&value));
         let open = active.is_some();
-        let trigger_width = if icon.is_some() { px(28.) } else { width };
-        let trigger_height = if icon.is_some() { px(28.) } else { px(32.) };
+        let trigger_height = self
+            .trigger_size
+            .unwrap_or(if icon.is_some() {
+                ControlSize::Medium
+            } else {
+                ControlSize::Large
+            })
+            .height();
+        let trigger_width = if icon.is_some() {
+            trigger_height
+        } else if self.fit_trigger_to_value {
+            width_for(&value)
+        } else {
+            width
+        };
         let toggle = {
             let state = state.clone();
             move |open: bool, win: &mut Window, cx: &mut App| {
@@ -179,9 +251,9 @@ impl<T: Copy + Eq> RenderOnce for Dropdown<T> {
                 )
                 .child(glyph(icon, ink).size(px(16.)))
         } else {
-            face.justify_between()
-                .px(px(13.))
-                .gap(px(8.))
+            face.when(!self.fit_trigger_to_value, |d| d.justify_between())
+                .px(px(TRIGGER_INSET))
+                .gap(px(super::LABEL_ARROW_GAP))
                 .text_color(
                     if !disabled && focus.is_focused(win) && win.last_input_was_keyboard() {
                         c.secondary
@@ -195,8 +267,8 @@ impl<T: Copy + Eq> RenderOnce for Dropdown<T> {
                     div()
                         .text_color(ink)
                         .whitespace_nowrap()
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_size(px(12.))
+                        .font_weight(self.value_font_weight)
+                        .text_size(self.value_font_size)
                         .child(value.clone()),
                 )
                 .child(
@@ -208,7 +280,7 @@ impl<T: Copy + Eq> RenderOnce for Dropdown<T> {
                         },
                         ink,
                     )
-                    .size(px(12.)),
+                    .size(px(ARROW_SIZE)),
                 )
         };
         let face = face.child(
@@ -229,7 +301,7 @@ impl<T: Copy + Eq> RenderOnce for Dropdown<T> {
             .inset_0()
             .size_full(),
         );
-        let options = Rc::new(self.options);
+        let options = self.options;
         if disabled {
             return Select::new(self.id)
                 .disabled(true)
@@ -296,7 +368,7 @@ impl<T: Copy + Eq> RenderOnce for Dropdown<T> {
             })
             .child(face);
         if let Some(active) = active {
-            let mut menu = div()
+            let menu = div()
                 .id("options")
                 .role(Role::ListBox)
                 .aria_label(self.label)
@@ -318,16 +390,26 @@ impl<T: Copy + Eq> RenderOnce for Dropdown<T> {
                 });
             let selected_fill = c.panel.blend(c.secondary.opacity(0.055));
             let hover_fill = c.panel.blend(c.secondary.opacity(0.03));
+            let selected_ink = self.selected_option_color;
+            let mut list = div()
+                .id("option-scroll")
+                .flex()
+                .flex_col()
+                .max_h(px(28. * 7.).min((win.viewport_size().height - px(26.)).max(px(0.))))
+                .overflow_y_scroll()
+                .track_scroll(&state.read(cx).scroll);
             for (i, (_, name)) in options.iter().enumerate() {
                 let is_selected = selected == Some(i);
                 let pick = choose.clone();
                 let row = div()
                     .id(("option", i))
+                    .group("dropdown-option")
                     .role(Role::ListBoxOption)
                     .aria_label(name.clone())
                     .aria_selected(is_selected)
                     .when(i == active, |d| d.aria_active_descendant())
                     .relative()
+                    .flex_none()
                     .h(px(28.))
                     .px(px(8.))
                     .flex()
@@ -344,7 +426,12 @@ impl<T: Copy + Eq> RenderOnce for Dropdown<T> {
                     .child(continuous_corner_layer(px(12.), px(0.)))
                     .child(
                         div()
-                            .text_color(c.secondary)
+                            .text_color(if is_selected {
+                                selected_ink
+                            } else {
+                                c.secondary
+                            })
+                            .group_hover("dropdown-option", move |s| s.text_color(selected_ink))
                             .font_weight(FontWeight::MEDIUM)
                             .text_size(px(12.))
                             .whitespace_nowrap()
@@ -359,13 +446,13 @@ impl<T: Copy + Eq> RenderOnce for Dropdown<T> {
                         pick(i, win, cx);
                         cx.stop_propagation();
                     });
-                menu = menu.child(row);
+                list = list.child(row);
             }
             root = root.child(
                 deferred(
                     Positioner::side(bounds)
                         .placement(Placement::Bottom)
-                        .align(if icon.is_some() {
+                        .align(if icon.is_some() || self.fit_trigger_to_value {
                             Align::End
                         } else {
                             Align::Start
@@ -373,7 +460,7 @@ impl<T: Copy + Eq> RenderOnce for Dropdown<T> {
                         .offset(px(4.))
                         .margin(px(8.))
                         .occlude()
-                        .child(menu),
+                        .child(menu.child(list)),
                 )
                 .with_priority(POPUP_PRIORITY),
             );

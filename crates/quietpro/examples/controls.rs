@@ -72,6 +72,7 @@ fn main() {
         .with_quit_mode(QuitMode::LastWindowClosed)
         .run(|cx| {
             gpui_kit::init(cx);
+            quietpro::init_fonts(cx).expect("load bundled UI fonts");
             let options = WindowOptions {
                 focus: !std::env::args_os().any(|arg| arg == "--verify"),
                 ..Default::default()

@@ -1,4 +1,4 @@
-use crate::{Palette, continuous_corner_layer, continuous_frame};
+use crate::{ControlSize, Palette, continuous_corner_layer, continuous_frame};
 use gpui_kit::{prelude::*, *};
 
 fn calendar_control_face(c: Palette) -> Rgba {
@@ -17,10 +17,11 @@ pub fn calendar_caption(label: impl Into<SharedString>, c: Palette) -> Div {
         .flex_none()
         .items_center()
         .justify_center()
-        .text_size(px(14.))
+        .text_size(px(12.))
         .line_height(px(20.))
-        .font_weight(FontWeight::SEMIBOLD)
+        .font_weight(FontWeight::MEDIUM)
         .text_color(c.secondary)
+        .hover(move |caption| caption.text_color(c.text))
         .child(label.into())
 }
 
@@ -40,12 +41,13 @@ pub fn calendar_trigger(
     )
 }
 
-pub fn calendar_arrow_frame(control: impl IntoElement, c: Palette) -> Div {
-    continuous_frame(px(28. / 2.), c.border, calendar_control_face(c))
-        .size(px(28.))
+pub fn calendar_arrow_frame(control: gpui_kit::base::Button, size: ControlSize, c: Palette) -> Div {
+    let edge = size.height();
+    continuous_frame(edge * 0.5, c.border, calendar_control_face(c))
+        .size(edge)
         .flex_none()
         .p_0()
-        .child(control)
+        .child(control.size_full())
 }
 
 #[derive(Clone, Copy, Default)]
@@ -88,7 +90,7 @@ pub fn calendar_month_header(
                 .flex_1()
                 .text_center()
                 .text_size(px(14.))
-                .font_weight(FontWeight::SEMIBOLD)
+                .font_weight(FontWeight::BOLD)
                 .child(title),
         )
         .child(next)

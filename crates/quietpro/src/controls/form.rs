@@ -9,6 +9,20 @@ pub fn settings_row() -> Div {
         .flex_none()
 }
 
+pub fn settings_row_label(name: impl Into<SharedString>) -> Stateful<Div> {
+    row_label(name).font_weight(FontWeight::MEDIUM)
+}
+
+pub(super) fn row_label(name: impl Into<SharedString>) -> Stateful<Div> {
+    let name = name.into();
+    div()
+        .id(name.clone())
+        .role(Role::Label)
+        .aria_value(name.clone())
+        .text_size(px(14.))
+        .child(name)
+}
+
 // The frame is painted inside the card. Its edge belongs to the first and last rows.
 pub fn settings_rows_card(c: crate::Palette) -> Div {
     content_card(c.border, c.canvas).py_0()

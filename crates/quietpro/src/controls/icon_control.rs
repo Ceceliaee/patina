@@ -75,6 +75,7 @@ pub struct IconControl {
     disabled: bool,
     focus: Option<FocusHandle>,
     selected_icon: Option<&'static [u8]>,
+    tooltip: bool,
 }
 
 impl IconControl {
@@ -86,11 +87,17 @@ impl IconControl {
             disabled: false,
             focus: None,
             selected_icon: None,
+            tooltip: false,
         }
     }
 
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
+        self
+    }
+
+    pub fn with_tooltip(mut self) -> Self {
+        self.tooltip = true;
         self
     }
 
@@ -106,11 +113,15 @@ impl IconControl {
     }
 
     pub fn button(self, colors: Palette) -> Button {
+        let tip = self.label.clone();
         control(
             Button::new(self.id)
                 .when_some(self.focus, |button, focus| button.track_focus(&focus))
                 .accessibility_label(self.label)
-                .disabled(self.disabled),
+                .disabled(self.disabled)
+                .when(self.tooltip, |button| {
+                    crate::with_text_tooltip(button, tip, colors)
+                }),
             colors,
             self.icon,
             self.disabled,
@@ -122,7 +133,7 @@ impl IconControl {
         self,
         colors: Palette,
         click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
-    ) -> impl IntoElement {
+    ) -> Button {
         self.button(colors).on_click(click)
     }
 
@@ -134,12 +145,16 @@ impl IconControl {
         pressed: bool,
         change: impl Fn(bool, &ClickEvent, &mut Window, &mut App) + 'static,
     ) -> impl IntoElement {
+        let tip = self.label.clone();
         control(
             Toggle::new(self.id)
                 .when_some(self.focus, |button, focus| button.track_focus(&focus))
                 .pressed(pressed)
                 .accessibility_label(self.label)
-                .disabled(self.disabled),
+                .disabled(self.disabled)
+                .when(self.tooltip, |button| {
+                    crate::with_text_tooltip(button, tip, colors)
+                }),
             colors,
             self.icon,
             self.disabled,
@@ -155,13 +170,17 @@ impl IconControl {
         mixed: bool,
         change: impl Fn(bool, &ClickEvent, &mut Window, &mut App) + 'static,
     ) -> impl IntoElement {
+        let tip = self.label.clone();
         control(
             gpui_kit::base::Checkbox::new(self.id)
                 .when_some(self.focus, |button, focus| button.track_focus(&focus))
                 .checked(checked)
                 .indeterminate(mixed)
                 .accessibility_label(self.label)
-                .disabled(self.disabled),
+                .disabled(self.disabled)
+                .when(self.tooltip, |button| {
+                    crate::with_text_tooltip(button, tip, colors)
+                }),
             colors,
             self.icon,
             self.disabled,

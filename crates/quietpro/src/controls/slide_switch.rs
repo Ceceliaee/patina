@@ -1,7 +1,7 @@
 use crate::Palette;
 use gpui_kit::{
-    App, ClickEvent, Div, ElementId, IntoElement, RenderOnce, Rgba, SharedString, Window,
-    base::Switch, div, prelude::*, px,
+    App, ClickEvent, Div, ElementId, FontWeight, IntoElement, RenderOnce, Rgba, SharedString,
+    Window, base::Switch, div, prelude::*, px,
 };
 use std::{cell::Cell, time::Instant};
 
@@ -81,8 +81,9 @@ pub fn slide_switch(
         .items_center()
         .justify_between()
         .gap(px(12.))
+        .font_weight(FontWeight::MEDIUM)
         .when(!enabled, |s| s.opacity(0.52))
-        .child(div().text_color(colors.text).child(label))
+        .child(super::form::row_label(label).text_color(colors.text))
         .child(face)
 }
 

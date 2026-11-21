@@ -21,4 +21,26 @@ pub(super) mod slider;
 pub(super) mod text_button;
 pub(super) mod text_input;
 pub(super) mod timeline;
+pub(super) mod toast;
+pub(super) mod tooltip;
 pub(super) mod trend_chart;
+
+const CONTROL_HORIZONTAL_PADDING: f32 = 12.;
+const LABEL_ARROW_GAP: f32 = 8.;
+
+#[derive(Clone, Copy)]
+pub enum ControlSize {
+    Small,
+    Medium,
+    Large,
+}
+
+impl ControlSize {
+    pub fn height(self) -> gpui_kit::Pixels {
+        gpui_kit::px(match self {
+            Self::Small => 24.,
+            Self::Medium => 28.,
+            Self::Large => 32.,
+        })
+    }
+}

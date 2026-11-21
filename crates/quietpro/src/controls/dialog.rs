@@ -1,8 +1,14 @@
-use crate::{Palette, continuous_corner_layer};
-use gpui_kit::{Div, Pixels, Size, div, prelude::*, px, rgba};
+use crate::{CARD_TITLE_GAP, CONTENT_INSET, Palette, continuous_corner_layer};
+use gpui_kit::{
+    App, Div, FocusHandle, Pixels, SharedString, Size, Window,
+    base::{Dialog, DialogPopup},
+    div,
+    prelude::*,
+    px, rgba,
+};
 
 const RADIUS: f32 = 16.;
-pub const DIALOG_FRAME_INSET: f32 = 17.;
+pub const DIALOG_FRAME_INSET: f32 = CONTENT_INSET + 1.;
 pub const DIALOG_WINDOW_MARGIN: f32 = 24.;
 const MIN_WIDTH: f32 = 280.;
 
@@ -25,13 +31,34 @@ pub fn dialog_surface(colors: Palette, viewport: Size<Pixels>) -> Div {
         .min_h_0()
         .max_h((viewport.height - px(DIALOG_WINDOW_MARGIN * 2.)).max(px(0.)))
         .p(px(DIALOG_FRAME_INSET))
-        .gap(px(12.))
+        .gap(px(CARD_TITLE_GAP))
         .child(layer(0., colors.border))
         .child(layer(1., colors.panel))
 }
 
 pub fn dialog_backdrop() -> Div {
     div().size_full().bg(rgba(0x00000033))
+}
+
+/// A dialog without an explicit confirm handler stays open on the dialog-level Enter action.
+pub fn modal_dialog(
+    title: impl Into<SharedString>,
+    focus: FocusHandle,
+    content: impl IntoElement,
+    dismiss: impl Fn(&mut Window, &mut App) + 'static,
+    cx: &mut App,
+) -> Dialog {
+    Dialog::new(cx)
+        .accessibility_label(title)
+        .focus_handle(focus)
+        .on_ok(|_, _, _| false)
+        .backdrop(dialog_backdrop())
+        .popup(DialogPopup::new().child(content))
+        .on_open_change(move |open, _, win, cx| {
+            if !open {
+                dismiss(win, cx);
+            }
+        })
 }
 
 pub fn dialog_actions() -> Div {
@@ -42,5 +69,4 @@ pub fn dialog_actions() -> Div {
         .justify_end()
         .items_center()
         .gap(px(8.))
-        .mt(px(4.))
 }
