@@ -2,38 +2,9 @@ use super::*;
 use patina_activity_model::{Series, format_text};
 use quietpro::{Icon, Palette};
 
-use super::heatmap::{HeatmapView, heatmap_dates};
-
-pub(super) struct SourceIcon {
-    image: Arc<Image>,
-    color: Option<u32>,
-    source: Option<String>,
-}
+use super::heatmap::HeatmapView;
 
 impl DataPage {
-    pub(super) fn load_trend_heat(&mut self, cx: &mut Context<Self>) {
-        let today = Local::now().date_naive();
-        let kind = self.data_kind;
-        let dates = heatmap_dates(self.trend_heat_year, today);
-        let start = self.trend_heat_year.map_or(dates[0], |year| {
-            NaiveDate::from_ymd_opt(year, 1, 1).unwrap()
-        });
-        let end = self.trend_heat_year.map_or(today, |year| {
-            NaiveDate::from_ymd_opt(year, 12, 31).unwrap().min(today)
-        });
-        let read = self.client.trends(noon(start).zip(noon(end)), kind);
-        self.trend_heat_read = Some(cx.spawn(async move |view, cx| {
-            let result = read.await;
-            let _ = view.update(cx, |this, cx| {
-                match result {
-                    Ok(data) => this.trend_heat = Some((kind, data)),
-                    Err(_) => this.error = true,
-                }
-                this.trend_heat_read = None;
-                cx.notify();
-            });
-        }));
-    }
     fn trend_chart(
         &self,
         days: &[i64],
@@ -41,7 +12,13 @@ impl DataPage {
         c: Palette,
         cx: &mut Context<Self>,
     ) -> quietpro::TrendChart {
-        let monthly = self.ranges[RangeTarget::Destination as usize].monthly();
+        let monthly = self
+            .frame
+            .as_ref()
+            .unwrap()
+            .request
+            .selection
+            .monthly(Local::now().date_naive());
         let mut dates = Vec::<String>::new();
         let mut buckets = Vec::new();
         for day in days {
@@ -114,18 +91,18 @@ impl DataPage {
             },
         );
         let current_year = Local::now().year();
-        let earliest_year = self
-            .trend_heat
-            .as_ref()
-            .and_then(|(_, data)| data.earliest)
+        let frame = self.frame.as_ref().unwrap();
+        let earliest_year = frame
+            .heat
+            .earliest
             .and_then(chrono::DateTime::from_timestamp_millis)
             .map(|date| date.with_timezone(&Local).year())
             .unwrap_or(current_year)
             .min(current_year);
-        let ready = self.trend_heat_read.is_none() && self.trend_heat.is_some();
         let previous = self.trend_heat_year.is_none_or(|year| year > earliest_year);
-        let caption = self
-            .trend_heat_year
+        let caption = frame
+            .request
+            .year
             .map_or_else(|| text(locale, "data.recentYear"), |year| year.to_string());
         let arrow = |next| {
             quietpro::calendar_arrow_frame(
@@ -149,14 +126,11 @@ impl DataPage {
                         Icon::ChevronLeft
                     },
                 )
-                .disabled(
-                    !ready
-                        || if next {
-                            self.trend_heat_year.is_none()
-                        } else {
-                            !previous
-                        },
-                )
+                .disabled(if next {
+                    self.trend_heat_year.is_none()
+                } else {
+                    !previous
+                })
                 .action(
                     c,
                     cx.listener(move |this, _, _, cx| {
@@ -170,10 +144,11 @@ impl DataPage {
                                     .map_or(Local::now().year(), |year| year - 1),
                             )
                         };
-                        this.load_trend_heat(cx);
+                        this.select_view(true, cx);
                         cx.notify();
                     }),
                 ),
+                quietpro::ControlSize::Medium,
                 c,
             )
         };
@@ -181,17 +156,11 @@ impl DataPage {
             .flex()
             .items_center()
             .gap(px(8.))
-            .child(
-                label(title.clone())
-                    .text_size(px(12.))
-                    .text_color(c.secondary)
-                    .flex_1(),
-            )
+            .child(heading(title.clone()).flex_1().min_w_0().truncate())
             .child({
                 let view = cx.weak_entity();
-                quietpro::segmented(
-                    "destination-heat-granularity",
-                    title.clone(),
+                quietpro::segmented_with_medium_labels(
+                    ("destination-heat-granularity", title),
                     std::array::from_fn::<_, 2, _>(|i| {
                         let (weekly, key) =
                             [(false, "data.heatmapDaily"), (true, "data.heatmapWeekly")][i];
@@ -205,6 +174,7 @@ impl DataPage {
                     self.trend_heat_weekly,
                     true,
                     c,
+                    quietpro::ControlSize::Medium,
                     move |weekly, _, cx| {
                         let _ = view.update(cx, |this, cx| {
                             this.trend_heat_weekly = weekly;
@@ -242,76 +212,12 @@ impl DataPage {
                 id: "trend-heatmap",
                 days,
                 totals,
-                year: self.trend_heat_year,
+                year: self.frame.as_ref().unwrap().request.year,
                 weekly: self.trend_heat_weekly,
-                loading: self.trend_heat.is_none(),
             },
             c,
             cx,
         )
-    }
-    pub(super) fn load_icons(&mut self, cx: &mut Context<Self>) {
-        self.icon_read = None;
-        let Some(data) = &self.data else { return };
-        if self.data_kind == SeriesKind::Category {
-            return;
-        }
-        let kind = self.data_kind;
-        let missing: Vec<_> = data
-            .series
-            .iter()
-            .filter(|s| s.key != "activity:anonymous")
-            .filter(|s| self.icons.get(&s.key).is_none_or(|i| i.source != s.favicon))
-            .map(|s| (s.key.clone(), s.favicon.clone()))
-            .collect();
-        if missing.is_empty() {
-            return;
-        }
-        let client = self.client.clone();
-        let renderer = cx.svg_renderer();
-        self.icon_read = Some(cx.spawn(async move |view, cx| {
-            let images = if kind == SeriesKind::App {
-                client
-                    .icons(missing.iter().map(|(key, _)| key.clone()).collect())
-                    .await
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|(key, bytes)| (key, None, bytes))
-                    .collect::<Vec<_>>()
-            } else {
-                let mut images = Vec::new();
-                for (key, source) in missing {
-                    let Some(source) = source else { continue };
-                    let url = source.clone();
-                    let executor = cx.background_executor().clone();
-                    let renderer = renderer.clone();
-                    if let Some(bytes) = cx
-                        .background_executor()
-                        .spawn(async move {
-                            crate::features::source_icon::favicon(&url, &executor, renderer).await
-                        })
-                        .await
-                    {
-                        images.push((key, Some(source), bytes));
-                    }
-                }
-                images
-            };
-            let _ = view.update(cx, |this, cx| {
-                for (key, source, bytes) in images {
-                    this.icons.insert(
-                        key,
-                        SourceIcon {
-                            color: patina_activity_model::icon_color(&bytes),
-                            image: Arc::new(Image::from_bytes(ImageFormat::Png, bytes)),
-                            source,
-                        },
-                    );
-                }
-                this.icon_read = None;
-                cx.notify();
-            });
-        }));
     }
 
     fn choose_series(&mut self, key: &str, multi: bool, cx: &mut Context<Self>) {
@@ -341,6 +247,7 @@ impl DataPage {
         self.detail_trigger = win.focused(cx);
         win.focus(&self.detail_focus, cx);
         self.detail = Some(cx.new(|cx| {
+            let icon = target.as_ref().and_then(|(key, _)| self.icon(key));
             History::new_source(
                 self.client.clone(),
                 day,
@@ -348,6 +255,9 @@ impl DataPage {
                 self.data_kind == SeriesKind::Web,
                 win,
                 cx,
+            )
+            .with_target_icon(
+                icon.and_then(|icon| Some((icon.image.clone(), icon.raster()?.color))),
             )
         }));
         cx.notify();
@@ -357,7 +267,9 @@ impl DataPage {
         let icon = if self.data_kind == SeriesKind::Category {
             None
         } else {
-            self.icons.get(&s.key).and_then(|i| i.color)
+            self.icon(&s.key)
+                .and_then(|i| i.raster())
+                .and_then(|r| r.color)
         };
         quietpro::activity_display_color(s.source_color(icon), c.panel, self.client.dark(win))
     }
@@ -373,15 +285,24 @@ impl DataPage {
             .into_any_element()
         } else if self.data_kind == SeriesKind::Category {
             div()
-                .size(px(12.))
-                .rounded_full()
-                .bg(self.series_color(s, c, win))
+                .size(px(size))
+                .flex_none()
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(
+                    div()
+                        .size(px(quietpro::LEGEND_DOT_SIZE))
+                        .rounded_full()
+                        .bg(self.series_color(s, c, win)),
+                )
                 .into_any_element()
         } else {
             quietpro::unframed_app_icon(
                 SharedString::from(format!("trend-icon-{}", s.key)),
                 s.name.clone(),
-                self.icons.get(&s.key).map(|icon| icon.image.clone()),
+                self.icon(&s.key)
+                    .and_then(|icon| Some(icon.raster()?.pixels.clone())),
                 if self.data_kind == SeriesKind::Web {
                     Icon::Globe
                 } else {
@@ -393,6 +314,124 @@ impl DataPage {
         }
     }
 
+    fn trend_row(
+        &self,
+        index: usize,
+        detail_date: i64,
+        c: Palette,
+        win: &Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement + use<> {
+        let frame = self.frame.as_ref().expect("displayed detail frame");
+        let s = &frame.trend.series[index];
+        let locale = self.client.locale.get();
+        let category = self.data_kind == SeriesKind::Category;
+        let web = self.data_kind == SeriesKind::Web;
+        let all = frame.total;
+        let key = s.key.clone();
+        let target = (s.key.clone(), s.name.clone());
+        let chosen = self.selected.contains(&s.key);
+        let ms = frame.series_totals[index];
+        let accessible = format_text(
+            locale,
+            "destinationDetail.open",
+            &[("name", s.name.clone())],
+        );
+        let view = cx.weak_entity();
+        let a11y_target = target.clone();
+        let openable = !category && s.key != "activity:anonymous";
+        let icon = self.series_icon(s, c, win);
+        let mark = if openable {
+            quietpro::unframed_app_icon_button(
+                SharedString::from(format!("trend-open-{}", s.key)),
+                accessible,
+                c,
+            )
+            .child(icon)
+            .on_a11y_action(AccessibleAction::Click, move |_, win, cx| {
+                let _ = view.update(cx, |this, cx| {
+                    this.open_trend_day(detail_date, Some(a11y_target.clone()), win, cx)
+                });
+            })
+            .on_click(cx.listener(move |this, event: &ClickEvent, win, cx| {
+                cx.stop_propagation();
+                if event.is_keyboard() || event.click_count() == 2 {
+                    this.open_trend_day(detail_date, Some(target.clone()), win, cx);
+                } else {
+                    this.choose_series(&target.0, event.modifiers().control, cx);
+                }
+            }))
+            .into_any_element()
+        } else {
+            icon.into_any_element()
+        };
+        let key_for_keyboard = key.clone();
+        let quick_key = key.clone();
+        let quick_name = s.name.clone();
+        quietpro::object_list_item(
+            SharedString::from(format!("series-{key}")),
+            s.name.clone(),
+            chosen,
+            c,
+        )
+        .when(openable, |row| {
+            row.on_mouse_down(
+                MouseButton::Right,
+                cx.listener(move |this, e: &MouseDownEvent, win, cx| {
+                    cx.stop_propagation();
+                    this.open_quick_edit(
+                        quick_key.clone(),
+                        quick_name.clone(),
+                        web,
+                        e.position,
+                        win,
+                        cx,
+                    );
+                }),
+            )
+        })
+        .child(mark)
+        .child(div().flex_1().min_w_0().text_color(c.text).child(
+            if !category && s.key == "activity:anonymous" {
+                crate::features::page_controls::anonymous::name(c.text).into_any_element()
+            } else {
+                label(s.name.clone())
+                    .truncate()
+                    .text_size(px(12.))
+                    .line_height(px(20.))
+                    .into_any_element()
+            },
+        ))
+        .child(
+            div()
+                .flex_none()
+                .flex()
+                .flex_col()
+                .items_end()
+                .child(
+                    label(duration(ms))
+                        .text_size(px(12.))
+                        .line_height(px(16.))
+                        .text_color(c.text),
+                )
+                .child(
+                    label(format!("{:.0}%", ms as f64 / all.max(1) as f64 * 100.))
+                        .text_size(px(12.))
+                        .line_height(px(16.))
+                        .text_color(c.secondary),
+                ),
+        )
+        .on_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
+            this.choose_series(&key, event.modifiers().control, cx)
+        }))
+        .on_key_down(cx.listener(move |this, event: &KeyDownEvent, _, cx| {
+            if event.keystroke.key == "space" && event.keystroke.modifiers.control {
+                this.choose_series(&key_for_keyboard, true, cx);
+                cx.stop_propagation();
+            }
+        }))
+    }
+
     pub(super) fn trend_panel(
         &mut self,
         modes: impl IntoElement,
@@ -402,7 +441,14 @@ impl DataPage {
     ) -> Stateful<Div> {
         let locale = self.client.locale.get();
         let tr = |k| text(locale, k);
-        let data = self.data.as_ref().unwrap();
+        let frame = self.frame.as_ref().unwrap();
+        let data = &frame.trend;
+        let detail_date = frame
+            .request
+            .selection
+            .bounds(Local::now().date_naive())
+            .and_then(|(_, end)| noon(end))
+            .unwrap_or_else(|| Local::now().timestamp_millis());
         let category = self.data_kind == SeriesKind::Category;
         let web = self.data_kind == SeriesKind::Web;
         let title = tr(if category {
@@ -439,7 +485,7 @@ impl DataPage {
             }
         }
         let total: i64 = totals.iter().sum();
-        let all: i64 = data.series.iter().flat_map(|s| s.daily.values()).sum();
+
         let mut status = div().flex().gap(px(4.)).items_center();
         for s in &selected {
             status = status.child(self.series_icon(s, c, win));
@@ -450,7 +496,7 @@ impl DataPage {
             .role(Role::Group)
             .flex_1()
             .min_h_0()
-            .overflow_y_scroll()
+            .overflow_hidden()
             .flex()
             .flex_col()
             .gap(px(4.));
@@ -462,134 +508,51 @@ impl DataPage {
                     .child(tr("data.selectionLimitReached")),
             );
         }
-        let mut count = 0;
-        for s in &data.series {
-            if !s.name.to_lowercase().contains(&query) && !s.key.to_lowercase().contains(&query) {
-                continue;
-            }
-            count += 1;
-            let key = s.key.clone();
-            let target = (s.key.clone(), s.name.clone());
-            let chosen = self.selected.contains(&s.key);
-            let ms: i64 = s.daily.values().sum();
-            let accessible = format_text(
-                locale,
-                "destinationDetail.open",
-                &[("name", s.name.clone())],
-            );
-            let view = cx.weak_entity();
-            let a11y_target = target.clone();
-            let openable = !category && s.key != "activity:anonymous";
-            let icon = self.series_icon(s, c, win);
-            let mark = if openable {
-                quietpro::unframed_app_icon_button(
-                    SharedString::from(format!("trend-open-{}", s.key)),
-                    accessible,
-                    c,
-                )
-                .child(icon)
-                .on_a11y_action(AccessibleAction::Click, move |_, win, cx| {
-                    let _ = view.update(cx, |this, cx| {
-                        this.open_trend_day(
-                            this.ranges[RangeTarget::Destination as usize]
-                                .range()
-                                .map_or_else(|| Local::now().timestamp_millis(), |(_, end)| end),
-                            Some(a11y_target.clone()),
-                            win,
-                            cx,
-                        )
-                    });
-                })
-                .on_click(cx.listener(move |this, event: &ClickEvent, win, cx| {
-                    cx.stop_propagation();
-                    if event.is_keyboard() || event.click_count() == 2 {
-                        this.open_trend_day(
-                            this.ranges[RangeTarget::Destination as usize]
-                                .range()
-                                .map_or_else(|| Local::now().timestamp_millis(), |(_, end)| end),
-                            Some(target.clone()),
-                            win,
-                            cx,
-                        );
-                    } else {
-                        this.choose_series(&target.0, event.modifiers().control, cx);
-                    }
-                }))
-                .into_any_element()
-            } else {
-                icon.into_any_element()
-            };
-            let key_for_keyboard = key.clone();
-            let quick_key = key.clone();
-            let quick_name = s.name.clone();
+        let matches: Vec<_> = data
+            .series
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| {
+                query.is_empty()
+                    || s.name.to_lowercase().contains(&query)
+                    || s.key.to_lowercase().contains(&query)
+            })
+            .map(|(index, _)| index)
+            .collect();
+        if !matches.is_empty() {
+            let count = matches.len();
             list = list.child(
-                quietpro::object_list_item(
-                    SharedString::from(format!("series-{key}")),
-                    s.name.clone(),
-                    chosen,
-                    c,
+                uniform_list(
+                    "trend-visible-rows",
+                    count,
+                    cx.processor(move |this, range: std::ops::Range<usize>, win, cx| {
+                        range
+                            .map(|row| {
+                                crate::features::page_controls::keyboard_row(
+                                    this.rank_scroll.clone(),
+                                    row,
+                                    count,
+                                    cx,
+                                )
+                                .h(px(44.))
+                                .pb(px(4.))
+                                .child(this.trend_row(
+                                    matches[row],
+                                    detail_date,
+                                    c,
+                                    win,
+                                    cx,
+                                ))
+                            })
+                            .collect()
+                    }),
                 )
-                .when(openable, |row| {
-                    row.on_mouse_down(
-                        MouseButton::Right,
-                        cx.listener(move |this, e: &MouseDownEvent, win, cx| {
-                            cx.stop_propagation();
-                            this.open_quick_edit(
-                                quick_key.clone(),
-                                quick_name.clone(),
-                                web,
-                                e.position,
-                                win,
-                                cx,
-                            );
-                        }),
-                    )
-                })
-                .child(mark)
-                .child(div().flex_1().min_w_0().text_color(c.text).child(
-                    if !category && s.key == "activity:anonymous" {
-                        crate::features::page_controls::anonymous::name(c.text).into_any_element()
-                    } else {
-                        label(s.name.clone())
-                            .truncate()
-                            .text_size(px(12.))
-                            .line_height(px(20.))
-                            .into_any_element()
-                    },
-                ))
-                .child(
-                    div()
-                        .flex_none()
-                        .flex()
-                        .flex_col()
-                        .items_end()
-                        .child(
-                            label(duration(ms))
-                                .text_size(px(12.))
-                                .line_height(px(16.))
-                                .text_color(c.text),
-                        )
-                        .child(
-                            label(format!("{:.0}%", ms as f64 / all.max(1) as f64 * 100.))
-                                .text_size(px(10.))
-                                .line_height(px(12.))
-                                .text_color(c.secondary),
-                        ),
-                )
-                .on_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
-                    this.choose_series(&key, event.modifiers().control, cx)
-                }))
-                .on_key_down(cx.listener(
-                    move |this, event: &KeyDownEvent, _, cx| {
-                        if event.keystroke.key == "space" && event.keystroke.modifiers.control {
-                            this.choose_series(&key_for_keyboard, true, cx);
-                            cx.stop_propagation();
-                        }
-                    },
-                )),
+                .track_scroll(&self.rank_scroll)
+                .flex_1()
+                .min_h_0()
+                .w_full(),
             );
-        }
-        if count == 0 {
+        } else {
             let key = match (category, web, query.is_empty()) {
                 (true, _, true) => "data.categoryTrendEmpty",
                 (true, _, false) => "data.categoryTrendNoMatch",
@@ -608,7 +571,7 @@ impl DataPage {
         let sidebar = div()
             .flex_1()
             .min_w_0()
-            .h_full()
+            .min_h_0()
             .flex()
             .flex_col()
             .gap(px(12.))
@@ -629,11 +592,11 @@ impl DataPage {
                 }))
                 .w_full()
                 .text_right()
-                .text_size(px(10.))
+                .text_size(px(12.))
                 .text_color(c.secondary)
                 .truncate(),
             );
-        let monthly = self.ranges[RangeTarget::Destination as usize].monthly();
+        let monthly = frame.request.selection.monthly(Local::now().date_naive());
         let periods = if monthly {
             data.days
                 .iter()
@@ -682,7 +645,8 @@ impl DataPage {
             })
             .collect();
         let chart = self.trend_chart(&data.days, lines, c, cx);
-        let heat = if let Some((_, heat)) = &self.trend_heat {
+        let heat = {
+            let heat = &frame.heat;
             let mut values = vec![0; heat.days.len()];
             for s in &heat.series {
                 if self.selected.contains(&s.key) {
@@ -692,8 +656,6 @@ impl DataPage {
                 }
             }
             self.trend_heatmap(&heat.days, &values, c, win, cx)
-        } else {
-            self.trend_heatmap(&[], &[], c, win, cx)
         };
         let heat = div()
             .id("destination-heatmap")
@@ -708,49 +670,47 @@ impl DataPage {
             .border_color(c.border)
             .child(self.trend_heat_header(c, cx))
             .child(heat);
+        let main_column = div()
+            .flex_1()
+            .flex_grow(4.)
+            .min_w_0()
+            .flex()
+            .flex_col()
+            .gap(px(CARD_TITLE_GAP))
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .flex_none()
+                    .items_center()
+                    .gap(px(8.))
+                    .child(heading(title))
+                    .child(modes)
+                    .child(status)
+                    .child(div().ml_auto().flex().flex_none().child(self.range_control(
+                        RangeTarget::Destination,
+                        c,
+                        cx,
+                    ))),
+            )
+            .child(metrics)
+            .child(chart)
+            .child(heat);
         content_card(c.border, c.panel)
             .id("data-destination")
             .accessibility_id("data-destination")
             .flex_1()
             .min_h(px(480.))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .mb(px(CARD_TITLE_GAP))
-                    .child(heading(title))
-                    .child(modes)
-                    .child(status)
-                    .child(div().flex_1())
-                    .child(self.range_control(super::RangeTarget::Destination, c, cx)),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_1()
-                    .min_h_0()
-                    .gap(px(16.))
-                    .child(
-                        div()
-                            .flex_1()
-                            .flex_grow(4.)
-                            .min_w_0()
-                            .flex()
-                            .flex_col()
-                            .gap(px(12.))
-                            .child(metrics)
-                            .child(chart)
-                            .child(heat),
-                    )
-                    .child(sidebar),
-            )
+            .flex_row()
+            .gap(px(quietpro::CARD_GAP))
+            .child(main_column)
+            .child(sidebar)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::heatmap_dates;
+    use crate::features::data::heatmap::heatmap_dates;
     use chrono::{Datelike, NaiveDate, Weekday};
     #[test]
     fn heatmap_years_keep_calendar_alignment() {

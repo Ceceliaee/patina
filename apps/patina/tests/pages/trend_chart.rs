@@ -65,7 +65,7 @@ pub(super) fn check(hwnd: HWND) -> Result<(), Error> {
     key(hwnd, 13)?;
     history_day(hwnd, today)?;
     press(hwnd, "Data")?;
-    wait("return to overview", || named(hwnd, "Total · 1h 40m"))?;
+    wait("return to overview", || named(hwnd, "Total ･ 1h 40m"))?;
     let yesterday = today - chrono::Days::new(1);
     let column = wait("yesterday trend column", || {
         by_id(&format!("overview-trend-{yesterday}"))
@@ -73,7 +73,7 @@ pub(super) fn check(hwnd: HWND) -> Result<(), Error> {
     double_click_day(hwnd, &column, yesterday)?;
     press(hwnd, "Data")?;
     let heat = wait("overview heatmap date", || {
-        button(hwnd, &format!("{yesterday} · 30m"))
+        button(hwnd, &format!("{yesterday} ･ 30m"))
     })?;
     heatmap_geometry(hwnd)?;
     unsafe {
@@ -106,7 +106,7 @@ pub(super) fn check(hwnd: HWND) -> Result<(), Error> {
     })?;
     double_click_day(hwnd, &heat, yesterday)?;
     press(hwnd, "Data")?;
-    wait("return to overview", || named(hwnd, "Total · 1h 40m"))?;
+    wait("return to overview", || named(hwnd, "Total ･ 1h 40m"))?;
     Ok(())
 }
 
