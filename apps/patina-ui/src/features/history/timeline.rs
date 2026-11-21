@@ -4,10 +4,52 @@ use quietpro::heading;
 use quietpro::{Icon, IconControl, activity_display_color, value_slider};
 use std::collections::BTreeMap;
 
+pub(super) struct DisplayDay {
+    pub day: HistoryDay,
+    overview: [std::cell::OnceCell<Vec<HistoryRecord>>; 2],
+}
+
+impl From<HistoryDay> for DisplayDay {
+    fn from(day: HistoryDay) -> Self {
+        Self {
+            day,
+            overview: Default::default(),
+        }
+    }
+}
+
+impl std::ops::Deref for DisplayDay {
+    type Target = HistoryDay;
+    fn deref(&self) -> &HistoryDay {
+        &self.day
+    }
+}
+
+impl DisplayDay {
+    pub(super) fn overview(&self, categories: bool) -> &[HistoryRecord] {
+        self.overview[usize::from(categories)].get_or_init(|| dominant_records(self, categories))
+    }
+}
+
+fn timeline_record(record: &HistoryRecord, start: i64, end: i64, duration: i64) -> HistoryRecord {
+    HistoryRecord {
+        key: record.key.clone(),
+        name: record.name.clone(),
+        category: record.category.clone(),
+        start,
+        end,
+        group_duration: duration,
+        group_id: record.group_id,
+        current: record.current,
+        titles: Vec::new(),
+    }
+}
+
 pub(super) struct ZoomState {
     slider: Entity<SliderState>,
     slider_focus: FocusHandle,
     focus: FocusHandle,
+    pub(super) trigger_focus: FocusHandle,
 }
 
 impl ZoomState {
@@ -29,65 +71,72 @@ impl ZoomState {
             slider,
             slider_focus: cx.focus_handle(),
             focus: cx.focus_handle(),
+            trigger_focus: cx.focus_handle(),
         }
     }
 }
 
-struct Lane<'a> {
-    key: &'a str,
-    name: &'a str,
+struct Lane {
+    key: String,
+    name: String,
     duration: i64,
     records: Vec<HistoryRecord>,
 }
 
-fn lanes(day: &HistoryDay, left: i64, right: i64, categories: bool) -> Vec<Lane<'_>> {
-    let mut lanes = BTreeMap::<&str, Lane<'_>>::new();
+fn lanes(day: &HistoryDay, left: i64, right: i64, categories: bool) -> Vec<Lane> {
+    let mut by_key = BTreeMap::<&str, Vec<&HistoryRecord>>::new();
     for r in &day.records {
-        let duration = r.end.min(right) - r.start.max(left);
-        if duration <= 0 {
+        if r.end.min(right) <= r.start.max(left) {
             continue;
         }
-        let (key, name) = if categories {
-            (r.category.as_str(), r.category.as_str())
-        } else {
-            (r.key.as_str(), r.name.as_str())
-        };
-        let lane = lanes.entry(key).or_insert_with(|| Lane {
-            key,
-            name,
-            duration: 0,
-            records: Vec::new(),
-        });
-        lane.duration += duration;
-        let mut clipped = r.clone();
-        clipped.start = r.start.max(left);
-        clipped.end = r.end.min(right);
-        clipped.group_duration = duration;
-        lane.records.push(clipped);
+        let key = if categories { &r.category } else { &r.key };
+        by_key.entry(key).or_default().push(r);
     }
-    let mut lanes: Vec<_> = lanes.into_values().collect();
-    for lane in &mut lanes {
-        lane.records.sort_by_key(|r| (r.start, r.end));
-        let mut merged: Vec<HistoryRecord> = Vec::new();
-        for record in lane.records.drain(..) {
-            if let Some(previous) = merged.last_mut()
-                && record.start >= previous.end
-                && record.start - previous.end <= day.timeline_merge_gap_ms.max(0)
-            {
-                previous.end = record.end;
-                previous.group_duration += record.group_duration;
-            } else {
-                merged.push(record);
+    let mut lanes: Vec<_> = by_key
+        .into_iter()
+        .map(|(key, fragments)| {
+            let name = if categories { key } else { &fragments[0].name }.to_owned();
+            let records = merged_lane_records(fragments, (left, right), day.timeline_merge_gap_ms);
+            Lane {
+                key: key.to_owned(),
+                name,
+                duration: records.iter().map(|r| r.group_duration).sum(),
+                records,
             }
-        }
-        lane.records = merged;
-    }
-    lanes.sort_by(|a, b| b.duration.cmp(&a.duration).then_with(|| a.key.cmp(b.key)));
+        })
+        .collect();
+    lanes.sort_by(|a, b| b.duration.cmp(&a.duration).then_with(|| a.key.cmp(&b.key)));
     lanes
 }
 
+pub(super) fn merged_lane_records(
+    mut fragments: Vec<&HistoryRecord>,
+    (left, right): (i64, i64),
+    merge_gap_ms: i64,
+) -> Vec<HistoryRecord> {
+    fragments.sort_by_key(|r| (r.start.max(left), r.end.min(right)));
+    let mut merged: Vec<HistoryRecord> = Vec::new();
+    for record in fragments {
+        let start = record.start.max(left);
+        let end = record.end.min(right);
+        if end <= start {
+            continue;
+        }
+        if let Some(previous) = merged.last_mut()
+            && start >= previous.end
+            && start - previous.end <= merge_gap_ms.max(0)
+        {
+            previous.end = end;
+            previous.group_duration += end - start;
+        } else {
+            merged.push(timeline_record(record, start, end, end - start));
+        }
+    }
+    merged
+}
+
 pub(super) fn dominant_records(day: &HistoryDay, categories: bool) -> Vec<HistoryRecord> {
-    let mut buckets = BTreeMap::<i64, BTreeMap<String, (i64, HistoryRecord)>>::new();
+    let mut buckets = BTreeMap::<i64, BTreeMap<&str, (i64, &HistoryRecord)>>::new();
     let mut bounds = BTreeMap::<i64, (i64, i64)>::new();
     for record in &day.records {
         let mut minute = day.start + (record.start.max(day.start) - day.start) / 60_000 * 60_000;
@@ -105,50 +154,49 @@ pub(super) fn dominant_records(day: &HistoryDay, categories: bool) -> Vec<Histor
             let item = buckets
                 .entry(minute)
                 .or_default()
-                .entry(key.clone())
-                .or_insert_with(|| (0, record.clone()));
+                .entry(key.as_str())
+                .or_insert((0, record));
             item.0 += (end - start).max(0);
             if record.start < item.1.start {
-                item.1 = record.clone();
+                item.1 = record;
             }
             minute += 60_000;
         }
     }
     let mut result: Vec<HistoryRecord> = Vec::new();
     for (minute, items) in buckets {
-        let Some((_, (duration, mut record))) = items.into_iter().min_by(|(ka, a), (kb, b)| {
+        let Some((_, (duration, source))) = items.into_iter().min_by(|(ka, a), (kb, b)| {
             b.0.cmp(&a.0)
                 .then(a.1.start.cmp(&b.1.start))
                 .then(ka.cmp(kb))
         }) else {
             continue;
         };
-        record.group_duration = duration;
         let (start, end) = bounds[&minute];
-        record.start = if start - minute <= 1000 {
+        let start = if start - minute <= 1000 {
             minute
         } else {
             start
         };
         let boundary = (minute + 60_000).min(day.end);
-        record.end = if boundary - end <= 1000 {
+        let end = if boundary - end <= 1000 {
             boundary
         } else {
             end
         };
         if let Some(previous) = result.last_mut()
             && (if categories {
-                previous.category == record.category
+                previous.category == source.category
             } else {
-                previous.key == record.key
+                previous.key == source.key
             })
-            && (record.key != "activity:anonymous" || record.group_id == previous.group_id)
-            && record.start - previous.end <= day.timeline_merge_gap_ms.max(0)
+            && (source.key != "activity:anonymous" || source.group_id == previous.group_id)
+            && start - previous.end <= day.timeline_merge_gap_ms.max(0)
         {
-            previous.end = record.end;
-            previous.group_duration += record.group_duration;
+            previous.end = end;
+            previous.group_duration += duration;
         } else {
-            result.push(record);
+            result.push(timeline_record(source, start, end, duration));
         }
     }
     result
@@ -169,6 +217,16 @@ pub(super) fn initial_offset(start: i64, end: i64, hours: f32, focus: i64) -> i6
     (snapped - width / 2).clamp(start, end - width)
 }
 
+pub(super) fn time_range_label(day: &HistoryDay, left: i64, right: i64) -> String {
+    format!(
+        "{} – {}",
+        clock_label(left, day.end),
+        clock_label(right, day.end)
+    )
+}
+
+pub(super) const TICK_HEIGHT: f32 = 20.;
+
 pub(super) fn ticks(day: &HistoryDay, left: i64, right: i64, colors: Palette) -> Div {
     let span = right - left;
     let step = if span <= 2 * HOUR {
@@ -182,10 +240,11 @@ pub(super) fn ticks(day: &HistoryDay, left: i64, right: i64, colors: Palette) ->
     };
     let mut axis = div()
         .relative()
-        .h(px(20.))
+        .h(px(TICK_HEIGHT))
         .w_full()
         .flex_none()
-        .text_size(px(11.))
+        .text_size(px(12.))
+        .font_weight(FontWeight::MEDIUM)
         .text_color(colors.secondary)
         .child(div().absolute().left_0().child(clock_label(left, day.end)))
         .child(
@@ -249,19 +308,15 @@ fn track<'a>(
         let key = if categories { &r.category } else { &r.key };
         let color = activity_display_color(source_color(key), colors.canvas, dark);
         let description = format!(
-            "{} · {}–{} · {}",
+            "{} ･ {}–{} ･ {}",
             if categories { &r.category } else { &r.name },
             stamp(a, "%H:%M:%S"),
             stamp(b, "%H:%M:%S"),
-            records::elapsed(r.group_duration.min(b - a))
+            duration(r.group_duration.min(b - a))
         );
-        track = track.child(
+        track = track.child(quietpro::with_text_tooltip(
             div()
                 .id(("zoom-segment", index))
-                .tooltip(move |_, cx| {
-                    cx.new(|_| super::detail::SegmentTip(description.clone(), colors))
-                        .into()
-                })
                 .absolute()
                 .top(px(segment_inset))
                 .bottom(px(segment_inset))
@@ -273,7 +328,9 @@ fn track<'a>(
                 .when(r.key == "activity:anonymous", |s| {
                     s.child(quietpro::dot_pattern(colors.secondary))
                 }),
-        );
+            description,
+            colors,
+        ));
     }
     track
 }
@@ -301,8 +358,9 @@ impl History {
         let Some(day) = self.timeline_data() else {
             return;
         };
-        let hours = self.hours;
         let max = (day.end - day.start) as f32 / HOUR as f32;
+        self.hours = self.hours.min(max);
+        let hours = self.hours;
         self.zoom_view.slider.update(cx, |s, cx| {
             *s = SliderState::new()
                 .min(1.)
@@ -313,7 +371,7 @@ impl History {
         });
     }
 
-    pub(super) fn zoom_toolbar(
+    pub(super) fn zoom_controls(
         &self,
         day: &HistoryDay,
         colors: Palette,
@@ -328,7 +386,6 @@ impl History {
                 .slider
                 .update(cx, |s, cx| s.set_value(self.hours, win, cx));
         }
-        let mode_label = self.timeline_mode_label();
         div()
             .flex()
             .flex_none()
@@ -377,8 +434,7 @@ impl History {
                             colors,
                             cx,
                         )
-                        .track_focus(&self.zoom_view.slider_focus.clone().tab_stop(true))
-                        .w(px(128.)),
+                        .track_focus(&self.zoom_view.slider_focus.clone().tab_stop(true)),
                     ),
             )
             .child(
@@ -387,51 +443,69 @@ impl History {
                     "history.timelineHoursValue",
                     &[("hours", format!("{:.1}", self.hours))],
                 ))
-                .w(px(64.))
-                .text_center()
-                .text_size(px(12.))
-                .font_weight(FontWeight::SEMIBOLD),
+                .w(px(48.))
+                .whitespace_nowrap()
+                .text_right()
+                .text_size(px(14.))
+                .font_weight(quietpro::REGULAR_TEXT_WEIGHT),
             )
             .child(
                 IconControl::new("zoom-more", tr("history.timelineIncreaseHours"), Icon::Plus)
                     .disabled(right - left >= day.end - day.start)
                     .action(colors, cx.listener(|this, _, _, cx| this.zoom(1., 0.5, cx))),
             )
-            .child(
-                label(format!(
-                    "{} – {}",
-                    clock_label(left, day.end),
-                    clock_label(right, day.end)
-                ))
-                .flex_1()
-                .text_center()
-                .when(self.target.is_some(), |label| label.text_right())
-                .text_size(px(12.))
-                .text_color(colors.secondary),
-            )
-            .when(self.target.is_none(), |bar| {
-                bar.child(
-                    IconControl::new("zoom-mode", mode_label, Icon::Tags).action(
-                        colors,
-                        cx.listener(|this, _, _, cx| {
-                            this.cycle_timeline(cx);
-                        }),
-                    ),
-                )
-            })
     }
 
-    fn zoom_lanes(&self, day: &HistoryDay, colors: Palette, dark: bool) -> Stateful<Div> {
-        let (left, right) = self.viewport(day);
-        let lanes = lanes(day, left, right, self.timeline_categories);
-        let mut rows = div()
+    fn zoom_header(&self, colors: Palette, cx: &mut Context<Self>) -> Div {
+        let tr = |key| text(self.client.locale.get(), key);
+        div()
+            .flex()
+            .flex_none()
+            .items_center()
+            .h(px(32.))
+            .gap(px(12.))
+            .child(
+                heading(tr("history.timelineZoom"))
+                    .flex_1()
+                    .min_w_0()
+                    .truncate(),
+            )
+            .child(
+                IconControl::new("close-zoom", tr("common.close"), Icon::X).action(
+                    colors,
+                    cx.listener(|this, _, win, cx| this.close_overlay(win, cx)),
+                ),
+            )
+    }
+
+    fn zoom_lanes(
+        &self,
+        day: Option<&HistoryDay>,
+        colors: Palette,
+        dark: bool,
+        cx: &mut Context<Self>,
+    ) -> Stateful<Div> {
+        let rows = div()
             .id("zoom-lanes")
             .flex_initial()
             .min_h_0()
             .max_h(px(40. * 5.))
-            .overflow_y_scroll()
+            .overflow_hidden()
             .flex()
             .flex_col();
+        let Some(day) = day else {
+            return rows.h(px(40. * 5.)).when(
+                self.error || (self.timeline_web && self.web_error),
+                |rows| {
+                    rows.child(label(text(
+                        self.client.locale.get(),
+                        "destinationDetail.dayError",
+                    )))
+                },
+            );
+        };
+        let (left, right) = self.viewport(day);
+        let lanes = lanes(day, left, right, self.timeline_categories);
         if lanes.is_empty() {
             return rows.items_center().justify_center().child(
                 label(text(
@@ -442,164 +516,198 @@ impl History {
                 .text_size(px(12.)),
             );
         }
-        for (index, lane) in lanes.iter().enumerate() {
-            let color = activity_display_color(
-                self.source_color(day, lane.key, self.timeline_categories),
-                colors.canvas,
-                dark,
-            );
-            let mark = if !self.timeline_categories && lane.key == "activity:anonymous" {
-                crate::features::page_controls::anonymous::icon(color, lane.name.into(), 16.)
-                    .into_any_element()
-            } else if !self.timeline_categories
-                && let Some(icon) = self.icons.get(lane.key)
-            {
-                img(icon.image.clone()).size(px(16.)).into_any_element()
-            } else {
-                div()
-                    .size(px(8.))
-                    .rounded_full()
-                    .bg(color)
-                    .into_any_element()
+        let count = lanes.len();
+        let render = cx.processor(move |this, range: std::ops::Range<usize>, _, _| {
+            let Some(day) = this.timeline_data() else {
+                return Vec::new();
             };
-            let elapsed = if lane.duration < 60_000 {
-                format!("{}s", lane.duration / 1000)
-            } else {
-                duration(lane.duration)
-            };
-            rows = rows.child(
+            range
+                .map(|index| this.zoom_lane(index, &lanes[index], day, colors, dark))
+                .collect()
+        });
+        rows.h(px(40. * count.min(5) as f32))
+            .child(uniform_list("zoom-lane-list", count, render).size_full())
+    }
+
+    fn zoom_lane(
+        &self,
+        index: usize,
+        lane: &Lane,
+        day: &HistoryDay,
+        colors: Palette,
+        dark: bool,
+    ) -> Stateful<Div> {
+        let (left, right) = self.viewport(day);
+        let color = activity_display_color(
+            self.source_color(day, &lane.key, self.timeline_categories),
+            colors.canvas,
+            dark,
+        );
+        let mark = if !self.timeline_categories && lane.key == "activity:anonymous" {
+            crate::features::page_controls::anonymous::icon(color, lane.name.clone(), 16.)
+                .into_any_element()
+        } else if !self.timeline_categories
+            && let Some(icon) = self.icons.get(&lane.key)
+        {
+            img(icon.image.clone()).size(px(16.)).into_any_element()
+        } else {
+            div()
+                .size(px(8.))
+                .rounded_full()
+                .bg(color)
+                .into_any_element()
+        };
+        let elapsed = duration(lane.duration);
+        div()
+            .id(("zoom-lane", index))
+            .role(Role::Group)
+            .aria_label(format!("{} ･ {elapsed}", lane.name))
+            .flex()
+            .flex_none()
+            .w_full()
+            .items_center()
+            .h(px(40.))
+            .gap(px(12.))
+            .text_size(px(12.))
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(colors.text)
+            .border_b_1()
+            .border_color(colors.border)
+            .child(
                 div()
-                    .id(("zoom-lane", index))
-                    .role(Role::Group)
-                    .aria_label(format!("{} · {elapsed}", lane.name))
-                    .flex()
+                    .w(relative(0.16))
+                    .min_w(px(100.))
                     .flex_none()
+                    .flex()
                     .items_center()
-                    .h(px(40.))
-                    .gap(px(12.))
-                    .border_b_1()
-                    .border_color(colors.border)
+                    .gap(px(8.))
+                    .child(div().flex_none().child(mark))
                     .child(
                         div()
-                            .w(relative(0.16))
-                            .min_w(px(100.))
-                            .flex_none()
-                            .flex()
-                            .items_center()
-                            .gap(px(8.))
-                            .child(div().flex_none().child(mark))
-                            .child(
-                                div()
-                                    .when_else(
-                                        !self.timeline_categories
-                                            && lane.key == "activity:anonymous",
-                                        |s| {
-                                            s.child(
-                                                crate::features::page_controls::anonymous::name(
-                                                    colors.text,
-                                                ),
-                                            )
-                                        },
-                                        |s| s.child(lane.name.to_owned()),
-                                    )
-                                    .min_w_0()
-                                    .truncate()
-                                    .text_size(px(12.)),
-                            ),
-                    )
-                    .child(
-                        track(
-                            lane.records.iter(),
-                            |key| self.source_color(day, key, self.timeline_categories),
-                            (left, right),
-                            self.timeline_categories,
-                            colors,
-                            dark,
-                            6.,
-                        )
-                        .flex_1()
-                        .h(px(32.)),
-                    )
-                    .child(
-                        label(elapsed)
-                            .w(px(56.))
-                            .flex_none()
-                            .text_right()
-                            .text_size(px(12.))
-                            .text_color(colors.secondary),
+                            .when_else(
+                                !self.timeline_categories && lane.key == "activity:anonymous",
+                                |s| {
+                                    s.child(crate::features::page_controls::anonymous::name(
+                                        colors.text,
+                                    ))
+                                },
+                                |s| s.child(lane.name.to_owned()),
+                            )
+                            .min_w_0()
+                            .truncate(),
                     ),
-            );
-        }
-        rows
+            )
+            .child(
+                track(
+                    lane.records.iter(),
+                    |key| self.source_color(day, key, self.timeline_categories),
+                    (left, right),
+                    self.timeline_categories,
+                    colors,
+                    dark,
+                    6.,
+                )
+                .flex_1()
+                .h(px(32.)),
+            )
+            .child(
+                label(elapsed)
+                    .w(px(56.))
+                    .flex_none()
+                    .text_right()
+                    .text_color(colors.secondary),
+            )
     }
 
     pub(super) fn zoom_popup(
         &self,
-        day: &HistoryDay,
         colors: Palette,
         win: &mut Window,
         cx: &mut Context<Self>,
     ) -> Div {
         let locale = self.client.locale.get();
-        let dark = self.client.dark(win);
-        let (left, right) = self.viewport(day);
-        let overview_records = dominant_records(day, self.timeline_categories);
-        let overview = track(
-            overview_records.iter(),
-            |key| self.source_color(day, key, self.timeline_categories),
-            (left, right),
-            self.timeline_categories,
-            colors,
-            dark,
-            8.,
-        )
-        .id("zoom-overview")
-        .role(Role::Group)
-        .accessibility_id("zoom-overview")
-        .aria_label(text(locale, "history.horizontalTimeline.ariaLabel"))
-        .track_focus(&self.zoom_view.focus.clone().tab_stop(true))
-        .focus_visible(|s| s.border_color(colors.secondary))
-        .h(px(48.))
-        .w_full()
-        .flex_none()
-        .on_key_down(cx.listener(|this, e: &KeyDownEvent, _, cx| {
-            match e.keystroke.key.as_str() {
-                "left" => this.pan(-1, cx),
-                "right" => this.pan(1, cx),
-                "home" | "end" => {
-                    if let Some(day) = &this.data {
-                        let (left, right) = this.viewport(day);
-                        this.offset = Some(if e.keystroke.key == "home" {
-                            day.start
-                        } else {
-                            day.end - (right - left)
-                        });
-                        cx.notify();
-                    }
-                }
-                _ => return,
-            }
-            cx.stop_propagation();
-        }));
-        let overview = self.interactive_timeline(overview, left, right, cx);
-        quietpro::dialog_surface(colors, win.viewport_size())
+        let popup = quietpro::dialog_surface(colors, win.viewport_size())
             .w((win.viewport_size().width - px(48.)).min(px(1000.)))
             .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
+            .child(self.zoom_header(colors, cx))
             .child(
                 div()
                     .flex()
                     .flex_none()
                     .items_center()
-                    .child(heading(text(locale, "history.timelineZoom")).flex_1())
+                    .children(
+                        self.timeline_data()
+                            .map(|day| self.zoom_controls(day, colors, win, cx)),
+                    )
+                    .child(div().flex_1())
                     .child(
-                        IconControl::new("close-zoom", text(locale, "common.close"), Icon::X)
+                        self.date_controls(&self.overlay_date_trigger, colors, win, cx)
+                            .mr(px(quietpro::SECTION_GROUP_GAP)),
+                    )
+                    .child(
+                        IconControl::new("zoom-mode", self.timeline_mode_label(), Icon::Tags)
+                            .with_tooltip()
                             .action(
                                 colors,
-                                cx.listener(|this, _, win, cx| this.close_overlay(win, cx)),
+                                cx.listener(|this, _, _, cx| this.cycle_timeline(cx)),
                             ),
                     ),
             )
-            .child(self.zoom_toolbar(day, colors, win, cx))
+            .when(self.calendar.is_some(), |s| {
+                s.child(self.calendar_popup(colors, win, cx))
+            });
+        let dark = self.client.dark(win);
+        let day = self.timeline_data();
+        let (overview, axis) = day
+            .map(|day| {
+                let (left, right) = self.viewport(day);
+                let overview_records = day.overview(self.timeline_categories);
+                let overview = track(
+                    overview_records.iter(),
+                    |key| self.source_color(day, key, self.timeline_categories),
+                    (left, right),
+                    self.timeline_categories,
+                    colors,
+                    dark,
+                    8.,
+                )
+                .id("zoom-overview")
+                .role(Role::Group)
+                .accessibility_id("zoom-overview")
+                .aria_label(text(locale, "history.horizontalTimeline.ariaLabel"))
+                .track_focus(&self.zoom_view.focus.clone().tab_stop(true))
+                .focus_visible(|s| s.border_color(colors.secondary))
+                .h(px(48.))
+                .w_full()
+                .flex_none()
+                .on_key_down(cx.listener(|this, e: &KeyDownEvent, _, cx| {
+                    match e.keystroke.key.as_str() {
+                        "left" => this.pan(-1, cx),
+                        "right" => this.pan(1, cx),
+                        "home" | "end" => {
+                            if let Some(day) = &this.data {
+                                let (left, right) = this.viewport(day);
+                                this.offset = Some(if e.keystroke.key == "home" {
+                                    day.start
+                                } else {
+                                    day.end - (right - left)
+                                });
+                                cx.notify();
+                            }
+                        }
+                        _ => return,
+                    }
+                    cx.stop_propagation();
+                }));
+                let overview = self.interactive_timeline(overview, left, right, cx);
+                let axis = ticks(day, left, right, colors)
+                    .id("zoom-timeline-axis")
+                    .role(Role::Group)
+                    .aria_label(time_range_label(day, left, right));
+                (overview, axis)
+            })
+            .unzip();
+        popup
             .child(
                 div()
                     .flex()
@@ -609,8 +717,8 @@ impl History {
                     .py(px(16.))
                     .border_y_1()
                     .border_color(colors.border)
-                    .child(overview)
-                    .child(ticks(day, left, right, colors)),
+                    .child(div().h(px(48.)).flex_none().children(overview))
+                    .child(div().h(px(TICK_HEIGHT)).flex_none().children(axis)),
             )
             .child(
                 heading(text(
@@ -623,9 +731,9 @@ impl History {
                         "history.timelineAppLanes"
                     },
                 ))
-                .text_size(px(12.)),
+                .text_size(px(14.)),
             )
-            .child(self.zoom_lanes(day, colors, dark))
+            .child(self.zoom_lanes(day.map(|day| &day.day), colors, dark, cx))
     }
 }
 
@@ -765,7 +873,9 @@ mod tests {
         };
         let apps = lanes(&day, HOUR, 3 * HOUR, false);
         assert_eq!(
-            apps.iter().map(|l| (l.key, l.duration)).collect::<Vec<_>>(),
+            apps.iter()
+                .map(|l| (l.key.as_str(), l.duration))
+                .collect::<Vec<_>>(),
             vec![("a", HOUR), ("b", HOUR)]
         );
         let categories = lanes(&day, HOUR, 3 * HOUR, true);
@@ -783,11 +893,17 @@ mod tests {
         assert_eq!(merged[0].key, "a");
         assert_eq!(merged[0].duration, 120_000);
         assert_eq!(merged[0].records.len(), 2);
+        let first = &merged[0].records[0];
         assert_eq!(
-            (merged[0].records[0].start, merged[0].records[0].end),
-            (30_000, 180_000)
+            (first.start, first.end, first.group_duration),
+            (30_000, 180_000, 90_000)
         );
         assert_eq!(merged[0].records[1].end, 430_000);
+        assert!(
+            lanes(&day, 70_000, 110_000, false)
+                .iter()
+                .all(|lane| lane.key != "a")
+        );
     }
 
     #[test]
@@ -862,5 +978,59 @@ mod tests {
         );
         assert_eq!(initial_offset(0, 24 * HOUR, 8., HOUR), 0);
         assert_eq!(initial_offset(0, 24 * HOUR, 8., 23 * HOUR), 16 * HOUR);
+    }
+
+    #[test]
+    #[ignore = "dense-day repeated viewport measurement"]
+    fn dense_day_overview_during_drag() {
+        let records = (0..4320)
+            .map(|i| HistoryRecord {
+                key: format!("app-{}", i % 48),
+                name: format!("App {}", i % 48),
+                category: format!("category-{}", i % 5),
+                start: i * 10000,
+                end: i * 10000 + 9000,
+                group_duration: 9000,
+                group_id: i as usize,
+                current: false,
+                titles: vec![(i * 10000, i * 10000 + 9000, format!("Title {i}"), None)],
+            })
+            .collect();
+        let mut day = HistoryDay {
+            start: 0,
+            end: 24 * HOUR,
+            apps: Vec::new(),
+            records,
+            minimum_seconds: 0,
+            timeline_merge_gap_ms: 0,
+            colors: Default::default(),
+            custom_colors: Default::default(),
+            favicons: Default::default(),
+            hours: [0; 24],
+            categories: Vec::new(),
+            category_hours: Default::default(),
+        };
+        for cached in [false, true, true, false] {
+            let view = super::DisplayDay::from(day);
+            let mut samples = Vec::new();
+            for step in 0..60 {
+                let started = std::time::Instant::now();
+                if cached {
+                    std::hint::black_box(view.overview(step >= 30));
+                } else {
+                    std::hint::black_box(dominant_records(&view, step >= 30));
+                }
+                samples.push(started.elapsed().as_nanos());
+            }
+            samples.sort();
+            eprintln!(
+                "dense overview cached={cached} calls=60 p50={} p95={} max={} ns",
+                samples[29], samples[56], samples[59]
+            );
+            day = view.day;
+        }
+        let mut changed = day;
+        changed.records.clear();
+        assert!(super::DisplayDay::from(changed).overview(false).is_empty());
     }
 }
