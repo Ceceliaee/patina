@@ -152,6 +152,7 @@ FunctionEnd
 !macroend
 
 !macro CleanOwned DIRECTORY
+  Delete "$INSTDIR\${DIRECTORY}\Font-Licenses.txt"
   Delete "$INSTDIR\${DIRECTORY}\patina.exe"
   Delete "$INSTDIR\${DIRECTORY}\patina-ui.exe"
   Delete "$INSTDIR\${DIRECTORY}\patina-probe.exe"
@@ -164,6 +165,7 @@ FunctionEnd
 !macro RecoveryFunction NAME
 Function ${NAME}
   IfFileExists "$INSTDIR\.patina-publishing" 0 backing
+    !insertmacro RemoveCurrent "Font-Licenses.txt"
     !insertmacro RemoveCurrent "patina.exe"
     !insertmacro RemoveCurrent "patina-ui.exe"
     !insertmacro RemoveCurrent "patina-probe.exe"
@@ -174,6 +176,7 @@ Function ${NAME}
     IfErrors recovery_failed
 backing:
   IfFileExists "$INSTDIR\.patina-backing" 0 done
+  !insertmacro Restore "Font-Licenses.txt"
   !insertmacro Restore "patina-gpui.exe"
   !insertmacro Restore "patina.exe"
   !insertmacro Restore "patina-ui.exe"
@@ -203,6 +206,7 @@ Section "Patina"
   SetOutPath "$INSTDIR\.patina-staging"
   ClearErrors
   File /oname=patina.exe "${APP_BINARY}"
+  File "..\..\crates\quietpro\assets\fonts\Font-Licenses.txt"
   WriteUninstaller "$INSTDIR\.patina-staging\Uninstall.exe"
   FileOpen $0 "$INSTDIR\.patina-staging\patina-gpui-installation" w
   FileWrite $0 "patina-gpui"
@@ -213,6 +217,7 @@ Section "Patina"
   IfErrors stage_failed
   FileClose $0
   !insertmacro Backup "patina-gpui.exe"
+  !insertmacro Backup "Font-Licenses.txt"
   !insertmacro Backup "patina.exe"
   !insertmacro Backup "patina-ui.exe"
   !insertmacro Backup "patina-probe.exe"
@@ -222,6 +227,7 @@ Section "Patina"
   Rename "$INSTDIR\.patina-backing" "$INSTDIR\.patina-publishing"
   IfErrors rollback
   !insertmacro Publish "Uninstall.exe"
+  !insertmacro Publish "Font-Licenses.txt"
   !insertmacro Publish "patina-gpui-installation"
   !insertmacro Publish "patina.exe"
   Delete "$INSTDIR\.patina-publishing"
@@ -279,6 +285,7 @@ Section "Uninstall"
   FileOpen $0 "$INSTDIR\.patina-backing" w
   IfErrors busy
   FileClose $0
+  !insertmacro Backup "Font-Licenses.txt"
   !insertmacro Backup "patina.exe"
   !insertmacro Backup "patina-ui.exe"
   !insertmacro Backup "patina-probe.exe"
@@ -293,6 +300,7 @@ Section "Uninstall"
   DeleteRegKey HKCU "Software\${INSTALLATION_ID}"
   Goto done
 rollback:
+  !insertmacro Restore "Font-Licenses.txt"
   !insertmacro Restore "patina.exe"
   !insertmacro Restore "patina-ui.exe"
   !insertmacro Restore "patina-probe.exe"
