@@ -303,6 +303,7 @@ pub fn history_peak_hour(locale: Locale) -> String { super::format_text(locale, 
 pub fn history_session_count(locale: Locale, count: f64) -> String { super::format_text(locale, "history.sessionCount", &[("count", count.to_string())]) }
 pub fn history_show_hourly_activity_by_category(locale: Locale) -> String { super::format_text(locale, "history.showHourlyActivityByCategory", &[]) }
 pub fn history_show_total_hourly_activity(locale: Locale) -> String { super::format_text(locale, "history.showTotalHourlyActivity", &[]) }
+pub fn history_summary_duration(locale: Locale) -> String { super::format_text(locale, "history.summaryDuration", &[]) }
 pub fn history_timeline(locale: Locale) -> String { super::format_text(locale, "history.timeline", &[]) }
 pub fn history_timeline_app_lanes(locale: Locale) -> String { super::format_text(locale, "history.timelineAppLanes", &[]) }
 pub fn history_timeline_axis(locale: Locale) -> String { super::format_text(locale, "history.timelineAxis", &[]) }
@@ -565,6 +566,7 @@ pub fn settings_storage_storage_data_migration_confirm_title(locale: Locale) -> 
 pub fn settings_storage_storage_directory_title(locale: Locale) -> String { super::format_text(locale, "settings.storage.storageDirectoryTitle", &[]) }
 pub fn settings_storage_storage_migration_failed(locale: Locale) -> String { super::format_text(locale, "settings.storage.storageMigrationFailed", &[]) }
 pub fn settings_storage_storage_snapshot_refresh_action(locale: Locale) -> String { super::format_text(locale, "settings.storage.storageSnapshotRefreshAction", &[]) }
+pub fn settings_storage_storage_snapshot_refreshed(locale: Locale) -> String { super::format_text(locale, "settings.storage.storageSnapshotRefreshed", &[]) }
 pub fn settings_storage_cleanup_before(locale: Locale, days: f64) -> String { super::format_text(locale, "settings.storageCleanupBefore", &[("days", days.to_string())]) }
 pub fn settings_storage_frequency(locale: Locale) -> String { super::format_text(locale, "settings.storageFrequency", &[]) }
 pub fn settings_storage_move_pending(locale: Locale) -> String { super::format_text(locale, "settings.storageMovePending", &[]) }
