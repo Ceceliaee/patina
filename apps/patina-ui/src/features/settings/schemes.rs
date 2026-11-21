@@ -1,8 +1,9 @@
 use super::*;
-use gpui_kit::base::{Dialog, DialogPopup};
+use gpui_kit::base::Dialog;
 use quietpro::{Palette, ThemePreset};
 
 const COLUMNS: usize = 4;
+const GRID_GAP: f32 = 8.;
 
 pub(super) struct Picker {
     dark: bool,
@@ -23,15 +24,28 @@ fn library_key(dark: bool) -> &'static str {
 }
 
 impl Settings {
-    pub(super) fn scheme_row(&self, c: Palette, cx: &mut Context<Self>) -> Div {
+    pub(super) fn scheme_row(&self, c: Palette, win: &Window, cx: &mut Context<Self>) -> Div {
         let tr = |key| text(self.client.locale.get(), key);
-        let mut row = settings_row()
-            .gap(px(8.))
-            .child(label(tr("settings.colorSchemeLabel")).flex_1());
+        let active_dark = self
+            .picker
+            .as_ref()
+            .map_or_else(|| self.client.dark(win), |picker| picker.dark);
+        let mut row = settings_row().gap(px(8.)).child(
+            settings_row_label(tr("settings.colorSchemeLabel"))
+                .font_weight(FontWeight::BOLD)
+                .flex_1(),
+        );
         for dark in [false, true] {
             let key = library_key(dark);
+            let label_color = if dark == active_dark {
+                c.text
+            } else {
+                c.secondary
+            };
             row = row.child(
-                text_button(key, tr(key), c, !self.busy)
+                quietpro::inline_choice_entry(key, tr(key), !self.busy(), c, label_color)
+                    .text_size(px(12.))
+                    .control_size(ControlSize::Medium)
                     .track_focus(&self.scheme_triggers[usize::from(dark)])
                     .on_click(cx.listener(move |s, _, win, cx| s.open_schemes(dark, win, cx))),
             );
@@ -141,17 +155,20 @@ impl Settings {
             .iter()
             .map(|(_, preset)| {
                 let name = preset.label.clone().unwrap_or_else(|| tr("common.default"));
-                let run = win.text_style().to_run(name.len());
+                let mut run = win.text_style().to_run(name.len());
+                run.font.weight = FontWeight::MEDIUM;
                 let label_width = f32::from(
                     win.text_system()
-                        .shape_line(name.into(), px(12.), &[run], None)
+                        .shape_line(name.into(), px(14.), &[run], None)
                         .width,
                 );
                 let swatches_width = preset.swatches().len() as f32 * 16. - 4.;
                 label_width.max(swatches_width) + quietpro::CONTENT_INSET * 2.
             })
             .fold(0_f32, f32::max);
-        let width = ((item_width * COLUMNS as f32 + CARD_TITLE_GAP * (COLUMNS - 1) as f32 + 34.)
+        let width = ((item_width * COLUMNS as f32
+            + GRID_GAP * (COLUMNS - 1) as f32
+            + 2. * quietpro::DIALOG_FRAME_INSET)
             / 4.)
             .ceil()
             * 4.;
@@ -162,12 +179,12 @@ impl Settings {
             .track_scroll(&picker.scroll)
             .flex()
             .flex_col()
-            .gap(px(CARD_TITLE_GAP));
+            .gap(px(GRID_GAP));
         for (row_index, group) in entries.chunks(COLUMNS).enumerate() {
             let mut row = div()
                 .grid()
                 .grid_cols(COLUMNS as u16)
-                .gap(px(CARD_TITLE_GAP))
+                .gap(px(GRID_GAP))
                 .flex_none();
             for (offset, &(id, preset)) in group.iter().enumerate() {
                 let name = preset.label.clone().unwrap_or_else(|| tr("common.default"));
@@ -233,19 +250,17 @@ impl Settings {
                     ),
             );
         let view = cx.weak_entity();
-        Dialog::new(cx)
-            .focus_handle(picker.focus.clone())
-            .accessibility_label(title)
-            .on_ok(|_, _, _| false)
-            // Enter activates the focused swatch or footer button.
-            .close_on_escape(false)
-            .close_on_backdrop_press(!picker.saving)
-            .backdrop(quietpro::dialog_backdrop())
-            .popup(DialogPopup::new().child(content))
-            .on_open_change(move |open, _, win, cx| {
-                if !open {
-                    let _ = view.update(cx, |s, cx| s.close_schemes(win, cx));
-                }
-            })
+        quietpro::modal_dialog(
+            title,
+            picker.focus.clone(),
+            content,
+            move |win, cx| {
+                let _ = view.update(cx, |s, cx| s.close_schemes(win, cx));
+            },
+            cx,
+        )
+        // Enter activates the focused swatch or footer button.
+        .close_on_escape(false)
+        .close_on_backdrop_press(!picker.saving)
     }
 }

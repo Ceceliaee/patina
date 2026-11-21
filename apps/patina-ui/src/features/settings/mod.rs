@@ -8,17 +8,22 @@ use gpui_kit::{
     *,
 };
 use patina_activity_model::{AppPreferences, CloseBehavior, Locale, Theme, text};
+use quietpro::{ButtonSizeExt, ControlSize, Icon, IconControl, text_button};
 use quietpro::{CARD_TITLE_GAP, content_card, heading, page, page_actions, page_title_row};
-use quietpro::{Icon, IconControl, text_button};
 use std::rc::Rc;
 mod schemes;
 mod services;
 mod storage;
 use quietpro::{
-    SETTINGS_ROW_HEIGHT, SUBHEADING_GAP, choice_card, divider_color, line_above, settings_row,
-    settings_rows_card, settings_title, vertical_divider,
+    SECTION_GROUP_GAP, SETTINGS_ROW_HEIGHT, SUBHEADING_GAP, choice_card, divider_color, line_above,
+    settings_row, settings_row_label, settings_rows_card, settings_title, vertical_divider,
 };
 use services::ServiceFields;
+
+pub(crate) type PreferencesRead = futures::future::LocalBoxFuture<
+    'static,
+    Result<AppPreferences, patina_desktop_protocol::RequestError>,
+>;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Failure {
@@ -42,12 +47,16 @@ pub(crate) struct Settings {
     theme_focus: [FocusHandle; 3],
     scheme_triggers: [FocusHandle; 2],
     picker: Option<schemes::Picker>,
-    busy: bool,
     failure: Option<Failure>,
     services: ServiceFields,
 }
 impl Settings {
-    pub(crate) fn new(client: Rc<Client>, win: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub(crate) fn new(
+        client: Rc<Client>,
+        read: PreferencesRead,
+        win: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let sliders = std::array::from_fn(|i| {
             let (min, max, val) = if i == 0 { (1., 5., 3.) } else { (5., 30., 15.) };
             let state = cx.new(|_| {
@@ -89,8 +98,14 @@ impl Settings {
             }
         })
         .detach();
+        let storage = cx.new(|cx| storage::StorageCard::new(client.clone(), win, cx));
+        cx.subscribe(
+            &storage,
+            |_, _, event: &crate::windows::main::Feedback, cx| cx.emit(event.clone()),
+        )
+        .detach();
         let mut this = Self {
-            storage: cx.new(|cx| storage::StorageCard::new(client.clone(), win, cx)),
+            storage,
             services,
             client,
             saved: None,
@@ -101,26 +116,50 @@ impl Settings {
             theme_focus: std::array::from_fn(|_| cx.focus_handle()),
             scheme_triggers: std::array::from_fn(|_| cx.focus_handle()),
             picker: None,
-            busy: false,
             failure: None,
         };
-        this.reload(win, cx);
+        this.load_preferences(read, win, cx);
         this
     }
-    fn reload(&mut self, win: &mut Window, cx: &mut Context<Self>) {
-        let read = self.client.preferences();
+    pub(crate) fn ready_to_present(&self) -> bool {
+        self.draft.is_some() || self.failure == Some(Failure::Load)
+    }
+    fn load_preferences(
+        &mut self,
+        mut read: PreferencesRead,
+        win: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        use futures::FutureExt;
+
+        if let Some(result) = read.as_mut().now_or_never() {
+            self.finish_load(result.ok(), win, cx);
+            return;
+        }
+        self.services.set_busy(true, cx);
         self.load = Some(cx.spawn_in(win, async move |view, cx| {
-            let res = read.await;
+            let preferences = read.await.ok();
             let _ = view.update_in(cx, |t, win, cx| {
-                if let Ok(p) = res {
-                    t.saved = Some(p);
-                    t.reset(win, cx);
-                } else {
-                    t.failure = Some(Failure::Load);
-                }
-                cx.notify();
+                t.load = None;
+                t.finish_load(preferences, win, cx);
             });
         }));
+        cx.notify();
+    }
+    fn finish_load(
+        &mut self,
+        preferences: Option<AppPreferences>,
+        win: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.services.set_busy(false, cx);
+        if let Some(p) = preferences {
+            self.saved = Some(p);
+            self.reset(win, cx);
+        } else {
+            self.failure = Some(Failure::Load);
+            cx.notify();
+        }
     }
     fn reset(&mut self, win: &mut Window, cx: &mut Context<Self>) {
         self.failure = None;
@@ -140,24 +179,30 @@ impl Settings {
         }
         cx.notify();
     }
+    fn busy(&self) -> bool {
+        self.load.is_some() || self.write.is_some()
+    }
     pub(crate) fn dirty(&self) -> bool {
-        self.saved != self.draft || self.services.invalid_port || self.busy
+        self.saved != self.draft || self.services.invalid_port || self.write.is_some()
     }
     pub(crate) fn save(&mut self, cx: &mut Context<Self>) {
         let (Some(p), Some(old)) = (self.draft.clone(), self.saved.clone()) else {
             return;
         };
-        if self.busy || !p.valid() || self.services.invalid_port {
+        if self.busy()
+            || matches!(self.failure, Some(Failure::Load | Failure::Conflict))
+            || !p.valid()
+            || self.services.invalid_port
+        {
             return;
         }
-        self.busy = true;
         self.services.set_busy(true, cx);
         let client = self.client.clone();
         let write = client.save_preferences(old, p.clone());
         self.write = Some(cx.spawn(async move |view, cx| {
             let res = write.await;
             let _ = view.update(cx, |t, cx| {
-                t.busy = false;
+                t.write = None;
                 t.services.set_busy(false, cx);
                 if let Err(error) = res {
                     eprintln!("save preferences: {error}");
@@ -175,7 +220,7 @@ impl Settings {
                     t.services.set_locale(p.locale, cx);
                     client.theme.set(p.theme);
                     cx.refresh_windows();
-                    cx.emit(crate::windows::main::Saved);
+                    cx.emit(crate::windows::main::Saved { show_toast: true });
                 }
                 cx.notify();
             });
@@ -187,47 +232,48 @@ impl Render for Settings {
     fn render(&mut self, win: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = self.client.palette(win);
         let tr = |k| text(self.client.locale.get(), k);
-        let changed = self.dirty() && !self.busy;
-        let conflict = self.failure == Some(Failure::Conflict);
-        let can_apply = !conflict
+        let busy = self.busy();
+        let changed = self.dirty() && !busy;
+        let needs_reload = matches!(self.failure, Some(Failure::Conflict | Failure::Load));
+        let can_apply = !needs_reload
             && changed
             && !self.services.invalid_port
             && self.draft.as_ref().is_some_and(|p| p.valid());
         let actions = page_actions()
-            .when(self.draft.is_some(), |row| {
-                let status = tr(if self.busy {
-                    "common.saving"
-                } else if changed {
-                    "settings.unsaved"
-                } else {
-                    "common.saved"
-                });
-                row.child(save_status(status, c))
+            .when(self.write.is_some(), |row| {
+                row.child(save_status(tr("common.saving"), c))
             })
             .child(
-                text_button("cancel", tr("common.cancel"), c, changed || conflict).on_click(
-                    cx.listener(|t, _, win, cx| {
-                        let conflict = t.failure == Some(Failure::Conflict);
+                text_button(
+                    "cancel",
+                    tr("common.cancel"),
+                    c,
+                    changed || (!busy && self.failure == Some(Failure::Conflict)),
+                )
+                .control_size(ControlSize::Large)
+                .on_click(cx.listener(|t, _, win, cx| {
+                    if matches!(t.failure, Some(Failure::Conflict | Failure::Load)) {
+                        t.load_preferences(Box::pin(t.client.preferences()), win, cx);
+                    } else {
                         t.reset(win, cx);
-                        if conflict {
-                            t.draft = None;
-                            t.saved = None;
-                            t.reload(win, cx);
-                        }
-                    }),
-                ),
+                    }
+                })),
             )
             .child(
                 text_button("save", tr("common.save"), c, can_apply)
+                    .control_size(ControlSize::Large)
                     .on_click(cx.listener(|t, _, _, cx| t.save(cx))),
             );
         let mut shell =
             page(c).child(page_title_row(tr("settings.title"), Icon::Settings2, c).child(actions));
         match self.failure {
             Some(Failure::Load) => {
-                shell = shell.child(
-                    text_button("retry", tr("common.retry"), c, true)
-                        .on_click(cx.listener(|t, _, win, cx| t.reload(win, cx))),
+                shell = shell.child(label(tr("settings.loadFailed"))).child(
+                    text_button("retry", tr("common.retry"), c, !busy).on_click(cx.listener(
+                        |t, _, win, cx| {
+                            t.load_preferences(Box::pin(t.client.preferences()), win, cx)
+                        },
+                    )),
                 );
             }
             Some(Failure::Save) => {
@@ -240,16 +286,14 @@ impl Render for Settings {
                 shell = shell.child(label(tr("settings.saveConflict")));
             }
             Some(Failure::Token { field, reveal }) => {
-                shell = shell.child(
-                    text_button("retry", tr("common.retry"), c, !self.busy).on_click(
-                        cx.listener(move |t, _, win, cx| t.generate_token(field, reveal, win, cx)),
-                    ),
-                );
+                shell = shell.child(text_button("retry", tr("common.retry"), c, !busy).on_click(
+                    cx.listener(move |t, _, win, cx| t.generate_token(field, reveal, win, cx)),
+                ));
             }
             None => {}
         }
         let Some(p) = self.draft.as_ref() else {
-            return shell.child(label(tr("common.loading")));
+            return shell;
         };
         let divider = divider_color(c);
         let mut time_group = settings_rows_card(c);
@@ -270,15 +314,16 @@ impl Render for Settings {
             ),
         ] {
             let name = tr(k);
-            let mut row = settings_row()
-                .id(k)
-                .gap(px(8.))
-                .child(label(name.clone()).flex_1());
+            let mut row = settings_row().id(k).gap(px(8.)).child(
+                settings_row_label(name.clone())
+                    .font_weight(FontWeight::BOLD)
+                    .flex_1(),
+            );
             for (dir, symbol) in [(-1, "−"), (1, "+")] {
                 if dir == 1 {
                     let s = &self.sliders[i];
                     row = row
-                        .child(quietpro::value_slider(s, name.clone(), !self.busy, c, cx))
+                        .child(quietpro::value_slider(s, name.clone(), !busy, c, cx))
                         .child(label(format!("{value} min")).w(px(48.)).text_right());
                 }
                 row = row.child(
@@ -287,7 +332,7 @@ impl Render for Settings {
                         format!("{symbol} {name}"),
                         if dir == 1 { Icon::Plus } else { Icon::Minus },
                     )
-                    .disabled(self.busy || !(min..=max).contains(&(value + dir)))
+                    .disabled(busy || !(min..=max).contains(&(value + dir)))
                     .action(
                         c,
                         cx.listener(move |t, _, win, cx| {
@@ -330,7 +375,9 @@ impl Render for Settings {
                 .child(right)
         };
         let toggle_row = |k: &'static str, on, set| {
-            quietpro::slide_switch(k, tr(k), on, !self.busy, c, update_toggle(set)).flex_1()
+            quietpro::slide_switch(k, tr(k), on, !busy, c, update_toggle(set))
+                .font_weight(FontWeight::BOLD)
+                .flex_1()
         };
         let options = pair(
             toggle_row("settings.trackingPausedLabel", p.paused, |p, v| {
@@ -376,11 +423,8 @@ impl Render for Settings {
                 .flex_col()
                 .gap(px(SUBHEADING_GAP))
                 .child(
-                    heading(tr(key))
+                    quietpro::group_heading(tr(key))
                         .id("group-title")
-                        .aria_level(3)
-                        .text_size(px(14.))
-                        .line_height(px(20.))
                         .text_color(c.secondary),
                 )
                 .child(controls)
@@ -394,7 +438,7 @@ impl Render for Settings {
                     div()
                         .flex()
                         .flex_col()
-                        .gap(px(SUBHEADING_GAP))
+                        .gap(px(SECTION_GROUP_GAP))
                         .children(groups),
                 )
         };
@@ -415,7 +459,11 @@ impl Render for Settings {
                 .h(px(SETTINGS_ROW_HEIGHT))
                 .gap(px(8.))
                 .items_center()
-                .child(label(name).flex_1())
+                .child(
+                    settings_row_label(name)
+                        .font_weight(FontWeight::BOLD)
+                        .flex_1(),
+                )
         };
         let theme_options = [
             (Theme::Light, "settings.themeModeOptions.light"),
@@ -426,17 +474,21 @@ impl Render for Settings {
         let view = cx.weak_entity();
         let theme_row = settings_row()
             .gap(px(8.))
-            .child(label(theme_name.clone()).flex_1())
-            .child(quietpro::segmented(
-                "theme-mode",
-                theme_name,
+            .child(
+                settings_row_label(theme_name.clone())
+                    .font_weight(FontWeight::BOLD)
+                    .flex_1(),
+            )
+            .child(quietpro::segmented_with_medium_labels(
+                ("theme-mode", theme_name),
                 std::array::from_fn::<_, 3, _>(|i| {
                     let (theme, key) = theme_options[i];
                     (theme, tr(key), None, self.theme_focus[i].clone())
                 }),
                 p.theme,
-                !self.busy,
+                !busy,
                 c,
+                ControlSize::Medium,
                 move |theme, _, cx| {
                     let _ = view.update(cx, |t, cx| {
                         if let Some(p) = &mut t.draft {
@@ -447,10 +499,11 @@ impl Render for Settings {
                     });
                 },
             ));
-        let themes =
-            settings_rows_card(c)
-                .child(theme_row)
-                .child(line_above(self.scheme_row(c, cx), c, 0.));
+        let themes = settings_rows_card(c).child(theme_row).child(line_above(
+            self.scheme_row(c, win, cx),
+            c,
+            0.,
+        ));
         let language_label =
             patina_i18n::messages::settings_language_label(self.client.locale.get());
         let view = cx.weak_entity();
@@ -472,7 +525,11 @@ impl Render for Settings {
                     });
                 },
             )
-            .disabled(self.busy),
+            .trigger_size(ControlSize::Medium)
+            .value_typography(px(12.), FontWeight::MEDIUM)
+            .selected_option_color(c.text)
+            .fit_trigger_to_value()
+            .disabled(busy),
         );
         let appearance = section(
             settings_title(c, Icon::Palette, tr("settings.appearanceTitle")),
@@ -518,3 +575,5 @@ impl Render for Settings {
 }
 
 impl gpui_kit::EventEmitter<crate::windows::main::Saved> for Settings {}
+
+impl gpui_kit::EventEmitter<crate::windows::main::Feedback> for Settings {}

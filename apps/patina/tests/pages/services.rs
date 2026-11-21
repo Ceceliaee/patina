@@ -73,7 +73,7 @@ fn settings_services() -> Result<(), Error> {
     };
     let mut app = launch()?;
     let pid = app.0.id();
-    let main = || children::find(pid, |p| window(p, w!("Patina UI")));
+    let main = || children::find(pid, |p| window(p, w!("Patina")));
     let hwnd = wait("main window", main)?;
     click(hwnd, "Settings")?;
     let switch = |hwnd, name: &str| -> Result<(), Error> {
@@ -168,6 +168,11 @@ fn settings_services() -> Result<(), Error> {
     let body = wait("guide scroll body", || bounds("web-sync-guide-body"))?;
     assert!(body.bottom <= surface.bottom && body.top > close_bounds.bottom);
     press(hwnd, "Copy port")?;
+    wait("copy result toast", || named(hwnd, "Copied"))?;
+    assert!(
+        button(hwnd, "Copy port").is_some(),
+        "copy keeps its action label"
+    );
     assert!(guide().is_some(), "copy must leave the guide open");
     key(hwnd, 0x1b)?;
     wait("guide closed with Escape", || {
@@ -196,37 +201,38 @@ fn settings_services() -> Result<(), Error> {
         named(hwnd, "Enter a port between 1024 and 65535.")
     })?;
     activate_control(hwnd, &port_input, true)?;
-    // Keep the field away from the fixed header and the scroll viewport's clipped bottom.
-    for attempt in 0..=8 {
-        let r = unsafe { port_input.CurrentBoundingRectangle()? };
+    // Both the editor and the adjacent blur target need to be inside the scrolling body.
+    let mut previous_top = None;
+    desktop::wait_observed("scroll service port into the middle of the window", || {
+        let r = unsafe { port_input.CurrentBoundingRectangle() }.map_err(|e| e.to_string())?;
         let mut frame = RECT::default();
-        unsafe { GetWindowRect(hwnd, &mut frame)? };
-        if (r.top + r.bottom) / 2 < frame.top + (frame.bottom - frame.top) * 2 / 3 {
-            break;
+        unsafe { GetWindowRect(hwnd, &mut frame) }.map_err(|e| e.to_string())?;
+        let height = frame.bottom - frame.top;
+        let center = (r.top + r.bottom) / 2;
+        if (frame.top + height / 3..=frame.bottom - height / 3).contains(&center) {
+            return Ok(());
         }
-        if attempt == 8 {
-            return Err(
-                format!("port remains near viewport edge: port={r:?}, window={frame:?}").into(),
-            );
-        }
-        unsafe {
-            PostMessageW(
-                Some(hwnd),
-                WM_MOUSEWHEEL,
-                WPARAM((-120i32 as u32 as usize) << 16),
-                LPARAM(((frame.top + 300) as isize) << 16 | (frame.left + 600) as isize),
-            )?;
-        }
-        desktop::wait_observed("port input moves away from viewport edge", || {
-            let next =
-                unsafe { port_input.CurrentBoundingRectangle() }.map_err(|e| e.to_string())?;
-            if next.top != r.top {
-                Ok(())
+        if previous_top != Some(r.top) {
+            let delta: i32 = if center > frame.bottom - height / 3 {
+                -120
             } else {
-                Err(format!("port bounds={next:?}"))
+                120
+            };
+            let x = (frame.left + frame.right) / 2;
+            let y = (frame.top + frame.bottom) / 2;
+            unsafe {
+                PostMessageW(
+                    Some(hwnd),
+                    WM_MOUSEWHEEL,
+                    WPARAM((delta as u32 as usize) << 16),
+                    LPARAM(((y as isize) << 16) | x as isize),
+                )
             }
-        })?;
-    }
+            .map_err(|e| e.to_string())?;
+            previous_top = Some(r.top);
+        }
+        Err(format!("port={r:?}, window={frame:?}"))
+    })?;
     let bounds = unsafe { port_input.CurrentBoundingRectangle()? };
     let outside = LPARAM(
         client_center(hwnd, &port_input)?.0 - ((bounds.right - bounds.left) / 2 + 24) as isize,
@@ -285,7 +291,7 @@ fn settings_services() -> Result<(), Error> {
     edit(hwnd, "Port", &port.to_string())?;
     switch(hwnd, "Remote push")?;
     edit(hwnd, "Endpoint URL", &format!("ws://{address}/ws"))?;
-    click(hwnd, "Save")?;
+    click(hwnd, "Save").map_err(|e| format!("save configured services: {e}"))?;
     wait("saved services", || named(hwnd, "Saved"))?;
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -352,7 +358,7 @@ fn settings_services() -> Result<(), Error> {
     let pid = app.0.id();
     let tray = wait("new host", || window(pid, w!("Patina GPUI")))?;
     let reopened = wait("reopened", || {
-        children::find(pid, |p| window(p, w!("Patina UI")))
+        children::find(pid, |p| window(p, w!("Patina")))
     })?;
     assert_eq!(wait("restored web listener", || post(port, &token))?.0, 200);
     assert_eq!(
@@ -361,10 +367,13 @@ fn settings_services() -> Result<(), Error> {
     );
     click(reopened, "Settings")?;
     switch(reopened, "Remote push")?;
-    click(reopened, "Save")?;
+    click(reopened, "Save").map_err(|e| format!("save remote disable: {e}"))?;
     wait("saved remote disable", || named(reopened, "Saved"))?;
-    click(reopened, "Generate token")?;
-    click(reopened, "Save")?;
+    press(reopened, "Generate token")?;
+    wait("generated token is revealed", || {
+        button(reopened, "Hide token")
+    })?;
+    click(reopened, "Save").map_err(|e| format!("save rotated token: {e}"))?;
     wait("rotated token rejected", || {
         (post(port, &token)?.0 == 401).then_some(())
     })?;
@@ -375,7 +384,7 @@ fn settings_services() -> Result<(), Error> {
         200
     );
     switch(reopened, "Web sync")?;
-    click(reopened, "Save")?;
+    click(reopened, "Save").map_err(|e| format!("save web disable: {e}"))?;
     wait("web listener closed", || {
         TcpStream::connect(("127.0.0.1", port))
             .is_err()

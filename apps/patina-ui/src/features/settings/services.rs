@@ -1,8 +1,5 @@
 use super::*;
-use gpui_kit::base::{
-    Dialog, DialogPopup,
-    input::{InputAccessibility, InputEvent, InputState},
-};
+use gpui_kit::base::input::{InputAccessibility, InputEvent, InputState};
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub(super) enum Field {
@@ -96,8 +93,6 @@ pub(super) struct ServiceFields {
     guide_focus: FocusHandle,
     guide_title_focus: FocusHandle,
     guide_trigger: FocusHandle,
-    guide_copied: Option<Field>,
-    copy_reset: Option<Task<()>>,
 }
 
 impl ServiceFields {
@@ -148,8 +143,6 @@ impl ServiceFields {
             guide_focus: cx.focus_handle(),
             guide_title_focus: cx.focus_handle(),
             guide_trigger: cx.focus_handle(),
-            guide_copied: None,
-            copy_reset: None,
         }
     }
     pub(super) fn reset(
@@ -234,7 +227,8 @@ impl Settings {
         };
         let mut input =
             quietpro::TextInput::new(("service-input", idx), &self.services.inputs[idx], c)
-                .disabled(self.busy)
+                .fixed_mask()
+                .disabled(self.busy())
                 .invalid(error.is_some());
         if matches!(field, WebToken | RemoteToken) {
             input = input.suffix(
@@ -243,7 +237,8 @@ impl Settings {
                     tr("accessibility.settings.generateServiceToken"),
                     Icon::Dices,
                 )
-                .disabled(self.busy)
+                .with_tooltip()
+                .disabled(self.busy())
                 .action(
                     c,
                     cx.listener(move |s, _, win, cx| s.generate_token(field, true, win, cx)),
@@ -267,7 +262,8 @@ impl Settings {
                         Icon::Eye
                     },
                 )
-                .disabled(self.busy)
+                .with_tooltip()
+                .disabled(self.busy())
                 .action(
                     c,
                     cx.listener(move |s, _, win, cx| {
@@ -287,7 +283,8 @@ impl Settings {
         let row = settings_row()
             .gap(px(8.))
             .child(
-                label(tr(field.label()))
+                settings_row_label(tr(field.label()))
+                    .font_weight(FontWeight::BOLD)
                     .id(("service-field-label", idx))
                     .w(px(84.))
                     .flex_none(),
@@ -325,7 +322,7 @@ impl Settings {
                 Icon::Server,
                 tr("settings.servicesTitle"),
             ));
-        let mut sections = div().flex().flex_col().gap(px(SUBHEADING_GAP));
+        let mut sections = div().flex().flex_col().gap(px(SECTION_GROUP_GAP));
         for (web, enabled, title) in [
             (true, p.web.enabled, "settings.webActivityTitle"),
             (false, p.remote.enabled, "settings.remoteStatusBridgeTitle"),
@@ -335,7 +332,7 @@ impl Settings {
                 title,
                 tr(title),
                 enabled,
-                !self.busy,
+                !self.busy(),
                 c,
                 move |on, _, win, cx| {
                     let _ = view.update(cx, |s, cx| {
@@ -365,27 +362,31 @@ impl Settings {
                 .flex()
                 .items_center()
                 .gap(px(8.))
-                .child(heading(tr(title)).aria_level(3).text_size(px(14.)));
+                .child(quietpro::group_heading(tr(title)).text_color(c.secondary));
             if web && enabled {
                 header = header.child(
                     gpui_kit::base::Button::new("sync-guide")
                         .track_focus(&self.services.guide_trigger)
                         .accessibility_label(tr("settings.webActivityHelpAction"))
-                        .px(px(8.))
-                        .h(px(20.))
+                        .group("sync-guide-badge")
+                        .h(px(28.))
+                        .flex_none()
+                        .flex()
+                        .items_center()
+                        .justify_center()
                         .rounded_full()
                         .border_1()
-                        .border_color(c.border)
-                        .bg(c.canvas)
-                        .text_color(c.secondary)
-                        .text_size(px(12.))
+                        .border_color(gpui_kit::transparent_black())
                         .cursor_pointer()
-                        .hover(move |s| s.bg(c.track))
                         .focus_visible(move |s| s.border_color(c.secondary))
-                        .child(tr("settings.webActivityHelpAction"))
+                        .child(
+                            quietpro::badge(tr("settings.webActivityHelpAction"), c)
+                                .id("sync-guide-badge-face")
+                                .group_hover("sync-guide-badge", move |s| s.bg(c.track))
+                                .group_active("sync-guide-badge", move |s| s.bg(c.track)),
+                        )
                         .on_click(cx.listener(|s, _, win, cx| {
                             s.services.guide = true;
-                            s.services.guide_copied = None;
                             win.focus(&s.services.guide_title_focus, cx);
                             cx.notify();
                         })),
@@ -471,11 +472,9 @@ impl Settings {
                                 .text_size(px(12.))
                                 .child((index + 1).to_string()),
                         )
-                        .child(
-                            heading(step["title"].as_str().unwrap().into())
-                                .aria_level(3)
-                                .text_size(px(14.)),
-                        ),
+                        .child(quietpro::group_heading(
+                            step["title"].as_str().unwrap().into(),
+                        )),
                 )
                 .child(
                     label(step["description"].as_str().unwrap().into())
@@ -502,49 +501,35 @@ impl Settings {
                                 .min_h(px(24.))
                                 .px(px(8.))
                                 .text_size(px(12.))
+                                .font_weight(FontWeight::MEDIUM)
                                 .on_click(move |_, _, cx| cx.open_url(&url)),
                         );
                     }
                 }
                 if index == 0 && detail_index + 1 == details.len() {
-                    for (field, key, value) in [
+                    for (key, value) in [
                         (
-                            Port,
                             "settings.webActivityHelpCopyPortAction",
                             p.web.port.to_string(),
                         ),
                         (
-                            WebToken,
                             "settings.webActivityHelpCopyTokenAction",
                             p.web.token.clone(),
                         ),
                     ] {
-                        let shown = if self.services.guide_copied == Some(field) {
-                            tr("settings.webActivityHelpCopiedAction")
-                        } else {
-                            tr(key)
-                        };
                         line = line.child(
-                            text_button(key, shown, c, !value.is_empty())
+                            text_button(key, tr(key), c, !value.is_empty())
                                 .accessibility_label(tr(key))
                                 .min_h(px(24.))
                                 .px(px(8.))
                                 .text_size(px(12.))
+                                .font_weight(FontWeight::MEDIUM)
                                 .on_click(cx.listener(move |s, _, _, cx| {
                                     cx.write_to_clipboard(ClipboardItem::new_string(value.clone()));
-                                    s.services.guide_copied = Some(field);
-                                    s.services.copy_reset =
-                                        Some(cx.spawn(async move |view, cx| {
-                                            cx.background_executor()
-                                                .timer(std::time::Duration::from_millis(1400))
-                                                .await;
-                                            let _ = view.update(cx, |s, cx| {
-                                                if s.services.guide_copied == Some(field) {
-                                                    s.services.guide_copied = None;
-                                                    cx.notify();
-                                                }
-                                            });
-                                        }));
+                                    cx.emit(crate::windows::main::Feedback(text(
+                                        s.client.locale.get(),
+                                        "settings.webActivityHelpCopiedAction",
+                                    )));
                                     cx.notify();
                                 })),
                         );
@@ -615,24 +600,34 @@ impl Settings {
                     .gap(px(12.))
                     .child(ServiceGuideSteps(cx.weak_entity()))
                     .child(
-                        label(tr("settings.webActivityHelpNote"))
+                        div()
+                            .flex()
+                            .flex_col()
                             .flex_none()
-                            .text_color(c.secondary),
+                            .text_color(c.secondary)
+                            .font_weight(FontWeight::NORMAL)
+                            .children(tr("settings.webActivityHelpNote").lines().enumerate().map(
+                                |(i, line)| {
+                                    label(line.to_owned()).text_size(px(if i == 0 {
+                                        14.
+                                    } else {
+                                        12.
+                                    }))
+                                },
+                            )),
                     ),
             );
         let view = cx.weak_entity();
-        Dialog::new(cx)
-            .focus_handle(self.services.guide_focus.clone())
-            .accessibility_label(title)
-            .on_ok(|_, _, _| false)
-            .close_on_escape(false)
-            .close_on_backdrop_press(true)
-            .backdrop(quietpro::dialog_backdrop())
-            .popup(DialogPopup::new().child(content))
-            .on_open_change(move |open, _, win, cx| {
-                if !open {
-                    let _ = view.update(cx, |s, cx| s.close_service_guide(win, cx));
-                }
-            })
+        quietpro::modal_dialog(
+            title,
+            self.services.guide_focus.clone(),
+            content,
+            move |win, cx| {
+                let _ = view.update(cx, |s, cx| s.close_service_guide(win, cx));
+            },
+            cx,
+        )
+        .close_on_escape(false)
+        .close_on_backdrop_press(true)
     }
 }

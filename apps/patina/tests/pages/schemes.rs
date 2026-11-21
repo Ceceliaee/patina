@@ -21,7 +21,7 @@ fn settings_color_schemes() -> Result<(), Error> {
                 .spawn()?,
         );
         let hwnd = wait("main", || {
-            children::find(host.0.id(), |p| window(p, w!("Patina UI")))
+            children::find(host.0.id(), |p| window(p, w!("Patina")))
         })?;
         click(hwnd, "Settings")?;
         wait("color scheme row", || named(hwnd, "Color scheme"))?;
@@ -62,6 +62,22 @@ fn settings_color_schemes() -> Result<(), Error> {
         })
     };
     let (host, hwnd) = start()?;
+    let bounds = |name: &str| -> Result<_, Error> {
+        Ok(unsafe { wait(name, || button(hwnd, name))?.CurrentBoundingRectangle()? })
+    };
+    let light = bounds("Light theme")?;
+    let dark = bounds("Dark theme")?;
+    let save = bounds("Save")?;
+    for (name, height) in [
+        ("Light theme", 28),
+        ("Dark theme", 28),
+        ("Cancel", 32),
+        ("Save", 32),
+    ] {
+        assert_control_height(hwnd, &wait(name, || button(hwnd, name))?, height)?;
+    }
+    assert!(light.right > light.left && dark.right > dark.left);
+    assert!(light.top == dark.top && light.right < dark.left && dark.right <= save.right);
     let old_gap = read("timeline_merge_gap_secs")?;
     let old_dark = read("color_scheme_dark")?;
     click(hwnd, "+ Activity hold time")?;
