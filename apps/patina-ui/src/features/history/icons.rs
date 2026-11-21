@@ -28,10 +28,16 @@ impl History {
                 let url = source.clone();
                 let executor = cx.background_executor().clone();
                 let renderer = renderer.clone();
-                let bytes = cx
-                    .background_executor()
-                    .spawn(async move { favicon(&url, &executor, renderer).await })
-                    .await;
+                let (mut send, receive) = futures::channel::oneshot::channel();
+                cx.background_executor()
+                    .spawn(async move {
+                        let bytes = favicon(&url, &executor, renderer, send.cancellation()).await;
+                        let _ = send.send(bytes);
+                    })
+                    .detach();
+                let Ok(bytes) = receive.await else {
+                    return;
+                };
                 if view
                     .update(cx, |this, cx| {
                         if !(if this.web {
