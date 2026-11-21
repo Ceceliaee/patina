@@ -81,7 +81,11 @@ impl StorageCard {
             "dialog.confirmDanger"
         };
         let content = quietpro::dialog_surface(c, win.viewport_size())
-            .w(px(600.))
+            .w(px(if confirm.detail.is_empty() {
+                280.
+            } else {
+                600.
+            }))
             .track_focus(&self.dialog_content_focus)
             .on_key_down(cx.listener(|s, event: &KeyDownEvent, w, cx| {
                 if event.keystroke.key == "escape" {
@@ -90,13 +94,15 @@ impl StorageCard {
                 }
             }))
             .child(heading(title.clone()))
-            .child(
-                div()
-                    .id("storage-confirm-detail")
-                    .min_h_0()
-                    .overflow_y_scroll()
-                    .child(label(confirm.detail.clone())),
-            )
+            .when(!confirm.detail.is_empty(), |dialog| {
+                dialog.child(
+                    div()
+                        .id("storage-confirm-detail")
+                        .min_h_0()
+                        .overflow_y_scroll()
+                        .child(label(confirm.detail.clone())),
+                )
+            })
             .child(
                 quietpro::dialog_actions()
                     .child(
@@ -114,17 +120,16 @@ impl StorageCard {
                     ),
             );
         let weak = cx.weak_entity();
-        Dialog::new(cx)
-            .focus_handle(self.dialog_focus.clone())
-            .accessibility_label(title)
-            .close_on_escape(false)
-            .backdrop(quietpro::dialog_backdrop())
-            .popup(DialogPopup::new().child(content))
-            .on_open_change(move |open, _, w, cx| {
-                if !open {
-                    let _ = weak.update(cx, |s, cx| s.close(w, cx));
-                }
-            })
+        quietpro::modal_dialog(
+            title,
+            self.dialog_focus.clone(),
+            content,
+            move |w, cx| {
+                let _ = weak.update(cx, |s, cx| s.close(w, cx));
+            },
+            cx,
+        )
+        .close_on_escape(false)
     }
     pub(super) fn preview_details(
         &self,
@@ -144,7 +149,7 @@ impl StorageCard {
             ("settings.dataImport.categorizedAppsLabel", categorized),
             ("settings.dataImport.conflictedAppsLabel", conflicts),
         ] {
-            body = body.child(label(format!("{} · {count}", self.tr(key))));
+            body = body.child(label(format!("{} ･ {count}", self.tr(key))));
         }
         if conflicts > 0 {
             body = body.child(
@@ -199,7 +204,7 @@ impl StorageCard {
             ],
         );
         format!(
-            "{} · {}\n{counts}",
+            "{} ･ {}\n{counts}",
             stamp(p.created_at_ms as i64),
             bytes(p.size_bytes)
         )
@@ -281,33 +286,31 @@ impl StorageCard {
             }
         }));
     }
-    pub(super) fn schedule_status(&self, backup: bool, c: quietpro::Palette) -> Div {
-        let mut body = div().flex().flex_col().gap(px(8.));
-        let Some(p) = form::schedule(&self.result) else {
-            return body;
-        };
+    pub(super) fn schedule_status(&self, backup: bool, c: quietpro::Palette) -> Option<Div> {
+        let mut lines = Vec::new();
+        let p = form::schedule(&self.result)?;
         for (key, value) in [
             ("settings.scheduledBackupLabels.nextExecution", p.next),
             ("settings.scheduledBackupLabels.recentSuccess", p.success),
             ("settings.scheduledBackupLabels.recentFailure", p.failure),
         ] {
             if let Some(value) = value {
-                body = body.child(label(format!("{} · {}", self.tr(key), stamp(value))));
+                lines.push(label(format!("{} ･ {}", self.tr(key), stamp(value))));
             }
         }
         if let Some(size) = p.size {
-            body = body.child(label(bytes(size)));
+            lines.push(label(bytes(size)));
         }
         if let Some(code) = p.error {
-            body = body.child(label(self.task_error(code, backup)).text_color(c.danger));
+            lines.push(label(self.task_error(code, backup)).text_color(c.danger));
         }
         if p.cleanup.is_some_and(|w| !w.is_empty()) {
-            body = body.child(
+            lines.push(
                 label(self.tr("settings.scheduledBackupCleanupWarning")).text_color(c.secondary),
             );
         }
         if let Some(status) = p.active {
-            body = body.child(label(if status == "running" {
+            lines.push(label(if status == "running" {
                 self.tr(if backup {
                     "settings.backupExporting"
                 } else {
@@ -315,16 +318,16 @@ impl StorageCard {
                 })
             } else {
                 format!(
-                    "{} · {}",
+                    "{} ･ {}",
                     self.tr("settings.retry"),
                     p.retry.map(stamp).unwrap_or_default()
                 )
             }));
             if let Some(code) = p.active_error {
-                body = body.child(label(self.task_error(code, backup)));
+                lines.push(label(self.task_error(code, backup)));
             }
         }
-        body
+        (!lines.is_empty()).then(|| div().flex().flex_col().gap(px(8.)).children(lines))
     }
     pub(super) fn schedule_time(&self, c: quietpro::Palette, cx: &Context<Self>) -> Div {
         let value = self.val(4, cx);
@@ -366,6 +369,7 @@ impl StorageCard {
                         });
                     },
                 )
+                .value_typography(px(12.), FontWeight::MEDIUM)
                 .disabled(self.busy || !self.enabled),
             );
             if part == 0 {
@@ -376,7 +380,7 @@ impl StorageCard {
             .flex()
             .flex_col()
             .gap(px(8.))
-            .child(label(self.tr("settings.storageTime")))
+            .child(label(self.tr("settings.storageTime")).font_weight(FontWeight::BOLD))
             .child(row)
     }
     pub(super) fn completed(&self, request: &Request, result: &StorageReply) -> String {

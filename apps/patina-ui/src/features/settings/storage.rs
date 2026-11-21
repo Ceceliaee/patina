@@ -2,7 +2,7 @@ mod form;
 use super::*;
 use chrono::{Datelike, Duration, Local, NaiveDate, TimeZone};
 use gpui_kit::base::{
-    Button, Dialog, DialogPopup,
+    Button, Dialog,
     input::{InputAccessibility, InputEvent, InputState},
 };
 use patina_activity_model::views::storage::{ExportPreferences, StorageInfo, StorageReply};
@@ -133,14 +133,17 @@ pub(super) struct StorageCard {
     confirmation: Option<Confirmation>,
     export_preferences: ExportPreferences,
     range_mode: String,
+    range_from_calendar: bool,
     calendar_month: NaiveDate,
     calendar_start: Option<NaiveDate>,
     calendar_end: Option<NaiveDate>,
     calendar_active: NaiveDate,
     calendar_focus: FocusHandle,
+    range_trigger: FocusHandle,
+    range_bounds: Rc<std::cell::Cell<Bounds<Pixels>>>,
+    range_group_bounds: Rc<std::cell::Cell<Bounds<Pixels>>>,
     calendar_mode: &'static str,
     schedule_poll: Option<Task<()>>,
-    schedule_target: Option<bool>,
 }
 impl StorageCard {
     pub(super) fn new(client: Rc<Client>, win: &mut Window, cx: &mut Context<Self>) -> Self {
@@ -198,14 +201,17 @@ impl StorageCard {
             confirmation: None,
             export_preferences: ExportPreferences::default(),
             range_mode: "month".into(),
+            range_from_calendar: false,
             calendar_month: Local::now().date_naive().with_day(1).unwrap(),
             calendar_start: None,
             calendar_end: None,
             calendar_active: Local::now().date_naive(),
             calendar_focus: cx.focus_handle(),
+            range_trigger: cx.focus_handle(),
+            range_bounds: Default::default(),
+            range_group_bounds: Default::default(),
             calendar_mode: "custom",
             schedule_poll: None,
-            schedule_target: None,
         };
         card.fetch(Request::Info, View::Home, win, cx);
         card
@@ -261,6 +267,7 @@ impl StorageCard {
             if self.view == View::Fields {
                 self.finish_fields(false, win, cx);
             } else if let Some(parent) = self.parents.pop() {
+                let was_calendar = self.view == View::Range;
                 self.set_view(parent.view, win, cx);
                 self.result = parent.result;
                 for (i, value) in parent.values.iter().enumerate() {
@@ -268,7 +275,14 @@ impl StorageCard {
                         self.fields[i].update(cx, |f, cx| f.set_value(value.clone(), win, cx));
                     }
                 }
-                win.focus(&self.dialog_content_focus, cx);
+                win.focus(
+                    if was_calendar {
+                        &self.range_trigger
+                    } else {
+                        &self.dialog_content_focus
+                    },
+                    cx,
+                );
                 self.message.clear();
                 cx.notify();
             } else {
@@ -379,6 +393,16 @@ impl StorageCard {
         .detach();
     }
     fn fetch(&mut self, req: Request, next: View, win: &mut Window, cx: &mut Context<Self>) {
+        self.fetch_request(req, next, false, win, cx);
+    }
+    fn fetch_request(
+        &mut self,
+        req: Request,
+        next: View,
+        feedback: bool,
+        win: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if self.busy {
             return;
         }
@@ -423,18 +447,29 @@ impl StorageCard {
             };
             let _ = v.update_in(cx, |s, win, cx| {
                 s.busy = false;
+                if feedback {
+                    cx.emit(crate::windows::main::Feedback(s.tr(if response.is_ok() {
+                        "settings.storage.storageSnapshotRefreshed"
+                    } else {
+                        "settings.storage.storageSnapshotRefreshFailed"
+                    })));
+                }
                 match response {
                     Err(e) => {
-                        s.message = s.failed(&outcome, &e.to_string());
+                        if finished || converted {
+                            cx.emit(crate::windows::main::Feedback(s.failed(&outcome, &e.to_string())));
+                        } else if !feedback {
+                            s.message = s.failed(&outcome, &e.to_string());
+                        }
                     }
                     Ok(data) => {
                         if testing {
-                            s.message = s.tr("toast.webDavTestSuccess");
+                            cx.emit(crate::windows::main::Feedback(s.tr("toast.webDavTestSuccess")));
                             cx.notify();
                             return;
                         }
                         if converted {
-                            s.message = s.completed(&outcome, &data);
+                            cx.emit(crate::windows::main::Feedback(s.completed(&outcome, &data)));
                             s.result = data;
                             cx.notify();
                             return;
@@ -451,7 +486,7 @@ impl StorageCard {
                             s.set(
                                 6,
                                 "settings.webDavFileName",
-                                &format!("Patina-{}.zip", Local::now().format("%Y%m%d-%H%M%S")),
+                                &format!("Patina-backup-{}.zip", Local::now().format("%Y%m%d-%H%M%S")),
                                 win,
                                 cx,
                             );
@@ -490,13 +525,11 @@ impl StorageCard {
                                 win,
                                 cx,
                             );
-                            if b && let Some(remote) = s.schedule_target.take() {
-                                s.remote = remote;
-                            }
                             s.poll_schedule(b, cx);
                         }
                         if next == View::Export && let StorageReply::ExportPreferences(prefs) = &data {
                             s.export_preferences = prefs.clone().unwrap_or_default();
+                            s.range_from_calendar = false;
                             s.range_mode = s.export_preferences.mode.clone().unwrap_or_else(|| "month".into());
                             s.format = export::format_name(s.export_preferences.format.as_deref().unwrap_or("csv"));
                             s.columns = s.saved_columns(s.format);
@@ -517,6 +550,9 @@ impl StorageCard {
                         } else {
                             String::new()
                         };
+                        if finished && !moved {
+                            cx.emit(crate::windows::main::Feedback(std::mem::take(&mut s.message)));
+                        }
                         s.result = data;
                         if let Some(batches) = batches {
                             match batches {
@@ -566,16 +602,18 @@ impl StorageCard {
         let root = std::env::var_os("USERPROFILE")
             .map(PathBuf::from)
             .unwrap_or_default();
-        let ext = if matches!(pick, Pick::Backup) {
-            "zip"
-        } else {
-            match self.format {
-                "markdown" => "md",
-                other => other,
-            }
-        };
-        let suggested = format!("Patina-{}.{ext}", Local::now().format("%Y-%m-%d"));
-        let save_picker = save.then(|| cx.prompt_for_new_path(&root, Some(&suggested)));
+        let save_picker = save.then(|| {
+            let (kind, ext) = if matches!(pick, Pick::Backup) {
+                ("backup", "zip")
+            } else {
+                ("export", export::extension(self.format))
+            };
+            let suggested = format!(
+                "Patina-{kind}-{}.{ext}",
+                Local::now().format("%Y%m%d-%H%M%S")
+            );
+            cx.prompt_for_new_path(&root, Some(&suggested))
+        });
         let open_picker = (!save).then(|| {
             cx.prompt_for_paths(PathPromptOptions {
                 files: !dir,
@@ -686,7 +724,13 @@ impl StorageCard {
             .gap(px(8.))
             .min_w_0()
             .flex_none()
-            .child(label(self.tr(key)).text_size(px(14.)))
+            .child(
+                label(self.tr(key))
+                    .text_size(px(14.))
+                    .when(matches!(self.view, View::Dav | View::Schedule(_)), |l| {
+                        l.font_weight(FontWeight::BOLD)
+                    }),
+            )
             .child(div().flex().h(px(32.)).child(
                 quietpro::TextInput::new(("storage-input", i), &self.fields[i], c).disabled(
                     self.busy || (matches!(self.view, View::Schedule(_)) && !self.enabled),
@@ -771,9 +815,8 @@ impl StorageCard {
                 .items_center()
                 .gap(px(8.))
                 .child(
-                    heading(title.clone())
+                    quietpro::group_heading(title.clone())
                         .id("field-group-title")
-                        .text_size(px(14.))
                         .flex_1(),
                 )
                 .child(
@@ -785,7 +828,7 @@ impl StorageCard {
                     quietpro::checkbox(
                         "select-group",
                         format!(
-                            "{} · {title}",
+                            "{} ･ {title}",
                             self.tr(if all {
                                 "export.deselectGroupFields"
                             } else {
@@ -811,7 +854,7 @@ impl StorageCard {
                     IconControl::new(
                         "expand-group",
                         format!(
-                            "{} · {title}",
+                            "{} ･ {title}",
                             self.tr(if expanded {
                                 "export.collapseFieldGroup"
                             } else {
@@ -834,7 +877,8 @@ impl StorageCard {
                 );
             let mut group = content_card(c.border, c.panel)
                 .id(title_key)
-                .p(px(12.))
+                .p(px(12. + 1.))
+                .when(!expanded, |card| card.h(px(48.)).py_0().justify_center())
                 .gap(px(12.))
                 .flex_none()
                 .child(header);
@@ -898,10 +942,17 @@ impl StorageCard {
         };
         let view_button = |key, next| self.btn(key, c, cx, move |s, w, c| s.open_view(next, w, c));
         let picker = |key, pick| self.btn(key, c, cx, move |s, w, c| s.choose(pick, w, c));
-        let button =
-            |key, f: fn(&mut Self, &mut Window, &mut Context<Self>)| self.btn(key, c, cx, f);
-        let choice = |key: &'static str, f: fn(&mut Self, &mut Window, &mut Context<Self>)| {
-            quietpro::choice_entry(key, self.tr(key), !self.busy, c)
+        let button = |key, f: fn(&mut Self, &mut Window, &mut Context<Self>)| {
+            self.btn(key, c, cx, f)
+                .when(matches!(view, Dav | Cleanup), |b| {
+                    b.control_size(ControlSize::Large)
+                })
+        };
+        let dav_configured = self.paths.as_ref().is_some_and(|info| info.dav.is_some());
+        let choice = |key: &'static str,
+                      enabled: bool,
+                      f: fn(&mut Self, &mut Window, &mut Context<Self>)| {
+            quietpro::choice_entry(key, self.tr(key), enabled && !self.busy, c)
                 .on_click(cx.listener(move |s, _, w, cx| f(s, w, cx)))
         };
         let mut head = if view == Home {
@@ -914,14 +965,18 @@ impl StorageCard {
                 .child(heading(self.tr(view.title())).id("dialog-title").flex_1())
         };
         let mut header_icons = Vec::new();
-        if view == Export || view == Import {
+        if matches!(view, Export | Import | Backup) {
             let (key, next, icon) = match view {
-                Export => ("export.scheduledTitle", Schedule(false), Icon::Clock),
+                Export => (
+                    "export.scheduledTitle",
+                    Schedule(false),
+                    Icon::CalendarClock,
+                ),
                 Import => ("settings.dataImport.batchesTitle", Batches, Icon::Trash),
                 _ => (
                     "settings.storageScheduledBackup",
                     Schedule(true),
-                    Icon::Clock,
+                    Icon::CalendarClock,
                 ),
             };
             header_icons.push(
@@ -1014,12 +1069,7 @@ impl StorageCard {
         match view {
             Home => {
                 let wide = crate::windows::main::page_width(win.viewport_size().width) >= px(680.);
-                let subhead = |key| {
-                    heading(self.tr(key))
-                        .aria_level(3)
-                        .text_size(px(14.))
-                        .line_height(px(20.))
-                };
+                let subhead = |key| quietpro::group_heading(self.tr(key)).text_color(c.secondary);
                 let section = |title: Div, card: Div| {
                     div()
                         .flex()
@@ -1043,27 +1093,34 @@ impl StorageCard {
                             .child(line_above(right, c, 0.))
                     }
                 };
+                let row_name =
+                    |name: String| settings_row_label(name).font_weight(FontWeight::BOLD);
+                let row_action = |button: Button| {
+                    button
+                        .control_size(ControlSize::Medium)
+                        .text_size(px(12.))
+                        .font_weight(FontWeight::MEDIUM)
+                };
                 let entry = |key, view| {
                     settings_row()
                         .justify_between()
                         .gap(px(8.))
-                        .child(label(self.tr(key)))
-                        .child(view_button(key, view))
+                        .child(row_name(self.tr(key)))
+                        .child(row_action(view_button(key, view)))
                 };
                 let portable = settings_rows_card(c).child(pair(
                     entry("settings.dataExportAction", Export),
                     entry("settings.dataImportAction", Import),
                 ));
-                let config = self.paths.as_ref().and_then(|info| info.dav.as_ref());
                 let dav = row()
-                    .child(label(self.tr("settings.webDavConfigTitle")).flex_1())
+                    .child(row_name(self.tr("settings.webDavConfigTitle")).flex_1())
                     .child(
-                        text_button(
+                        row_action(text_button(
                             "dav-test",
                             self.tr("settings.webDavTestConnection"),
                             c,
-                            !self.busy && config.is_some(),
-                        )
+                            !self.busy && dav_configured,
+                        ))
                         .on_click(cx.listener(|s, _, w, cx| {
                             let Some(config) = s.paths.as_ref().and_then(|info| info.dav.as_ref())
                             else {
@@ -1082,14 +1139,14 @@ impl StorageCard {
                             );
                         })),
                     )
-                    .child(view_button("settings.webDavEdit", Dav))
+                    .child(row_action(view_button("settings.webDavEdit", Dav)))
                     .child(
-                        text_button(
+                        row_action(text_button(
                             "dav-delete",
                             self.tr("settings.webDavDeleteAction"),
                             c,
-                            !self.busy && config.is_some(),
-                        )
+                            !self.busy && dav_configured,
+                        ))
                         .on_click(cx.listener(|s, _, w, cx| {
                             s.confirm(
                                 Request::DavClear,
@@ -1118,8 +1175,14 @@ impl StorageCard {
                             self.tr("settings.storage.storageSnapshotRefreshAction"),
                             Icon::RefreshCw,
                         )
+                        .with_tooltip()
                         .disabled(self.busy)
-                        .action(c, cx.listener(|s, _, w, cx| s.open_view(Home, w, cx))),
+                        .action(
+                            c,
+                            cx.listener(|s, _, w, cx| {
+                                s.fetch_request(Request::Info, Home, true, w, cx)
+                            }),
+                        ),
                     );
                 let directory = |key, id: &'static str| {
                     let name = self.tr(key);
@@ -1133,7 +1196,7 @@ impl StorageCard {
                     let mut dir = settings_row()
                         .min_w_0()
                         .gap(px(4.))
-                        .child(label(name.clone()));
+                        .child(row_name(name.clone()));
                     if let Some(bytes) = self.paths.as_ref().map(|info| {
                         if id == "data" {
                             info.bytes
@@ -1151,12 +1214,13 @@ impl StorageCard {
                         IconControl::new(
                             id,
                             format!(
-                                "{} · {}",
+                                "{} ･ {}",
                                 self.tr("settings.storage.openDirectoryAction"),
                                 name
                             ),
                             Icon::FolderOpen,
                         )
+                        .with_tooltip()
                         .disabled(self.busy || path.is_none())
                         .action(c, move |_, _, cx| {
                             if let Some(path) = &path {
@@ -1171,6 +1235,7 @@ impl StorageCard {
                                 self.tr("settings.storage.changePathAction"),
                                 Icon::FolderPen,
                             )
+                            .with_tooltip()
                             .disabled(self.busy)
                             .action(c, cx.listener(|s, _, w, cx| s.choose(Pick::Move, w, cx))),
                         );
@@ -1180,8 +1245,17 @@ impl StorageCard {
                                 self.tr("settings.cleanupTitle"),
                                 Icon::Trash,
                             )
+                            .with_tooltip()
                             .disabled(self.busy)
-                            .action(c, cx.listener(|s, _, w, cx| s.open_view(Cleanup, w, cx))),
+                            .action(
+                                quietpro::Palette {
+                                    secondary: c.danger,
+                                    text: c.danger,
+                                    disabled_text: c.danger.opacity(0.5),
+                                    ..c
+                                },
+                                cx.listener(|s, _, w, cx| s.open_view(Cleanup, w, cx)),
+                            ),
                         );
                         if self.paths.as_ref().is_some_and(|info| {
                             info.data.as_ref() != Some(&info.default) || info.pending.is_some()
@@ -1192,6 +1266,7 @@ impl StorageCard {
                                     self.tr("settings.storage.restoreDefaultPathAction"),
                                     Icon::RotateCcw,
                                 )
+                                .with_tooltip()
                                 .disabled(self.busy)
                                 .action(c, cx.listener(|s, _, w, cx| s.prepare_move(None, w, cx))),
                             );
@@ -1204,7 +1279,7 @@ impl StorageCard {
                     directory("settings.storage.dataDirectoryLabel", "data"),
                 ));
                 body = body
-                    .gap(px(SUBHEADING_GAP))
+                    .gap(px(SECTION_GROUP_GAP))
                     .child(section(
                         div().child(subhead("settings.dataExportTitle")),
                         portable,
@@ -1226,99 +1301,16 @@ impl StorageCard {
                         ),
                     ] {
                         if let Some(detail) = detail {
-                            body = body.child(label(format!("{} · {detail}", self.tr(key))));
+                            body = body.child(label(format!("{} ･ {detail}", self.tr(key))));
                         }
                     }
                 }
             }
             Export => {
-                body = body.child(self.export_range(c, cx));
-                let options = [
-                    ("csv", "CSV"),
-                    ("markdown", "Markdown"),
-                    ("parquet", "Parquet"),
-                    ("sqlite", "SQLite"),
-                ];
-                let weak = cx.weak_entity();
-                let formats = quietpro::segmented(
-                    "export-format",
-                    self.tr("export.formatLabel"),
-                    std::array::from_fn::<_, 4, _>(|i| {
-                        (
-                            options[i].0,
-                            options[i].1.to_owned(),
-                            None,
-                            self.format_focus[i].clone(),
-                        )
-                    }),
-                    self.format,
-                    !self.busy,
-                    c,
-                    move |format, _, cx| {
-                        let _ = weak.update(cx, |s, cx| {
-                            s.change_format(format, cx);
-                            cx.notify();
-                        });
-                    },
-                );
-                body = body
-                    .child(
-                        content_card(c.border, c.panel).flex_none().child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .justify_between()
-                                .gap(px(12.))
-                                .child(
-                                    heading(self.tr("export.formatLabel"))
-                                        .text_size(px(14.))
-                                        .flex_1(),
-                                )
-                                .child(formats),
-                        ),
-                    )
-                    .child(
-                        content_card(c.border, c.panel).flex_none().child(
-                            row()
-                                .justify_between()
-                                .child(
-                                    div()
-                                        .flex()
-                                        .flex_col()
-                                        .gap(px(4.))
-                                        .child(
-                                            heading(self.tr("export.fieldsSectionTitle"))
-                                                .text_size(px(14.)),
-                                        )
-                                        .child(
-                                            label(format!(
-                                                "{} / {}",
-                                                self.columns.len(),
-                                                ALL_EXPORT_FIELDS.len()
-                                            ))
-                                            .text_size(px(12.))
-                                            .text_color(c.secondary),
-                                        ),
-                                )
-                                .child(
-                                    button("export.configFields", |s, w, cx| {
-                                        s.expanded_field_groups = [false; 6];
-                                        s.field_draft = Some((s.columns.clone(), w.focused(cx)));
-                                        s.set_view(Fields, w, cx);
-                                        cx.notify();
-                                    })
-                                    .track_focus(&self.fields_trigger),
-                                ),
-                        ),
-                    );
+                body = body.child(export::ExportForm(cx.weak_entity()));
                 actions.push(picker("settings.dataExportAction", Pick::Export).into_any_element());
             }
-            Range => {
-                body = body.child(self.calendar(c, cx));
-                actions.push(
-                    button("data.applyRange", |s, w, cx| s.apply_range(w, cx)).into_any_element(),
-                );
-            }
+            Range => unreachable!("range calendar is anchored in export"),
             Fields => {
                 body = body.child(FieldGroups(cx.weak_entity()));
                 actions.push(
@@ -1328,17 +1320,19 @@ impl StorageCard {
                         c,
                         !self.busy && !self.columns.is_empty(),
                     )
+                    .control_size(ControlSize::Large)
                     .on_click(cx.listener(|s, _, w, cx| s.finish_fields(true, w, cx)))
                     .into_any_element(),
                 );
             }
             Import => {
                 body = body
-                    .child(choice("settings.dataImport.csvTitle", |s, w, cx| {
+                    .child(choice("settings.dataImport.csvTitle", true, |s, w, cx| {
                         s.choose(Pick::Csv, w, cx)
                     }))
                     .child(choice(
                         "settings.dataImport.destructureTitle",
+                        true,
                         |s, w, cx| s.choose(Pick::Convert, w, cx),
                     ));
             }
@@ -1355,7 +1349,7 @@ impl StorageCard {
                     ("settings.dataImport.duplicateLabel", p.duplicate_records),
                     ("settings.dataImport.errorLabel", p.error_records),
                 ] {
-                    body = body.child(label(format!("{} · {count}", self.tr(key))));
+                    body = body.child(label(format!("{} ･ {count}", self.tr(key))));
                 }
                 if p.valid_records > p.duplicate_records {
                     actions.push(
@@ -1399,7 +1393,7 @@ impl StorageCard {
                                 batch.id.clone(),
                                 batch.source_name.clone(),
                                 format!(
-                                    "{} · {} · {}",
+                                    "{} ･ {} ･ {}",
                                     self.formatted(
                                         "settings.dataImport.batchTitle",
                                         &[("number", (index + 1).to_string())]
@@ -1483,82 +1477,17 @@ impl StorageCard {
                 }
             }
             Backup => {
-                for remote in [false, true] {
-                    body = body.child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap(px(4.))
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap(px(8.))
-                                    .child(
-                                        quietpro::choice_entry(
-                                            if remote {
-                                                "backup-webdav"
-                                            } else {
-                                                "backup-local"
-                                            },
-                                            self.tr(if remote {
-                                                "settings.backupTargetRemoteTitle"
-                                            } else {
-                                                "settings.backupTargetLocalTitle"
-                                            }),
-                                            !self.busy,
-                                            c,
-                                        )
-                                        .flex_1()
-                                        .on_click(
-                                            cx.listener(move |s, _, w, cx| {
-                                                if remote {
-                                                    s.open_view(Upload, w, cx)
-                                                } else {
-                                                    s.choose(Pick::Backup, w, cx)
-                                                }
-                                            }),
-                                        ),
-                                    )
-                                    .child(
-                                        IconControl::new(
-                                            if remote {
-                                                "schedule-webdav"
-                                            } else {
-                                                "schedule-local"
-                                            },
-                                            format!(
-                                                "{} · {}",
-                                                self.tr("settings.storageScheduledBackup"),
-                                                self.tr(if remote {
-                                                    "settings.backupTargetRemoteTitle"
-                                                } else {
-                                                    "settings.backupTargetLocalTitle"
-                                                })
-                                            ),
-                                            Icon::Clock,
-                                        )
-                                        .disabled(self.busy)
-                                        .action(
-                                            c,
-                                            cx.listener(move |s, _, w, cx| {
-                                                s.schedule_target = Some(remote);
-                                                s.open_view(Schedule(true), w, cx);
-                                            }),
-                                        ),
-                                    ),
-                            )
-                            .child(
-                                label(self.tr(if remote {
-                                    "settings.backupTargetRemoteHint"
-                                } else {
-                                    "settings.backupTargetLocalHint"
-                                }))
-                                .text_size(px(12.))
-                                .text_color(c.secondary),
-                            ),
-                    );
-                }
+                body = body
+                    .child(choice(
+                        "settings.backupTargetLocalTitle",
+                        true,
+                        |s, w, cx| s.choose(Pick::Backup, w, cx),
+                    ))
+                    .child(choice(
+                        "settings.backupTargetRemoteTitle",
+                        dav_configured,
+                        |s, w, cx| s.open_view(Upload, w, cx),
+                    ));
             }
             Upload => {
                 if let StorageReply::DavConfig(snapshot) = &self.result
@@ -1570,7 +1499,7 @@ impl StorageCard {
                     let username = &target.username;
                     body = body
                         .child(label(format!(
-                            "{username} · {}{}{}",
+                            "{username} ･ {}{}{}",
                             url.trim_end_matches('/'),
                             "/",
                             dir.trim_start_matches('/')
@@ -1604,22 +1533,16 @@ impl StorageCard {
             }
             Restore => {
                 body = body
-                    .child(choice("settings.restoreSourceLocalTitle", |s, w, cx| {
-                        s.choose(Pick::Restore, w, cx)
-                    }))
-                    .child(
-                        label(self.tr("settings.restoreSourceLocalHint"))
-                            .text_size(px(12.))
-                            .text_color(c.secondary),
-                    )
-                    .child(choice("settings.restoreSourceRemoteTitle", |s, w, cx| {
-                        s.open_view(Remote, w, cx)
-                    }))
-                    .child(
-                        label(self.tr("settings.restoreSourceRemoteHint"))
-                            .text_size(px(12.))
-                            .text_color(c.secondary),
-                    );
+                    .child(choice(
+                        "settings.restoreSourceLocalTitle",
+                        true,
+                        |s, w, cx| s.choose(Pick::Restore, w, cx),
+                    ))
+                    .child(choice(
+                        "settings.restoreSourceRemoteTitle",
+                        dav_configured,
+                        |s, w, cx| s.open_view(Remote, w, cx),
+                    ));
             }
             PreviewBackup => {
                 let StorageReply::Restore(restore) = &self.result else {
@@ -1628,12 +1551,11 @@ impl StorageCard {
                 let preview = &restore.preview;
                 body = body.child(label(self.backup_summary(preview)));
                 if preview.restore_supported {
-                    let mut strategies = row();
                     for (key, replace) in [
                         ("settings.restoreStrategyOptions.merge", false),
                         ("settings.restoreStrategyOptions.replace", true),
                     ] {
-                        strategies = strategies.child(self.btn(key, c, cx, move |s, w, c| {
+                        let strategy = self.btn(key, c, cx, move |s, w, c| {
                             let StorageReply::Restore(restore) = &s.result else {
                                 return;
                             };
@@ -1657,9 +1579,9 @@ impl StorageCard {
                                 w,
                                 c,
                             )
-                        }));
+                        });
+                        actions.push(strategy.control_size(ControlSize::Large).into_any_element());
                     }
-                    actions.push(strategies.into_any_element());
                 } else {
                     body = body.child(label(preview.restore_message.clone()));
                 }
@@ -1672,7 +1594,11 @@ impl StorageCard {
                             .flex_col()
                             .flex_none()
                             .gap(px(8.))
-                            .child(label(self.tr("settings.webDavServerUrl")).text_size(px(14.)))
+                            .child(
+                                label(self.tr("settings.webDavServerUrl"))
+                                    .text_size(px(14.))
+                                    .font_weight(FontWeight::BOLD),
+                            )
                             .child(
                                 div().flex().h(px(32.)).child(
                                     quietpro::TextInput::new("dav-server", &self.fields[0], c)
@@ -1699,7 +1625,11 @@ impl StorageCard {
                         .flex()
                         .flex_col()
                         .gap(px(8.))
-                        .child(label(self.tr("settings.webDavPassword")).text_size(px(14.)))
+                        .child(
+                            label(self.tr("settings.webDavPassword"))
+                                .text_size(px(14.))
+                                .font_weight(FontWeight::BOLD),
+                        )
                         .child(
                             div().flex().h(px(32.)).child(
                                 quietpro::TextInput::new("dav-password", &self.fields[3], c)
@@ -1770,8 +1700,11 @@ impl StorageCard {
                     .iter()
                     .position(|day| *day == self.days)
                     .unwrap_or(4) as i32;
-                let mut retention =
-                    row().child(label(self.tr("settings.cleanupRangeLabel")).flex_1());
+                let mut retention = settings_row().gap(px(8.)).child(
+                    settings_row_label(self.tr("settings.cleanupRangeLabel"))
+                        .font_weight(FontWeight::BOLD)
+                        .flex_1(),
+                );
                 for delta in [-1, 1] {
                     if delta == 1 {
                         retention = retention
@@ -1788,7 +1721,8 @@ impl StorageCard {
                                     "settings.storageCleanupBefore",
                                     &[("days", self.days.to_string())],
                                 ))
-                                .min_w(px(64.))
+                                .min_w(px(48.))
+                                .whitespace_nowrap()
                                 .text_right(),
                             );
                     }
@@ -1824,7 +1758,7 @@ impl StorageCard {
                             Request::Cleanup(s.days),
                             Home,
                             "settings.cleanupTitle",
-                            format!("{} · {} d", s.tr("settings.cleanupRangeLabel"), s.days),
+                            String::new(),
                             w,
                             c,
                         )
@@ -1840,7 +1774,11 @@ impl StorageCard {
                 .flex()
                 .flex_col()
                 .gap(px(8.))
-                .child(label(self.tr("settings.storageFrequency")).text_size(px(14.)))
+                .child(
+                    label(self.tr("settings.storageFrequency"))
+                        .text_size(px(14.))
+                        .font_weight(FontWeight::BOLD),
+                )
                 .child(
                     quietpro::Dropdown::new(
                         "schedule-cadence",
@@ -1858,6 +1796,7 @@ impl StorageCard {
                             });
                         },
                     )
+                    .value_typography(px(12.), FontWeight::MEDIUM)
                     .disabled(self.busy || !self.enabled),
                 );
             let mut controls = div()
@@ -1875,7 +1814,10 @@ impl StorageCard {
                         .flex()
                         .flex_col()
                         .gap(px(8.))
-                        .child(label(self.tr("export.fields.weekday.label")))
+                        .child(
+                            label(self.tr("export.fields.weekday.label"))
+                                .font_weight(FontWeight::BOLD),
+                        )
                         .child(
                             quietpro::Dropdown::new(
                                 "schedule-weekday",
@@ -1891,6 +1833,7 @@ impl StorageCard {
                                     });
                                 },
                             )
+                            .value_typography(px(12.), FontWeight::MEDIUM)
                             .disabled(self.busy || !self.enabled),
                         ),
                 );
@@ -1924,15 +1867,17 @@ impl StorageCard {
                         )
                         .child(
                             picker("settings.storage.changePathAction", Pick::ScheduleDirectory)
+                                .control_size(ControlSize::Large)
                                 .disabled(self.busy || !self.enabled),
                         ),
                 );
             }
-            body = body.child(self.schedule_status(backup, c));
+            body = body.children(self.schedule_status(backup, c));
             actions.push(
                 self.btn("common.save", c, cx, move |s, w, c| {
                     s.schedule_save(backup, w, c)
                 })
+                .control_size(ControlSize::Large)
                 .into_any_element(),
             );
         }
@@ -1959,33 +1904,22 @@ impl StorageCard {
                     .child(body.flex_none()),
             )
         };
-        if view == self.view
-            && (self.busy || !self.message.is_empty())
-            && !(matches!(view, Import | Backup | Restore) && self.busy)
-        {
+        if view == self.view && !self.busy && !self.message.is_empty() {
             panel = panel.child(
-                label(if self.busy {
-                    self.tr("common.loading")
-                } else {
-                    self.message.clone()
-                })
-                .id("storage-status")
-                .role(Role::Status)
-                .flex_none(),
+                label(self.message.clone())
+                    .id("storage-status")
+                    .role(Role::Status)
+                    .flex_none(),
             );
         }
         if !actions.is_empty() {
             panel = panel.child(
-                div()
+                quietpro::dialog_actions()
                     .id("storage-dialog-actions")
-                    .flex()
-                    .flex_wrap()
-                    .flex_none()
-                    .items_center()
-                    .justify_end()
-                    .gap(px(8.))
-                    .pt(px(4.))
-                    .child(button("common.cancel", |s, w, cx| s.close(w, cx)))
+                    .child(button("common.cancel", |s, w, cx| s.close(w, cx)).when(
+                        matches!(view, Fields | PreviewBackup | Schedule(_)),
+                        |button| button.control_size(ControlSize::Large),
+                    ))
                     .children(actions),
             );
         }
@@ -2038,16 +1972,22 @@ impl Render for StorageCard {
         if self.view == View::Home {
             return home;
         }
-        let title = self.tr(self.view.title());
-        let form_width = (win.viewport_size().width - px(48.)).min(px(
-            if matches!(self.view, View::Export | View::Fields) {
-                760.
-            } else {
-                600.
+        let dialog_view = if self.view == View::Range {
+            View::Export
+        } else {
+            self.view
+        };
+        let title = self.tr(dialog_view.title());
+        let form_width = (win.viewport_size().width - px(48.)).min(px(match dialog_view {
+            View::Export | View::Fields => 680.,
+            View::Batches => match &self.result {
+                StorageReply::Batches(rows) if !rows.is_empty() => 480.,
+                _ => 280.,
             },
-        ));
+            _ => 600.,
+        }));
         let content = self
-            .content(self.view, win, cx)
+            .content(dialog_view, win, cx)
             .id("storage-dialog")
             .role(Role::Group)
             .accessibility_id("storage-dialog-surface")
@@ -2061,7 +2001,7 @@ impl Render for StorageCard {
             .max_w(form_width)
             .when(
                 matches!(
-                    self.view,
+                    dialog_view,
                     View::Export
                         | View::Fields
                         | View::Dav
@@ -2071,21 +2011,121 @@ impl Render for StorageCard {
                 ),
                 |d| d.w(form_width),
             );
+        let content = if self.view == View::Range {
+            content.child(self.calendar(self.client.palette(win), win, cx))
+        } else {
+            content
+        };
         let view = cx.weak_entity();
         home.child(
-            Dialog::new(cx)
-                .focus_handle(self.dialog_focus.clone())
-                .accessibility_label(title)
-                .on_ok(|_, _, _| false)
-                .close_on_escape(false)
-                .close_on_backdrop_press(!self.busy)
-                .backdrop(quietpro::dialog_backdrop())
-                .popup(DialogPopup::new().child(content))
-                .on_open_change(move |open, _, w, cx| {
-                    if !open {
-                        let _ = view.update(cx, |s, cx| s.close(w, cx));
-                    }
-                }),
+            quietpro::modal_dialog(
+                title,
+                self.dialog_focus.clone(),
+                content,
+                move |w, cx| {
+                    let _ = view.update(cx, |s, cx| s.close(w, cx));
+                },
+                cx,
+            )
+            .close_on_escape(false)
+            .close_on_backdrop_press(!self.busy),
         )
+    }
+}
+
+impl gpui_kit::EventEmitter<crate::windows::main::Feedback> for StorageCard {}
+
+#[cfg(all(test, feature = "test-support"))]
+mod feedback_tests {
+    use super::{Client, Rc, Request, StorageCard, StorageInfo, StorageReply, View};
+    use gpui_kit::{AppContext, TestAppContext, WindowOptions};
+    use patina_desktop_protocol::{FromWindow, Reply, RequestError, WindowRequest};
+    #[gpui_kit::test]
+    fn backup_result_uses_only_one_toast(cx: &mut TestAppContext) {
+        cx.update(gpui_kit::init);
+        let (client, requests) = Client::test_connection();
+        let (handle, view) = cx.update(|cx| {
+            gpui_kit::open_window(WindowOptions::default(), cx, |win, cx| {
+                cx.new(|cx| StorageCard::new(client.clone(), win, cx))
+            })
+            .unwrap()
+        });
+        let messages = Rc::new(std::cell::RefCell::new(Vec::new()));
+        let sink = messages.clone();
+        cx.update(|cx| {
+            cx.subscribe(
+                &view,
+                move |_, event: &crate::windows::main::Feedback, _| {
+                    sink.borrow_mut().push(event.0.clone())
+                },
+            )
+            .detach()
+        });
+        let request_id = || {
+            requests
+                .try_iter()
+                .find_map(|message| match message {
+                    FromWindow::Request(id, request)
+                        if matches!(*request, WindowRequest::Storage(_)) =>
+                    {
+                        Some(id)
+                    }
+                    _ => None,
+                })
+                .expect("storage request")
+        };
+        cx.run_until_parked();
+        client.test_answer(
+            request_id(),
+            Reply::Storage(StorageReply::Info(StorageInfo {
+                install: "fixture/install".into(),
+                install_bytes: 0,
+                data: None,
+                default: "fixture/data".into(),
+                bytes: 0,
+                pending: None,
+                move_error: None,
+                dav: None,
+            })),
+        );
+        cx.run_until_parked();
+        assert!(messages.borrow().is_empty(), "initial load stays silent");
+        for success in [true, false] {
+            cx.update_window(handle, |_, win, cx| {
+                view.update(cx, |card, cx| {
+                    card.fetch(
+                        Request::Backup("fixture/backup.zip".into()),
+                        View::Backup,
+                        win,
+                        cx,
+                    )
+                })
+            })
+            .unwrap();
+            cx.run_until_parked();
+            let id = request_id();
+            if success {
+                client.test_answer(id, Reply::Storage(StorageReply::Done));
+            } else {
+                client.test_reject(id, RequestError::Rejected("disk unavailable".into()));
+            }
+            cx.run_until_parked();
+            cx.update(|cx| {
+                let card = view.read(cx);
+                let expected = if success {
+                    card.completed(
+                        &Request::Backup("fixture/backup.zip".into()),
+                        &StorageReply::Done,
+                    )
+                } else {
+                    card.failed(
+                        &Request::Backup("fixture/backup.zip".into()),
+                        "disk unavailable",
+                    )
+                };
+                assert_eq!(messages.borrow().last(), Some(&expected));
+                assert!(card.message.is_empty());
+            });
+        }
     }
 }

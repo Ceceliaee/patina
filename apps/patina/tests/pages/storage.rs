@@ -20,11 +20,20 @@ fn settings_storage_card() -> Result<(), Error> {
             .spawn()?,
     );
     let pid = child.0.id();
-    let hwnd = wait("main", || {
-        children::find(pid, |p| window(p, w!("Patina UI")))
-    })?;
+    let hwnd = wait("main", || children::find(pid, |p| window(p, w!("Patina"))))?;
     click(hwnd, "Settings")?;
     wait("storage", || named(hwnd, "Storage"))?;
+    for name in [
+        "Export",
+        "Import",
+        "Back up",
+        "Restore",
+        "Test connection",
+        "Edit",
+        "Delete",
+    ] {
+        assert_control_height(hwnd, &wait(name, || button(hwnd, name))?, 28)?;
+    }
     let dialog = |title: &str| {
         controls(hwnd).ok()?.into_iter().find(|el| unsafe {
             el.CurrentControlType().ok() == Some(UIA_WindowControlTypeId)
@@ -55,6 +64,16 @@ fn settings_storage_card() -> Result<(), Error> {
         press(hwnd, entry)?;
         wait(title, || dialog(title))?;
         wait(inside, || named(hwnd, inside))?;
+        if let Some(remote) = match entry {
+            "Back up" => Some("WebDAV backup"),
+            "Restore" => Some("WebDAV restore"),
+            _ => None,
+        } {
+            let local = wait(inside, || button(hwnd, inside))?;
+            let remote = wait(remote, || button(hwnd, remote))?;
+            assert!(unsafe { local.CurrentIsEnabled()? }.as_bool());
+            assert!(!unsafe { remote.CurrentIsEnabled()? }.as_bool());
+        }
         let dismiss = if matches!(entry, "Export" | "Edit" | "Clear history records") {
             "Cancel"
         } else {
@@ -111,31 +130,19 @@ fn settings_storage_card() -> Result<(), Error> {
     }
     for (entry, nested) in [
         ("Export", "Scheduled export"),
-        ("Back up", "Scheduled backup · Local backup"),
+        ("Back up", "Scheduled backup"),
         ("Import", "Delete external imported data"),
     ] {
         press(hwnd, entry)?;
         press(hwnd, nested)?;
-        wait(nested, || {
-            dialog(if entry == "Back up" {
-                "Scheduled backup"
-            } else {
-                nested
-            })
-        })?;
+        wait(nested, || dialog(nested))?;
         wait("nested view loaded", || {
             button(hwnd, if entry == "Import" { "Close" } else { "Cancel" })
                 .filter(|b| unsafe { b.CurrentIsEnabled().is_ok_and(|v| v.as_bool()) })
         })?;
         key(hwnd, 0x1b)?;
         wait("nested dialog dismissed", || {
-            dialog(if entry == "Back up" {
-                "Scheduled backup"
-            } else {
-                nested
-            })
-            .is_none()
-            .then_some(())
+            dialog(nested).is_none().then_some(())
         })?;
         let parent = match entry {
             "Export" => "Data Export",
@@ -150,8 +157,17 @@ fn settings_storage_card() -> Result<(), Error> {
     }
     press(hwnd, "Export")?;
     wait("export dialog", || dialog("Data Export"))?;
+    press(hwnd, "Previous range")?;
+    let today = Local::now().date_naive();
+    let monday = today - chrono::Duration::days(today.weekday().num_days_from_monday().into());
+    wait("week preset displays Monday through today", || {
+        named(hwnd, &format!("{monday} – {today}"))
+    })?;
+    press(hwnd, "Next range")?;
     press(hwnd, "Open range picker")?;
-    wait("export calendar", || dialog("Select range"))?;
+    wait("export calendar", || named(hwnd, "Select range"))?;
+    press(hwnd, "Next range mode")?;
+    press(hwnd, "Previous range mode")?;
     press(hwnd, "Previous month")?;
     let previous_month = (Local::now().date_naive().with_day(1).unwrap()
         - chrono::Duration::days(1))
@@ -169,14 +185,19 @@ fn settings_storage_card() -> Result<(), Error> {
         activate_control(hwnd, &cell, false)?;
     }
     press(hwnd, "Apply")?;
-    wait("calendar returns to export", || dialog("Data Export"))?;
+    wait("calendar returns to export", || {
+        dialog("Data Export").filter(|_| named(hwnd, "Select range").is_none())
+    })?;
+    wait("export displays applied dates", || {
+        named(hwnd, &format!("{first} – {last}"))
+    })?;
     press(hwnd, "Open range picker")?;
     wait("selected date range retained", || {
         named(hwnd, &format!("{first} – {last}"))
     })?;
     key(hwnd, 27)?;
     wait("calendar cancel returns to export", || {
-        dialog("Data Export")
+        dialog("Data Export").filter(|_| named(hwnd, "Select range").is_none())
     })?;
     let format_option = |name: &str| {
         controls(hwnd).ok()?.into_iter().find(|el| unsafe {
@@ -233,10 +254,10 @@ fn settings_storage_card() -> Result<(), Error> {
         "Source and audit",
     ];
     for name in groups {
-        assert!(button(hwnd, &format!("Expand · {name}")).is_some());
+        assert!(button(hwnd, &format!("Expand ･ {name}")).is_some());
     }
     let collapsed = wait("collapsed field bounds", surface)?;
-    press(hwnd, "Expand · Activity basics")?;
+    press(hwnd, "Expand ･ Activity basics")?;
     wait("field group expands height", || {
         let bounds = surface()?;
         (bounds.bottom - bounds.top > collapsed.bottom - collapsed.top).then_some(())
@@ -267,10 +288,10 @@ fn settings_storage_card() -> Result<(), Error> {
         })?;
         Ok(())
     };
-    group_state("Select all · Activity basics", ToggleState_Indeterminate)?;
-    toggle("Select all · Activity basics")?;
+    group_state("Select all ･ Activity basics", ToggleState_Indeterminate)?;
+    toggle("Select all ･ Activity basics")?;
     wait("all activity fields selected", || named(hwnd, "8/8"))?;
-    group_state("Deselect all · Activity basics", ToggleState_On)?;
+    group_state("Deselect all ･ Activity basics", ToggleState_On)?;
     let field = checkbox("Record Type")?;
     let bounds = unsafe { field.CurrentBoundingRectangle()? };
     let dpi = unsafe { GetDpiForWindow(hwnd) } as f32 / 96.;
@@ -298,13 +319,13 @@ fn settings_storage_card() -> Result<(), Error> {
     unsafe { field.SetFocus()? };
     key(hwnd, 0x20)?;
     wait("space toggles one field", || named(hwnd, "7/8"))?;
-    group_state("Select all · Activity basics", ToggleState_Indeterminate)?;
-    toggle("Select all · Activity basics")?;
-    toggle("Deselect all · Activity basics")?;
+    group_state("Select all ･ Activity basics", ToggleState_Indeterminate)?;
+    toggle("Select all ･ Activity basics")?;
+    toggle("Deselect all ･ Activity basics")?;
     wait("all activity fields cleared", || named(hwnd, "0/8"))?;
-    group_state("Select all · Activity basics", ToggleState_Off)?;
-    toggle("Select all · Activity basics")?;
-    press(hwnd, "Collapse · Activity basics")?;
+    group_state("Select all ･ Activity basics", ToggleState_Off)?;
+    toggle("Select all ･ Activity basics")?;
+    press(hwnd, "Collapse ･ Activity basics")?;
     wait("field dialog shrinks", || {
         let bounds = surface()?;
         ((bounds.bottom - bounds.top - (collapsed.bottom - collapsed.top)).abs() <= 2).then_some(())
@@ -317,8 +338,8 @@ fn settings_storage_card() -> Result<(), Error> {
     })?;
     wait("cancel restores field draft", || named(hwnd, "4/8"))?;
     for name in groups {
-        let selected = format!("Select all · {name}");
-        let deselected = format!("Deselect all · {name}");
+        let selected = format!("Select all ･ {name}");
+        let deselected = format!("Deselect all ･ {name}");
         if controls(hwnd)?
             .iter()
             .any(|el| unsafe { el.CurrentName().is_ok_and(|n| n == selected) })
@@ -340,7 +361,7 @@ fn settings_storage_card() -> Result<(), Error> {
     press(hwnd, "Restore defaults for this format")?;
     wait("format defaults restored", || named(hwnd, "4/8"))?;
     for name in groups {
-        press(hwnd, &format!("Expand · {name}"))?;
+        press(hwnd, &format!("Expand ･ {name}"))?;
     }
     wait("all grouped fields available", || {
         let count = controls(hwnd)
@@ -424,9 +445,7 @@ fn settings_webdav_layout() -> Result<(), Error> {
             .spawn()?,
     );
     let pid = child.0.id();
-    let hwnd = wait("main", || {
-        children::find(pid, |p| window(p, w!("Patina UI")))
-    })?;
+    let hwnd = wait("main", || children::find(pid, |p| window(p, w!("Patina"))))?;
     click(hwnd, "Settings")?;
     wait("storage", || named(hwnd, "Storage"))?;
     let edit = wait("WebDAV edit", || {
@@ -480,6 +499,67 @@ fn settings_webdav_layout() -> Result<(), Error> {
     key(hwnd, 27)?;
     wait("WebDAV Escape", || {
         named(hwnd, "Server address").is_none().then_some(())
+    })?;
+    let tray = window(pid, w!("Patina GPUI")).ok_or("missing tray")?;
+    command(tray, 2)?;
+    assert!(wait("exit", || child.0.try_wait().ok().flatten())?.success());
+    Ok(())
+}
+
+#[test]
+#[ignore = "isolated Win32 desktop"]
+fn storage_refresh_feedback() -> Result<(), Error> {
+    if !patina_test_support::run_case()? {
+        return Ok(());
+    }
+    let _com = ComApartment::init()?;
+    unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
+    let root = tempfile::tempdir()?;
+    let dir = root.path().join(patina::APP_ID);
+    fs::create_dir(&dir)?;
+    seed(&dir.join("patina.db"))?;
+    let mut child = TestChild(
+        Command::new(env!("CARGO_BIN_EXE_patina"))
+            .arg("--today")
+            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .spawn()?,
+    );
+    let pid = child.0.id();
+    let hwnd = wait("main", || children::find(pid, |p| window(p, w!("Patina"))))?;
+    click(hwnd, "Settings")?;
+    wait("storage", || named(hwnd, "Storage"))?;
+
+    assert!(named(hwnd, "Storage folders refreshed").is_none());
+    click(hwnd, "Check storage")?;
+    wait("refresh completion toast", || {
+        named(hwnd, "Storage folders refreshed")
+    })?;
+    let refresh = wait("refresh enabled again", || {
+        button(hwnd, "Check storage")
+            .filter(|el| unsafe { el.CurrentIsEnabled().is_ok_and(|value| value.as_bool()) })
+    })?;
+    unsafe {
+        PostMessageW(Some(hwnd), WM_MOUSEMOVE, WPARAM(0), LPARAM(0))?;
+        PostMessageW(
+            Some(hwnd),
+            WM_MOUSEMOVE,
+            WPARAM(0),
+            client_center(hwnd, &refresh)?,
+        )?;
+    }
+    let tip = wait("storage refresh tooltip", || {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentControlType().ok() == Some(UIA_ToolTipControlTypeId)
+                && el.CurrentName().is_ok_and(|name| name == "Check storage")
+        })
+    })?;
+    assert!(unsafe {
+        tip.CurrentBoundingRectangle()?.bottom <= refresh.CurrentBoundingRectangle()?.top
+    });
+    wait("refresh toast expires", || {
+        named(hwnd, "Storage folders refreshed")
+            .is_none()
+            .then_some(())
     })?;
     let tray = window(pid, w!("Patina GPUI")).ok_or("missing tray")?;
     command(tray, 2)?;
