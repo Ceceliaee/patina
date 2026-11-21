@@ -19,6 +19,7 @@ use windows::{
 #[derive(Clone, Copy, Debug)]
 pub enum Action {
     Mini { focus: bool },
+    Main,
     Today,
     SetPaused(bool),
     Refresh,
@@ -30,7 +31,8 @@ pub enum Action {
 
 const CALLBACK: u32 = WM_APP + 1;
 const NIN_KEYSELECT: u32 = NIN_SELECT | NINF_KEY;
-const TODAY: usize = 4;
+const MAIN: usize = 4;
+const TODAY: usize = 5;
 const OPEN: usize = 1;
 const EXIT: usize = 2;
 const TOGGLE: usize = 3;
@@ -50,12 +52,12 @@ pub(super) fn reopen(profile_id: &str, actions: &async_channel::Receiver<Action>
         let mut pid = 0;
         GetWindowThreadProcessId(hwnd, Some(&mut pid));
         let _ = AllowSetForegroundWindow(pid);
-        let mut action = actions.try_recv().unwrap_or(Action::Today);
+        let mut action = actions.try_recv().unwrap_or(Action::Main);
         loop {
-            let id = if matches!(action, Action::Mini { .. }) {
-                OPEN
-            } else {
-                TODAY
+            let id = match action {
+                Action::Mini { .. } => OPEN,
+                Action::Today => TODAY,
+                _ => MAIN,
             };
             PostMessageW(Some(hwnd), WM_COMMAND, WPARAM(id), LPARAM(0))?;
             let Ok(next) = actions.try_recv() else { break };
@@ -101,10 +103,19 @@ fn icon_data(hwnd: HWND, icon: HICON) -> NOTIFYICONDATAW {
         hIcon: icon,
         ..Default::default()
     };
-    for (slot, ch) in entry.szTip.iter_mut().zip("Patina · GPUI".encode_utf16()) {
+    for (slot, ch) in entry.szTip.iter_mut().zip("Patina".encode_utf16()) {
         *slot = ch;
     }
     entry
+}
+
+#[cfg(test)]
+#[test]
+fn shell_tooltip_shows_the_product_name() {
+    let entry = icon_data(HWND::default(), HICON::default());
+    assert!(entry.uFlags.contains(NIF_TIP | NIF_SHOWTIP));
+    let end = entry.szTip.iter().position(|ch| *ch == 0).unwrap();
+    assert_eq!(String::from_utf16(&entry.szTip[..end]).unwrap(), "Patina");
 }
 
 fn register_icon(hwnd: HWND, icon: HICON) -> Result<()> {
@@ -246,7 +257,7 @@ fn menu(hwnd: HWND, at: WPARAM, recorder: &RecordingControl, locale: Locale) -> 
         let popup = CreatePopupMenu()?;
         let selected = (|| -> Result<_> {
             for (id, key) in [
-                (TODAY, "native.tray.showMain"),
+                (MAIN, "native.tray.showMain"),
                 (OPEN, "miniWindow.open"),
                 (
                     TOGGLE,
@@ -327,7 +338,7 @@ unsafe extern "system" fn dispatch(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -
         if msg == CALLBACK {
             match (l.0 & 0xffff) as u32 {
                 NIN_SELECT | NIN_KEYSELECT => {
-                    let _ = tx.try_send(Action::Today);
+                    let _ = tx.try_send(Action::Main);
                 }
                 WM_CONTEXTMENU => {
                     if let Err(error) = menu(hwnd, w, &recorder, locale.get()) {
@@ -339,6 +350,7 @@ unsafe extern "system" fn dispatch(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -
             return LRESULT(0);
         }
         let action = match (msg, w.0, l.0) {
+            (WM_COMMAND, MAIN, 0) => Some(Action::Main),
             (WM_COMMAND, TODAY, 0) => Some(Action::Today),
             (WM_COMMAND, OPEN, 0) => Some(Action::Mini { focus: true }),
             (WM_COMMAND, TOGGLE, 0) => Some(Action::SetPaused(!recorder.paused())),

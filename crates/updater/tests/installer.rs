@@ -255,7 +255,7 @@ fn main() {
     let started = fs::read_to_string(destination.join("started.txt"))?;
     assert_eq!(
         started.lines().skip(1).collect::<Vec<_>>(),
-        ["--today", "--profile-parent", restart_profile.as_str()]
+        ["--main", "--profile-parent", restart_profile.as_str()]
     );
     assert!(!destination.join(".patina-previous").exists());
     let data = destination.join("user-data.db");

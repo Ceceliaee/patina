@@ -16,7 +16,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         #[cfg(windows)]
         None | Some("dev") => dev::run(root, args.collect())?,
         #[cfg(windows)]
-        Some(action @ ("--today" | "--mini")) => {
+        Some(action @ ("--main" | "--today" | "--mini")) => {
             dev::run(
                 root,
                 std::iter::once(action.to_owned()).chain(args).collect(),
@@ -48,7 +48,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             audit::run(root, offline)?;
         }
         Some("--help" | "-h" | "help") => println!(
-            "cargo xtask dev [--today|--mini] (Windows)\ncargo xtask check [tools|native]\ncargo xtask docs check [--archives]\ncargo xtask i18n --help\ncargo xtask ci intake|candidate\ncargo xtask audit [--offline]\ncargo xtask release --help"
+            "cargo xtask dev [--main|--today|--mini] (Windows)\ncargo xtask check [tools|native]\ncargo xtask docs check [--archives]\ncargo xtask i18n --help\ncargo xtask ci intake|candidate\ncargo xtask audit [--offline]\ncargo xtask release --help"
         ),
         _ => return Err("Unknown task. Run cargo xtask --help.".into()),
     }

@@ -1,5 +1,3 @@
-#[cfg(debug_assertions)]
-pub(crate) mod dev_preview;
 pub(crate) mod eyedropper;
 pub(crate) mod main;
 pub(crate) mod mini;
@@ -11,11 +9,12 @@ use gpui_kit::{
     AnyWindowHandle, App, AsyncApp, GraphicalEnvironment, WeakEntity, WindowingRequest,
 };
 
+use patina_desktop_protocol::MainTarget;
 use std::rc::Rc;
 
 #[derive(Default)]
 pub(crate) struct AppWindows {
-    today: Option<(AnyWindowHandle, WeakEntity<MainWindow>)>,
+    main: Option<(AnyWindowHandle, WeakEntity<MainWindow>)>,
     mini: Option<(AnyWindowHandle, WeakEntity<Mini>)>,
     notice: Option<(
         AnyWindowHandle,
@@ -25,7 +24,7 @@ pub(crate) struct AppWindows {
 
 impl AppWindows {
     pub(crate) fn refresh_tools(&self, cx: &mut App) {
-        if let Some((_, view)) = &self.today {
+        if let Some((_, view)) = &self.main {
             let _ = view.update(cx, |w, cx| w.refresh_tools(cx));
         }
     }
@@ -35,13 +34,13 @@ impl AppWindows {
         cx: &AsyncApp,
     ) -> bool {
         if self
-            .today
+            .main
             .as_ref()
             .is_none_or(|(_, v)| cx.update(|_| v.upgrade().is_none()))
         {
-            self.open_main(client, None, cx).await;
+            self.open_main(client, MainTarget::Resume, cx).await;
         }
-        if let Some((w, v)) = &self.today {
+        if let Some((w, v)) = &self.main {
             return cx.update(|cx| {
                 w.update(cx, |_, win, cx| {
                     v.update(cx, |v, cx| v.show_notice(win, cx))
@@ -55,7 +54,7 @@ impl AppWindows {
         if let Some((_, n)) = &self.notice {
             let _ = n.update(cx, |n, cx| n.refresh(cx));
         }
-        if let Some((_, v)) = &self.today {
+        if let Some((_, v)) = &self.main {
             let _ = v.update(cx, |v, cx| v.refresh_notice(cx));
         }
     }
@@ -120,46 +119,35 @@ impl AppWindows {
     pub(crate) async fn open_main(
         &mut self,
         client: &Rc<crate::client::Client>,
-        target: Option<patina_activity_model::ToolTarget>,
+        target: MainTarget,
         cx: &AsyncApp,
     ) {
-        if let Some((handle, view)) = &self.today
+        if let Some((handle, view)) = &self.main
             && cx
                 .update(|cx| {
                     handle.update(cx, |_, window, cx| {
-                        window.activate_window();
-                        let _ = view.update(cx, |v, cx| v.navigate(target, window, cx));
+                        view.update(cx, |main, cx| main.reopen(target, window, cx))
                     })
                 })
-                .is_ok()
+                .is_ok_and(|updated| updated.is_ok())
         {
             return;
         }
         if !attach_graphics(cx).await {
             return;
         }
-        self.today = cx.update(|cx| match MainWindow::open(cx, client.clone()) {
-            Ok((handle, view)) => {
-                if target.is_some() {
-                    let _ = handle.update(cx, |_, win, cx| {
-                        view.update(cx, |v, cx| v.navigate(target, win, cx))
-                    });
-                }
-                Some((handle, view))
-            }
-            Err(error) => {
-                eprintln!("open Today: {error:#}");
-
-                None
-            }
+        self.main = cx.update(|cx| {
+            MainWindow::open_at(cx, client.clone(), target)
+                .inspect_err(|error| eprintln!("open main window: {error:#}"))
+                .ok()
         });
     }
 
     pub(crate) fn pause_changed(&self, cx: &mut App) {
-        if let Some((handle, view)) = &self.today {
+        if let Some((handle, view)) = &self.main {
             let _ = handle.update(cx, |_, window, cx| {
                 if window.is_window_active() {
-                    let _ = view.update(cx, |today, cx| today.refresh(cx));
+                    let _ = view.update(cx, |main, cx| main.refresh(cx));
                 }
             });
         }

@@ -71,14 +71,14 @@ fn stop(preview: &mut Option<Child>) -> io::Result<()> {
 
 pub(super) fn run(root: &Path, mut args: Vec<String>) -> io::Result<()> {
     if args.is_empty() {
-        args.push("--today".into());
+        args.push("--main".into());
     }
     if args
         .iter()
-        .any(|arg| !matches!(arg.as_str(), "--today" | "--mini"))
+        .any(|arg| !matches!(arg.as_str(), "--main" | "--today" | "--mini"))
     {
         return Err(io::Error::other(
-            "Usage: cargo xtask dev [--today | --mini]",
+            "Usage: cargo xtask dev [--main | --today | --mini]",
         ));
     }
     let profile = if let Some(parent) = env::var_os("PATINA_GPUI_PROFILE_PARENT") {

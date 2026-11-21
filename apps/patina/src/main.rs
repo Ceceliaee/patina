@@ -20,12 +20,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             parent = Some(args.next().ok_or("missing profile parent")?.into());
             continue;
         }
-        let action = if arg == "--today" {
+        let action = if arg == "--main" {
+            patina::Action::Main
+        } else if arg == "--today" {
             patina::Action::Today
         } else if arg == "--mini" {
             patina::Action::Mini { focus: true }
         } else {
-            return Err("Usage: patina [--mini] [--today]".into());
+            return Err("Usage: patina [--main | --today | --mini]".into());
         };
         send.try_send(action)?;
     }

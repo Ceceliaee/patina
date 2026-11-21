@@ -151,7 +151,7 @@ pub fn launch(
     let behavior = initial.desktop;
     let silent = actions.is_empty() && behavior.start_minimized;
     if actions.is_empty() && !silent {
-        send.try_send(Action::Today)?;
+        send.try_send(Action::Main)?;
     }
     let tray = tray::Tray::new(
         send.clone(),
@@ -215,7 +215,7 @@ pub fn launch(
             std::process::exit(75);
         }
         let mut command = std::process::Command::new(env::current_exe()?);
-        command.arg("--today");
+        command.arg("--main");
         if let Some(dir) = parent {
             command.arg("--profile-parent").arg(dir);
         }

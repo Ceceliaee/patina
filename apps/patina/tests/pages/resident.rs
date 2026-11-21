@@ -106,7 +106,7 @@ fn exercise_resident_preferences(check_shell_icon: bool) -> Result<(), Error> {
     };
     let mut host = TestChild(launch().spawn()?);
     let pid = host.0.id();
-    let main = || children::find(pid, |p| window(p, w!("Patina UI")));
+    let main = || children::find(pid, |p| window(p, w!("Patina")));
     let tray = wait("silent startup", || window(pid, w!("Patina GPUI")))?;
     let icon = NOTIFYICONIDENTIFIER {
         cbSize: std::mem::size_of::<NOTIFYICONIDENTIFIER>() as u32,
@@ -129,6 +129,14 @@ fn exercise_resident_preferences(check_shell_icon: bool) -> Result<(), Error> {
         assert_eq!(login.CurrentToggleState()?, ToggleState_Off);
     }
     change(hwnd, "Launch at login", ToggleState_On, true)?;
+    unsafe {
+        let _ = ShowWindow(hwnd, SW_MINIMIZE);
+    }
+    command(tray, 4)?;
+    wait("tray restored the existing window", || unsafe {
+        (!IsIconic(hwnd).as_bool()).then_some(())
+    })?;
+    assert_eq!(unsafe { login.CurrentToggleState()? }, ToggleState_On);
     click(hwnd, "Cancel")?;
     wait("cancelled login change", || unsafe {
         (login.CurrentToggleState().ok()? == ToggleState_Off).then_some(())
@@ -176,7 +184,6 @@ fn exercise_resident_preferences(check_shell_icon: bool) -> Result<(), Error> {
     assert!(host.0.try_wait()?.is_none());
     assert!(launch().status()?.success());
     let reopened = wait("reopened without tray icon", main)?;
-    click(reopened, "Settings")?;
     assert_eq!(
         unsafe { toggle(reopened, "Show tray icon")?.CurrentToggleState()? },
         ToggleState_Off
@@ -199,9 +206,8 @@ fn exercise_resident_preferences(check_shell_icon: bool) -> Result<(), Error> {
     let mut next = TestChild(registered.spawn()?);
     let next_pid = next.0.id();
     let hwnd = wait("foreground startup", || {
-        children::find(next_pid, |p| window(p, w!("Patina UI")))
+        children::find(next_pid, |p| window(p, w!("Patina")))
     })?;
-    click(hwnd, "Settings")?;
     assert_eq!(
         unsafe { toggle(hwnd, "Launch silently")?.CurrentToggleState()? },
         ToggleState_Off

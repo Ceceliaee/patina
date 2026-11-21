@@ -101,7 +101,7 @@ fn native_update_download_confirmation_and_navigation() -> Result<(), Error> {
             .spawn()?,
     );
     let hwnd = wait("main", || {
-        children::find(child.0.id(), |p| window(p, w!("Patina UI")))
+        children::find(child.0.id(), |p| window(p, w!("Patina")))
     })?;
     click(hwnd, "About")?;
     click(hwnd, "Check updates")?;

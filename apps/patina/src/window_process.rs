@@ -21,7 +21,8 @@ use std::{
 };
 
 use patina_desktop_protocol::{
-    FromWindow, Target, ToWindow, WIRE_VERSION, handshake, read_messages, writer,
+    FromWindow, MainNavigation, MainTarget, Target, ToWindow, WIRE_VERSION, handshake,
+    read_messages, writer,
 };
 
 enum Event {
@@ -109,16 +110,14 @@ impl WindowProcess {
     fn open(
         &mut self,
         target: Target,
+        navigation: MainNavigation,
         recorder: &RecordingControl,
         revision: u64,
     ) -> io::Result<()> {
         if self.child.try_wait()?.is_some() {
             return Err(io::Error::other("window process has exited"));
         }
-        if matches!(
-            target,
-            Target::Today | Target::Tool(_) | Target::Mini { focus: true }
-        ) {
+        if matches!(target, Target::Main(_) | Target::Mini { focus: true }) {
             // Forward the foreground permission granted by a user's tray action.
             let _ = unsafe {
                 windows::Win32::UI::WindowsAndMessaging::AllowSetForegroundWindow(self.child.id())
@@ -130,6 +129,7 @@ impl WindowProcess {
                 serial: self.serial,
                 revision,
                 target,
+                navigation,
                 activity: recorder.current_activity(),
                 paused: recorder.paused(),
             })
@@ -178,13 +178,23 @@ pub(super) async fn serve(
         })
         .detach();
     {
+        let mut saved_navigation = requests
+            .preferences
+            .main_navigation()
+            .await
+            .inspect_err(|error| {
+                eprintln!("read main window navigation: {error}");
+            })
+            .ok();
+        let mut navigation = saved_navigation.unwrap_or_default();
         let mut worker: Option<WindowProcess> = None;
         let mut generation = 0;
         let mut active: Vec<async_executor::Task<()>> = Vec::new();
         while let Ok(event) = inbox.recv().await {
             let target = match event {
                 Event::Action(Action::Exit) => break,
-                Event::Action(Action::Today) => Some(Target::Today),
+                Event::Action(Action::Main) => Some(Target::Main(MainTarget::Resume)),
+                Event::Action(Action::Today) => Some(Target::Main(MainTarget::Today)),
                 Event::Action(Action::ToolNotice { dialog }) => Some(Target::Notice { dialog }),
                 Event::Action(Action::WakeTools) => {
                     tools.wake();
@@ -219,6 +229,16 @@ pub(super) async fn serve(
                     let current = worker.as_mut().unwrap();
                     match msg {
                         FromWindow::Open(target) => Some(target),
+                        FromWindow::Navigation(current) => {
+                            navigation = current;
+                            if saved_navigation != Some(current) {
+                                match requests.preferences.save_main_navigation(current).await {
+                                    Ok(()) => saved_navigation = Some(current),
+                                    Err(error) => eprintln!("save main window navigation: {error}"),
+                                }
+                            }
+                            None
+                        }
                         FromWindow::MainOpened(hwnd) => {
                             current.main_hwnd = hwnd;
                             if let Err(e) = tray.main_opened() {
@@ -294,8 +314,13 @@ pub(super) async fn serve(
             };
             if let Some(target) = target {
                 if let Some(w) = worker.as_mut()
-                    && w.open(target, recorder, revision.load(Ordering::Acquire))
-                        .is_ok()
+                    && w.open(
+                        target,
+                        navigation,
+                        recorder,
+                        revision.load(Ordering::Acquire),
+                    )
+                    .is_ok()
                 {
                     continue;
                 }
@@ -311,7 +336,12 @@ pub(super) async fn serve(
                         WindowProcess::start(generation, &preferences, events.clone())
                     })
                     .and_then(|mut w| {
-                        w.open(target, recorder, revision.load(Ordering::Acquire))?;
+                        w.open(
+                            target,
+                            navigation,
+                            recorder,
+                            revision.load(Ordering::Acquire),
+                        )?;
                         Ok(w)
                     }) {
                     Ok(w) => {

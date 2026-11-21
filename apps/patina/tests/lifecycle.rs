@@ -279,7 +279,7 @@ fn concurrent_launch_and_renderer_crash_reopen_the_committed_snapshot() -> Resul
             .open(profile.join("instance.lock"))
     };
     assert_eq!(lock().unwrap_err().raw_os_error(), Some(32));
-    let main = || children::find(owner, |pid| window(pid, w!("Patina UI")));
+    let main = || children::find(owner, |pid| window(pid, w!("Patina")));
     let initial = wait("first renderer", main)?;
     let initial_pid = window_pid(initial);
     let toggle = wait("initial chart snapshot", || {
@@ -298,10 +298,10 @@ fn concurrent_launch_and_renderer_crash_reopen_the_committed_snapshot() -> Resul
     let pattern: IUIAutomationTogglePattern =
         unsafe { toggle.GetCurrentPatternAs(UIA_TogglePatternId)? };
     unsafe { pattern.Toggle()? };
-    wait("renderer waiting for the chart write", || {
-        let control = named(initial, "Show by category")?;
-        (!unsafe { control.CurrentIsEnabled().ok()? }.as_bool()).then_some(())
-    })?;
+    wait(
+        "renderer shows category mode while storage is locked",
+        || named(initial, "Show total activity"),
+    )?;
     assert!(children::children(owner)?.contains(&initial_pid));
     let peer = unsafe { Owned::new(OpenProcess(PROCESS_TERMINATE, false, initial_pid)?) };
     unsafe { TerminateProcess(*peer, 7)? };

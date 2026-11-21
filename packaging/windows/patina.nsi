@@ -247,7 +247,7 @@ Section "Patina"
   WriteRegDWORD HKCU "${UNINSTALL_KEY}" "NoRepair" 1
   ${GetSize} "$INSTDIR" "/S=0K" $0 $1 $2
   WriteRegDWORD HKCU "${UNINSTALL_KEY}" "EstimatedSize" $0
-  CreateShortcut "$SMPROGRAMS\${INSTALLATION_ID}.lnk" "$INSTDIR\patina.exe" "--today"
+  CreateShortcut "$SMPROGRAMS\${INSTALLATION_ID}.lnk" "$INSTDIR\patina.exe" "--main"
   Goto finished
 rollback:
   Call Recover
@@ -261,7 +261,7 @@ SectionEnd
 
 Function .onInstSuccess
   ${If} $ProfileParent == ""
-    Exec '"$INSTDIR\patina.exe" --today'
+    Exec '"$INSTDIR\patina.exe" --main'
   ${Else}
     ; Each trailing backslash must survive the closing quote in the restarted host's argv.
     StrCpy $0 $ProfileParent
@@ -273,7 +273,7 @@ Function .onInstSuccess
       StrCpy $0 $0 -1
       StrCpy $ProfileParent "$ProfileParent\"
     ${Loop}
-    Exec '"$INSTDIR\patina.exe" --today --profile-parent "$ProfileParent"'
+    Exec '"$INSTDIR\patina.exe" --main --profile-parent "$ProfileParent"'
   ${EndIf}
 FunctionEnd
 
