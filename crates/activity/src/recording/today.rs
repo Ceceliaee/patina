@@ -33,7 +33,7 @@ pub async fn load_day_summary_at(
     let (yesterday_start_ms, _) = local_day_range_at(day_start_ms - 1)?;
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
     let mapping = load_classification_snapshot_in_tx(&mut tx).await?;
-    let prefs: Vec<(String, String)> = sqlx::query_as("SELECT key,value FROM settings WHERE key IN ('hourly_activity_chart_mode','refresh_interval_secs') OR key GLOB '__category_default_color_assignment::*'")
+    let prefs: Vec<(String, String)> = sqlx::query_as("SELECT key,value FROM settings WHERE key='refresh_interval_secs' OR key GLOB '__category_default_color_assignment::*'")
         .fetch_all(&mut *tx).await.map_err(|e| e.to_string())?;
     let prefs: BTreeMap<_, _> = prefs.into_iter().collect();
     let ranges = load_range_in_tx(
@@ -152,9 +152,6 @@ pub async fn load_day_summary_at(
             .into_iter()
             .map(|c| (c.id, c.label))
             .collect(),
-        chart_by_category: prefs
-            .get("hourly_activity_chart_mode")
-            .is_some_and(|m| m == "category"),
         refresh_seconds: prefs
             .get("refresh_interval_secs")
             .and_then(|s| s.parse::<u64>().ok())

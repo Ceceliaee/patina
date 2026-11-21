@@ -1,6 +1,7 @@
 use crate::data::repositories::app_settings::{
     commit_app_setting_mutations, commit_app_setting_mutations_in_tx, AppSettingMutation,
 };
+use patina_activity_model::views::preferences::{MainNavigation, MainSection};
 use sqlx::SqlitePool;
 use std::collections::BTreeMap;
 
@@ -245,6 +246,26 @@ pub struct Preferences {
     live: Option<LivePreferences>,
 }
 
+async fn write_main_navigation(
+    conn: &mut sqlx::SqliteConnection,
+    navigation: MainNavigation,
+) -> Result<(), String> {
+    sqlx::query(
+        "INSERT INTO settings(key,value) VALUES('__gpui_main_section',?),('__gpui_data_detailed',?),
+            ('__gpui_data_kind',?),('__gpui_sidebar_labels',?),('hourly_activity_chart_mode',?)
+         ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE value<>excluded.value",
+    )
+    .bind(serde_json::to_string(&navigation.section).map_err(|e| e.to_string())?)
+    .bind(if navigation.data_detailed { "1" } else { "0" })
+    .bind(serde_json::to_string(&navigation.data_kind).map_err(|e| e.to_string())?)
+    .bind(if navigation.sidebar_labels { "1" } else { "0" })
+    .bind(if navigation.hourly_by_category { "category" } else { "total" })
+    .execute(conn)
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 impl Preferences {
     pub fn new(pool: SqlitePool, locale: crate::Locale) -> Self {
         Self {
@@ -270,6 +291,73 @@ impl Preferences {
     }
     pub async fn preferences(&self) -> Result<AppPreferences, crate::ActivityError> {
         Ok(load_preferences(self.pool.clone()).await?)
+    }
+    pub async fn main_navigation(&self) -> Result<MainNavigation, String> {
+        let mut tx = self.pool.begin().await.map_err(|e| e.to_string())?;
+        let handoff: Option<String> = sqlx::query_scalar(
+            "DELETE FROM settings WHERE key='__update_resume_page' RETURNING value",
+        )
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+        let history: Option<String> =
+            sqlx::query_scalar("SELECT value FROM settings WHERE key='__gpui_history_modes'")
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(|e| e.to_string())?;
+        if let Some([distribution @ 0..=2, timeline @ 0..=2, grouped @ 0..=1]) =
+            history.and_then(|v| serde_json::from_str::<[u8; 3]>(&v).ok())
+        {
+            sqlx::query(
+                "INSERT INTO settings(key,value) VALUES('hourly_activity_chart_mode',?),('__gpui_history_modes',?)
+                 ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE excluded.key='__gpui_history_modes'",
+            )
+            .bind(if grouped == 1 { "category" } else { "total" })
+            .bind(serde_json::to_string(&[distribution, timeline]).map_err(|e| e.to_string())?)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+        }
+        let (saved, data_detailed, data_kind, sidebar_labels, hourly_by_category): (
+            Option<String>,
+            bool,
+            Option<String>,
+            bool,
+            bool,
+        ) = sqlx::query_as(
+            "SELECT (SELECT value FROM settings WHERE key='__gpui_main_section'),
+                    EXISTS(SELECT 1 FROM settings WHERE key='__gpui_data_detailed' AND value='1'),
+                    (SELECT value FROM settings WHERE key='__gpui_data_kind'),
+                    EXISTS(SELECT 1 FROM settings WHERE key='__gpui_sidebar_labels' AND value='1'),
+                    EXISTS(SELECT 1 FROM settings WHERE key='hourly_activity_chart_mode' AND value='category')",
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+        let mut navigation = MainNavigation {
+            section: saved
+                .and_then(|page| serde_json::from_str(&page).ok())
+                .unwrap_or_default(),
+            data_detailed,
+            data_kind: data_kind
+                .and_then(|v| serde_json::from_str(&v).ok())
+                .unwrap_or_default(),
+            sidebar_labels,
+            hourly_by_category,
+        };
+        if let Some(section) = handoff.and_then(|page| {
+            serde_json::from_value::<MainSection>(serde_json::Value::String(page)).ok()
+        }) {
+            navigation.section = section;
+            write_main_navigation(&mut tx, navigation).await?;
+        }
+        tx.commit().await.map_err(|e| e.to_string())?;
+        Ok(navigation)
+    }
+
+    pub async fn save_main_navigation(&self, navigation: MainNavigation) -> Result<(), String> {
+        let mut conn = self.pool.acquire().await.map_err(|e| e.to_string())?;
+        write_main_navigation(&mut conn, navigation).await
     }
     pub async fn save_preferences(
         &self,
@@ -307,27 +395,16 @@ impl Preferences {
         }
         Ok(())
     }
-    pub async fn set_chart_mode(&self, category: bool) -> Result<(), String> {
-        commit_app_setting_mutations(
-            &self.pool,
-            &[AppSettingMutation {
-                key: "hourly_activity_chart_mode".into(),
-                value: if category { "category" } else { "total" }.into(),
-            }],
-        )
-        .await
-        .map_err(|e| e.to_string())
-    }
     pub async fn detail_zoom(&self, hours: Option<f32>) -> Result<f32, String> {
         self.zoom_preference("__gpui_detail_zoom_hours", 24., hours)
             .await
     }
 
-    pub async fn history_modes(&self, modes: Option<[u8; 3]>) -> Result<([u8; 3], bool), String> {
+    pub async fn history_modes(&self, modes: Option<[u8; 2]>) -> Result<([u8; 2], bool), String> {
         let pool = self.pool.clone();
 
         if let Some(modes) = modes {
-            if modes[0] > 2 || modes[1] > 2 || modes[2] > 1 {
+            if modes[0] > 2 || modes[1] > 2 {
                 return Err("invalid history modes".into());
             }
             sqlx::query("INSERT INTO settings(key,value) VALUES('__gpui_history_modes',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
@@ -339,8 +416,8 @@ impl Preferences {
         .fetch_optional(&pool)
         .await
         .map_err(|e| e.to_string())?
-        .and_then(|v| serde_json::from_str::<[u8; 3]>(&v).ok())
-        .filter(|v| v[0] <= 2 && v[1] <= 2 && v[2] <= 1)
+        .and_then(|v| serde_json::from_str::<[u8; 2]>(&v).ok())
+        .filter(|v| v[0] <= 2 && v[1] <= 2)
         .unwrap_or_default();
         let enabled = super::preferences::load_preferences(pool)
             .await?

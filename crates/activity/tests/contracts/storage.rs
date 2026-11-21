@@ -50,6 +50,64 @@ fn storage_round_trip_and_migration() -> Result<(), Error> {
     );
     assert!(response!(request(R::ResumeAfterUpdate(None))?, Text).is_none());
     assert!(request(R::ResumeAfterUpdate(Some("unexpected".into()))).is_err());
+    use patina_activity_model::views::preferences::{MainNavigation, MainSection};
+    let navigation = patina_activity::Preferences::new(pool.clone(), patina_activity::Locale::EnUs);
+    rt.block_on(
+        sqlx::query("INSERT INTO settings(key,value) VALUES('__gpui_history_modes','[2,1,1]')")
+            .execute(&pool),
+    )?;
+    assert_eq!(
+        rt.block_on(navigation.main_navigation())?,
+        MainNavigation::default()
+    );
+    assert_eq!(rt.block_on(navigation.history_modes(None))?.0, [2, 1]);
+    rt.block_on(
+        sqlx::raw_sql(
+            "DELETE FROM settings WHERE key='hourly_activity_chart_mode';
+         UPDATE settings SET value='[1,2,1]' WHERE key='__gpui_history_modes';",
+        )
+        .execute(&pool),
+    )?;
+    assert!(
+        rt.block_on(navigation.main_navigation())?
+            .hourly_by_category
+    );
+    assert_eq!(rt.block_on(navigation.history_modes(None))?.0, [1, 2]);
+    let history = MainNavigation {
+        section: MainSection::History,
+        data_detailed: true,
+        data_kind: patina_activity_model::SeriesKind::Web,
+        sidebar_labels: true,
+        hourly_by_category: true,
+    };
+    rt.block_on(navigation.save_main_navigation(history))?;
+    assert_eq!(rt.block_on(navigation.main_navigation())?, history);
+    request(R::ResumeAfterUpdate(Some("About".into())))?;
+    assert_eq!(
+        rt.block_on(navigation.main_navigation())?,
+        MainNavigation {
+            section: MainSection::About,
+            ..history
+        }
+    );
+    assert_eq!(
+        rt.block_on(navigation.main_navigation())?.section,
+        MainSection::About
+    );
+    assert!(response!(request(R::ResumeAfterUpdate(None))?, Text).is_none());
+    rt.block_on(
+        sqlx::query("UPDATE settings SET value='obsolete' WHERE key IN ('__gpui_main_section','__gpui_data_kind','__gpui_sidebar_labels')")
+            .execute(&pool),
+    )?;
+    assert_eq!(
+        rt.block_on(navigation.main_navigation())?,
+        MainNavigation {
+            section: MainSection::Today,
+            data_detailed: true,
+            hourly_by_category: true,
+            ..Default::default()
+        }
+    );
     assert!(response!(request(R::Info)?, Info).install.is_absolute());
     let csv = root.path().join("input.csv");
     fs::write(

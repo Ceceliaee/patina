@@ -1,8 +1,9 @@
 use crate::activity_read_model::ANONYMOUS_ACTIVITY_KEY;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-#[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SeriesKind {
+    #[default]
     App,
     Category,
     Web,

@@ -1,6 +1,7 @@
 mod requests;
 use patina_desktop_protocol::{
-    FromWindow, Target, ToWindow, WindowRequest, handshake, read_messages, writer,
+    FromWindow, MainNavigation, MainTarget, Target, ToWindow, WindowRequest, handshake,
+    read_messages, writer,
 };
 
 use crate::windows::AppWindows;
@@ -31,10 +32,12 @@ impl Drop for PendingRequest {
 }
 
 pub(crate) struct Client {
+    pub(crate) navigation: Cell<MainNavigation>,
     shortcuts: RefCell<Vec<patina_activity_model::Shortcut>>,
     shortcut_revision: Cell<u64>,
     clock: RefCell<Option<gpui_kit::Task<()>>>,
     pub(crate) locale: Cell<Locale>,
+    pub(crate) activity_revision: Cell<u64>,
     pub(crate) theme: Cell<patina_activity_model::Theme>,
     pub(crate) schemes: RefCell<[String; 2]>,
     pub(crate) scheme_preview: Cell<Option<(gpui_kit::WindowId, bool, &'static str)>>,
@@ -55,10 +58,12 @@ impl Client {
         tx: mpsc::Sender<FromWindow>,
     ) -> Self {
         Self {
+            navigation: Cell::default(),
             shortcuts: Default::default(),
             shortcut_revision: Cell::new(0),
             clock: Default::default(),
             locale: Cell::new(locale),
+            activity_revision: Cell::new(0),
             theme: Cell::new(theme),
             schemes: RefCell::new(schemes),
             scheme_preview: Cell::new(None),
@@ -168,7 +173,7 @@ impl Client {
                 };
                 let client = self.clone();
                 let name = format!(
-                    "{} · {}",
+                    "{} ･ {}",
                     patina_i18n::text(self.locale.get(), key),
                     s.label
                 );
@@ -177,7 +182,9 @@ impl Client {
                         .accessibility_label(name)
                         .px(px(4.))
                         .child(display)
-                        .on_click(move |_, _, _| client.open(Target::Tool(target)))
+                        .on_click(move |_, _, _| {
+                            client.open(Target::Main(MainTarget::Tool(target)))
+                        })
                         .into_any_element(),
                 )
             })
@@ -218,6 +225,16 @@ impl Client {
             .map(|h| h.0 as usize);
         let _ = self.tx.send(FromWindow::MainOpened(hwnd));
     }
+    pub(crate) fn remember_navigation(&self, navigation: MainNavigation) {
+        self.navigation.set(navigation);
+        let _ = self.tx.send(FromWindow::Navigation(navigation));
+    }
+    pub(crate) fn set_hourly_by_category(&self, hourly_by_category: bool) {
+        self.remember_navigation(MainNavigation {
+            hourly_by_category,
+            ..self.navigation.get()
+        });
+    }
     pub(crate) fn close_main(&self, window: &mut gpui_kit::Window) {
         let _ = self.tx.send(FromWindow::MainClosed);
         window.remove_window();
@@ -226,6 +243,25 @@ impl Client {
         &self,
         request: WindowRequest,
     ) -> impl Future<Output = Result<T, RequestError>> + 'static {
+        use patina_activity_model::StorageRequest;
+        if matches!(
+            &request,
+            WindowRequest::Edit(..)
+                | WindowRequest::SavePreferences(..)
+                | WindowRequest::SaveRules(..)
+                | WindowRequest::DeleteApplication(_, Some(_))
+                | WindowRequest::DeleteWebsite(_, Some(_))
+                | WindowRequest::Storage(
+                    StorageRequest::Import { .. }
+                        | StorageRequest::DeleteBatch(_)
+                        | StorageRequest::Restore { .. }
+                        | StorageRequest::Cleanup(_)
+                        | StorageRequest::Move(_)
+                )
+        ) {
+            self.activity_revision
+                .set(self.activity_revision.get().wrapping_add(1));
+        }
         let id = self.next_request_id.get();
         let (tx, rx) = async_channel::bounded(1);
         let reservation = if self.pending.borrow().len() >= MAX_PENDING {
@@ -304,6 +340,9 @@ fn run(
         .with_quit_mode(QuitMode::Explicit)
         .run(move |cx| {
             gpui_kit::init(cx);
+            if let Err(error) = quietpro::init_fonts(cx) {
+                eprintln!("Load bundled UI fonts: {error:#}");
+            }
             let client = Rc::new(Client::new(locale, theme, schemes, tx));
             let close = client.clone();
             cx.on_window_closed(move |cx, _| {
@@ -320,17 +359,19 @@ fn run(
                             serial,
                             revision,
                             target,
+                            navigation,
                             activity,
                             paused,
                         } => {
-                            client.serial.set(serial);
+                            if client.serial.replace(serial) == 0 {
+                                client.navigation.set(navigation);
+                            }
                             client.revision.set(revision);
                             client.activity.replace(activity);
                             client.paused.set(paused);
                             match target {
-                                Target::Today => windows.open_main(&client, None, cx).await,
-                                Target::Tool(target) => {
-                                    windows.open_main(&client, Some(target), cx).await
+                                Target::Main(target) => {
+                                    windows.open_main(&client, target, cx).await
                                 }
                                 Target::Notice { dialog } => {
                                     let shown = if dialog {

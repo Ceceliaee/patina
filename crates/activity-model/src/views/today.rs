@@ -41,8 +41,6 @@ pub struct DaySummary {
     pub total_duration_ms: i64,
     #[serde(rename = "yesterday")]
     pub yesterday_duration_ms: i64,
-    #[serde(rename = "category_mode")]
-    pub chart_by_category: bool,
     pub refresh_seconds: u64,
 }
 
@@ -67,7 +65,7 @@ mod tests {
                 "custom_color":null,"anonymous":false,"hours":hours,"duration":61_500}],
             "categories": [{"id":"work","label":"Work","color":42,"hours":hours,"duration":61_500}],
             "choices":[["work","Work"]],"total":61_500,"yesterday":90_000,
-            "category_mode":true,"refresh_seconds":2
+            "refresh_seconds":2
         });
         let summary: DaySummary = serde_json::from_value(payload.clone()).unwrap();
         assert_eq!(summary.day_end_ms, 86_400_000);

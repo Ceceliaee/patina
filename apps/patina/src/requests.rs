@@ -91,7 +91,6 @@ impl Dispatch {
             | WindowRequest::Today
             | WindowRequest::Recent
             | WindowRequest::Icons(_)
-            | WindowRequest::ChartMode(_)
             | WindowRequest::Edit(..) => Self::Parallel,
         }
     }
@@ -291,10 +290,6 @@ impl DesktopRequests {
                     })
                     .await?,
             ),
-            WindowRequest::ChartMode(mode) => {
-                prefs.set_chart_mode(mode).await?;
-                Reply::Done
-            }
             WindowRequest::Edit(key, edit) => {
                 self.classification
                     .edit_app(key, edit)

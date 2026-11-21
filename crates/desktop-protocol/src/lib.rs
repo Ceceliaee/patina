@@ -1,3 +1,4 @@
+pub use model::views::preferences::{MainNavigation, MainSection};
 use model::views::storage::StorageReply;
 use patina_activity_model as model;
 use patina_activity_model::{AppEdit, CurrentActivity};
@@ -10,16 +11,22 @@ use std::{
 
 pub mod tools;
 pub const APP_ID: &str = "Patina.GPUI.Experimental";
-pub const WIRE_VERSION: &str = "2";
+pub const WIRE_VERSION: &str = "6";
 pub const MAX_PENDING: usize = 256;
 const MAX_FRAME: u64 = 128 * 1024 * 1024;
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
 pub enum Target {
-    Today,
+    Main(MainTarget),
     Notice { dialog: bool },
-    Tool(patina_activity_model::ToolTarget),
     Mini { focus: bool },
+}
+
+#[derive(Clone, Copy, Serialize, Deserialize)]
+pub enum MainTarget {
+    Resume,
+    Today,
+    Tool(model::ToolTarget),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -32,7 +39,7 @@ pub enum WindowRequest {
     HistoryMinimum(bool, i64),
     DetailZoom(Option<f32>),
     HistoryZoom(Option<f32>),
-    HistoryModes(Option<[u8; 3]>),
+    HistoryModes(Option<[u8; 2]>),
     Rules,
     ClassificationMode(bool),
     DeleteApplication(String, Option<patina_activity_model::DeletionImpact>),
@@ -58,7 +65,6 @@ pub enum WindowRequest {
     Today,
     Recent,
     Icons(Vec<String>),
-    ChartMode(bool),
     Edit(String, AppEdit),
 }
 
@@ -70,6 +76,7 @@ pub enum ToWindow {
     Open {
         serial: u64,
         revision: u64,
+        navigation: MainNavigation,
         target: Target,
         activity: CurrentActivity,
         paused: bool,
@@ -89,7 +96,7 @@ pub enum Reply {
     Storage(StorageReply),
     Update(patina_updater::Snapshot),
     Zoom(f32),
-    HistoryModes(([u8; 3], bool)),
+    HistoryModes(([u8; 2], bool)),
     Rules(model::ClassificationRules),
     Deletion(model::DeletionImpact),
     Preferences(model::AppPreferences),
@@ -161,7 +168,7 @@ macro_rules! reply_types {
     }
 }
 reply_types! {
-    Storage(StorageReply), Update(patina_updater::Snapshot), Zoom(f32), HistoryModes(([u8;3],bool)),
+    Storage(StorageReply), Update(patina_updater::Snapshot), Zoom(f32), HistoryModes(([u8;2],bool)),
     Rules(model::ClassificationRules), Deletion(model::DeletionImpact), Preferences(model::AppPreferences),
     Trends(model::Trends), History(model::HistoryDay), Today(model::DaySummary), Recent(model::Recent),
     Icons(Vec<(String,String)>), Tools(ToolList), Stopping(Vec<String>), Shortcuts(Vec<model::Shortcut>),
@@ -187,6 +194,7 @@ impl FromReply for Option<String> {
 #[derive(Serialize, Deserialize)]
 pub enum FromWindow {
     Open(Target),
+    Navigation(MainNavigation),
     MainOpened(Option<usize>),
     MainClosed,
     Idle(u64),

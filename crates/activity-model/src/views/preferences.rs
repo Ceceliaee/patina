@@ -1,5 +1,26 @@
 use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Default, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub enum MainSection {
+    #[default]
+    Today,
+    History,
+    Data,
+    Classification,
+    Tools,
+    Settings,
+    About,
+}
+
+#[derive(Clone, Copy, Default, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct MainNavigation {
+    pub section: MainSection,
+    pub data_detailed: bool,
+    pub data_kind: super::analysis::SeriesKind,
+    pub sidebar_labels: bool,
+    pub hourly_by_category: bool,
+}
+
+#[derive(Clone, Copy, Default, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum Theme {
     #[default]
     Light,

@@ -40,12 +40,6 @@ impl Client {
     pub(crate) fn recent(&self) -> impl Future<Output = Result<Recent, RequestError>> + 'static {
         self.request(WindowRequest::Recent)
     }
-    pub(crate) fn set_chart_mode(
-        &self,
-        mode: bool,
-    ) -> impl Future<Output = Result<(), RequestError>> + 'static {
-        self.request(WindowRequest::ChartMode(mode))
-    }
     pub(crate) fn edit_app(
         &self,
         key: String,
@@ -138,8 +132,8 @@ impl Client {
     }
     pub(crate) fn history_modes(
         &self,
-        modes: Option<[u8; 3]>,
-    ) -> impl Future<Output = Result<([u8; 3], bool), RequestError>> + 'static {
+        modes: Option<[u8; 2]>,
+    ) -> impl Future<Output = Result<([u8; 2], bool), RequestError>> + 'static {
         self.request(WindowRequest::HistoryModes(modes))
     }
     pub(crate) fn zoom(
@@ -189,13 +183,6 @@ impl Client {
     ) -> impl Future<Output = Result<(), RequestError>> + 'static {
         self.request(WindowRequest::Storage(
             model::StorageRequest::ResumeAfterUpdate(Some(page)),
-        ))
-    }
-    pub(crate) fn take_resume_page(
-        &self,
-    ) -> impl Future<Output = Result<Option<String>, RequestError>> + 'static {
-        self.request(WindowRequest::Storage(
-            model::StorageRequest::ResumeAfterUpdate(None),
         ))
     }
 }

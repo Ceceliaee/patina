@@ -139,11 +139,11 @@ fn detail_preferences_and_current_activity() -> Result<(), Error> {
     rt.block_on(async {
         assert_eq!(preferences.detail_zoom(None).await?, 24.0);
         assert_eq!(preferences.history_zoom(None).await?, 4.0);
-        assert_eq!(preferences.history_modes(None).await?.0, [0,0,0]);
-        preferences.history_modes(Some([2,1,1])).await?;
-        assert_eq!(preferences.history_modes(None).await?.0, [2,1,1]);
-        assert!(preferences.history_modes(Some([0,3,0])).await.is_err());
-        assert_eq!(preferences.history_modes(None).await?.0, [2,1,1]);
+        assert_eq!(preferences.history_modes(None).await?.0, [0,0]);
+        preferences.history_modes(Some([2,1])).await?;
+        assert_eq!(preferences.history_modes(None).await?.0, [2,1]);
+        assert!(preferences.history_modes(Some([0,3])).await.is_err());
+        assert_eq!(preferences.history_modes(None).await?.0, [2,1]);
         preferences.history_zoom(Some(8.)).await?;
         preferences.detail_zoom(Some(8.2)).await?;
         assert_eq!(preferences.detail_zoom(None).await?, 8.2);
@@ -175,7 +175,7 @@ fn detail_preferences_and_current_activity() -> Result<(), Error> {
     );
     assert_eq!(rt.block_on(reopened.detail_zoom(None))?, 8.2);
     assert_eq!(rt.block_on(reopened.history_zoom(None))?, 8.0);
-    assert_eq!(rt.block_on(reopened.history_modes(None))?.0, [2, 1, 1]);
+    assert_eq!(rt.block_on(reopened.history_modes(None))?.0, [2, 1]);
     Ok(())
 }
 
