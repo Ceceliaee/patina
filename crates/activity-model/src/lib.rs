@@ -20,7 +20,9 @@ pub mod web_activity;
 pub mod web_links;
 
 pub use classification::default_category_color;
-pub use color::{app_color as default_app_color, icon_color, icon_png, icon_png_from_bgra};
+pub use color::{
+    app_color as default_app_color, icon_color, icon_color_from_bgra, icon_png, icon_png_from_bgra,
+};
 pub use localization::{format_text, localized_data, text, Locale};
 pub use settings::{
     CloseBehavior, DesktopBehaviorSettings, RemoteStatusBridgeSettings, WebActivityBridgeSettings,

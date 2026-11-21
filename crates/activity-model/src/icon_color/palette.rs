@@ -66,7 +66,10 @@ pub(super) fn to_rgb([light, a, b]: Lab) -> u32 {
     })
 }
 pub(super) fn distance(a: Lab, b: Lab) -> f64 {
-    (a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2) + (a[2] - b[2]).powi(2)
+    let x = a[0] - b[0];
+    let y = a[1] - b[1];
+    let z = a[2] - b[2];
+    x * x + y * y + z * z
 }
 fn hue(lab: Lab) -> f64 {
     (lab[2].atan2(lab[1]).to_degrees() + 360.0) % 360.0
@@ -161,17 +164,40 @@ fn quantize(points: &[Point]) -> Vec<Swatch> {
         }
         centers.push(points[best.1].lab);
     }
-    let mut groups = vec![];
+    let mut groups: Vec<Vec<&Point>> = vec![Vec::new(); centers.len()];
+    let mut assigned = vec![0; points.len()];
     for _ in 0..30 {
-        groups = vec![Vec::new(); centers.len()];
-        for p in points {
-            let nearest = centers
-                .iter()
-                .enumerate()
-                .min_by(|(_, a), (_, b)| distance(p.lab, **a).total_cmp(&distance(p.lab, **b)))
-                .unwrap()
-                .0;
-            groups[nearest].push(p);
+        let mut separation = [[0.; 12]; 12];
+        let mut closest_neighbor = [f64::INFINITY; 12];
+        for (i, center) in centers.iter().enumerate() {
+            groups[i].clear();
+            for (j, &other) in centers[..i].iter().enumerate() {
+                let d = distance(*center, other);
+                separation[i][j] = d;
+                separation[j][i] = d;
+                closest_neighbor[i] = closest_neighbor[i].min(d);
+                closest_neighbor[j] = closest_neighbor[j].min(d);
+            }
+        }
+        for (p, cluster) in points.iter().zip(&mut assigned) {
+            let previous = *cluster;
+            let mut best = distance(p.lab, centers[previous]);
+            // A center farther than twice the point's current distance cannot win.
+            // Include a margin and retain the lowest index on exact ties.
+            let bound = 4. * best + 1e-14;
+            if closest_neighbor[previous] <= bound {
+                for (i, &center) in centers.iter().enumerate() {
+                    if i == previous || separation[previous][i] > bound {
+                        continue;
+                    }
+                    let d = distance(p.lab, center);
+                    if d < best || (d == best && i < *cluster) {
+                        best = d;
+                        *cluster = i;
+                    }
+                }
+            }
+            groups[*cluster].push(p);
         }
         let mut movement = 0.0;
         for (i, group) in groups.iter().enumerate() {

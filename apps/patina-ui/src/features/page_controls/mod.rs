@@ -34,38 +34,40 @@ pub(crate) fn logo() -> Img {
     });
     img(IMAGE.clone())
 }
+actions!(patina_lists, [NextControl, PreviousControl]);
 
-pub(crate) fn detail_dialog(
-    content: Entity<crate::features::history::History>,
-    focus: &FocusHandle,
-    close_label: String,
-    colors: quietpro::Palette,
-    close: impl Fn(&mut Window, &mut App) + 'static,
-    window: &Window,
+struct RowBindings;
+impl Global for RowBindings {}
+
+/// Bind Tab at the row so that focus can reach controls beyond the rendered viewport.
+pub(crate) fn keyboard_row(
+    scroll: UniformListScrollHandle,
+    index: usize,
+    count: usize,
     cx: &mut App,
-) -> gpui_kit::base::Dialog {
-    let close = std::rc::Rc::new(close);
-    let button = close.clone();
-    let popup = quietpro::dialog_surface(colors, window.viewport_size())
-        .id("app-detail-popup")
-        .relative()
-        .w((window.viewport_size().width - px(48.)).min(px(800.)))
-        .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
-        .child(content)
-        .child(
-            div().absolute().top(px(17.)).right(px(17.)).child(
-                quietpro::IconControl::new("close-detail", close_label, quietpro::Icon::X)
-                    .action(colors, move |_, win, cx| button(win, cx)),
-            ),
-        );
-    gpui_kit::base::Dialog::new(cx)
-        .focus_handle(focus.clone())
-        .on_ok(|_, _, _| false)
-        .backdrop(quietpro::dialog_backdrop())
-        .popup(gpui_kit::base::DialogPopup::new().child(popup))
-        .on_open_change(move |open, _, win, cx| {
-            if !open {
-                close(win, cx);
-            }
+) -> Div {
+    const CONTEXT: &str = "PatinaVirtualRow";
+    if !cx.has_global::<RowBindings>() {
+        cx.bind_keys([
+            KeyBinding::new("tab", NextControl, Some(CONTEXT)),
+            KeyBinding::new("shift-tab", PreviousControl, Some(CONTEXT)),
+        ]);
+        cx.set_global(RowBindings);
+    }
+    let back = scroll.clone();
+    div()
+        .key_context(CONTEXT)
+        .on_action(move |_: &NextControl, win, cx| {
+            scroll.scroll_to_item(
+                (index + 1).min(count.saturating_sub(1)),
+                ScrollStrategy::Nearest,
+            );
+            win.focus_next(cx);
+            win.refresh();
+        })
+        .on_action(move |_: &PreviousControl, win, cx| {
+            back.scroll_to_item(index.saturating_sub(1), ScrollStrategy::Nearest);
+            win.focus_prev(cx);
+            win.refresh();
         })
 }
