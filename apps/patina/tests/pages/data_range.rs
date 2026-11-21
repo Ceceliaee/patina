@@ -64,10 +64,10 @@ fn range_draft_apply_and_dismiss() -> Result<(), Error> {
             .spawn()?,
     );
     let hwnd = wait("main", || {
-        children::find(host.0.id(), |p| window(p, w!("Patina UI")))
+        children::find(host.0.id(), |p| window(p, w!("Patina")))
     })?;
     click(hwnd, "Data")?;
-    wait("data loaded", || named(hwnd, "Total · 1h 40m"))?;
+    wait("data loaded", || named(hwnd, "Total ･ 1h 40m"))?;
     let today = Local::now().date_naive();
     let scale = unsafe { GetDpiForWindow(hwnd) } as f64 / 96.;
     for name in ["Select range", "Shorten trend range", "Expand trend range"] {
@@ -123,7 +123,7 @@ fn range_draft_apply_and_dismiss() -> Result<(), Error> {
     wait("ordered draft", || {
         named(hwnd, &format!("{earlier} – {today}"))
     })?;
-    assert!(named(hwnd, "Total · 1h 40m").is_some());
+    assert!(named(hwnd, "Total ･ 1h 40m").is_some());
     press(hwnd, "Cancel")?;
     close()?;
     press(hwnd, "Select range")?;
@@ -153,7 +153,7 @@ fn range_draft_apply_and_dismiss() -> Result<(), Error> {
     })?;
     press(hwnd, "Apply")?;
     close()?;
-    wait("today data", || named(hwnd, "Total · 1h 10m"))
+    wait("today data", || named(hwnd, "Total ･ 1h 10m"))
         .map_err(|e| format!("{e}; {:?}", names(hwnd)))?;
     press(hwnd, "Select range")?;
     click(hwnd, "Next range mode")?;
@@ -175,12 +175,12 @@ fn range_draft_apply_and_dismiss() -> Result<(), Error> {
     close()?;
     wait("reset available", || button(hwnd, "Reset to last 7 days"))?;
     press(hwnd, "Reset to last 7 days")?;
-    wait("range restored", || named(hwnd, "Total · 1h 40m"))?;
+    wait("range restored", || named(hwnd, "Total ･ 1h 40m"))?;
     press(hwnd, "Expand trend range")?;
-    wait("expanded range data", || named(hwnd, "Total · 1h 40m"))?;
+    wait("expanded range data", || named(hwnd, "Total ･ 1h 40m"))?;
     press(hwnd, "Shorten trend range")?;
-    wait("shortened range data", || named(hwnd, "Total · 1h 40m"))?;
-    select_segment(hwnd, "Detailed analysis")?;
+    wait("shortened range data", || named(hwnd, "Total ･ 1h 40m"))?;
+    select_segment(hwnd, "Details")?;
     // Destination range commits affect only the selected object's metrics and curve.
     let destination = wait("destination range", || {
         range_button(hwnd, "Select app trend range", "Select range")
@@ -199,14 +199,14 @@ fn range_draft_apply_and_dismiss() -> Result<(), Error> {
     activate_control(hwnd, &cell, false)?;
     press(hwnd, "Apply")?;
     close()?;
-    wait("single-day app total", || named(hwnd, "Total · 45m"))?;
+    wait("single-day app total", || named(hwnd, "Total ･ 45m"))?;
     select_segment(hwnd, "Overview")?;
     assert!(
-        named(hwnd, "Total · 1h 40m").is_some(),
+        named(hwnd, "Total ･ 1h 40m").is_some(),
         "overview range must remain seven days"
     );
-    select_segment(hwnd, "Detailed analysis")?;
-    assert!(named(hwnd, "Total · 45m").is_some());
+    select_segment(hwnd, "Details")?;
+    assert!(named(hwnd, "Total ･ 45m").is_some());
     activate_control(
         hwnd,
         &range_button(hwnd, "Select app trend range", "Select range").ok_or("range trigger")?,
@@ -225,7 +225,7 @@ fn range_draft_apply_and_dismiss() -> Result<(), Error> {
             .ok_or("destination reset")?,
         true,
     )?;
-    wait("app range restored", || named(hwnd, "Total · 1h 15m"))?;
+    wait("app range restored", || named(hwnd, "Total ･ 1h 15m"))?;
     activate_control(
         hwnd,
         &range_button(hwnd, "Select app trend range", "Select range").ok_or("range trigger")?,
@@ -238,10 +238,10 @@ fn range_draft_apply_and_dismiss() -> Result<(), Error> {
         true,
     )?;
     close()?;
-    assert!(named(hwnd, "Total · 1h 40m").is_some());
-    select_segment(hwnd, "Detailed analysis")?;
+    assert!(named(hwnd, "Total ･ 1h 40m").is_some());
+    select_segment(hwnd, "Details")?;
     assert!(popup(hwnd).is_none());
-    assert!(named(hwnd, "Total · 1h 15m").is_some());
+    assert!(named(hwnd, "Total ･ 1h 15m").is_some());
     let tray = window(host.0.id(), w!("Patina GPUI")).ok_or("tray")?;
     command(tray, 2)?;
     assert!(wait("exit", || host.0.try_wait().ok().flatten())?.success());
@@ -340,11 +340,14 @@ fn full_year_cells(hwnd: HWND, detailed: bool, year: i32) -> Result<(), Error> {
     Ok(())
 }
 
-fn overview_heat_layout(hwnd: HWND) -> Result<(), Error> {
-    let date = Local::now().date_naive();
+fn overview_heat_layout(hwnd: HWND, date: chrono::NaiveDate) -> Result<(), Error> {
     wait("overview heatmap ready", || {
-        super::button(hwnd, &format!("{date} · 1h 10m"))
+        super::button(hwnd, &format!("{date} ･ 1h 10m"))
     })?;
+    for label in ["Daily", "Weekly"] {
+        let option = segment(hwnd, label).ok_or("heatmap mode option")?;
+        super::assert_control_height(hwnd, &option, 28)?;
+    }
     let geometry = chart_heat_geometry(hwnd, false)?;
     super::trend_chart::heatmap_geometry(hwnd)?;
     for mode in ["Weekly", "Daily"] {
@@ -363,16 +366,18 @@ fn overview_heat_layout(hwnd: HWND) -> Result<(), Error> {
     ] {
         super::press(hwnd, direction)?;
         stable_heat_geometry(hwnd, false, geometry)?;
-        wait("overview heatmap reloaded", || {
-            super::button(hwnd, &format!("{date} · 1h 10m"))
-        })?;
-        assert_eq!(chart_heat_geometry(hwnd, false)?, geometry);
         if direction == "Previous month" {
-            full_year_cells(hwnd, false, date.year())?;
+            full_year_cells(hwnd, false, Local::now().date_naive().year())?;
         }
+        if direction == "Next month" || date.year() == Local::now().date_naive().year() {
+            wait("overview heatmap reloaded", || {
+                super::button(hwnd, &format!("{date} ･ 1h 10m"))
+            })?;
+        }
+        assert_eq!(chart_heat_geometry(hwnd, false)?, geometry);
     }
-    select_segment(hwnd, "Detailed analysis")?;
-    wait("detail loaded", || named(hwnd, "Total · 1h 15m"))?;
+    select_segment(hwnd, "Details")?;
+    wait("detail loaded", || named(hwnd, "Total ･ 1h 15m"))?;
     select_segment(hwnd, "Overview")?;
     stable_heat_geometry(hwnd, false, geometry)?;
     Ok(())
@@ -390,8 +395,10 @@ fn destination_heatmap_year_range() -> Result<(), Error> {
     let profile = root.path().join(patina::APP_ID);
     fs::create_dir(&profile)?;
     let db = profile.join("patina.db");
-    seed(&db)?;
     let today = Local::now().date_naive();
+    // Use a completed day so the expected 70 minutes are available even just after midnight.
+    let activity_date = today - Days::new(1);
+    support::fixture::seed_profile_on(&db, false, activity_date)?;
     let old_date = chrono::NaiveDate::from_ymd_opt(today.year() - 1, 1, 15).unwrap();
     let old_date = old_date - Days::new(old_date.weekday().num_days_from_monday().into());
     let old_start = old_date
@@ -406,6 +413,7 @@ fn destination_heatmap_year_range() -> Result<(), Error> {
         .build()?;
     rt.block_on(async {
         let mut db = SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&db)).await?;
+        super::history_timeline::enable_web_history(&mut db).await?;
         sqlx::query("INSERT INTO sessions(exe_name,app_name,start_time,end_time,duration) VALUES ('studio.exe','Studio',?,?,300000)")
             .bind(old_start).bind(old_start+300000).execute(&mut db).await?;
         sqlx::query("INSERT INTO sessions(exe_name,app_name,start_time,end_time,duration) VALUES ('studio.exe','Studio',?,?,600000)")
@@ -419,12 +427,16 @@ fn destination_heatmap_year_range() -> Result<(), Error> {
             .spawn()?,
     );
     let hwnd = wait("main", || {
-        children::find(host.0.id(), |p| window(p, w!("Patina UI")))
+        children::find(host.0.id(), |p| window(p, w!("Patina")))
     })?;
     click(hwnd, "Data")?;
-    wait("overview loaded", || named(hwnd, "Total · 1h 40m"))?;
-    overview_heat_layout(hwnd)?;
-    select_segment(hwnd, "Detailed analysis")?;
+    wait("overview loaded", || named(hwnd, "Total ･ 1h 40m"))?;
+    overview_heat_layout(hwnd, activity_date)?;
+    select_segment(hwnd, "Details")?;
+    for label in ["Apps", "Categories", "Web", "Daily", "Weekly"] {
+        let option = wait(label, || segment(hwnd, label))?;
+        super::assert_control_height(hwnd, &option, 28)?;
+    }
     let heat_button = |name: &str| range_button(hwnd, "Select heatmap range", name);
     let enabled = |name: &str| {
         heat_button(name).filter(|el| unsafe { el.CurrentIsEnabled().is_ok_and(|v| v.as_bool()) })
@@ -533,20 +545,20 @@ fn destination_heatmap_year_range() -> Result<(), Error> {
     assert!(
         windows::core::BSTR::try_from(&description)?
             .to_string()
-            .ends_with(" · 5m")
+            .ends_with(" ･ 5m")
     );
     activate_control(hwnd, &heat_segment("Weekly").ok_or("weekly mode")?, true)?;
     wait("weekly restored", || heat_selected("Weekly"))?;
     select_segment(hwnd, "Overview")?;
-    assert!(named(hwnd, "Total · 1h 40m").is_some());
+    assert!(named(hwnd, "Total ･ 1h 40m").is_some());
     assert!(
         super::selected_segment(hwnd, "Daily").is_some(),
         "overview granularity must remain daily"
     );
-    select_segment(hwnd, "Detailed analysis")?;
+    select_segment(hwnd, "Details")?;
     assert!(heat_selected("Weekly").is_some());
     assert!(named(hwnd, &(today.year() - 1).to_string()).is_some());
-    assert!(named(hwnd, "Total · 1h 15m").is_some());
+    assert!(named(hwnd, "Total ･ 1h 15m").is_some());
     activate_control(
         hwnd,
         &wait("newer year", || enabled("Switch to newer range"))?,
@@ -577,7 +589,7 @@ fn destination_heatmap_year_range() -> Result<(), Error> {
     wait("empty web earliest year", || {
         disabled("Switch to earlier range")
     })?;
-    assert!(named(hwnd, "Total · 0m").is_some());
+    assert!(named(hwnd, "Total ･ 0s").is_some());
     assert!(
         heat_selected("Weekly").is_some(),
         "destination mode must preserve granularity"
@@ -585,5 +597,110 @@ fn destination_heatmap_year_range() -> Result<(), Error> {
     let tray = window(host.0.id(), w!("Patina GPUI")).ok_or("tray")?;
     command(tray, 2)?;
     assert!(wait("exit", || host.0.try_wait().ok().flatten())?.success());
+    Ok(())
+}
+#[test]
+#[ignore = "isolated Win32 desktop and temporary profile"]
+fn restored_data_tab_follows_the_profile() -> Result<(), Error> {
+    if !patina_test_support::run_case()? {
+        return Ok(());
+    }
+    let _com = ComApartment::init()?;
+    unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
+    let root = tempfile::tempdir()?;
+    let profile = root.path().join(patina::APP_ID);
+    fs::create_dir(&profile)?;
+    let db = profile.join("patina.db");
+    seed(&db)?;
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?
+        .block_on(async {
+            let mut conn =
+                SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&db)).await?;
+            history_timeline::enable_web_history(&mut conn).await
+        })?;
+    let launch = || {
+        Command::new(env!("CARGO_BIN_EXE_patina"))
+            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .arg("--main")
+            .spawn()
+            .map(TestChild)
+    };
+    let main_window = |pid| children::find(pid, |p| window(p, w!("Patina")));
+    let labels = |hwnd, expected| {
+        wait("sidebar label toggle", || unsafe {
+            let toggle = super::button(hwnd, "Navigation labels")?
+                .GetCurrentPatternAs::<IUIAutomationTogglePattern>(UIA_TogglePatternId)
+                .ok()?;
+            (toggle.CurrentToggleState().ok()? == expected).then_some(())
+        })
+    };
+    let mut host = launch()?;
+    let pid = host.0.id();
+    let hwnd = wait("first main window", || main_window(pid))?;
+    click(hwnd, "Show by category")?;
+    wait("Today groups hourly activity", || {
+        button(hwnd, "Show total activity")
+    })?;
+    labels(hwnd, ToggleState_Off)?;
+    click(hwnd, "Navigation labels")?;
+    labels(hwnd, ToggleState_On)?;
+    click(hwnd, "Data")?;
+    wait("default overview", || selected_segment(hwnd, "Overview"))?;
+    select_segment(hwnd, "Details")?;
+    wait("default apps", || selected_segment(hwnd, "Apps"))?;
+    select_segment(hwnd, "Categories")?;
+    click(hwnd, "Settings")?;
+    wait("settings displayed", || named(hwnd, "Show tray icon"))?;
+    click(hwnd, "Data")?;
+    wait("details after page switch", || {
+        selected_segment(hwnd, "Details")
+    })?;
+    wait("categories after page switch", || {
+        selected_segment(hwnd, "Categories")
+    })?;
+    select_segment(hwnd, "Web")?;
+    let tray = wait("tray", || window(pid, w!("Patina GPUI")))?;
+    press(hwnd, "Close window")?;
+    wait("main released", || main_window(pid).is_none().then_some(()))?;
+    command(tray, 4)?;
+    let hwnd = wait("tray reopen", || main_window(pid))?;
+    wait("details after tray reopen", || {
+        selected_segment(hwnd, "Details")
+    })?;
+    wait("web after tray reopen", || selected_segment(hwnd, "Web"))?;
+    labels(hwnd, ToggleState_On)?;
+    command(tray, 2)?;
+    assert!(wait("complete exit", || host.0.try_wait().ok().flatten())?.success());
+    let mut host = launch()?;
+    let pid = host.0.id();
+    let hwnd = wait("restart", || main_window(pid))?;
+    wait("details after restart", || {
+        selected_segment(hwnd, "Details")
+    })?;
+    wait("web after restart", || selected_segment(hwnd, "Web"))?;
+    labels(hwnd, ToggleState_On)?;
+    click(hwnd, "Navigation labels")?;
+    labels(hwnd, ToggleState_Off)?;
+    select_segment(hwnd, "Overview")?;
+    wait("overview displayed", || selected_segment(hwnd, "Overview"))?;
+    let tray = wait("restarted tray", || window(pid, w!("Patina GPUI")))?;
+    command(tray, 2)?;
+    assert!(wait("second exit", || host.0.try_wait().ok().flatten())?.success());
+    let host = launch()?;
+    let hwnd = wait("second restart", || main_window(host.0.id()))?;
+    wait("overview after restart", || {
+        selected_segment(hwnd, "Overview")
+    })?;
+    labels(hwnd, ToggleState_Off)?;
+    select_segment(hwnd, "Details")?;
+    wait("overview retained the last detail kind", || {
+        selected_segment(hwnd, "Web")
+    })?;
+    click(hwnd, "History")?;
+    wait("History restores Today's hourly mode after restart", || {
+        button(hwnd, "Show total activity")
+    })?;
     Ok(())
 }

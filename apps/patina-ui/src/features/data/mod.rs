@@ -11,14 +11,20 @@ use gpui_kit::{
     *,
 };
 use patina_activity_model::{SeriesKind, Trends, text};
+use patina_desktop_protocol::MainNavigation;
 use quietpro::{CARD_TITLE_GAP, content_card, heading, page as shell, page_title_row};
 use std::{
     collections::{BTreeSet, HashMap},
     rc::Rc,
-    sync::Arc,
 };
 mod heatmap;
+mod icons;
 mod range_picker;
+mod snapshot;
+pub(crate) use snapshot::DataCache;
+use snapshot::DataFrame;
+#[cfg(all(test, feature = "test-support"))]
+mod tests;
 mod trend;
 use range_picker::{RangeControl, RangePicker, RangeTarget};
 
@@ -36,35 +42,27 @@ pub(crate) struct DataPage {
     quick_edit: Option<Entity<crate::features::page_controls::quick_edit::QuickEdit>>,
     client: Rc<Client>,
     refresh_timer: Option<Task<()>>,
-    detailed: bool,
-    web_enabled: bool,
+    frame: Option<DataFrame>,
+    cache: DataCache,
+    web_enabled: Option<bool>,
     view_focus: [FocusHandle; 2],
-    year: i32,
-    recent_heat: bool,
-    heat: Option<Trends>,
+    overview_year: Option<i32>,
     heat_focus: std::cell::RefCell<HashMap<&'static str, heatmap::HeatmapFocus>>,
-    heat_read: Option<Task<()>>,
     weekly: bool,
     mode_focus: [FocusHandle; 3],
     heatmap_mode_focus: [FocusHandle; 2],
     range_picker: Option<RangePicker>,
     ranges: [RangeControl; 2],
 
-    kind: SeriesKind,
     data_kind: SeriesKind,
-    data: Option<Trends>,
-    overview: Option<Trends>,
-    overview_read: Option<Task<()>>,
     modes_read: Option<Task<()>>,
-    read: Option<Task<()>>,
+    read: Option<(snapshot::PanelRequest, Task<()>)>,
     error: bool,
     selected: BTreeSet<String>,
     selections: [BTreeSet<String>; 3],
     selection_notice: bool,
-    icons: HashMap<String, trend::SourceIcon>,
-    icon_read: Option<Task<()>>,
-    trend_heat: Option<(SeriesKind, Trends)>,
-    trend_heat_read: Option<Task<()>>,
+    rank_scroll: UniformListScrollHandle,
+    viewport_height: Pixels,
     trend_heat_year: Option<i32>,
     trend_heat_weekly: bool,
     trend_heat_mode_focus: [FocusHandle; 2],
@@ -76,6 +74,35 @@ pub(crate) struct DataPage {
 impl EventEmitter<OpenHistoryDay> for DataPage {}
 
 impl DataPage {
+    fn select_view(&mut self, detailed: bool, cx: &mut Context<Self>) {
+        self.select_panel(detailed, self.client.navigation.get().data_kind, cx);
+    }
+
+    fn select_panel(&mut self, detailed: bool, kind: SeriesKind, cx: &mut Context<Self>) {
+        let current = self.client.navigation.get();
+        if current.data_detailed != detailed || current.data_kind != kind {
+            self.client.remember_navigation(MainNavigation {
+                data_detailed: detailed,
+                data_kind: kind,
+                ..current
+            });
+        }
+        self.load_panel(false, cx);
+    }
+
+    fn detail_kind(&self) -> Option<SeriesKind> {
+        match self.client.navigation.get().data_kind {
+            SeriesKind::Web => self.web_enabled.map(|enabled| {
+                if enabled {
+                    SeriesKind::Web
+                } else {
+                    SeriesKind::App
+                }
+            }),
+            kind => Some(kind),
+        }
+    }
+
     fn open_quick_edit(
         &mut self,
         key: String,
@@ -116,8 +143,14 @@ impl DataPage {
         cx.notify();
     }
 
-    pub(crate) fn new(client: Rc<Client>, win: &mut Window, cx: &mut Context<Self>) -> Self {
-        let today = Local::now().date_naive();
+    pub(crate) fn new(
+        client: Rc<Client>,
+        cache: DataCache,
+        win: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        cx.on_release(|page, cx| page.release_frame(&HashMap::new(), cx))
+            .detach();
         let searches = std::array::from_fn(|_| {
             let search = cx.new(|cx| InputState::new(win, cx));
             cx.subscribe(&search, |_, _, event, cx| {
@@ -133,34 +166,26 @@ impl DataPage {
             quick_edit: None,
             client,
             refresh_timer: None,
-            detailed: false,
-            web_enabled: false,
+            frame: None,
+            cache,
+            web_enabled: None,
             view_focus: std::array::from_fn(|_| cx.focus_handle()),
-            year: today.year(),
-            recent_heat: true,
-            heat: None,
+            overview_year: None,
             heat_focus: Default::default(),
-            heat_read: None,
             weekly: false,
             mode_focus: std::array::from_fn(|_| cx.focus_handle()),
             heatmap_mode_focus: std::array::from_fn(|_| cx.focus_handle()),
             range_picker: None,
             ranges: std::array::from_fn(|_| RangeControl::new(cx)),
-            kind: SeriesKind::App,
             data_kind: SeriesKind::App,
-            data: None,
-            overview: None,
-            overview_read: None,
             modes_read: None,
             read: None,
             error: false,
             selected: BTreeSet::new(),
             selections: Default::default(),
             selection_notice: false,
-            icons: HashMap::new(),
-            icon_read: None,
-            trend_heat: None,
-            trend_heat_read: None,
+            rank_scroll: UniformListScrollHandle::new(),
+            viewport_height: win.viewport_size().height,
             trend_heat_year: None,
             trend_heat_weekly: false,
             trend_heat_mode_focus: std::array::from_fn(|_| cx.focus_handle()),
@@ -195,103 +220,25 @@ impl DataPage {
         .detach();
         this
     }
-    fn load_heat(&mut self, cx: &mut Context<Self>) {
-        let today = Local::now().date_naive();
-        let monday = today - Days::new(today.weekday().num_days_from_monday() as u64);
-        let (start, end) = if self.recent_heat {
-            (noon(monday - Days::new(52 * 7)), noon(today))
-        } else {
-            (
-                NaiveDate::from_ymd_opt(self.year, 1, 1).and_then(noon),
-                NaiveDate::from_ymd_opt(self.year, 12, 31).and_then(noon),
-            )
-        };
-        let read = self.client.trends(start.zip(end), SeriesKind::App);
-        self.heat_read = Some(cx.spawn(async move |view, cx| {
-            let res = read.await;
-            let _ = view.update(cx, |this, cx| {
-                match res {
-                    Ok(data) => this.heat = Some(data),
-                    Err(_) => this.error = true,
-                };
-                cx.notify();
-            });
-        }));
-    }
     pub(crate) fn refresh(&mut self, cx: &mut Context<Self>) {
         let read = self.client.history_modes(None);
         self.modes_read = Some(cx.spawn(async move |view, cx| {
-            if let Ok((_, enabled)) = read.await {
-                let _ = view.update(cx, |this, cx| {
-                    this.web_enabled = enabled;
-                    if !enabled && this.kind == SeriesKind::Web {
-                        this.kind = SeriesKind::App;
-                        this.load_destination(cx);
-                    }
-                    cx.notify();
-                });
-            }
-        }));
-        self.error = false;
-        self.load_overview(cx);
-        self.load_destination(cx);
-        self.load_heat(cx);
-        self.load_trend_heat(cx);
-    }
-    fn load_overview(&mut self, cx: &mut Context<Self>) {
-        let read = self.client.trends(
-            self.ranges[RangeTarget::Overview as usize].range(),
-            SeriesKind::App,
-        );
-        self.overview_read = Some(cx.spawn(async move |view, cx| {
             let result = read.await;
             let _ = view.update(cx, |this, cx| {
-                match result {
-                    Ok(data) => this.overview = Some(data),
-                    Err(_) => this.error = true,
+                this.modes_read = None;
+                let previous = this.detail_kind();
+                if let Ok((_, enabled)) = result {
+                    this.web_enabled = Some(enabled);
+                }
+                if this.client.navigation.get().data_detailed
+                    && (previous.is_none() || previous != this.detail_kind())
+                {
+                    this.load_panel(previous.is_none(), cx);
                 }
                 cx.notify();
             });
         }));
-    }
-    fn load_destination(&mut self, cx: &mut Context<Self>) {
-        let kind = self.kind;
-        let read = self
-            .client
-            .trends(self.ranges[RangeTarget::Destination as usize].range(), kind);
-        self.read = Some(cx.spawn(async move |view, cx| {
-            let result = read.await;
-            let _ = view.update(cx, |this, cx| {
-                match result {
-                    Ok(data) => {
-                        if this.data_kind != kind {
-                            this.selections[this.data_kind as usize] = this.selected.clone();
-                            this.selected = this.selections[kind as usize].clone();
-                        }
-                        this.data_kind = kind;
-                        this.selected
-                            .retain(|key| data.series.iter().any(|s| &s.key == key));
-                        if this.selected.is_empty()
-                            && let Some(first) = data.series.first()
-                        {
-                            this.selected.insert(first.key.clone());
-                        }
-                        this.data = Some(data);
-                        this.load_icons(cx);
-                        if this
-                            .trend_heat
-                            .as_ref()
-                            .is_none_or(|(kind, _)| *kind != this.kind)
-                        {
-                            this.load_trend_heat(cx);
-                        }
-                    }
-                    Err(_) => this.error = true,
-                };
-                cx.notify();
-            });
-        }));
-        cx.notify();
+        self.load_panel(true, cx);
     }
 }
 impl DataPage {
@@ -303,9 +250,27 @@ impl DataPage {
     ) -> Stateful<Div> {
         let locale = self.client.locale.get();
         let tr = |key| text(locale, key);
-        let data = self.overview.as_ref().unwrap();
+        let frame = self.frame.as_ref().unwrap();
+        let data = &frame.trend;
         let overall = daily_totals(data);
         let overview_total = overall.iter().sum::<i64>();
+        let metric = |key, ms| {
+            let value = duration(ms);
+            let summary = SharedString::from(format!("{} ･ {value}", tr(key)));
+            let value_range = summary.len() - value.len()..summary.len();
+            div()
+                .id(summary.clone())
+                .role(Role::Label)
+                .aria_value(summary.clone())
+                .whitespace_nowrap()
+                .child(StyledText::new(summary).with_highlights([(
+                    value_range,
+                    HighlightStyle {
+                        color: Some(colors.text.into()),
+                        ..Default::default()
+                    },
+                )]))
+        };
         let mut overview = content_card(colors.border, colors.panel)
             .id("data-overview")
             .accessibility_id("data-overview")
@@ -315,20 +280,36 @@ impl DataPage {
         overview = overview.child(
             div()
                 .flex()
+                .flex_wrap()
                 .items_center()
                 .gap(px(16.))
-                .child(heading(tr("data.activityTrend")).flex_1())
-                .child(label(format!(
-                    "{} · {}",
-                    tr("data.appTrendTotal"),
-                    duration(overview_total)
-                )))
-                .child(label(format!(
-                    "{} · {}",
-                    tr("data.appTrendAverage"),
-                    duration(overview_total / data.days.len().max(1) as i64)
-                )))
-                .child(self.range_control(RangeTarget::Overview, colors, cx)),
+                .child(
+                    heading(tr("data.activityTrend"))
+                        .flex_1()
+                        .whitespace_nowrap(),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .flex_none()
+                        .items_center()
+                        .gap(px(16.))
+                        .text_size(px(14.))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(colors.secondary)
+                        .child(metric("data.appTrendTotal", overview_total))
+                        .child(metric(
+                            "data.appTrendAverage",
+                            overview_total / data.days.len().max(1) as i64,
+                        )),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .flex()
+                        .justify_end()
+                        .child(self.range_control(RangeTarget::Overview, colors, cx)),
+                ),
         );
         let make_chart = |id: &'static str, values: &[i64], height: f32| {
             let mut points = std::collections::BTreeMap::<String, i64>::new();
@@ -336,7 +317,7 @@ impl DataPage {
                 *points
                     .entry(stamp(
                         day,
-                        if self.ranges[RangeTarget::Overview as usize].monthly() {
+                        if frame.request.selection.monthly(Local::now().date_naive()) {
                             "%Y-%m"
                         } else {
                             "%Y-%m-%d"
@@ -348,17 +329,18 @@ impl DataPage {
             let dates: Vec<_> = entries.iter().map(|(date, _)| date.clone()).collect();
             let descriptions = entries
                 .iter()
-                .map(|(date, value)| format!("{date} · {}", duration(*value)))
+                .map(|(date, value)| format!("{date} ･ {}", duration(*value)))
                 .collect();
             let days = data.days.clone();
             let view = cx.weak_entity();
-            let activate = (!self.ranges[RangeTarget::Overview as usize].monthly()).then(|| {
-                Rc::new(move |i: usize, _win: &mut Window, cx: &mut App| {
-                    if let Some(&day) = days.get(i) {
-                        let _ = view.update(cx, |_, cx| cx.emit(OpenHistoryDay(day)));
-                    }
-                }) as Rc<dyn Fn(usize, &mut Window, &mut App)>
-            });
+            let activate =
+                (!frame.request.selection.monthly(Local::now().date_naive())).then(|| {
+                    Rc::new(move |i: usize, _win: &mut Window, cx: &mut App| {
+                        if let Some(&day) = days.get(i) {
+                            let _ = view.update(cx, |_, cx| cx.emit(OpenHistoryDay(day)));
+                        }
+                    }) as Rc<dyn Fn(usize, &mut Window, &mut App)>
+                });
             div()
                 .w_full()
                 .flex_1()
@@ -406,9 +388,8 @@ impl DataPage {
                     .child(heading(tr("data.activityHeatmap")).flex_1())
                     .child({
                         let view = cx.weak_entity();
-                        quietpro::segmented(
-                            "heatmap-mode",
-                            tr("data.activityHeatmap"),
+                        quietpro::segmented_with_medium_labels(
+                            ("heatmap-mode", tr("data.activityHeatmap")),
                             std::array::from_fn::<_, 2, _>(|i| {
                                 let (weekly, key) =
                                     [(false, "data.heatmapDaily"), (true, "data.heatmapWeekly")][i];
@@ -417,6 +398,7 @@ impl DataPage {
                             self.weekly,
                             true,
                             colors,
+                            quietpro::ControlSize::Medium,
                             move |weekly, _, cx| {
                                 let _ = view.update(cx, |this, cx| {
                                     this.weekly = weekly;
@@ -435,28 +417,27 @@ impl DataPage {
                                         accessible_name,
                                         quietpro::Icon::ChevronLeft,
                                     )
-                                    .disabled(self.year <= 1970)
+                                    .disabled(self.overview_year.is_some_and(|year| year <= 1970))
                                     .button(colors)
                                     .on_click(cx.listener(
                                         |this, _, _, cx| {
-                                            if this.recent_heat {
-                                                this.recent_heat = false;
-                                                this.year = Local::now().date_naive().year();
-                                            } else {
-                                                this.year -= 1;
-                                            }
-                                            this.load_heat(cx);
+                                            this.overview_year =
+                                                Some(this.overview_year.map_or_else(
+                                                    || Local::now().year(),
+                                                    |year| year - 1,
+                                                ));
+                                            this.select_view(false, cx);
                                         },
                                     ))
                                 },
+                                quietpro::ControlSize::Medium,
                                 colors,
                             ))
                             .child(quietpro::calendar_caption(
-                                if self.recent_heat {
-                                    tr("data.recentYear")
-                                } else {
-                                    self.year.to_string()
-                                },
+                                frame
+                                    .request
+                                    .year
+                                    .map_or_else(|| tr("data.recentYear"), |year| year.to_string()),
                                 colors,
                             ))
                             .child(quietpro::calendar_arrow_frame(
@@ -467,78 +448,77 @@ impl DataPage {
                                         accessible_name,
                                         quietpro::Icon::ChevronRight,
                                     )
-                                    .disabled(self.recent_heat)
+                                    .disabled(self.overview_year.is_none())
                                     .button(colors)
                                     .on_click(cx.listener(
                                         |this, _, _, cx| {
-                                            if this.year == Local::now().date_naive().year() {
-                                                this.recent_heat = true;
-                                            } else {
-                                                this.year += 1;
-                                            }
-                                            this.load_heat(cx);
+                                            this.overview_year = this
+                                                .overview_year
+                                                .filter(|year| *year < Local::now().year())
+                                                .map(|year| year + 1);
+                                            this.select_view(false, cx);
                                         },
                                     ))
                                 },
+                                quietpro::ControlSize::Medium,
                                 colors,
                             )),
                     ),
             );
-        let totals = self.heat.as_ref().map(daily_totals).unwrap_or_default();
-        heat = heat.child(
-            self.render_heatmap(
-                heatmap::HeatmapView {
-                    id: "overview-heatmap",
-                    days: self
-                        .heat
-                        .as_ref()
-                        .map(|data| data.days.as_slice())
-                        .unwrap_or_default(),
-                    totals: &totals,
-                    year: (!self.recent_heat).then_some(self.year),
-                    weekly: self.weekly,
-                    loading: self.heat.is_none(),
-                },
-                colors,
-                cx,
-            ),
-        );
+        let totals = daily_totals(&frame.heat);
+        heat = heat.child(self.render_heatmap(
+            heatmap::HeatmapView {
+                id: "overview-heatmap",
+                days: &frame.heat.days,
+                totals: &totals,
+                year: frame.request.year,
+                weekly: self.weekly,
+            },
+            colors,
+            cx,
+        ));
         overview.child(heat)
     }
 }
 
 impl Render for DataPage {
     fn render(&mut self, win: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.viewport_height = win.viewport_size().height;
         let locale = self.client.locale.get();
         let tr = |k| text(locale, k);
         let colors = self.client.palette(win);
 
         let mut page = shell(colors);
+        let requested_detail = self.client.navigation.get().data_detailed;
+        let detailed = self
+            .frame
+            .as_ref()
+            .map_or(requested_detail, |frame| frame.request.detailed);
 
         let view = cx.weak_entity();
-        let view_switch = quietpro::segmented(
-            "data-view",
-            tr("data.title"),
+        let view_switch = quietpro::page_tabs(
+            ("data-view", tr("data.title")),
             std::array::from_fn::<_, 2, _>(|i| {
                 let (detailed, key) =
                     [(false, "data.overview"), (true, "data.detailedAnalysis")][i];
                 (detailed, tr(key), None, self.view_focus[i].clone())
             }),
-            self.detailed,
-            true,
+            quietpro::SegmentSelection {
+                displayed: detailed,
+                requested: requested_detail,
+            },
             colors,
             move |detailed, win, cx| {
                 let _ = view.update(cx, |this, cx| {
-                    if this.detailed != detailed {
+                    if this.client.navigation.get().data_detailed != detailed {
                         this.close_range(false, win, cx);
-                        this.detailed = detailed;
-                        cx.notify();
+                        this.select_view(detailed, cx);
                     }
                 });
             },
         );
         page = page.child(
-            page_title_row(tr("data.title"), quietpro::Icon::ChartColumn, colors)
+            page_title_row(tr("data.title"), quietpro::Icon::ChartSpline, colors)
                 .child(view_switch),
         );
         let mode_options = [
@@ -547,24 +527,24 @@ impl Render for DataPage {
             (SeriesKind::Web, "data.destinationWeb"),
         ];
         let view = cx.weak_entity();
-        let modes = quietpro::segmented(
-            "destination-mode",
-            tr("data.destinationMode"),
+        let modes = quietpro::segmented_with_medium_labels(
+            ("destination-mode", tr("data.destinationMode")),
             std::array::from_fn::<_, 3, _>(|i| {
                 let (kind, key) = mode_options[i];
                 (kind, tr(key), None, self.mode_focus[i].clone())
             })
             .into_iter()
-            .take(if self.web_enabled { 3 } else { 2 }),
-            self.kind,
+            .take(if self.web_enabled == Some(true) { 3 } else { 2 }),
+            quietpro::SegmentSelection {
+                displayed: self.data_kind,
+                requested: self.detail_kind().unwrap_or(self.data_kind),
+            },
             true,
             colors,
+            quietpro::ControlSize::Medium,
             move |kind, _, cx| {
                 let _ = view.update(cx, |this, cx| {
-                    if this.kind != kind {
-                        this.kind = kind;
-                        this.load_destination(cx);
-                    }
+                    this.select_panel(true, kind, cx);
                 });
             },
         );
@@ -577,17 +557,17 @@ impl Render for DataPage {
                     .on_click(cx.listener(|this, _, _, cx| this.refresh(cx)))
             });
         }
-        if (self.detailed && self.data.is_none()) || (!self.detailed && self.overview.is_none()) {
-            return page.child(label(tr("common.loading")));
+        if self.frame.is_none() {
+            return page;
         }
-        let panel = if self.detailed {
+        let panel = if detailed {
             self.trend_panel(modes, colors, win, cx)
         } else {
             self.overview_panel(colors, win, cx)
         };
         let page = page.child(
             div()
-                .id(if self.detailed {
+                .id(if detailed {
                     "data-detail-scroll"
                 } else {
                     "data-overview-scroll"
@@ -601,7 +581,7 @@ impl Render for DataPage {
         );
         if let Some(detail) = &self.detail {
             let view = cx.weak_entity();
-            return page.child(crate::features::page_controls::detail_dialog(
+            return page.child(crate::features::history::History::detail_dialog(
                 detail.clone(),
                 &self.detail_focus,
                 tr("common.close"),

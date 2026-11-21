@@ -8,7 +8,6 @@ pub(super) struct HeatmapView<'a> {
     pub totals: &'a [i64],
     pub year: Option<i32>,
     pub weekly: bool,
-    pub loading: bool,
 }
 
 fn weekly_rows(total: i64, max: i64) -> usize {
@@ -29,7 +28,7 @@ fn daily_intensity(total: i64, max: i64) -> f32 {
 
 pub(super) struct HeatmapFocus {
     start: NaiveDate,
-    handles: Vec<FocusHandle>,
+    handles: Rc<[FocusHandle]>,
     active: Rc<std::cell::Cell<usize>>,
 }
 
@@ -75,7 +74,7 @@ impl DataPage {
         let mut cache = self.heat_focus.borrow_mut();
         let entry = cache.entry(view.id).or_insert_with(|| HeatmapFocus {
             start: dates[0],
-            handles: Vec::new(),
+            handles: Rc::default(),
             active: Rc::new(std::cell::Cell::new(last)),
         });
         if entry.start != dates[0] || entry.handles.len() != dates.len() {
@@ -162,7 +161,7 @@ impl DataPage {
                         visible.clone()
                     };
                     format!(
-                        "{} – {} · {}",
+                        "{} – {} ･ {}",
                         span[0],
                         span[span.len() - 1],
                         if visible.is_empty() {
@@ -172,9 +171,9 @@ impl DataPage {
                         }
                     )
                 } else if date > today {
-                    format!("{date} · {}", text(locale, "data.notStarted"))
+                    format!("{date} ･ {}", text(locale, "data.notStarted"))
                 } else {
-                    format!("{date} · {}", duration(value(date)))
+                    format!("{date} ･ {}", duration(value(date)))
                 };
                 let owner = cx.entity().downgrade();
                 column.push(Some(HeatmapCell {
@@ -212,7 +211,6 @@ impl DataPage {
                             true
                         })
                     },
-                    size: 12.,
                     future: if view.weekly {
                         visible.is_empty()
                     } else {
@@ -233,19 +231,16 @@ impl DataPage {
                         date.to_string()
                     },
                     description,
-                    intensity: if view.loading {
-                        0.
-                    } else if view.weekly {
+                    intensity: if view.weekly {
                         if row >= 7 - rows { 0.88 } else { 0. }
                     } else {
                         daily_intensity(value(date), max_day)
                     },
-                    enabled: !view.loading
-                        && if view.weekly {
-                            !visible.is_empty()
-                        } else {
-                            date <= today
-                        },
+                    enabled: if view.weekly {
+                        !visible.is_empty()
+                    } else {
+                        date <= today
+                    },
                     colors: c,
                     activate: (!view.weekly).then(|| {
                         Rc::new(move |_: &mut Window, cx: &mut App| {
@@ -267,36 +262,14 @@ impl DataPage {
             .min_w_0()
             .flex_none()
             .child(heatmap_layout(view.id, months, weekdays, columns, c))
-            .when(view.loading, |grid| {
-                grid.child(
-                    div()
-                        .absolute()
-                        .inset_0()
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .child(
-                            label(text(
-                                locale,
-                                if self.error {
-                                    "destinationDetail.dayError"
-                                } else {
-                                    "common.loading"
-                                },
-                            ))
-                            .bg(c.panel)
-                            .px(px(8.)),
-                        ),
-                )
-            })
     }
 }
 
-pub(super) fn heatmap_dates(year: Option<i32>, today: NaiveDate) -> Vec<NaiveDate> {
-    let (first, last) = year.map_or_else(
+pub(super) fn heatmap_range(year: Option<i32>, today: NaiveDate) -> (NaiveDate, NaiveDate) {
+    year.map_or_else(
         || {
             let monday = today - Days::new(today.weekday().num_days_from_monday().into());
-            (monday - Days::new(52 * 7), monday + Days::new(6))
+            (monday - Days::new(52 * 7), today)
         },
         |year| {
             (
@@ -304,7 +277,11 @@ pub(super) fn heatmap_dates(year: Option<i32>, today: NaiveDate) -> Vec<NaiveDat
                 NaiveDate::from_ymd_opt(year, 12, 31).unwrap(),
             )
         },
-    );
+    )
+}
+
+pub(super) fn heatmap_dates(year: Option<i32>, today: NaiveDate) -> Vec<NaiveDate> {
+    let (first, last) = heatmap_range(year, today);
     let start = first - Days::new(first.weekday().num_days_from_monday().into());
     let end = last + Days::new(6 - last.weekday().num_days_from_monday() as u64);
     (0..=(end - start).num_days())

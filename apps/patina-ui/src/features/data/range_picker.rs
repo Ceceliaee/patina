@@ -38,7 +38,7 @@ pub(super) enum RangeSelection {
 }
 
 impl RangeSelection {
-    fn monthly(self, today: NaiveDate) -> bool {
+    pub(super) fn monthly(self, today: NaiveDate) -> bool {
         match self {
             Self::All | Self::Rolling(365) | Self::Period(PickerMode::Year, _) => true,
             Self::Custom(_, _) => self
@@ -47,7 +47,7 @@ impl RangeSelection {
             _ => false,
         }
     }
-    fn bounds(self, today: NaiveDate) -> Option<(NaiveDate, NaiveDate)> {
+    pub(super) fn bounds(self, today: NaiveDate) -> Option<(NaiveDate, NaiveDate)> {
         let (a, b) = match self {
             Self::All => return None,
             Self::Rolling(365) => (today.with_day(1).unwrap() - Months::new(11), today),
@@ -157,7 +157,7 @@ pub(super) enum RangeTarget {
 }
 
 pub(super) struct RangeControl {
-    selection: RangeSelection,
+    pub(super) selection: RangeSelection,
     focus: FocusHandle,
     bounds: Rc<std::cell::Cell<Bounds<Pixels>>>,
     controls_bounds: Rc<std::cell::Cell<Bounds<Pixels>>>,
@@ -170,14 +170,6 @@ impl RangeControl {
             bounds: Rc::new(std::cell::Cell::new(Bounds::default())),
             controls_bounds: Rc::new(std::cell::Cell::new(Bounds::default())),
         }
-    }
-    pub(super) fn monthly(&self) -> bool {
-        self.selection.monthly(Local::now().date_naive())
-    }
-    pub(super) fn range(&self) -> Option<(i64, i64)> {
-        self.selection
-            .bounds(Local::now().date_naive())
-            .and_then(|(a, b)| noon(a).zip(noon(b)))
     }
 }
 
@@ -245,10 +237,7 @@ impl DataPage {
         self.ranges[target as usize].selection = selection;
         self.close_range(false, win, cx);
         win.focus(&self.ranges[target as usize].focus, cx);
-        match target {
-            RangeTarget::Overview => self.load_overview(cx),
-            RangeTarget::Destination => self.load_destination(cx),
-        }
+        self.select_view(target == RangeTarget::Destination, cx);
         cx.notify();
     }
 
@@ -262,8 +251,9 @@ impl DataPage {
         let picker = self.range_picker.as_ref().filter(|p| p.target == target);
         let locale = self.client.locale.get();
         let today = Local::now().date_naive();
+        let shown = self.frame.as_ref().unwrap().request.selection;
         let caption = picker.map_or_else(
-            || control.selection.label(locale, today),
+            || shown.label(locale, today),
             |p| {
                 p.draft
                     .map_or_else(|| text(locale, p.mode.key()), |s| s.label(locale, today))
@@ -278,7 +268,7 @@ impl DataPage {
                 locale,
                 match target {
                     RangeTarget::Overview => "accessibility.data.trendRange",
-                    RangeTarget::Destination => match self.kind {
+                    RangeTarget::Destination => match self.data_kind {
                         SeriesKind::App => "accessibility.data.appTrendRange",
                         SeriesKind::Category => "accessibility.data.categoryTrendRange",
                         SeriesKind::Web => "accessibility.data.webTrendRange",
@@ -291,7 +281,7 @@ impl DataPage {
                     .absolute()
                     .inset_0(),
             );
-        if control.selection.special() {
+        if shown.special() {
             controls = controls.child(
                 IconControl::new(
                     "reset-range",
@@ -308,8 +298,18 @@ impl DataPage {
         }
         for next in [false, true] {
             if next {
+                let trigger_colors = if picker.is_some() {
+                    Palette {
+                        secondary: c.text,
+                        ..c
+                    }
+                } else {
+                    c
+                };
                 controls = controls.child(
-                    quietpro::calendar_trigger("open-range", caption.clone(), c)
+                    quietpro::calendar_trigger("open-range", caption.clone(), trigger_colors)
+                        .text_size(px(12.))
+                        .font_weight(FontWeight::MEDIUM)
                         .h(px(28.))
                         .min_h(px(28.))
                         .flex_none()
@@ -404,6 +404,7 @@ impl DataPage {
                         }
                     }),
                 ),
+                quietpro::ControlSize::Medium,
                 c,
             ));
         }
@@ -445,8 +446,8 @@ impl DataPage {
             }))
             .child(
                 label(picker.summary(locale))
-                    .text_size(px(12.))
-                    .font_weight(FontWeight::SEMIBOLD),
+                    .text_size(px(14.))
+                    .font_weight(FontWeight::MEDIUM),
             );
         let arrow = |next| {
             IconControl::new(
