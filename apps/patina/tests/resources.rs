@@ -223,8 +223,11 @@ impl Run<'_> {
             }
             let main = || {
                 children::find(pid, |child| {
-                    window(child, w!("Patina UI"))
-                        .or_else(|| self.previous.then(|| window(child, w!("Patina"))).flatten())
+                    window(child, w!("Patina")).or_else(|| {
+                        self.previous
+                            .then(|| window(child, w!("Patina UI")))
+                            .flatten()
+                    })
                 })
             };
             if let Some(hwnd) = main() {

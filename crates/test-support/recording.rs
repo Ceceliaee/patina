@@ -8,8 +8,12 @@ pub fn seed(db: &Path) -> Result<(), Error> {
 }
 
 pub fn seed_profile(db: &Path, show_icon: bool) -> Result<(), Error> {
+    seed_profile_on(db, show_icon, Local::now().date_naive())
+}
+
+pub fn seed_profile_on(db: &Path, show_icon: bool, date: chrono::NaiveDate) -> Result<(), Error> {
     let start = Local
-        .from_local_datetime(&Local::now().date_naive().and_hms_opt(0, 0, 0).unwrap())
+        .from_local_datetime(&date.and_hms_opt(0, 0, 0).unwrap())
         .earliest()
         .unwrap()
         .timestamp_millis();

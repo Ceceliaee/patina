@@ -94,7 +94,7 @@ cargo test --locked -p quietpro --features native-tests --test controls accessib
 - 高频平台查询应优先考虑短 TTL 缓存、negative cache、in-flight 合并和退避，避免后台采样对同一资源重复开销
 - 窗口资源策略变更时验证后台资源、重开延迟与状态恢复。须区分常驻录制进程和可释放的窗口进程，并复核可见性与窗口世代。
 
-性能场景在 `apps/patina/tests/resources.rs` 注册，采样器在 `apps/patina/examples/windows-resource-sample.rs`。长期口径是固定场景后比较 average、p50、p95 与 max，以子进程失败、预算超限或不允许的 SQLite table scan 为失败；不得并发运行制造虚假吞吐，也不得把模拟数据路径描述成真实 SQLite I/O。生命周期测量必须等待可信 read model 与实际内容提交，以窗口内容实际提交为测量终点，保留同等加载工作。
+托盘与 Mini 的资源测量见[常驻场景](../apps/patina/tests/resources.rs)。[前台切页场景](../apps/patina/tests/pages/foreground_resources.rs)使用页面测试的侧栏和原生控件驱动。两者共用 [Windows 进程树采样器](../apps/patina/examples/windows-resource-sample.rs)。长期口径是固定场景后比较 average、p50、p95 与 max，以子进程失败、预算超限或不允许的 SQLite table scan 为失败；不得并发运行制造虚假吞吐，也不得把模拟数据路径描述成真实 SQLite I/O。生命周期测量必须等待可信 read model 与实际内容提交，以窗口内容实际提交为测量终点，保留同等加载工作。
 
 ## 外部 PR 的风险与证据
 

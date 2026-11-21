@@ -1,7 +1,7 @@
 use super::*;
 
 #[path = "../../../../crates/test-support/recording.rs"]
-mod fixture;
+pub(super) mod fixture;
 pub(super) use fixture::{seed, seed_profile};
 
 pub(super) fn names(hwnd: HWND) -> Vec<String> {

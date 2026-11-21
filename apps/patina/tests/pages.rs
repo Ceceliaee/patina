@@ -12,6 +12,8 @@ mod classification_web;
 mod data_range;
 #[path = "../../../crates/test-support/windows.rs"]
 mod desktop;
+#[path = "pages/foreground_resources.rs"]
+mod foreground_resources;
 #[path = "pages/history_calendar.rs"]
 mod history_calendar;
 #[path = "pages/history_timeline.rs"]
@@ -71,6 +73,29 @@ fn button(hwnd: HWND, label: &str) -> Option<IUIAutomationElement> {
         el.CurrentControlType().ok() == Some(UIA_ButtonControlTypeId)
             && el.CurrentName().is_ok_and(|n| n == label)
     })
+}
+fn select_list_option(option: &IUIAutomationElement) -> Result<(), Error> {
+    unsafe {
+        option
+            .GetCurrentPatternAs::<IUIAutomationSelectionItemPattern>(UIA_SelectionItemPatternId)?
+            .Select()?;
+    }
+    Ok(())
+}
+fn assert_control_height(
+    hwnd: HWND,
+    el: &IUIAutomationElement,
+    expected: i32,
+) -> Result<(), Error> {
+    let bounds = unsafe { el.CurrentBoundingRectangle()? };
+    let scale = unsafe { GetDpiForWindow(hwnd) } as f64 / 96.;
+    let height = f64::from(bounds.bottom - bounds.top) / scale;
+    assert!(
+        (height - f64::from(expected)).abs() <= 1.,
+        "{}: expected {expected} px, got {height} px",
+        unsafe { el.CurrentName()? },
+    );
+    Ok(())
 }
 fn click(hwnd: HWND, label: &str) -> Result<(), Error> {
     activate(hwnd, label, false)
@@ -210,14 +235,17 @@ fn sidebar_opens_empty_history() -> Result<(), Error> {
             .spawn()?,
     );
     let pid = host.0.id();
-    let hwnd = wait("Today", || {
-        children::find(pid, |p| window(p, w!("Patina UI")))
-    })?;
+    let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
     click(hwnd, "数据")?;
     wait("data ready", || named(hwnd, "活动趋势"))?;
     click(hwnd, "历史")?;
     wait("empty history summary", || {
-        (names(hwnd).iter().filter(|n| n.as_str() == "—").count() == 2).then_some(())
+        let labels = names(hwnd);
+        (["时长", "起止", "高峰"]
+            .into_iter()
+            .all(|label| labels.iter().any(|n| n == label))
+            && labels.iter().filter(|n| n.as_str() == "—").count() == 2)
+            .then_some(())
     })
     .map_err(|e| format!("{e}: {}", fs::read_to_string(&stderr).unwrap_or_default()))?;
     click(hwnd, "今天")?;
@@ -287,9 +315,7 @@ fn navigate_in_locale(tag: &str) -> Result<(), Error> {
     );
     let pid = host.0.id();
     let outcome = (|| -> Result<(), Error> {
-        let hwnd = wait("Today", || {
-            children::find(pid, |p| window(p, w!("Patina UI")))
-        })?;
+        let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
         for (width, height) in [(1200, 800), (810, 540)] {
             let dpi = unsafe { GetDpiForWindow(hwnd) } as i32;
             unsafe {
@@ -403,7 +429,8 @@ fn navigate_sidebar(hwnd: HWND, locale: patina_activity::Locale, key: &str) -> R
 fn check_history_hourly(hwnd: HWND) -> Result<(), Error> {
     let tooltip = || -> Option<String> {
         controls(hwnd).ok()?.into_iter().find_map(|el| unsafe {
-            (el.CurrentControlType().ok()? == UIA_ToolTipControlTypeId)
+            (el.CurrentControlType().ok()? == UIA_ToolTipControlTypeId
+                && el.CurrentAutomationId().ok()? == "history-hour-tooltip")
                 .then(|| el.CurrentName().ok().map(|s| s.to_string()))
                 .flatten()
         })
@@ -415,10 +442,23 @@ fn check_history_hourly(hwnd: HWND) -> Result<(), Error> {
             "Show by category"
         };
         let toggle = wait("history hourly mode", || named(hwnd, mode))?;
+        let pressed = unsafe {
+            toggle
+                .GetCurrentPatternAs::<IUIAutomationTogglePattern>(UIA_TogglePatternId)?
+                .CurrentToggleState()?
+        };
+        assert_eq!(
+            pressed,
+            if grouped {
+                ToggleState_On
+            } else {
+                ToggleState_Off
+            }
+        );
         let hour = wait("history first active hour", || {
             controls(hwnd).ok()?.into_iter().find(|el| unsafe {
                 el.CurrentName()
-                    .is_ok_and(|s| s.to_string().starts_with("00:00 · Active "))
+                    .is_ok_and(|s| s.to_string().starts_with("00:00 ･ Active "))
                     && el.CurrentControlType().ok() != Some(UIA_ToolTipControlTypeId)
             })
         })?;
@@ -431,7 +471,7 @@ fn check_history_hourly(hwnd: HWND) -> Result<(), Error> {
             )?;
         }
         let tip = wait("history hour hover tooltip", || {
-            tooltip().filter(|s| s.starts_with("00:00 · Active "))
+            tooltip().filter(|s| s.starts_with("00:00 ･ Active "))
         })?;
         assert_eq!(tip.contains('\n'), grouped, "{tip}");
         unsafe {
@@ -445,6 +485,21 @@ fn check_history_hourly(hwnd: HWND) -> Result<(), Error> {
         wait("history hour pointer leaves", || {
             tooltip().is_none().then_some(())
         })?;
+        let icon_tip = wait("history icon hover tooltip", || {
+            controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+                el.CurrentControlType().ok() == Some(UIA_ToolTipControlTypeId)
+                    && el.CurrentName().is_ok_and(|name| name == mode)
+            })
+        })?;
+        let (button_rect, tip_rect) = unsafe {
+            (
+                toggle.CurrentBoundingRectangle()?,
+                icon_tip.CurrentBoundingRectangle()?,
+            )
+        };
+        assert!(tip_rect.bottom <= button_rect.top);
+        let button_center = (button_rect.left + button_rect.right) / 2;
+        assert!(tip_rect.left <= button_center && button_center <= tip_rect.right);
         unsafe {
             hour.SetFocus()?;
         }
@@ -454,10 +509,26 @@ fn check_history_hourly(hwnd: HWND) -> Result<(), Error> {
         unsafe {
             toggle.SetFocus()?;
         }
-        let empty = named(hwnd, "02:00 · Active 0m").ok_or("missing empty history hour")?;
+        let empty = named(hwnd, "02:00 ･ Active 0s").ok_or("missing empty history hour")?;
         assert!(!unsafe { empty.CurrentIsKeyboardFocusable()? }.as_bool());
-        click(hwnd, mode)?;
+        activate_control(hwnd, &toggle, false)?;
     }
+    let locale = patina_activity::Locale::EnUs;
+    navigate_sidebar(hwnd, locale, "dashboard.title")?;
+    let total_mode = wait("Today inherits total mode from History", || {
+        button(hwnd, "Show by category")
+    })?;
+    activate_control(hwnd, &total_mode, false)?;
+    navigate_sidebar(hwnd, locale, "history.title")?;
+    let category_mode = wait("History inherits category mode from Today", || {
+        button(hwnd, "Show total activity")
+    })?;
+    activate_control(hwnd, &category_mode, false)?;
+    navigate_sidebar(hwnd, locale, "dashboard.title")?;
+    wait("Today follows the change back to total in History", || {
+        button(hwnd, "Show by category")
+    })?;
+    navigate_sidebar(hwnd, locale, "history.title")?;
     Ok(())
 }
 
@@ -501,9 +572,7 @@ fn history_navigation() -> Result<(), Error> {
             .spawn()?,
     );
     let pid = child.0.id();
-    let hwnd = wait("Today", || {
-        children::find(pid, |p| window(p, w!("Patina UI")))
-    })?;
+    let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
     let tray = wait("tray", || window(pid, w!("Patina GPUI")))?;
     let out = std::env::var_os("PATINA_MEASURE_HISTORY").map(|_| {
         Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -522,6 +591,44 @@ fn history_navigation() -> Result<(), Error> {
     wait("history day", || named(hwnd, &date))?;
     let includes = |q: &str| names(hwnd).into_iter().any(|s| s.contains(q));
     wait("daily aggregate", || includes("1h 10m").then_some(()))?;
+    let segment = wait("timeline segment", || {
+        controls(hwnd)
+            .ok()?
+            .into_iter()
+            .filter(|el| unsafe {
+                el.CurrentAutomationId()
+                    .is_ok_and(|id| id.to_string().starts_with("overview-segment-"))
+            })
+            .max_by_key(|el| unsafe {
+                el.CurrentBoundingRectangle()
+                    .map_or(0, |rect| rect.right - rect.left)
+            })
+    })?;
+    unsafe {
+        PostMessageW(
+            Some(hwnd),
+            WM_MOUSEMOVE,
+            WPARAM(0),
+            client_center(hwnd, &segment)?,
+        )?;
+    }
+    let tip = wait("timeline segment tooltip above", || {
+        controls(hwnd)
+            .ok()?
+            .into_iter()
+            .find(|el| unsafe { el.CurrentControlType().ok() == Some(UIA_ToolTipControlTypeId) })
+    })?;
+    assert_eq!(
+        unsafe { tip.CurrentName()?.to_string() },
+        "Studio ･ 00:00:00–00:45:00 ･ 45m"
+    );
+    let (segment_rect, tip_rect) = unsafe {
+        (
+            segment.CurrentBoundingRectangle()?,
+            tip.CurrentBoundingRectangle()?,
+        )
+    };
+    assert!(tip_rect.bottom <= segment_rect.top);
     check_history_hourly(hwnd)?;
     select_segment(hwnd, "Categories")?;
     wait("category distribution", || named(hwnd, "Office"))?;
@@ -539,15 +646,15 @@ fn history_navigation() -> Result<(), Error> {
     click(hwnd, "Open timeline")?;
     history_timeline::check_records(hwnd)?;
     click(hwnd, "Decrease display minutes by 1 minute")?;
-    wait("short fragment visible", || named(hwnd, "Brief · 30s"))?;
+    wait("short fragment visible", || named(hwnd, "Brief ･ 30s"))?;
     click(hwnd, "Increase display minutes by 1 minute")?;
     wait("only short fragment hidden", || {
-        named(hwnd, "Brief · 30s").is_none().then_some(())
+        named(hwnd, "Brief ･ 30s").is_none().then_some(())
     })?;
     key(hwnd, 27)?;
     history_timeline::open_icon_details(hwnd, "Studio")?;
     history_timeline::check_app_detail(hwnd)?;
-    press(hwnd, "Title details · Studio")?;
+    press(hwnd, "Title details ･ Studio")?;
     wait("recorded title", || {
         includes("Design fixture").then_some(())
     })?;
@@ -556,16 +663,19 @@ fn history_navigation() -> Result<(), Error> {
     wait("detail yesterday", || named(hwnd, &previous))?;
     assert!(!includes("Design fixture"));
     click(hwnd, "Close")?;
-    wait("history kept its date", || named(hwnd, &date))?;
+    wait("detail closed on the original history date", || {
+        (button(hwnd, "Close").is_none() && named(hwnd, &date).is_some()).then_some(())
+    })?;
     sample(&out, pid, "history")?;
     for _ in 0..5 {
-        click(hwnd, "Today")?;
+        navigate_sidebar(hwnd, patina_activity::Locale::EnUs, "dashboard.title")?;
         wait("today ranking", || named(hwnd, "Top Apps"))?;
         click(hwnd, "History")?;
         wait("history loaded", || named(hwnd, &date))?;
     }
-    click(hwnd, "Today")?;
+    navigate_sidebar(hwnd, patina_activity::Locale::EnUs, "dashboard.title")?;
     wait("today ranking", || named(hwnd, "Top Apps"))?;
+    wait("sub-minute ranked duration", || named(hwnd, "30s ･ 1%"))?;
     let studio = wait("ranked app", || button(hwnd, "View details for Studio"))?;
     let open: IUIAutomationInvokePattern =
         unsafe { studio.GetCurrentPatternAs(UIA_InvokePatternId)? };
@@ -577,7 +687,7 @@ fn history_navigation() -> Result<(), Error> {
     wait("restored detail starts at midnight", || {
         named(hwnd, "00:00 – 23:00")
     })?;
-    press(hwnd, "Title details · Studio")?;
+    press(hwnd, "Title details ･ Studio")?;
     wait("same detail from Today", || {
         includes("Design fixture").then_some(())
     })?;
@@ -612,7 +722,16 @@ fn data_navigation() -> Result<(), Error> {
     let root = tempfile::tempdir()?;
     let profile = root.path().join(patina::APP_ID);
     fs::create_dir(&profile)?;
-    seed(&profile.join("patina.db"))?;
+    let db = profile.join("patina.db");
+    seed(&db)?;
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?
+        .block_on(async {
+            let mut conn =
+                SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(db)).await?;
+            history_timeline::enable_web_history(&mut conn).await
+        })?;
     let mut host = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
@@ -620,43 +739,68 @@ fn data_navigation() -> Result<(), Error> {
             .spawn()?,
     );
     let pid = host.0.id();
-    let hwnd = wait("Today", || {
-        children::find(pid, |p| window(p, w!("Patina UI")))
-    })?;
+    let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
     press(hwnd, "Data")?;
-    wait("seven day cross-midnight total", || {
-        named(hwnd, "Total · 1h 40m")
+    let total = wait("seven day cross-midnight total", || {
+        named(hwnd, "Total ･ 1h 40m")
     })?;
-    assert!(selected_segment(hwnd, "Overview").is_some());
-    assert!(
-        button(hwnd, "Studio").is_none(),
-        "details must not be exposed in Overview"
-    );
-    trend_chart::check(hwnd)?;
-    select_segment(hwnd, "Detailed analysis")?;
-    assert!(
-        named(hwnd, "Total · 1h 40m").is_none(),
-        "overview must be hidden"
-    );
-    press(hwnd, "Studio")?;
-    wait("selected app total", || named(hwnd, "Total · 1h 15m"))
-        .map_err(|e| format!("{e}; {:?}", names(hwnd)))?;
-    wait("trend metrics", || named(hwnd, "Active days · 2"))?;
     let by_id = |id: &str| {
         controls(hwnd)
             .ok()?
             .into_iter()
             .find(|el| unsafe { el.CurrentAutomationId().is_ok_and(|value| value == id) })
     };
+    let average = wait("seven day average", || named(hwnd, "Daily avg. ･ 14m"))?;
+    let overview_chart = wait("overview chart", || by_id("overview-trend"))?;
+    let total = unsafe { total.CurrentBoundingRectangle()? };
+    let average = unsafe { average.CurrentBoundingRectangle()? };
+    let chart = unsafe { overview_chart.CurrentBoundingRectangle()? };
+    assert!(total.right < average.left);
+    assert!(
+        (total.left + average.right - chart.left - chart.right).abs() <= 2,
+        "trend metrics must be centered above the chart: {total:?}, {average:?}, {chart:?}"
+    );
+    assert!(selected_segment(hwnd, "Overview").is_some());
+    assert!(
+        button(hwnd, "Studio").is_none(),
+        "details must not be exposed in Overview"
+    );
+    trend_chart::check(hwnd)?;
+    select_segment(hwnd, "Details")?;
+    assert!(
+        named(hwnd, "Total ･ 1h 40m").is_none(),
+        "overview must be hidden"
+    );
+    press(hwnd, "Studio")?;
+    wait("selected app total", || named(hwnd, "Total ･ 1h 15m"))
+        .map_err(|e| format!("{e}; {:?}", names(hwnd)))?;
+    wait("trend metrics", || named(hwnd, "Active days ･ 2"))?;
     let list = unsafe {
         wait("trend object list", || by_id("trend-objects"))?.CurrentBoundingRectangle()?
     };
     let chart =
         unsafe { wait("trend plot", || by_id("selection-trend"))?.CurrentBoundingRectangle()? };
     assert!(chart.right < list.left && list.right - list.left < chart.right - chart.left);
+    let range = unsafe {
+        wait("app trend range", || named(hwnd, "Select app trend range"))?
+            .CurrentBoundingRectangle()?
+    };
+    let search =
+        unsafe { wait("trend search", || named(hwnd, "Search apps"))?.CurrentBoundingRectangle()? };
+    assert!(
+        (range.right - chart.right).abs() <= 1 && range.bottom <= chart.top,
+        "date range should align with the chart's right edge: {range:?}, {chart:?}"
+    );
+    assert!(
+        search.left >= list.left
+            && search.top < range.bottom
+            && search.bottom > range.top
+            && search.bottom <= list.top,
+        "search should share the header row above the list: {search:?}, {range:?}, {list:?}"
+    );
     press(hwnd, "Writer")?;
     wait("single selection replaces Studio", || {
-        named(hwnd, "Total · 20m")
+        named(hwnd, "Total ･ 20m")
     })?;
     press(hwnd, "Studio")?;
     let search = wait("trend search", || named(hwnd, "Search apps"))?;
@@ -666,12 +810,12 @@ fn data_navigation() -> Result<(), Error> {
         edit.SetValue(&windows::core::BSTR::from("no-such-app"))?;
     }
     wait("no matching apps", || named(hwnd, "No matching apps"))?;
-    assert!(named(hwnd, "Total · 1h 15m").is_some());
+    assert!(named(hwnd, "Total ･ 1h 15m").is_some());
     select_segment(hwnd, "Overview")?;
     assert!(named(hwnd, "Search apps").is_none());
-    select_segment(hwnd, "Detailed analysis")?;
+    select_segment(hwnd, "Details")?;
     wait("retained search", || named(hwnd, "No matching apps"))?;
-    assert!(named(hwnd, "Total · 1h 15m").is_some());
+    assert!(named(hwnd, "Total ･ 1h 15m").is_some());
     let search = wait("retained search input", || named(hwnd, "Search apps"))?;
     let edit: IUIAutomationValuePattern =
         unsafe { search.GetCurrentPatternAs(UIA_ValuePatternId)? };
@@ -689,18 +833,18 @@ fn data_navigation() -> Result<(), Error> {
     wait("expanded trend loaded", || {
         named(
             hwnd,
-            &format!("{} · 0m", Local::now().date_naive() - chrono::Days::new(29)),
+            &format!("{} ･ 0s", Local::now().date_naive() - chrono::Days::new(29)),
         )
     })?;
-    select_segment(hwnd, "Detailed analysis")?;
+    select_segment(hwnd, "Details")?;
     wait("changed range preserves app", || {
-        named(hwnd, "Total · 1h 15m")
+        named(hwnd, "Total ･ 1h 15m")
     })?;
     select_segment(hwnd, "Categories")?;
     press(hwnd, "Office")?;
-    wait("category total", || named(hwnd, "Total · 20m"))?;
+    wait("category total", || named(hwnd, "Total ･ 20m"))?;
     select_segment(hwnd, "Web")?;
-    wait("empty websites", || named(hwnd, "Total · 0m"))?;
+    wait("empty websites", || named(hwnd, "Total ･ 0s"))?;
     select_segment(hwnd, "Apps")?;
     press(hwnd, "Studio")?;
     history_timeline::open_icon_details(hwnd, "Studio")?;
@@ -715,7 +859,7 @@ fn data_navigation() -> Result<(), Error> {
     wait("data detail dismissed", || {
         button(hwnd, "Close").is_none().then_some(())
     })?;
-    wait("restored selection", || named(hwnd, "Total · 1h 15m"))?;
+    wait("restored selection", || named(hwnd, "Total ･ 1h 15m"))?;
     select_segment(hwnd, "Overview")?;
     activate_control(
         hwnd,
@@ -736,14 +880,14 @@ fn data_navigation() -> Result<(), Error> {
     })?;
     press(hwnd, "Previous month")?;
     press(hwnd, "Next month")?;
-    select_segment(hwnd, "Detailed analysis")?;
+    select_segment(hwnd, "Details")?;
     let yesterday = Local::now().date_naive() - chrono::Days::new(1);
     let heat = wait("detailed heatmap date", || {
         button(hwnd, &yesterday.to_string())
     })?;
     trend_chart::double_click_day(hwnd, &heat, yesterday)?;
     press(hwnd, "Data")?;
-    select_segment(hwnd, "Detailed analysis")?;
+    select_segment(hwnd, "Details")?;
     let column = wait("selected app trend date", || {
         controls(hwnd).ok()?.into_iter().find(|el| unsafe {
             el.CurrentAutomationId()
@@ -791,14 +935,12 @@ fn classification_navigation() -> Result<(), Error> {
             .spawn()?,
     );
     let pid = host.0.id();
-    let hwnd = wait("Today", || {
-        children::find(pid, |p| window(p, w!("Patina UI")))
-    })?;
+    let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
     click(hwnd, "Classification")?;
     wait("one card for Studio", || {
         (names(hwnd)
             .iter()
-            .filter(|n| n.as_str() == "Category · Studio")
+            .filter(|n| n.as_str() == "Category ･ Studio")
             .count()
             == 1)
             .then_some(())
@@ -811,7 +953,7 @@ fn classification_navigation() -> Result<(), Error> {
         initial_counts[0],
         names(hwnd)
             .iter()
-            .filter(|name| name.starts_with("Category · "))
+            .filter(|name| name.starts_with("Category ･ "))
             .count()
     );
     let app_image = |name: &str| {
@@ -851,14 +993,14 @@ fn classification_navigation() -> Result<(), Error> {
         unsafe { search.GetCurrentPatternAs(UIA_ValuePatternId)? };
     let other_app = names(hwnd)
         .into_iter()
-        .find(|name| name.starts_with("Category · ") && name != "Category · Studio")
+        .find(|name| name.starts_with("Category ･ ") && name != "Category ･ Studio")
         .ok_or("fixture needs an app besides Studio")?;
     unsafe {
         search.SetFocus()?;
         search_value.SetValue(&"Studio".into())?;
     }
     wait("search filters application cards", || {
-        (category_control("Category · Studio").is_some() && category_control(&other_app).is_none())
+        (category_control("Category ･ Studio").is_some() && category_control(&other_app).is_none())
             .then_some(())
     })?;
     assert_eq!(classification_counts(), Some(initial_counts));
@@ -903,8 +1045,12 @@ fn classification_navigation() -> Result<(), Error> {
         category_control(&other_app)
     })?;
     let category = wait("application category dropdown", || {
-        category_control("Category · Studio")
+        category_control("Category ･ Studio")
     })?;
+    assert_control_height(hwnd, &category, 28)?;
+    for (label, height) in [("Cancel", 32), ("Save", 32), ("Manage", 28)] {
+        assert_control_height(hwnd, &wait(label, || button(hwnd, label))?, height)?;
+    }
     activate_control(hwnd, &category, true)?;
     wait("category options open", || category_option("Office"))?;
     assert!(
@@ -928,12 +1074,24 @@ fn classification_navigation() -> Result<(), Error> {
     wait("category draft updates totals", || {
         (classification_counts() == Some(initial_counts)).then_some(())
     })?;
+    let toast = wait("classification unsaved toast", || {
+        named(hwnd, "Unsaved changes")
+    })?;
+    let toast_bounds = unsafe { toast.CurrentBoundingRectangle()? };
+    let mut window_bounds = RECT::default();
+    unsafe { GetWindowRect(hwnd, &mut window_bounds)? };
+    let scale = unsafe { GetDpiForWindow(hwnd) } as f32 / 96.;
+    assert!((toast_bounds.top - window_bounds.top) as f32 <= 64. * scale);
+    assert!((window_bounds.right - toast_bounds.right) as f32 <= 24. * scale);
     click(hwnd, "Cancel")?;
     wait("category draft cancelled", || unsafe {
         (!button(hwnd, "Cancel")?.CurrentIsEnabled().ok()?.as_bool()).then_some(())
     })?;
     wait("cancel restores classification totals", || {
         (classification_counts() == Some(initial_counts)).then_some(())
+    })?;
+    wait("cancel removes unsaved toast", || {
+        named(hwnd, "Unsaved changes").is_none().then_some(())
     })?;
     activate_control(hwnd, &category, true)?;
     let office = wait("Office after cancel", || category_option("Office"))?;
@@ -947,7 +1105,7 @@ fn classification_navigation() -> Result<(), Error> {
         }
         .as_bool()
     );
-    activate_control(hwnd, &office, false)?;
+    select_list_option(&office)?;
     wait("category menu closed", || {
         category_option("Office").is_none().then_some(())
     })?;
@@ -994,7 +1152,7 @@ fn classification_navigation() -> Result<(), Error> {
         })
     };
     wait("Escape discards only the name edit", || {
-        (rename_field().is_none() && category_control("Category · Studio").is_some()).then_some(())
+        (rename_field().is_none() && category_control("Category ･ Studio").is_some()).then_some(())
     })?;
     key(hwnd, 13)?;
     let field = wait("Enter on restored pencil reopens name input", rename_field)?;
@@ -1005,7 +1163,7 @@ fn classification_navigation() -> Result<(), Error> {
     }
     key(hwnd, 13)?;
     wait("renamed draft applied", || {
-        category_control("Category · Studio Review")
+        category_control("Category ･ Studio Review")
     })?;
     click(hwnd, "Edit app name")?;
     let field = wait("name input for blur", rename_field)?;
@@ -1016,7 +1174,7 @@ fn classification_navigation() -> Result<(), Error> {
     }
     activate_control(hwnd, &search, false)?;
     wait("blur applies only the name", || {
-        (rename_field().is_none() && category_control("Category · Studio Temporary").is_some())
+        (rename_field().is_none() && category_control("Category ･ Studio Temporary").is_some())
             .then_some(())
     })?;
     click(hwnd, "Edit app name")?;
@@ -1029,7 +1187,7 @@ fn classification_navigation() -> Result<(), Error> {
     let filename = wait("application identity trigger", || named(hwnd, "studio.exe"))?;
     activate_control(hwnd, &filename, false)?;
     wait("clicking identity commits and closes rename", || {
-        (rename_field().is_none() && category_control("Category · Studio Outside").is_some())
+        (rename_field().is_none() && category_control("Category ･ Studio Outside").is_some())
             .then_some(())
     })?;
     wait("identity opens application links", || {
@@ -1052,10 +1210,27 @@ fn classification_navigation() -> Result<(), Error> {
             .ok()
     };
     let original_titles = title_state().ok_or("title state")?;
+    unsafe {
+        PostMessageW(
+            Some(hwnd),
+            WM_MOUSEMOVE,
+            WPARAM(0),
+            client_center(hwnd, &titles)?,
+        )?;
+    }
+    let title_tip = wait("classification policy tooltip", || {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentControlType().ok() == Some(UIA_ToolTipControlTypeId)
+                && el.CurrentName().is_ok_and(|name| name == "Record titles")
+        })
+    })?;
+    assert!(unsafe {
+        title_tip.CurrentBoundingRectangle()?.bottom <= titles.CurrentBoundingRectangle()?.top
+    });
     activate_control(hwnd, &titles, false)?;
     wait("outside card action retains committed name", || {
         (rename_field().is_none()
-            && category_control("Category · Studio Card Action").is_some()
+            && category_control("Category ･ Studio Card Action").is_some()
             && title_state().is_some_and(|state| state != original_titles))
         .then_some(())
     })?;
@@ -1072,7 +1247,7 @@ fn classification_navigation() -> Result<(), Error> {
     }
     key(hwnd, 13)?;
     wait("final name draft", || {
-        category_control("Category · Studio Review")
+        category_control("Category ･ Studio Review")
     })?;
     click(hwnd, "Clear search")?;
     press(hwnd, "Save")?;
@@ -1087,7 +1262,7 @@ fn classification_navigation() -> Result<(), Error> {
     .map_err(|e| format!("{e}; nodes {:?}", names(hwnd)))?;
     click(hwnd, "Classification")?;
     wait("stored category", || {
-        category_control("Category · Studio Review")
+        category_control("Category ･ Studio Review")
     })?;
     wait("icon survives rename and page reload", || {
         app_image("Studio Review")
@@ -1103,15 +1278,15 @@ fn classification_navigation() -> Result<(), Error> {
     let card_count = || {
         names(hwnd)
             .iter()
-            .filter(|n| n.starts_with("Category · "))
+            .filter(|n| n.starts_with("Category ･ "))
             .count()
     };
     let all_card_count = card_count();
     activate_control(hwnd, &category_filter, false)?;
     let office = wait("Office filter option", || category_option("Office"))?;
-    activate_control(hwnd, &office, false)?;
+    select_list_option(&office)?;
     wait("category dropdown filters applications", || {
-        (category_control("Category · Studio Review").is_some()
+        (category_control("Category ･ Studio Review").is_some()
             && card_count() < all_card_count
             && category_option("Office").is_none())
         .then_some(())
@@ -1148,7 +1323,7 @@ fn classification_navigation() -> Result<(), Error> {
             .GetCurrentPatternAs::<IUIAutomationSelectionItemPattern>(UIA_SelectionItemPatternId)
             .ok()?;
         (selection.CurrentIsSelected().ok()?.as_bool()
-            && category_control("Category · Studio Review").is_none())
+            && category_control("Category ･ Studio Review").is_none())
         .then_some(())
     })?;
     let unclassified = wait("Unclassified segment", || {
@@ -1160,14 +1335,14 @@ fn classification_navigation() -> Result<(), Error> {
             .GetCurrentPatternAs::<IUIAutomationSelectionItemPattern>(UIA_SelectionItemPatternId)
             .ok()?;
         (selection.CurrentIsSelected().ok()?.as_bool()
-            && category_control("Category · Studio Review").is_none())
+            && category_control("Category ･ Studio Review").is_none())
         .then_some(())
     })?;
     unsafe { unclassified.SetFocus()? };
     key(hwnd, 0x25)?;
     wait(
         "Left selects Classified and restores the Office app",
-        || category_control("Category · Studio Review"),
+        || category_control("Category ･ Studio Review"),
     )?;
     click(hwnd, "Manage")?;
     click(hwnd, "New category")?;
@@ -1188,15 +1363,15 @@ fn classification_navigation() -> Result<(), Error> {
     })?;
     click(hwnd, "Close")?;
     press(hwnd, "Save")?;
-    wait("category save completes", || {
-        button(hwnd, "Save").filter(|b| unsafe { b.CurrentIsEnabled().is_ok_and(|v| !v.as_bool()) })
+    let category = wait("renamed app category ready after save", || {
+        named(hwnd, "Saved")?;
+        category_control("Category ･ Studio Review")
+            .filter(|el| unsafe { el.CurrentIsEnabled().is_ok_and(|v| v.as_bool()) })
     })?;
-    let category = wait("renamed app category", || {
-        category_control("Category · Studio Review")
-    })?;
-    activate_control(hwnd, &category, true)?;
+    activate_control(hwnd, &category, true)
+        .map_err(|e| format!("open category after save: {e}"))?;
     let research = wait("custom category option", || category_option("Research"))?;
-    activate_control(hwnd, &research, false)?;
+    select_list_option(&research)?;
     wait("custom category assigned", || {
         category_option("Research").is_none().then_some(())
     })?;
@@ -1227,7 +1402,7 @@ fn classification_navigation() -> Result<(), Error> {
     wait("one application before final rename", || {
         (names(hwnd)
             .iter()
-            .filter(|n| n.starts_with("Category · "))
+            .filter(|n| n.starts_with("Category ･ "))
             .count()
             == 1)
             .then_some(())
@@ -1241,7 +1416,7 @@ fn classification_navigation() -> Result<(), Error> {
     }
     click(hwnd, "Cancel")?;
     wait("page Cancel discards inline draft", || {
-        (rename_field().is_none() && category_control("Category · Studio Review").is_some())
+        (rename_field().is_none() && category_control("Category ･ Studio Review").is_some())
             .then_some(())
     })?;
     click(hwnd, "Edit app name")?;
@@ -1300,13 +1475,17 @@ fn classification_totals() -> Result<(), Error> {
             .spawn()?,
     );
     let pid = host.0.id();
-    let hwnd = wait("Today", || {
-        children::find(pid, |p| window(p, w!("Patina UI")))
-    })?;
+    let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
     click(hwnd, "Classification")?;
     let totals = |expected| -> Result<(), Error> {
         wait("classification counts match current records", || {
             (classification_filter_counts(hwnd) == Some(expected)).then_some(())
+        })
+        .map_err(|err| {
+            format!(
+                "{err}: expected {expected:?}, observed {:?}",
+                classification_filter_counts(hwnd)
+            )
         })?;
         Ok(())
     };
@@ -1314,7 +1493,7 @@ fn classification_totals() -> Result<(), Error> {
     classification_color::set(hwnd, "Search apps", "Studio")?;
     totals([2, 2, 0])?;
     let unclassify = || -> Result<(), Error> {
-        let category = wait("Studio category", || named(hwnd, "Category · Studio"))?;
+        let category = wait("Studio category", || named(hwnd, "Category ･ Studio"))?;
         activate_control(hwnd, &category, false)?;
         let option = wait("Unclassified option", || {
             controls(hwnd).ok()?.into_iter().find(|el| unsafe {
@@ -1322,7 +1501,7 @@ fn classification_totals() -> Result<(), Error> {
                     && el.CurrentName().is_ok_and(|name| name == "Unclassified")
             })
         })?;
-        activate_control(hwnd, &option, false)?;
+        select_list_option(&option)?;
         totals([2, 1, 1])
     };
     unclassify()?;
@@ -1336,11 +1515,11 @@ fn classification_totals() -> Result<(), Error> {
     totals([2, 1, 1])?;
     select_segment(hwnd, "Unclassified (1)")?;
     wait("unclassified application shown", || {
-        named(hwnd, "Category · Studio")
+        named(hwnd, "Category ･ Studio")
     })?;
     click(hwnd, "Delete application")?;
     wait("deletion confirmation ready", || {
-        named(hwnd, "Studio · studio.exe")?;
+        named(hwnd, "Studio ･ studio.exe")?;
         button(hwnd, "Delete application")
             .filter(|b| unsafe { b.CurrentIsEnabled().is_ok_and(|v| v.as_bool()) })
     })?;
@@ -1371,9 +1550,7 @@ fn settings_navigation() -> Result<(), Error> {
             .spawn()?,
     );
     let pid = host.0.id();
-    let hwnd = wait("Today", || {
-        children::find(pid, |p| window(p, w!("Patina UI")))
-    })?;
+    let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
     // Keep the first two settings groups visible regardless of the app's default window size.
     let dpi = unsafe { GetDpiForWindow(hwnd) } as i32;
     unsafe {
@@ -1392,6 +1569,32 @@ fn settings_navigation() -> Result<(), Error> {
     unsafe {
         let bounds = titles.CurrentBoundingRectangle()?;
         let dpi = GetDpiForWindow(hwnd) as i32;
+        let heading = wait("Recording options heading", || {
+            named(hwnd, "Recording options")
+        })?
+        .CurrentBoundingRectangle()?;
+        let previous = wait("last time-rule control", || {
+            button(hwnd, "+ Continue counting")
+        })?
+        .CurrentBoundingRectangle()?;
+        let first = wait("first time-rule control", || {
+            button(hwnd, "+ Activity hold time")
+        })?
+        .CurrentBoundingRectangle()?;
+        assert!(((previous.top - first.top) as f32 - 48. * dpi as f32 / 96.).abs() <= 1.);
+        let row_half_height = 24. * dpi as f32 / 96.;
+        let group_gap =
+            heading.top as f32 - (previous.top + previous.bottom) as f32 / 2. - row_half_height;
+        let heading_gap =
+            (bounds.top + bounds.bottom) as f32 / 2. - row_half_height - heading.bottom as f32;
+        assert!(
+            (group_gap - 12. * dpi as f32 / 96.).abs() <= 1.,
+            "between settings groups: {group_gap}"
+        );
+        assert!(
+            (heading_gap - 8. * dpi as f32 / 96.).abs() <= 1.,
+            "heading to settings row: {heading_gap}"
+        );
         let width = (36 * dpi + 48) / 96;
         let height = (28 * dpi + 48) / 96;
         assert!((bounds.right - bounds.left - width).abs() <= 1);
@@ -1428,6 +1631,7 @@ fn settings_navigation() -> Result<(), Error> {
         })
     };
     let initial = unsafe { language.CurrentBoundingRectangle()? };
+    assert_control_height(hwnd, &language, 28)?;
     activate_control(hwnd, &language, false)?;
     let spanish = wait("Spanish option", || option("Español"))?;
     let menu = unsafe { spanish.CurrentBoundingRectangle()? };
@@ -1441,7 +1645,11 @@ fn settings_navigation() -> Result<(), Error> {
         .filter(|b| unsafe { b.CurrentIsEnabled().is_ok_and(|v| v.as_bool()) })
     })?;
     let changed = unsafe { language.CurrentBoundingRectangle()? };
-    assert_eq!(initial.right - initial.left, changed.right - changed.left);
+    assert!((changed.right - initial.right).abs() <= 1);
+    assert!(
+        changed.right - changed.left > initial.right - initial.left,
+        "the language trigger should fit the longer Español label"
+    );
     click(
         hwnd,
         &patina_activity::text(patina_activity::Locale::Es, "common.cancel"),
@@ -1481,6 +1689,14 @@ fn settings_navigation() -> Result<(), Error> {
             .then_some(())
     };
     let dark = wait("Dark radio", || radio("Dark"))?;
+    let theme_mode = wait("Theme mode group", || {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentControlType().ok() == Some(UIA_GroupControlTypeId)
+                && el.CurrentName().is_ok_and(|n| n == "Theme mode")
+        })
+    })?;
+    assert_control_height(hwnd, &theme_mode, 28)?;
+    assert_control_height(hwnd, &dark, 28)?;
     activate_control(hwnd, &dark, false)?;
     wait("Dark selected by mouse", || is_selected("Dark"))?;
     unsafe { dark.SetFocus()? };
@@ -1492,6 +1708,20 @@ fn settings_navigation() -> Result<(), Error> {
     wait("saved preferences", || {
         button(hwnd, "Save").filter(|b| unsafe { b.CurrentIsEnabled().is_ok_and(|s| !s.as_bool()) })
     })?;
+    let toast = wait("save toast", || named(hwnd, "Saved"))?;
+    let bounds = unsafe { toast.CurrentBoundingRectangle()? };
+    assert!(bounds.right > bounds.left && bounds.bottom > bounds.top);
+    let scale = unsafe { GetDpiForWindow(hwnd) } as f32 / 96.;
+    assert!(((bounds.bottom - bounds.top) as f32 - 32. * scale).abs() <= 2.);
+    let mut window_bounds = RECT::default();
+    unsafe { GetWindowRect(hwnd, &mut window_bounds)? };
+    assert!(bounds.top > window_bounds.top);
+    assert!((bounds.top - window_bounds.top) as f32 <= 64. * scale);
+    assert!((window_bounds.right - bounds.right) as f32 <= 24. * scale);
+    wait("save toast expires", || {
+        named(hwnd, "Saved").is_none().then_some(())
+    })?;
+
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
@@ -1528,34 +1758,108 @@ fn about_navigation() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
+    // The offline fixture has no manifest, so Check updates exposes Manual download.
+    fs::write(
+        root.path().join("config.json"),
+        include_bytes!("../../../crates/updater/config.json"),
+    )?;
     let dir = root.path().join(patina::APP_ID);
     fs::create_dir(&dir)?;
     seed(&dir.join("patina.db"))?;
     let mut host = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
             .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env("PATINA_GPUI_UPDATE_FIXTURE", root.path())
             .arg("--today")
             .spawn()?,
     );
     let pid = host.0.id();
-    let hwnd = wait("Today", || {
-        children::find(pid, |p| window(p, w!("Patina UI")))
-    })?;
+    let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
     click(hwnd, "About")?;
     wait("binary version", || {
         named(hwnd, concat!("v", env!("CARGO_PKG_VERSION")))
     })?;
-    for (open, qr, action) in [
-        ("Feedback", "QQ Channel", "GitHub Issues"),
-        ("Sponsor", "WeChat reward code", "Open Ko-fi"),
+    let update_card = wait("update card", || {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentAutomationId()
+                .is_ok_and(|id| id == "about-update-card")
+        })
+    })?;
+    assert_control_height(hwnd, &update_card, 64)?;
+    let update_heading = wait("update heading", || {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentName().is_ok_and(|name| name == "App updates")
+                && el
+                    .CurrentAutomationId()
+                    .is_ok_and(|id| id != "about-update-card")
+        })
+    })?;
+    let heading_bounds = unsafe { update_heading.CurrentBoundingRectangle()? };
+    let status = wait("initial update status", || named(hwnd, "Not checked"))?;
+    let status_bounds = unsafe { status.CurrentBoundingRectangle()? };
+    assert!(status_bounds.left > heading_bounds.right);
+    assert!(status_bounds.top < heading_bounds.bottom && status_bounds.bottom > heading_bounds.top);
+    for (open, qr, link, action) in [
+        ("Feedback", "QQ Channel", "GitHub Issues", "GitHub Issues"),
+        ("Sponsor", "WeChat reward code", "Ko-fi", "Open Ko-fi"),
     ] {
         click(hwnd, open)?;
-        wait("QR card", || named(hwnd, qr))?;
-        assert!(button(hwnd, action).is_some());
-        press(hwnd, "Close")?;
+        let heading_bounds = |title| {
+            wait(title, || {
+                controls(hwnd).ok()?.into_iter().find_map(|el| unsafe {
+                    (el.CurrentName().ok()? == title
+                        && el.CurrentControlType().ok()? != UIA_ButtonControlTypeId)
+                        .then(|| el.CurrentBoundingRectangle().ok())
+                        .flatten()
+                })
+            })
+        };
+        let qr_bounds = heading_bounds(qr)?;
+        let link_bounds = heading_bounds(link)?;
+        let action = wait(action, || button(hwnd, action))?;
+        let action_bounds = unsafe { action.CurrentBoundingRectangle()? };
+        assert_control_height(hwnd, &action, 52)?;
+        assert!(qr_bounds.bottom < link_bounds.top && link_bounds.bottom <= action_bounds.top);
+        assert_eq!(qr_bounds.left, link_bounds.left);
+        let scale = unsafe { GetDpiForWindow(hwnd) } as f32 / 96.;
+        let badge_top_gap = (action_bounds.top - link_bounds.bottom) as f32 / scale + 8.;
+        assert!(
+            (badge_top_gap - 12.).abs() <= 1.,
+            "{open}: badge gap {badge_top_gap}"
+        );
+        let mark_and_gap = (link_bounds.left - action_bounds.left) as f32 / scale;
+        assert!((mark_and_gap - 24.).abs() <= 1., "{open}: {mark_and_gap}");
+        let close = wait("dialog close button", || button(hwnd, "Close"))?;
+        let bounds = unsafe { close.CurrentBoundingRectangle()? };
+        assert!(bounds.bottom <= qr_bounds.top && bounds.right >= action_bounds.right);
+        activate_control(hwnd, &close, false)?;
+        wait("dialog closed by mouse", || {
+            named(hwnd, qr).is_none().then_some(())
+        })?;
+        key(hwnd, 13)?;
+        wait("dialog reopened from returned focus", || named(hwnd, qr))?;
+        key(hwnd, 27)?;
         wait("return", || button(hwnd, "Close").is_none().then_some(()))?;
     }
-    assert!(button(hwnd, "Release notes").is_some() && button(hwnd, "Check updates").is_some());
+    click(hwnd, "Check updates")?;
+    wait("offline check failed", || {
+        named(hwnd, "Could not check updates")
+    })?;
+    click(hwnd, "Later")?;
+    wait("update dialog closed", || {
+        button(hwnd, "Later").is_none().then_some(())
+    })?;
+    for (name, height) in [
+        ("GitHub Star", 32),
+        ("Release notes", 32),
+        ("Feedback", 32),
+        ("Sponsor", 32),
+        ("Check updates", 32),
+        ("Manual download", 32),
+    ] {
+        let control = wait(name, || button(hwnd, name))?;
+        assert_control_height(hwnd, &control, height)?;
+    }
     command(window(pid, w!("Patina GPUI")).unwrap(), 2)?;
     assert!(wait("exit", || host.0.try_wait().ok().flatten())?.success());
     Ok(())
@@ -1580,9 +1884,7 @@ fn page_header_layout() -> Result<(), Error> {
             .spawn()?,
     );
     let pid = host.0.id();
-    let hwnd = wait("Today", || {
-        children::find(pid, |p| window(p, w!("Patina UI")))
-    })?;
+    let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
     let title_bounds = |page: &str| {
         wait(page, || {
             controls(hwnd).ok()?.into_iter().find_map(|el| unsafe {
@@ -1618,7 +1920,7 @@ fn page_header_layout() -> Result<(), Error> {
             end = rect.right;
         }
         if page == "Data" {
-            for name in ["Overview", "Detailed analysis"] {
+            for name in ["Overview", "Details"] {
                 let option = wait(name, || segment(hwnd, name))?;
                 let rect = unsafe { option.CurrentBoundingRectangle()? };
                 assert!(rect.left >= end && rect.right > rect.left);
