@@ -1,7 +1,6 @@
 use crate::{Palette, continuous_corner_fill};
 use gpui_kit::{Div, Rgba, div, linear_color_stop, linear_gradient, prelude::*, px};
-use gpui_kit::{ElementId, Image, Role, SharedString, Stateful, img};
-use std::sync::Arc;
+use gpui_kit::{ElementId, ImageSource, Role, SharedString, Stateful, img};
 
 const FRAME_SIZE: f32 = 40.;
 const COLOR_EDGE: f32 = 2.;
@@ -12,7 +11,7 @@ pub const UNFRAMED_APP_ICON_SIZE: f32 = 16.;
 pub fn unframed_app_icon(
     id: impl Into<ElementId>,
     name: impl Into<SharedString>,
-    image: Option<Arc<Image>>,
+    image: Option<impl Into<ImageSource>>,
     fallback: crate::Icon,
     colors: Palette,
 ) -> Stateful<Div> {

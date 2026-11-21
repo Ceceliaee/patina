@@ -1,4 +1,7 @@
-use crate::{Palette, content_card, continuous_frame};
+use crate::{
+    Palette,
+    layout::{axis_label_width, chart_axis_labels},
+};
 use gpui_kit::{
     base::{Align, Button, POPUP_PRIORITY, Placement, Positioner},
     prelude::*,
@@ -7,14 +10,7 @@ use gpui_kit::{
 
 pub const HEATMAP_CELL_SIZE: f32 = 12.;
 pub const HEATMAP_CELL_GAP: f32 = 4.;
-
-fn heatmap_column() -> Div {
-    div()
-        .flex()
-        .flex_col()
-        .flex_none()
-        .gap(px(HEATMAP_CELL_GAP))
-}
+mod paint;
 
 struct CellState {
     focus: FocusHandle,
@@ -35,7 +31,6 @@ pub struct HeatmapCell {
     pub label: String,
     pub description: String,
     pub intensity: f32,
-    pub size: f32,
     pub enabled: bool,
     pub future: bool,
     pub colors: Palette,
@@ -106,18 +101,19 @@ impl RenderOnce for HeatmapCell {
             .track_focus(&focus)
             .tab_stop(self.tab_stop)
             .relative()
-            .size(px(self.size))
+            .size_full()
             .flex_none()
             .p_0()
             .text_color(transparent_black())
             .when(self.enabled, |s| s.cursor_pointer())
-            .child(continuous_frame(px(4.), border, fill).size_full())
             .child(
                 canvas(
                     move |bounds, _, cx| {
                         measure.update(cx, |s, _| s.bounds = bounds);
                     },
-                    |_, _, _, _| {},
+                    move |bounds, (), window, cx| {
+                        paint::cell(bounds, border, fill, window, cx);
+                    },
                 )
                 .absolute()
                 .inset_0()
@@ -154,15 +150,14 @@ impl RenderOnce for HeatmapCell {
                 deferred(
                     Positioner::side(state.read(cx).bounds)
                         .placement(Placement::Top)
-                        .align(Align::Start)
+                        .align(Align::Center)
                         .offset(px(8.))
                         .margin(px(8.))
                         .child(
-                            content_card(c.border, c.panel)
+                            crate::tooltip_surface(c)
                                 .id("heatmap-tooltip")
                                 .role(Role::Tooltip)
                                 .aria_label(self.description.clone())
-                                .p(px(8.))
                                 .text_size(px(12.))
                                 .text_color(c.text)
                                 .child(self.description),
@@ -202,7 +197,7 @@ struct HeatmapLayout {
 }
 
 impl RenderOnce for HeatmapLayout {
-    fn render(self, win: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, win: &mut Window, _: &mut App) -> impl IntoElement {
         let Self {
             id,
             months,
@@ -213,146 +208,70 @@ impl RenderOnce for HeatmapLayout {
         let weekday_width = weekdays
             .iter()
             .step_by(2)
-            .map(|label| {
-                let run = win.text_style().to_run(label.len());
-                f32::from(
-                    win.text_system()
-                        .shape_line(label.clone().into(), px(12.), &[run], None)
-                        .width,
-                )
-            })
+            .map(|label| axis_label_width(label, win))
             .fold(0_f32, f32::max)
             .ceil();
-        let state = win.use_keyed_state(id.clone(), cx, |_, _| 0_f32);
-        let measure = state.clone();
-        let count = columns.len();
-        let (cell_size, step, width) = grid_geometry(*state.read(cx), count);
-        let labels = div().relative().h(px(16.)).w(px(width)).children(
-            months
-                .into_iter()
-                .enumerate()
-                .filter(|(_, label)| !label.is_empty())
-                .map(|(i, label)| div().absolute().left(px(i as f32 * step)).child(label)),
-        );
-        div()
-            .relative()
+        let slot = || {
+            div()
+                .relative()
+                .flex_1()
+                .min_w_0()
+                .max_w(px(HEATMAP_CELL_SIZE))
+        };
+        let track = || {
+            div()
+                .flex()
+                .flex_1()
+                .min_w_0()
+                .justify_between()
+                .items_start()
+                .gap(px(HEATMAP_CELL_GAP))
+                .pr(px(4.))
+        };
+        let row = || div().flex().w_full().gap(px(8.)).items_center();
+        let weekday = || div().relative().w(px(weekday_width)).flex_none();
+        let month_row = row()
+            .child(weekday())
+            .child(track().children(months.into_iter().map(|month| {
+                slot().h(px(16.)).child(
+                    div()
+                        .absolute()
+                        .left_0()
+                        .top_0()
+                        .whitespace_nowrap()
+                        .child(month),
+                )
+            })));
+        let mut columns: Vec<_> = columns.into_iter().map(Vec::into_iter).collect();
+        let mut grid = div().flex().flex_col().gap(px(HEATMAP_CELL_GAP));
+        for (index, label) in weekdays.into_iter().enumerate() {
+            let day_label = weekday().when(index % 2 == 0, |axis| {
+                axis.child(
+                    div()
+                        .absolute()
+                        .left_0()
+                        .top(px(-8.))
+                        .line_height(px(16.))
+                        .whitespace_nowrap()
+                        .child(label),
+                )
+            });
+            let cells = columns.iter_mut().map(|week| {
+                slot().aspect_square().children(
+                    week.next()
+                        .flatten()
+                        .map(|cell| div().absolute().inset_0().child(cell)),
+                )
+            });
+            grid = grid.child(row().child(day_label).child(track().children(cells)));
+        }
+        chart_axis_labels(c)
+            .id(id)
             .w_full()
             .min_w_0()
-            .flex_none()
-            .flex()
+            .flex_col()
             .gap(px(8.))
-            .child(
-                canvas(
-                    move |bounds, _, cx| {
-                        measure.update(cx, |s, cx| {
-                            let available =
-                                (f32::from(bounds.size.width) - weekday_width - 8. - 4.).max(0.);
-                            if (*s - available).abs() > 0.5 {
-                                *s = available;
-                                cx.notify();
-                            }
-                        });
-                    },
-                    |_, _, _, _| {},
-                )
-                .absolute()
-                .inset_0()
-                .size_full(),
-            )
-            .text_size(px(12.))
-            .text_color(c.secondary)
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(4.))
-                    .w(px(weekday_width))
-                    .flex_none()
-                    .pt(px(24.))
-                    .children(weekdays.into_iter().enumerate().map(|(i, label)| {
-                        div()
-                            .h(px(cell_size))
-                            .line_height(px(cell_size))
-                            .flex_none()
-                            .child(if i % 2 == 0 { label } else { String::new() })
-                    })),
-            )
-            .child(
-                div().id(id).min_w_0().flex_1().pr(px(4.)).child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap(px(8.))
-                        .flex_none()
-                        .w(px(width))
-                        .child(labels)
-                        .child(
-                            div()
-                                .relative()
-                                .h(px(7. * cell_size + 6. * HEATMAP_CELL_GAP + 1.))
-                                .children(columns.into_iter().enumerate().map(
-                                    |(index, column)| {
-                                        heatmap_column()
-                                            .absolute()
-                                            .left(px(index as f32 * step))
-                                            .children(column.into_iter().map(|cell| {
-                                                match cell {
-                                                    Some(mut cell) => {
-                                                        cell.size = cell_size;
-                                                        cell.into_any_element()
-                                                    }
-                                                    None => div()
-                                                        .size(px(cell_size))
-                                                        .flex_none()
-                                                        .into_any_element(),
-                                                }
-                                            }))
-                                    },
-                                )),
-                        ),
-                ),
-            )
-    }
-}
-
-// Fit the entire year, including narrow detail panels, without horizontal scrolling.
-fn grid_geometry(available: f32, count: usize) -> (f32, f32, f32) {
-    let count = count.max(1) as f32;
-    let available = available.max(0.);
-    let gap = HEATMAP_CELL_GAP.min(available / (2. * count - 1.));
-    let size = ((available - (count - 1.) * gap) / count).clamp(0., HEATMAP_CELL_SIZE);
-    let width = available;
-    let step = if count > 1. {
-        (width - size) / (count - 1.)
-    } else {
-        size
-    };
-    (size, step, width)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::grid_geometry;
-
-    #[test]
-    fn year_grid_fills_available_width_without_a_size_jump() {
-        for columns in [53, 54] {
-            for available in [160., 320., 500., 720., 800., 840., 880., 960., 1200.] {
-                let (size, step, width) = grid_geometry(available, columns);
-                assert!((width - available).abs() < 0.01);
-                assert!((0. ..=12.).contains(&size));
-                assert!(step >= size);
-                if available >= 428. {
-                    assert!(step - size >= 3.99);
-                }
-                assert!(((columns - 1) as f32 * step + size - width).abs() < 0.01);
-            }
-        }
-        let (before, _, _) = grid_geometry(843., 53);
-        let (after, _, _) = grid_geometry(844., 53);
-        assert!((after - before).abs() < 0.1);
-        let (size, _, width) = grid_geometry(500., 53);
-        assert!(size < 8.);
-        assert_eq!(width, 500.);
+            .child(month_row)
+            .child(grid)
     }
 }

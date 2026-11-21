@@ -18,11 +18,12 @@ pub use controls::dialog::{
     DIALOG_FRAME_INSET, DIALOG_WINDOW_MARGIN, dialog_actions, dialog_backdrop, dialog_surface,
     modal_dialog,
 };
-pub use controls::distribution::{DistributionValue, distribution_row};
+pub use controls::distribution::{DistributionValue, distribution_row, duration_share};
 pub use controls::donut::{DONUT_COMPACT_SIZE, DONUT_SIZE, DonutChart, DonutSlice};
 pub use controls::dot_pattern::dot_pattern;
 pub use controls::dropdown::Dropdown;
 pub use controls::heatmap::{HeatmapCell, heatmap_layout};
+pub use controls::hourly_chart::{HourlyBar, HourlyChart, HourlySegment};
 pub use controls::icon_control::{ICON_CONTROL_SIZE, IconControl};
 pub use controls::metric_group::MetricGroup;
 pub use controls::search_input::search_input;

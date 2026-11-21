@@ -1,4 +1,7 @@
-use crate::{Palette, content_card, continuous_frame, heading};
+use crate::{
+    LEGEND_DOT_SIZE, LEGEND_LABEL_GAP, Palette, content_card, continuous_frame, heading,
+    tooltip_surface,
+};
 use gpui_kit::{prelude::*, *};
 
 pub struct TimelineSegment {
@@ -20,28 +23,37 @@ pub struct TimelineOverview {
     pub colors: Palette,
 }
 
-struct SegmentTip(String, Palette);
-
 struct LegendTip(Vec<(String, Rgba)>, Palette);
 
 fn legend_entry(name: String, color: Rgba, colors: Palette) -> Div {
     div()
         .flex()
         .items_center()
-        .gap(px(4.))
+        .gap(px(LEGEND_LABEL_GAP))
         .text_size(px(12.))
         .line_height(px(16.))
         .text_color(colors.secondary)
-        .child(div().size(px(8.)).flex_none().rounded_full().bg(color))
-        .child(div().min_w_0().truncate().child(name))
+        .child(
+            div()
+                .size(px(LEGEND_DOT_SIZE))
+                .flex_none()
+                .rounded_full()
+                .bg(color),
+        )
+        .child(
+            div()
+                .min_w_0()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .child(name),
+        )
 }
 
 impl Render for LegendTip {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        content_card(self.1.border, self.1.panel)
+        tooltip_surface(self.1)
             .id("timeline-hidden-legends")
             .role(Role::Tooltip)
-            .p(px(8.))
             .flex()
             .flex_col()
             .gap(px(8.))
@@ -72,18 +84,6 @@ fn visible_legend_count(widths: &[f32], available: f32, overflow_width: f32) -> 
     visible
 }
 
-impl Render for SegmentTip {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        content_card(self.1.border, self.1.panel)
-            .id("timeline-overview-tooltip")
-            .role(Role::Tooltip)
-            .p(px(8.))
-            .text_size(px(12.))
-            .text_color(self.1.text)
-            .child(self.0.clone())
-    }
-}
-
 impl RenderOnce for TimelineOverview {
     fn render(self, win: &mut Window, cx: &mut App) -> impl IntoElement {
         let c = self.colors;
@@ -98,7 +98,7 @@ impl RenderOnce for TimelineOverview {
         let widths: Vec<_> = self
             .legends
             .iter()
-            .map(|(name, _)| measure(name).min(88.) + 12.)
+            .map(|(name, _)| measure(name).min(88.) + LEGEND_DOT_SIZE + LEGEND_LABEL_GAP)
             .collect();
         let overflow_width = measure(&format!("+{}", self.legends.len())) + 8.;
         let width = win.use_keyed_state("timeline-legend-width", cx, |_, _| 0_f32);
@@ -189,9 +189,10 @@ impl RenderOnce for TimelineOverview {
                     return None;
                 }
                 let description = s.description;
-                Some(
+                Some(crate::with_text_tooltip(
                     div()
                         .id(("overview-segment", i))
+                        .accessibility_id(SharedString::from(format!("overview-segment-{i}")))
                         .role(Role::Label)
                         .aria_label(description.clone())
                         .absolute()
@@ -202,20 +203,16 @@ impl RenderOnce for TimelineOverview {
                         .rounded(px(2.))
                         .bg(s.color)
                         .overflow_hidden()
-                        .when(s.anonymous, |s| s.child(crate::dot_pattern(c.secondary)))
-                        .tooltip(move |_, cx| {
-                            cx.new(|_| SegmentTip(description.clone(), c)).into()
-                        }),
-                )
+                        .when(s.anonymous, |s| s.child(crate::dot_pattern(c.secondary))),
+                    description,
+                    c,
+                ))
             }));
-        let axis = div()
-            .flex()
+        let axis = crate::layout::chart_axis_labels(c)
             .justify_between()
             .h(px(20.))
             .flex_none()
-            .text_size(px(12.))
             .line_height(px(20.))
-            .text_color(c.secondary)
             .children(["00:00", "06:00", "12:00", "18:00", "24:00"]);
         body = body.child(div().flex().flex_col().gap(px(8.)).child(track).child(axis));
         if let Some(notice) = self.notice {
@@ -242,5 +239,50 @@ mod tests {
         assert_eq!(visible_legend_count(&widths, 95., 24.), 0);
         assert_eq!(visible_legend_count(&[], 0., 24.), 0);
         assert_eq!(visible_legend_count(&[20.; 12], 1000., 24.), 7);
+    }
+
+    #[cfg(feature = "test-support")]
+    #[gpui_kit::test]
+    fn legend_text_can_paint_descenders_and_stays_within_label_width(
+        cx: &mut gpui_kit::TestAppContext,
+    ) {
+        use super::*;
+        use gpui_kit::test::TestWindowExt;
+
+        struct Labels;
+        impl Render for Labels {
+            fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                let colors = Palette::from(window.appearance());
+                div().p(px(16.)).flex().flex_col().children(
+                    ["Google Chrome", "Google Chrome with a long profile name"].map(|name| {
+                        legend_entry(name.into(), colors.accent, colors)
+                            .w(px(88. + LEGEND_DOT_SIZE + LEGEND_LABEL_GAP))
+                            .underline()
+                    }),
+                )
+            }
+        }
+
+        cx.update(|cx| {
+            gpui_kit::init(cx);
+            crate::init_fonts(cx).unwrap();
+        });
+        let (handle, _) = cx.update(|cx| {
+            gpui_kit::open_window(WindowOptions::default(), cx, |_, cx| cx.new(|_| Labels)).unwrap()
+        });
+        cx.update_window(handle, |_, window, cx| {
+            window.render_frame(cx);
+            // Underlines share the shaped text's width and its paint mask.
+            let lines = window.painted_underlines();
+            assert_eq!(lines.len(), 2);
+            for line in lines {
+                assert!(line.bounds.size.width <= px(88.).scale(window.scale_factor()));
+                assert!(
+                    line.content_mask.bounds.bottom()
+                        >= line.bounds.bottom() + px(2.).scale(window.scale_factor())
+                );
+            }
+        })
+        .unwrap();
     }
 }

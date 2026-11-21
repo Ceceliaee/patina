@@ -1,13 +1,31 @@
 use crate::{Palette, continuous_corner_layer};
-use gpui_kit::{prelude::*, *};
+use gpui_kit::{base::TestSupportExt, prelude::*, *};
 
 const ROW_HEIGHT: f32 = 48.;
 const ROW_RADIUS: f32 = 12.;
 
 pub struct DistributionValue {
-    pub label: String,
+    pub duration: String,
     pub ratio: f32,
     pub color: Rgba,
+}
+
+pub fn duration_share(duration: &str, percent: f64, c: Palette) -> Stateful<Div> {
+    let summary = SharedString::from(format!("{duration} ･ {percent:.0}%"));
+    div()
+        .id(summary.clone())
+        .role(Role::Label)
+        .aria_value(summary.clone())
+        .whitespace_nowrap()
+        .text_color(c.secondary)
+        .font_weight(crate::REGULAR_TEXT_WEIGHT)
+        .child(StyledText::new(summary).with_highlights([(
+            0..duration.len(),
+            HighlightStyle {
+                font_weight: Some(FontWeight::MEDIUM),
+                ..Default::default()
+            },
+        )]))
 }
 
 pub fn distribution_row(
@@ -19,7 +37,7 @@ pub fn distribution_row(
     c: Palette,
 ) -> Stateful<Div> {
     let DistributionValue {
-        label: value,
+        duration,
         ratio,
         color,
     } = value;
@@ -65,7 +83,15 @@ pub fn distribution_row(
                         .text_size(px(14.))
                         .line_height(px(20.))
                         .font_weight(FontWeight::NORMAL)
-                        .child(div().flex_none().flex().items_center().child(mark))
+                        .child(
+                            div()
+                                .size(px(crate::UNFRAMED_APP_ICON_SIZE))
+                                .flex_none()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .child(mark),
+                        )
                         .child(
                             div()
                                 .id("name")
@@ -74,29 +100,28 @@ pub fn distribution_row(
                                 .flex_1()
                                 .min_w_0()
                                 .truncate()
+                                .font_weight(FontWeight::MEDIUM)
                                 .child(name_content),
                         )
                         .child(
-                            div()
+                            duration_share(&duration, f64::from(ratio * 100.), c)
                                 .id("value")
-                                .role(Role::Label)
-                                .aria_value(value.clone())
                                 .flex_none()
-                                .whitespace_nowrap()
                                 .text_size(px(12.))
-                                .text_color(c.secondary)
-                                .child(value),
+                                .test_support(),
                         ),
                 )
                 .child(
                     div()
+                        .id("track")
                         .w_full()
                         .h(px(4.))
                         .flex_none()
                         .rounded_full()
                         .overflow_hidden()
                         .bg(c.panel.blend(c.secondary.opacity(0.05)))
-                        .child(div().h_full().w(relative(ratio)).rounded_full().bg(color)),
+                        .child(div().h_full().w(relative(ratio)).rounded_full().bg(color))
+                        .test_support(),
                 ),
         )
 }

@@ -1,10 +1,12 @@
-use crate::{Palette, content_card};
+use crate::{
+    Palette,
+    layout::{axis_label_width, chart_axis_labels},
+};
 use gpui_kit::{prelude::*, *};
 use std::rc::Rc;
 
 const PLOT_MIN_HEIGHT: f32 = 160.;
 const AXIS_GAP: f32 = 8.;
-const AXIS_FONT_SIZE: f32 = 12.;
 const LINE_WIDTH: f32 = 2.;
 const DOT_SIZE: f32 = 4.;
 const ACTIVE_DOT_SIZE: f32 = 6.;
@@ -137,14 +139,7 @@ impl RenderOnce for TrendChart {
             .collect();
         let gutter = tick_labels
             .iter()
-            .map(|label| {
-                let run = win.text_style().to_run(label.len());
-                f32::from(
-                    win.text_system()
-                        .shape_line(label.clone().into(), px(AXIS_FONT_SIZE), &[run], None)
-                        .width,
-                )
-            })
+            .map(|label| axis_label_width(label, win))
             .fold(0., f32::max);
         let gutter = (gutter / 4.).ceil() * 4.;
         let series = self.series;
@@ -344,7 +339,7 @@ impl RenderOnce for TrendChart {
                 active.unwrap_or(0) as f32 / (count - 1) as f32
             };
             grid = grid.child(
-                content_card(c.border, c.panel)
+                crate::tooltip_surface(c)
                     .id("trend-tooltip")
                     .role(Role::Tooltip)
                     .aria_label(description.clone())
@@ -355,7 +350,6 @@ impl RenderOnce for TrendChart {
                         |s| s.left(relative(x)).ml(px(8.)),
                         |s| s.right(relative(1. - x)).mr(px(8.)),
                     )
-                    .p(px(8.))
                     .max_w(relative(0.45))
                     .text_size(px(12.))
                     .text_color(c.text)
@@ -363,12 +357,10 @@ impl RenderOnce for TrendChart {
             );
         }
         let tick_count = count.min(4);
-        let ticks = div()
+        let ticks = chart_axis_labels(c)
             .relative()
             .h(px(16.))
             .ml(px(gutter + AXIS_GAP))
-            .text_size(px(AXIS_FONT_SIZE))
-            .text_color(c.secondary)
             .children((0..tick_count).map(|tick| {
                 let i = if tick_count == 1 {
                     0
@@ -417,14 +409,11 @@ impl RenderOnce for TrendChart {
                     .min_h(px(PLOT_MIN_HEIGHT))
                     .gap(px(AXIS_GAP))
                     .child(
-                        div()
+                        chart_axis_labels(c)
                             .w(px(gutter))
                             .flex_none()
-                            .flex()
                             .flex_col()
                             .justify_between()
-                            .text_size(px(AXIS_FONT_SIZE))
-                            .text_color(c.secondary)
                             .children(tick_labels.into_iter().map(|label| div().child(label))),
                     )
                     .child(grid),

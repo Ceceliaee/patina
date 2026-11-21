@@ -11,6 +11,7 @@ pub(super) mod dot_pattern;
 pub(super) mod dropdown;
 pub(super) mod form;
 pub(super) mod heatmap;
+pub(super) mod hourly_chart;
 pub(super) mod icon_control;
 pub(super) mod metric_group;
 pub(super) mod navigation_item;

@@ -1,4 +1,6 @@
-use gpui_kit::{Background, PathBuilder, Pixels, canvas, point, prelude::*, px};
+use gpui_kit::{
+    Background, Bounds, PathBuilder, Pixels, Point, Rgba, Window, canvas, point, prelude::*, px,
+};
 use std::{f32::consts::FRAC_PI_2, sync::LazyLock};
 
 const CORNER_EXPONENT: f32 = 4.;
@@ -32,33 +34,64 @@ fn layer(radius: Pixels, inset: Pixels, fill: Option<Background>) -> impl IntoEl
     canvas(
         |_, _, _| (),
         move |bounds, (), window, _| {
-            let bounds = bounds.inset(inset);
-            if bounds.size.width <= px(0.) || bounds.size.height <= px(0.) {
-                return;
-            }
-            let radius =
-                (radius - inset).clamp(px(0.), bounds.size.width.min(bounds.size.height) * 0.5);
-            let points: [_; 4 * QUARTER] = std::array::from_fn(|i| {
-                let (x, y) = ARC[i % QUARTER];
-                let dx = radius * (1. - x);
-                let dy = radius * (1. - y);
-                match i / QUARTER {
-                    0 => point(bounds.right() - dy, bounds.top() + dx),
-                    1 => point(bounds.right() - dx, bounds.bottom() - dy),
-                    2 => point(bounds.left() + dy, bounds.bottom() - dx),
-                    _ => point(bounds.left() + dx, bounds.top() + dy),
-                }
-            });
-            let mut path = PathBuilder::fill();
-            path.add_polygon(&points, true);
-            if let Ok(path) = path.build() {
-                window.paint_path(
-                    path,
-                    fill.unwrap_or_else(|| window.text_style().color.into()),
-                );
-            }
+            let fill = fill.unwrap_or_else(|| window.text_style().color.into());
+            paint_corner(bounds, radius, inset, fill, window);
         },
     )
     .absolute()
     .inset_0()
+}
+
+pub(crate) fn paint_frame(
+    bounds: Bounds<Pixels>,
+    radius: Pixels,
+    border: Rgba,
+    fill: Rgba,
+    window: &mut Window,
+) {
+    paint_corner(bounds, radius, px(0.), border.into(), window);
+    paint_corner(bounds, radius, px(1.), fill.into(), window);
+}
+
+fn paint_corner(
+    bounds: Bounds<Pixels>,
+    radius: Pixels,
+    inset: Pixels,
+    fill: Background,
+    window: &mut Window,
+) {
+    if bounds.intersect(&window.content_mask().bounds).is_empty() {
+        return;
+    }
+    let Some(points) = corner_points(bounds, radius, inset) else {
+        return;
+    };
+    let mut path = PathBuilder::fill();
+    path.add_polygon(&points, true);
+    if let Ok(path) = path.build() {
+        window.paint_path(path, fill);
+    }
+}
+
+pub(crate) fn corner_points(
+    bounds: Bounds<Pixels>,
+    radius: Pixels,
+    inset: Pixels,
+) -> Option<[Point<Pixels>; 4 * QUARTER]> {
+    let bounds = bounds.inset(inset);
+    if bounds.size.width <= px(0.) || bounds.size.height <= px(0.) {
+        return None;
+    }
+    let radius = (radius - inset).clamp(px(0.), bounds.size.width.min(bounds.size.height) * 0.5);
+    Some(std::array::from_fn(|i| {
+        let (x, y) = ARC[i % QUARTER];
+        let dx = radius * (1. - x);
+        let dy = radius * (1. - y);
+        match i / QUARTER {
+            0 => point(bounds.right() - dy, bounds.top() + dx),
+            1 => point(bounds.right() - dx, bounds.bottom() - dy),
+            2 => point(bounds.left() + dy, bounds.bottom() - dx),
+            _ => point(bounds.left() + dx, bounds.top() + dy),
+        }
+    }))
 }
