@@ -1,30 +1,74 @@
 use super::*;
+use gpui_kit::base::TestSupportExt;
 use quietpro::{Icon, IconControl};
 
-pub(super) struct SegmentTip(pub(super) String, pub(super) Palette);
-impl Render for SegmentTip {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        content_card(self.1.border, self.1.panel)
-            .id("detail-segment-tooltip")
-            .role(Role::Tooltip)
-            .aria_label(self.0.clone())
-            .p(px(8.))
-            .text_size(px(12.))
-            .child(self.0.clone())
-    }
-}
-
 impl History {
+    pub(crate) fn with_target_icon(mut self, icon: Option<(Arc<Image>, Option<u32>)>) -> Self {
+        if let (Some((key, _)), Some((image, color))) = (&self.target, icon) {
+            self.icons.insert(
+                key.clone(),
+                HistoryIcon {
+                    image,
+                    color,
+                    source: None,
+                },
+            );
+        }
+        self
+    }
+
+    pub(crate) fn detail_dialog(
+        content: Entity<Self>,
+        focus: &FocusHandle,
+        close_label: String,
+        colors: quietpro::Palette,
+        close: impl Fn(&mut Window, &mut App) + 'static,
+        window: &Window,
+        cx: &mut App,
+    ) -> gpui_kit::base::Dialog {
+        let title = content.read(cx).title();
+        let close = std::rc::Rc::new(close);
+        let button = close.clone();
+        let popup = quietpro::dialog_surface(colors, window.viewport_size())
+            .id("app-detail-popup")
+            .relative()
+            .w(
+                (window.viewport_size().width - px(quietpro::DIALOG_WINDOW_MARGIN * 2.))
+                    .min(px(800.)),
+            )
+            .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
+            .child(content)
+            .child(
+                div()
+                    .absolute()
+                    .top(px(quietpro::DIALOG_FRAME_INSET))
+                    .right(px(quietpro::DIALOG_FRAME_INSET))
+                    .child(
+                        quietpro::IconControl::new("close-detail", close_label, quietpro::Icon::X)
+                            .action(colors, move |_, win, cx| button(win, cx)),
+                    ),
+            );
+        quietpro::modal_dialog(
+            title,
+            focus.clone(),
+            popup.test_support(),
+            move |win, cx| {
+                close(win, cx);
+            },
+            cx,
+        )
+    }
+
     pub(super) fn render_detail(
         &self,
-        day: &HistoryDay,
+        key: &str,
+        name: &str,
         colors: Palette,
         win: &mut Window,
         cx: &mut Context<Self>,
     ) -> Div {
         let locale = self.client.locale.get();
         let tr = |key| text(locale, key);
-        let (key, name) = self.target.as_ref().unwrap();
         let icon = self.icons.get(key).map_or_else(
             || {
                 quietpro::glyph(
@@ -40,38 +84,46 @@ impl History {
             },
             |icon| img(icon.image.clone()).size(px(20.)).into_any_element(),
         );
-        let mut page = shell(colors).p_0().min_h_0().flex_initial().child(
-            div()
-                .flex()
-                .items_center()
-                .flex_none()
-                .h(px(32.))
-                .pr(px(44.))
-                .gap(px(12.))
-                .child(icon)
-                .child(heading(name.clone()).flex_1().min_w_0().truncate())
-                .child(self.date_controls(colors, win, cx)),
-        );
-        if self.calendar.is_some() {
-            page = page.child(self.calendar_popup(colors, win, cx));
-        }
-        if self.error {
-            page = page.child(
+        let mut timeline_section = div()
+            .flex()
+            .flex_col()
+            .flex_none()
+            .gap(px(CARD_TITLE_GAP))
+            .child(
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(8.))
-                    .child(label(tr("destinationDetail.dayError")))
+                    .flex_none()
+                    .h(px(32.))
+                    .gap(px(12.))
                     .child(
-                        quietpro::text_button("detail-retry", tr("common.retry"), colors, true)
-                            .on_click(cx.listener(|this, _, _, cx| this.refresh(cx))),
-                    ),
+                        div()
+                            .flex()
+                            .flex_1()
+                            .min_w_0()
+                            .items_center()
+                            .gap(px(12.))
+                            .child(icon)
+                            .child(heading(name.to_owned()).min_w_0().truncate()),
+                    )
+                    .mr(px(44.)),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_none()
+                    .items_center()
+                    .children(
+                        self.data
+                            .as_ref()
+                            .map(|day| self.zoom_controls(day, colors, win, cx)),
+                    )
+                    .child(div().flex_1())
+                    .child(self.date_controls(&self.date_trigger, colors, win, cx)),
             );
+        if self.calendar.is_some() {
+            timeline_section = timeline_section.child(self.calendar_popup(colors, win, cx));
         }
-        let minimum = self.minimum.unwrap_or(60);
-        let (left, right) = self.viewport(day);
-        let groups = records::groups_in_range(day, minimum * 1000, (left, right));
-        let visible: HashSet<_> = groups.iter().map(|group| group.id).collect();
         let mut track = div()
             .id("detail-timeline-track")
             .accessibility_id("detail-timeline-track")
@@ -86,47 +138,106 @@ impl History {
             .border_color(colors.border)
             .bg(colors.canvas)
             .focus_visible(move |s| s.border_color(colors.secondary));
-        for (index, record) in day.records.iter().enumerate() {
-            if !visible.contains(&record.group_id) || record.end <= left || record.start >= right {
-                continue;
+        let mut groups = Vec::new();
+        let mut ticks = None;
+        if let Some(day) = &self.data {
+            let (left, right) = self.viewport(day);
+            let minimum = self.minimum.unwrap_or(day.minimum_seconds);
+            groups = records::groups_in_range(day, minimum * 1000, (left, right));
+            let visible: HashSet<_> = groups.iter().map(|group| group.id).collect();
+            let fragments = day
+                .records
+                .iter()
+                .filter(|r| visible.contains(&r.group_id))
+                .collect();
+            let segments =
+                timeline::merged_lane_records(fragments, (left, right), day.timeline_merge_gap_ms);
+            for (index, record) in segments.iter().enumerate() {
+                let start = record.start;
+                let end = record.end;
+                let elapsed = duration(record.group_duration);
+                let description = format!(
+                    "{} ･ {}–{} ･ {elapsed}",
+                    record.name,
+                    stamp(start, "%H:%M:%S"),
+                    stamp(end, "%H:%M:%S")
+                );
+                let color = quietpro::activity_display_color(
+                    self.source_color(day, &record.key, false),
+                    colors.canvas,
+                    self.client.dark(win),
+                );
+                track = track.child(quietpro::with_text_tooltip(
+                    div()
+                        .id(("detail-segment", index))
+                        .role(Role::Label)
+                        .aria_label(description.clone())
+                        .absolute()
+                        .top(px(8.))
+                        .bottom(px(8.))
+                        .left(relative((start - left) as f32 / (right - left) as f32))
+                        .w(relative((end - start) as f32 / (right - left) as f32))
+                        .min_w(px(1.))
+                        .rounded(px(2.))
+                        .bg(color),
+                    description,
+                    colors,
+                ));
             }
-            let start = record.start.max(left);
-            let end = record.end.min(right);
-            let elapsed = if end - start < 60_000 {
-                format!("{}s", (end - start) / 1000)
-            } else {
-                duration(end - start)
-            };
-            let description = format!(
-                "{} · {}–{} · {elapsed}",
-                record.name,
-                stamp(start, "%H:%M:%S"),
-                stamp(end, "%H:%M:%S")
-            );
-            let color = quietpro::activity_display_color(
-                self.source_color(day, &record.key, false),
-                colors.canvas,
-                self.client.dark(win),
-            );
-            track = track.child(
-                div()
-                    .id(("detail-segment", index))
-                    .role(Role::Label)
-                    .aria_label(description.clone())
-                    .absolute()
-                    .top(px(8.))
-                    .bottom(px(8.))
-                    .left(relative((start - left) as f32 / (right - left) as f32))
-                    .w(relative((end - start) as f32 / (right - left) as f32))
-                    .min_w(px(1.))
-                    .rounded(px(2.))
-                    .bg(color)
-                    .tooltip(move |_, cx| {
-                        cx.new(|_| SegmentTip(description.clone(), colors)).into()
-                    }),
+            track = self.interactive_timeline(track, left, right, cx);
+            ticks = Some(
+                timeline::ticks(day, left, right, colors)
+                    .id("detail-timeline-axis")
+                    .role(Role::Group)
+                    .aria_label(timeline::time_range_label(day, left, right)),
             );
         }
-        let track = self.interactive_timeline(track, left, right, cx);
+        let timeline_section = timeline_section.child(
+            div()
+                .flex()
+                .flex_col()
+                .flex_none()
+                .gap(px(8.))
+                .py(px(12.))
+                .border_y_1()
+                .border_color(colors.border)
+                .child(track.test_support())
+                .child(
+                    div()
+                        .flex_none()
+                        .h(px(timeline::TICK_HEIGHT))
+                        .children(ticks),
+                ),
+        );
+        shell(colors)
+            .p_0()
+            .min_h_0()
+            .flex_initial()
+            .child(timeline_section)
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .flex_none()
+                    .min_h(px(quietpro::ICON_CONTROL_SIZE))
+                    .justify_between()
+                    .gap(px(12.))
+                    .child(heading(tr("destinationDetail.records")))
+                    .children(
+                        self.minimum
+                            .map(|minimum| self.detail_minimum(minimum, colors, cx)),
+                    ),
+            )
+            .child(self.detail_records(groups, colors, cx).test_support())
+    }
+
+    fn detail_minimum(
+        &self,
+        minimum: i64,
+        colors: Palette,
+        cx: &mut Context<Self>,
+    ) -> Stateful<Div> {
+        let tr = |key| text(self.client.locale.get(), key);
         let mut filter = div()
             .id("detail-minimum-duration")
             .role(Role::Group)
@@ -161,46 +272,13 @@ impl History {
                     ),
             );
             if direction < 0 {
-                filter = filter.child(label(format!("{} min", minimum / 60)).text_size(px(12.)));
+                filter = filter.child(
+                    label(format!("{} min", minimum / 60))
+                        .text_size(px(12.))
+                        .font_weight(FontWeight::MEDIUM),
+                );
             }
         }
-        let total: i64 = day
-            .records
-            .iter()
-            .map(|record| record.end - record.start)
-            .sum();
-        page.child(self.zoom_toolbar(day, colors, win, cx))
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .flex_none()
-                    .gap(px(8.))
-                    .py(px(12.))
-                    .border_y_1()
-                    .border_color(colors.border)
-                    .child(track)
-                    .child(timeline::ticks(day, left, right, colors)),
-            )
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .flex_none()
-                    .gap(px(12.))
-                    .child(heading(tr("destinationDetail.records")))
-                    .child(
-                        label(format!(
-                            "{} · {}",
-                            tr("history.activeDuration"),
-                            duration(total)
-                        ))
-                        .text_size(px(12.))
-                        .text_color(colors.secondary)
-                        .flex_1(),
-                    )
-                    .child(filter),
-            )
-            .child(self.detail_records(day, &groups, colors, win, cx))
+        filter
     }
 }

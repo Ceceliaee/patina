@@ -34,7 +34,7 @@ fn anchored_calendar() -> Result<(), Error> {
             .spawn()?,
     );
     let hwnd = wait("main window", || {
-        children::find(app.0.id(), |pid| window(pid, w!("Patina UI")))
+        children::find(app.0.id(), |pid| window(pid, w!("Patina")))
     })?;
     click(hwnd, "History")?;
     wait("loaded history", || named(hwnd, "Day Timeline"))?;
@@ -43,7 +43,24 @@ fn anchored_calendar() -> Result<(), Error> {
     let trigger = wait("date trigger", || button(hwnd, &today_name))?;
     let trigger_bounds = unsafe { trigger.CurrentBoundingRectangle()? };
     let scale = unsafe { GetDpiForWindow(hwnd) } as f64 / 96.;
-    assert!(((trigger_bounds.bottom - trigger_bounds.top) as f64 / scale - 28.).abs() <= 1.);
+    assert!(((trigger_bounds.bottom - trigger_bounds.top) as f64 / scale - 32.).abs() <= 1.);
+    for name in ["Previous day", "Next day"] {
+        let arrow = wait(name, || button(hwnd, name))?;
+        let bounds = unsafe { arrow.CurrentBoundingRectangle()? };
+        assert!(((bounds.right - bounds.left) as f64 / scale - 32.).abs() <= 1.);
+        assert!((bounds.top - trigger_bounds.top).abs() <= 1);
+        assert!((bounds.bottom - trigger_bounds.bottom).abs() <= 1);
+    }
+    let group = wait("distribution switch", || {
+        named(hwnd, "Select time destination type")
+    })?;
+    let group_bounds = unsafe { group.CurrentBoundingRectangle()? };
+    assert!(((group_bounds.bottom - group_bounds.top) as f64 / scale - 28.).abs() <= 1.);
+    let option = wait("Apps option", || segment(hwnd, "Apps"))?;
+    let option_bounds = unsafe { option.CurrentBoundingRectangle()? };
+    assert_control_height(hwnd, &option, 28)?;
+    assert!((option_bounds.top - group_bounds.top).abs() <= 1);
+    assert!((group_bounds.bottom - option_bounds.bottom).abs() <= 1);
     let close = || wait("closed calendar", || calendar(hwnd).is_none().then_some(()));
     // Isolated desktops cannot report foreground HasKeyboardFocus. A fresh Enter
     // without SetFocus proves that dismissal restored the trigger's keyboard target.

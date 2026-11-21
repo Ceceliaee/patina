@@ -2,12 +2,30 @@ use super::*;
 
 use chrono::{Datelike, Days, Months, NaiveDate, TimeZone};
 use gpui_kit::base::{Align, POPUP_PRIORITY, Placement, Positioner};
-use quietpro::{Icon, IconControl};
+use quietpro::{ButtonSizeExt, ControlSize, Icon, IconControl};
+
+#[derive(Clone)]
+pub(super) struct DateTrigger {
+    pub(super) focus: FocusHandle,
+    bounds: Rc<std::cell::Cell<Bounds<Pixels>>>,
+    size: ControlSize,
+}
+
+impl DateTrigger {
+    pub(super) fn new(size: ControlSize, cx: &App) -> Self {
+        Self {
+            focus: cx.focus_handle(),
+            bounds: Default::default(),
+            size,
+        }
+    }
+}
 
 pub(super) struct Calendar {
     month: NaiveDate,
     active: NaiveDate,
     focus: FocusHandle,
+    trigger: DateTrigger,
 }
 
 fn timestamp(date: NaiveDate) -> Option<i64> {
@@ -68,10 +86,20 @@ impl History {
             .date_naive()
     }
 
+    pub(super) fn requested_date_error(&self) -> Option<String> {
+        let day = self.data.as_ref()?;
+        (self.error && !(day.start..day.end).contains(&self.date)).then(|| {
+            let locale = self.client.locale.get();
+            let date = date_caption(locale, self.selected_date(), Local::now().date_naive());
+            format!("{date} ･ {}", text(locale, "destinationDetail.dayError"))
+        })
+    }
+
     fn close_calendar(&mut self, win: &mut Window, cx: &mut Context<Self>) {
-        self.calendar = None;
-        win.focus(&self.date_focus, cx);
-        cx.notify();
+        if let Some(calendar) = self.calendar.take() {
+            win.focus(&calendar.trigger.focus, cx);
+            cx.notify();
+        }
     }
 
     fn choose_date(&mut self, date: NaiveDate, win: &mut Window, cx: &mut Context<Self>) {
@@ -98,19 +126,30 @@ impl History {
 
     pub(super) fn date_controls(
         &self,
+        trigger: &DateTrigger,
         colors: Palette,
         win: &mut Window,
         cx: &mut Context<Self>,
     ) -> Div {
         let locale = self.client.locale.get();
         let date = self.selected_date();
+        let presented = Local
+            .timestamp_millis_opt(self.presented_date())
+            .single()
+            .unwrap()
+            .date_naive();
         let today = Local::now().date_naive();
         let today_label = text(locale, "date.today");
+        let size = trigger.size;
+        let weight = match size {
+            ControlSize::Large => FontWeight::BOLD,
+            _ => FontWeight::MEDIUM,
+        };
         let width = ["8888-88-88", today_label.as_str()]
             .into_iter()
             .map(|s| {
                 let mut run = win.text_style().to_run(s.len());
-                run.font.weight = FontWeight::SEMIBOLD;
+                run.font.weight = weight;
                 f32::from(
                     win.text_system()
                         .shape_line(s.to_owned().into(), px(14.), &[run], None)
@@ -118,7 +157,8 @@ impl History {
                 )
             })
             .fold(0_f32, f32::max);
-        let bounds = self.date_bounds.clone();
+        let trigger = trigger.clone();
+        let bounds = trigger.bounds.clone();
         quietpro::calendar_controls()
             .child(quietpro::calendar_arrow_frame(
                 IconControl::new(
@@ -134,20 +174,21 @@ impl History {
                         }
                     }),
                 ),
+                size,
                 colors,
             ))
             .child(
                 quietpro::calendar_trigger(
                     "date-picker",
-                    date_caption(locale, date, today),
+                    date_caption(locale, presented, today),
                     colors,
                 )
                 .w(px(((width + 24. + 2.) / 4.).ceil() * 4.))
-                .min_h(px(28.))
-                .h(px(28.))
+                .control_size(size)
+                .font_weight(weight)
                 .flex_none()
-                .accessibility_label(date.to_string())
-                .track_focus(&self.date_focus)
+                .accessibility_label(presented.to_string())
+                .track_focus(&trigger.focus)
                 .child(
                     canvas(move |b, _, _| bounds.set(b), |_, _, _, _| {})
                         .absolute()
@@ -165,6 +206,7 @@ impl History {
                         month: date.with_day(1).unwrap(),
                         active: date,
                         focus,
+                        trigger: trigger.clone(),
                     });
                     cx.notify();
                 })),
@@ -186,6 +228,7 @@ impl History {
                         }
                     }),
                 ),
+                size,
                 colors,
             ))
     }
@@ -208,7 +251,11 @@ impl History {
             .aria_label(text(locale, "date.pickDate"))
             .track_focus(&cal.focus)
             .on_mouse_down_out(cx.listener(|this, e: &MouseDownEvent, win, cx| {
-                if !this.date_bounds.get().contains(&e.position) {
+                if this
+                    .calendar
+                    .as_ref()
+                    .is_some_and(|cal| !cal.trigger.bounds.get().contains(&e.position))
+                {
                     this.close_calendar(win, cx);
                 }
             }))
@@ -342,7 +389,7 @@ impl History {
         }
         popup = popup.child(div().flex().flex_col().child(weekdays).child(grid));
         deferred(
-            Positioner::side(self.date_bounds.get())
+            Positioner::side(cal.trigger.bounds.get())
                 .placement(Placement::Bottom)
                 .align(Align::Center)
                 .offset(px(4.))

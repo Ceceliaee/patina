@@ -1,5 +1,4 @@
 use super::*;
-use chrono::{Days, TimeZone};
 use gpui_kit::base::Popover;
 use quietpro::{Icon, IconControl};
 use std::collections::BTreeMap;
@@ -7,12 +6,13 @@ use std::collections::BTreeMap;
 const RECORD_CARD_HEIGHT: f32 = 48.;
 const RECORD_CARD_GAP: f32 = 8.;
 const RECORD_LIST_MAX_HEIGHT: f32 = RECORD_CARD_HEIGHT * 7. + RECORD_CARD_GAP * 6.;
-const DETAIL_RECORD_LIST_MAX_HEIGHT: f32 = RECORD_CARD_HEIGHT * 5. + RECORD_CARD_GAP * 4.;
+const DETAIL_RECORD_LIST_HEIGHT: f32 = RECORD_CARD_HEIGHT * 5. + RECORD_CARD_GAP * 4.;
 
 pub(super) struct RecordsState {
     pub(super) web: bool,
     expanded: Option<usize>,
     modes: [FocusHandle; 2],
+    scroll: UniformListScrollHandle,
 }
 impl RecordsState {
     pub(super) fn new(cx: &mut Context<History>) -> Self {
@@ -20,6 +20,7 @@ impl RecordsState {
             web: false,
             expanded: None,
             modes: std::array::from_fn(|_| cx.focus_handle()),
+            scroll: UniformListScrollHandle::new(),
         }
     }
     pub(super) fn close_details(&mut self) {
@@ -27,9 +28,9 @@ impl RecordsState {
     }
 }
 
-pub(super) struct RecordGroup<'a> {
+pub(super) struct RecordGroup {
     pub(super) id: usize,
-    first: &'a HistoryRecord,
+    first_index: usize,
     start: i64,
     end: i64,
     duration: i64,
@@ -38,7 +39,7 @@ pub(super) struct RecordGroup<'a> {
     titles: Vec<(i64, i64, String, Option<String>, i64)>,
 }
 
-fn groups(day: &HistoryDay, minimum: i64) -> Vec<RecordGroup<'_>> {
+fn groups(day: &HistoryDay, minimum: i64) -> Vec<RecordGroup> {
     groups_in_range(day, minimum, (day.start, day.end))
 }
 
@@ -46,9 +47,9 @@ pub(super) fn groups_in_range(
     day: &HistoryDay,
     minimum: i64,
     range: (i64, i64),
-) -> Vec<RecordGroup<'_>> {
-    let mut groups = BTreeMap::<usize, RecordGroup<'_>>::new();
-    for record in &day.records {
+) -> Vec<RecordGroup> {
+    let mut groups = BTreeMap::<usize, RecordGroup>::new();
+    for (index, record) in day.records.iter().enumerate() {
         let start = record.start.max(range.0);
         let end = record.end.min(range.1);
         if end <= start {
@@ -58,7 +59,7 @@ pub(super) fn groups_in_range(
             .entry(record.group_id)
             .or_insert_with(|| RecordGroup {
                 id: record.group_id,
-                first: record,
+                first_index: index,
                 start,
                 end,
                 duration: 0,
@@ -98,16 +99,8 @@ pub(super) fn groups_in_range(
         }
         group.titles = merged;
     }
-    groups.sort_by_key(|g| (g.first.start, g.id));
+    groups.sort_by_key(|g| (day.records[g.first_index].start, g.id));
     groups
-}
-
-pub(super) fn elapsed(ms: i64) -> String {
-    if ms < 60_000 {
-        format!("{}s", ms.max(0) / 1000)
-    } else {
-        duration(ms)
-    }
 }
 
 fn title_rows(
@@ -115,15 +108,14 @@ fn title_rows(
     colors: Palette,
     locale: Locale,
     win: &Window,
-    close: impl IntoElement,
 ) -> Div {
     let viewport = win.viewport_size();
     let width = 428_f32.min(f32::from(viewport.width) - 48.);
-    let measure = |value: &str, size: f32| {
+    let measure = |value: &str| {
         let run = win.text_style().to_run(value.len());
         f32::from(
             win.text_system()
-                .shape_line(value.to_owned().into(), px(size), &[run], None)
+                .shape_line(value.to_owned().into(), px(12.), &[run], None)
                 .width,
         )
     };
@@ -137,14 +129,10 @@ fn title_rows(
         .flex_col()
         .gap(px(8.));
     for (index, (start, end, title, url, active)) in titles.iter().enumerate() {
-        let time = format!(
-            "{} – {}",
-            stamp(*start, "%H:%M:%S"),
-            stamp(*end, "%H:%M:%S")
-        );
-        let duration = elapsed(*active);
-        let truncated = measure(title, 12.)
-            > width - 34. - 24. - 12. - 8. - measure(&duration, 12.) - measure(&time, 10.);
+        let time = format!("{} – {}", stamp(*start, "%H:%M"), stamp(*end, "%H:%M"));
+        let duration = duration(*active);
+        let time_column_width = measure(&duration).max(measure(&time));
+        let truncated = measure(title) > width - 34. - 24. - 12. - time_column_width;
         let full_title = url
             .as_ref()
             .map_or_else(|| title.clone(), |url| format!("{title}\n{url}"));
@@ -177,7 +165,7 @@ fn title_rows(
                         .children(url.as_ref().map(|url| {
                             label(url.clone())
                                 .truncate()
-                                .text_size(px(10.))
+                                .text_size(px(12.))
                                 .text_color(colors.secondary)
                         })),
                 )
@@ -185,10 +173,11 @@ fn title_rows(
                     div()
                         .flex_none()
                         .flex()
-                        .items_center()
-                        .gap(px(8.))
+                        .flex_col()
+                        .items_end()
+                        .line_height(px(16.))
                         .child(label(duration).text_size(px(12.)))
-                        .child(label(time).text_size(px(10.)).text_color(colors.secondary)),
+                        .child(label(time).text_size(px(12.)).text_color(colors.secondary)),
                 ),
         );
     }
@@ -196,18 +185,11 @@ fn title_rows(
         .w(px(width))
         .gap(px(quietpro::CARD_TITLE_GAP))
         .child(
-            div()
-                .flex()
+            label(text(locale, "history.titleDetails"))
                 .flex_none()
-                .items_center()
-                .child(
-                    label(text(locale, "history.titleDetails"))
-                        .flex_1()
-                        .text_size(px(14.))
-                        .line_height(px(20.))
-                        .font_weight(FontWeight::SEMIBOLD),
-                )
-                .child(close),
+                .text_size(px(14.))
+                .line_height(px(20.))
+                .font_weight(FontWeight::BOLD),
         )
         .child(list)
 }
@@ -216,10 +198,10 @@ struct TitleTip(String, Palette);
 
 impl Render for TitleTip {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        content_card(self.1.border, self.1.panel)
-            .p(px(8.))
-            .max_w(px(400.))
-            .text_size(px(12.))
+        quietpro::tooltip_surface(self.1)
+            .id("record-title-tooltip")
+            .role(Role::Tooltip)
+            .aria_label(self.0.clone())
             .child(self.0.clone())
     }
 }
@@ -238,9 +220,11 @@ impl History {
         } else {
             self.data.as_ref()
         };
+        let minimum = self.minimum.or_else(|| data.map(|day| day.minimum_seconds));
         let groups = data
-            .map(|day| groups(day, self.minimum.unwrap_or(300) * 1000))
+            .map(|day| groups(day, minimum.unwrap_or(day.minimum_seconds) * 1000))
             .unwrap_or_default();
+        let count = groups.len();
         let mut rows = div()
             .id("timeline-record-list")
             .role(Role::Group)
@@ -248,15 +232,15 @@ impl History {
             .flex_initial()
             .min_h_0()
             .max_h(px(RECORD_LIST_MAX_HEIGHT))
-            .overflow_y_scroll()
+            .when(data.is_none(), |rows| rows.h(px(RECORD_LIST_MAX_HEIGHT)))
+            .overflow_hidden()
             .flex()
             .flex_col()
             .gap(px(RECORD_CARD_GAP));
-        if data.is_none() || groups.is_empty() {
-            let key = if self.error || (self.records_view.web && self.web_error) {
+        let failed = self.error || (self.records_view.web && self.web_error);
+        if groups.is_empty() && (failed || data.is_some()) {
+            let key = if failed {
                 "destinationDetail.dayError"
-            } else if data.is_none() {
-                "common.loading"
             } else {
                 "history.emptyDay"
             };
@@ -269,13 +253,21 @@ impl History {
                     .child(label(tr(key)).text_color(colors.secondary)),
             );
         }
-        for group in &groups {
-            rows = rows.child(self.record_card(group, data.unwrap(), colors, win, cx));
+        if !groups.is_empty() {
+            let height = ((RECORD_CARD_HEIGHT + RECORD_CARD_GAP) * groups.len() as f32
+                - RECORD_CARD_GAP)
+                .min(RECORD_LIST_MAX_HEIGHT);
+            rows = rows.h(px(height)).child(self.visible_records(
+                "history-group-rows",
+                groups,
+                self.records_view.web,
+                colors,
+                cx,
+            ));
         }
         let view = cx.weak_entity();
-        let tabs = quietpro::segmented(
-            "timeline-record-mode",
-            tr("data.destinationMode"),
+        let tabs = quietpro::segmented_with_medium_labels(
+            ("timeline-record-mode", tr("data.destinationMode")),
             std::array::from_fn::<_, 2, _>(|i| {
                 (
                     i == 1,
@@ -293,6 +285,7 @@ impl History {
             self.records_view.web,
             true,
             colors,
+            quietpro::ControlSize::Medium,
             move |web, _, cx| {
                 let _ = view.update(cx, |this, cx| {
                     this.records_view.web = web;
@@ -301,63 +294,8 @@ impl History {
                 });
             },
         );
-        let current = Local
-            .timestamp_millis_opt(self.date)
-            .single()
-            .unwrap()
-            .date_naive();
-        let today = Local::now().date_naive();
-        let date = div()
-            .flex()
-            .items_center()
-            .gap(px(4.))
-            .child(
-                IconControl::new(
-                    "records-prev-day",
-                    tr("destinationDetail.previousDay"),
-                    Icon::ChevronLeft,
-                )
-                .action(
-                    colors,
-                    cx.listener(move |this, _, _, cx| {
-                        if let Some(date) = (current - Days::new(1))
-                            .and_hms_opt(0, 0, 0)
-                            .and_then(|d| d.and_local_timezone(Local).earliest())
-                        {
-                            this.change_day(date.timestamp_millis(), cx);
-                        }
-                    }),
-                ),
-            )
-            .child(
-                label(if current == today {
-                    tr("date.today")
-                } else {
-                    current.to_string()
-                })
-                .text_size(px(12.))
-                .text_color(colors.secondary),
-            )
-            .child(
-                IconControl::new(
-                    "records-next-day",
-                    tr("destinationDetail.nextDay"),
-                    Icon::ChevronRight,
-                )
-                .disabled(current >= today)
-                .action(
-                    colors,
-                    cx.listener(move |this, _, _, cx| {
-                        if let Some(date) = (current + Days::new(1))
-                            .and_hms_opt(0, 0, 0)
-                            .and_then(|d| d.and_local_timezone(Local).earliest())
-                        {
-                            this.change_day(date.timestamp_millis(), cx);
-                        }
-                    }),
-                ),
-            );
-        let min = self.minimum.unwrap_or(300);
+        let date = self.date_controls(&self.overlay_date_trigger, colors, win, cx);
+        let min = minimum.unwrap_or(300);
         let filter = div()
             .flex()
             .items_center()
@@ -374,7 +312,11 @@ impl History {
                     cx.listener(move |this, _, _, cx| this.change_minimum(min - 60, cx)),
                 ),
             )
-            .child(label(format!("{} min", min / 60)).text_size(px(12.)))
+            .child(
+                label(format!("{} min", min / 60))
+                    .text_size(px(12.))
+                    .font_weight(FontWeight::MEDIUM),
+            )
             .child(
                 IconControl::new(
                     "records-more",
@@ -398,25 +340,31 @@ impl History {
             .border_b_1()
             .border_color(colors.border)
             .child(
-                div().flex().items_center().gap(px(12.)).child(tabs).child(
-                    label(format_text(
-                        locale,
-                        "history.sessionCount",
-                        &[("count", groups.len().to_string())],
-                    ))
-                    .text_size(px(12.))
-                    .text_color(colors.secondary),
-                ),
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(12.))
+                    .child(tabs)
+                    .children(data.map(|_| {
+                        label(format_text(
+                            locale,
+                            "history.sessionCount",
+                            &[("count", count.to_string())],
+                        ))
+                        .text_size(px(12.))
+                        .text_color(colors.secondary)
+                    })),
             )
             .child(date)
-            .child(filter);
+            .children(minimum.map(|_| filter));
         div().child(
             quietpro::dialog_surface(colors, win.viewport_size())
                 .id("timeline-records-dialog")
                 .accessibility_id("timeline-records-dialog")
                 .role(Role::Group)
                 .aria_label(tr("history.timeline"))
-                .w(px(760.).min(win.viewport_size().width - px(48.)))
+                .w(px(800.)
+                    .min(win.viewport_size().width - px(quietpro::DIALOG_WINDOW_MARGIN * 2.)))
                 .child(
                     div()
                         .flex()
@@ -432,6 +380,9 @@ impl History {
                         ),
                 )
                 .child(toolbar)
+                .when(self.calendar.is_some(), |s| {
+                    s.child(self.calendar_popup(colors, win, cx))
+                })
                 .when(self.error || self.web_error, |panel| {
                     panel.child(
                         quietpro::text_button("records-retry", tr("common.retry"), colors, true)
@@ -444,10 +395,8 @@ impl History {
 
     pub(super) fn detail_records(
         &self,
-        day: &HistoryDay,
-        groups: &[RecordGroup<'_>],
+        groups: Vec<RecordGroup>,
         colors: Palette,
-        win: &mut Window,
         cx: &mut Context<Self>,
     ) -> Stateful<Div> {
         let mut list = div()
@@ -457,11 +406,29 @@ impl History {
             .aria_label(text(self.client.locale.get(), "destinationDetail.records"))
             .flex_initial()
             .min_h_0()
-            .max_h(px(DETAIL_RECORD_LIST_MAX_HEIGHT))
-            .overflow_y_scroll()
+            .h(px(DETAIL_RECORD_LIST_HEIGHT))
+            .overflow_hidden()
             .flex()
             .flex_col()
             .gap(px(RECORD_CARD_GAP));
+        if self.error {
+            let tr = |key| text(self.client.locale.get(), key);
+            list = list.child(
+                div()
+                    .flex()
+                    .flex_none()
+                    .items_center()
+                    .gap(px(8.))
+                    .child(label(tr("destinationDetail.dayError")))
+                    .child(
+                        quietpro::text_button("detail-retry", tr("common.retry"), colors, true)
+                            .on_click(cx.listener(|this, _, _, cx| this.refresh(cx))),
+                    ),
+            );
+        }
+        let Some(day) = &self.data else {
+            return list;
+        };
         if groups.is_empty() {
             let locale = self.client.locale.get();
             let (left, right) = self.viewport(day);
@@ -477,23 +444,64 @@ impl History {
                 )
             };
             list = list.child(label(message).text_color(colors.secondary));
-        }
-        for group in groups {
-            list = list.child(self.record_card(group, day, colors, win, cx));
+        } else {
+            list = list.child(self.visible_records("detail-group-rows", groups, false, colors, cx));
         }
         list
     }
 
+    fn visible_records(
+        &self,
+        id: &'static str,
+        groups: Vec<RecordGroup>,
+        web: bool,
+        colors: Palette,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement + use<> {
+        let count = groups.len();
+        uniform_list(
+            id,
+            count,
+            cx.processor(move |this, range: std::ops::Range<usize>, win, cx| {
+                let day = if web { &this.web_data } else { &this.data };
+                let Some(day) = day else { return Vec::new() };
+                range
+                    .map(|index| {
+                        crate::features::page_controls::keyboard_row(
+                            this.records_view.scroll.clone(),
+                            index,
+                            count,
+                            cx,
+                        )
+                        .h(px(RECORD_CARD_HEIGHT + RECORD_CARD_GAP))
+                        .pb(px(RECORD_CARD_GAP))
+                        .child(this.record_card(
+                            &groups[index],
+                            day,
+                            colors,
+                            win,
+                            cx,
+                        ))
+                    })
+                    .collect()
+            }),
+        )
+        .track_scroll(&self.records_view.scroll)
+        .flex_1()
+        .min_h_0()
+        .w_full()
+    }
+
     fn record_card(
         &self,
-        group: &RecordGroup<'_>,
+        group: &RecordGroup,
         day: &HistoryDay,
         colors: Palette,
         win: &mut Window,
         cx: &mut Context<Self>,
     ) -> Stateful<Div> {
         let locale = self.client.locale.get();
-        let record = group.first;
+        let record = &day.records[group.first_index];
         let anonymous = record.key == "activity:anonymous";
         let source_color = self.source_color(day, &record.key, false);
         let color =
@@ -534,30 +542,32 @@ impl History {
                     .font_weight(FontWeight::MEDIUM),
             );
         if !anonymous {
+            let mut counts = format_text(
+                locale,
+                "history.activitySegmentCount",
+                &[("count", group.count.to_string())],
+            );
+            if self.data_has_titles {
+                let titles = format_text(
+                    locale,
+                    "history.titleRowCount",
+                    &[("count", group.titles.len().to_string())],
+                );
+                counts.push_str(" ･ ");
+                counts.push_str(&titles);
+            }
             identity = identity.child(
-                label(format!(
-                    "{} · {}",
-                    format_text(
-                        locale,
-                        "history.activitySegmentCount",
-                        &[("count", group.count.to_string())]
-                    ),
-                    format_text(
-                        locale,
-                        "history.titleRowCount",
-                        &[("count", group.titles.len().to_string())]
-                    )
-                ))
-                .text_size(px(10.))
-                .line_height(px(16.))
-                .text_color(colors.secondary)
-                .flex_none(),
+                label(counts)
+                    .text_size(px(12.))
+                    .line_height(px(16.))
+                    .text_color(colors.secondary)
+                    .flex_none(),
             );
         }
         if group.current {
             identity = identity.child(
                 label(text(locale, "destinationDetail.current"))
-                    .text_size(px(10.))
+                    .text_size(px(12.))
                     .text_color(colors.accent)
                     .flex_none(),
             );
@@ -573,7 +583,7 @@ impl History {
                 Bounds::<Pixels>::default()
             });
             let rect = *bounds.read(cx);
-            let popup_height = 34. + 28. + 12. + (group.titles.len().min(5) as f32 * 48. - 8.);
+            let popup_height = 34. + 20. + 12. + (group.titles.len().min(5) as f32 * 48. - 8.);
             let anchor = if win.viewport_size().height - rect.bottom() < px(popup_height + 8.)
                 && rect.top() > win.viewport_size().height - rect.bottom()
             {
@@ -581,9 +591,12 @@ impl History {
             } else {
                 Anchor::TopLeft
             };
-            let titles = group.titles.clone();
-            let view = cx.weak_entity();
-            let name = format!("{} · {}", text(locale, "history.titleDetails"), record.name);
+            let titles = if open {
+                group.titles.clone()
+            } else {
+                Vec::new()
+            };
+            let name = format!("{} ･ {}", text(locale, "history.titleDetails"), record.name);
             action = action.child(
                 Popover::new(("record-details", id))
                     .open(open)
@@ -616,29 +629,13 @@ impl History {
                         this.records_view.expanded = open.then_some(id);
                         cx.notify();
                     }))
-                    .content(move |_, win, _| {
-                        let view = view.clone();
-                        let trigger_focus = trigger_focus.clone();
-                        let close = IconControl::new(
-                            "close-title-details",
-                            text(locale, "common.close"),
-                            Icon::X,
-                        )
-                        .action(colors, move |_, win, cx| {
-                            let _ = view.update(cx, |this, cx| {
-                                this.records_view.expanded = None;
-                                win.focus(&trigger_focus, cx);
-                                cx.notify();
-                            });
-                        });
-                        title_rows(&titles, colors, locale, win, close)
-                    }),
+                    .content(move |_, win, _| title_rows(&titles, colors, locale, win)),
             );
         }
         quietpro::continuous_frame(px(16.), colors.border, colors.panel)
             .id(("timeline-record", group.id))
             .role(Role::Group)
-            .aria_label(format!("{} · {}", record.name, elapsed(group.duration)))
+            .aria_label(format!("{} ･ {}", record.name, duration(group.duration)))
             .flex()
             .flex_none()
             .items_center()
@@ -669,7 +666,7 @@ impl History {
                     .items_center()
                     .gap(px(8.))
                     .child(
-                        label(elapsed(group.duration))
+                        label(duration(group.duration))
                             .text_size(px(14.))
                             .line_height(px(20.))
                             .font_weight(FontWeight::MEDIUM),
@@ -677,11 +674,12 @@ impl History {
                     .child(
                         label(format!(
                             "{} – {}",
-                            stamp(group.start, "%H:%M:%S"),
-                            stamp(group.end, "%H:%M:%S")
+                            stamp(group.start, "%H:%M"),
+                            stamp(group.end, "%H:%M")
                         ))
-                        .text_size(px(10.))
+                        .text_size(px(12.))
                         .line_height(px(16.))
+                        .font_weight(FontWeight::MEDIUM)
                         .text_color(colors.secondary),
                     ),
             )
@@ -752,7 +750,11 @@ mod tests {
         let visible = groups(&day, 120_000);
         assert_eq!(visible.len(), 2);
         assert_eq!(
-            (visible[0].first.start, visible[0].end, visible[0].duration),
+            (
+                day.records[visible[0].first_index].start,
+                visible[0].end,
+                visible[0].duration
+            ),
             (0, 240_000, 180_000)
         );
         assert_eq!((visible[0].count, visible[0].titles.len()), (2, 1));
