@@ -41,7 +41,7 @@ fn counts(db: &Path) -> Result<Vec<i64>, Error> {
 
 fn ready(hwnd: HWND) -> Result<(), Error> {
     wait("deletion preview ready", || {
-        named(hwnd, "Studio · studio.exe")?;
+        named(hwnd, "Studio ･ studio.exe")?;
         button(hwnd, "Delete application")
             .filter(|b| unsafe { b.CurrentIsEnabled().is_ok_and(|v| v.as_bool()) })
     })?;
@@ -86,9 +86,7 @@ fn classification_delete_records() -> Result<(), Error> {
             .spawn()?,
     );
     let pid = host.0.id();
-    let hwnd = wait("Today", || {
-        children::find(pid, |p| window(p, w!("Patina UI")))
-    })?;
+    let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
     click(hwnd, "Classification")?;
     let search = wait("search", || {
         controls(hwnd).ok()?.into_iter().find(|e| unsafe {
@@ -104,7 +102,7 @@ fn classification_delete_records() -> Result<(), Error> {
     wait("single application", || {
         (names(hwnd)
             .iter()
-            .filter(|n| n.starts_with("Category · "))
+            .filter(|n| n.starts_with("Category ･ "))
             .count()
             == 1)
             .then_some(())
@@ -112,26 +110,26 @@ fn classification_delete_records() -> Result<(), Error> {
     click(hwnd, "Delete application")?;
     ready(hwnd)?;
     wait("reminder impact", || {
-        named(hwnd, "Studio reminder · studio.exe (#1)")
+        named(hwnd, "Studio reminder ･ studio.exe (#1)")
     })?;
     assert_eq!(counts(&db)?, before);
     key(hwnd, 13)?;
     wait("Enter selects safe action", || {
-        named(hwnd, "Studio · studio.exe").is_none().then_some(())
+        named(hwnd, "Studio ･ studio.exe").is_none().then_some(())
     })?;
     assert_eq!(counts(&db)?, before);
     click(hwnd, "Delete application")?;
     ready(hwnd)?;
     click(hwnd, "Cancel")?;
     wait("cancelled", || {
-        named(hwnd, "Studio · studio.exe").is_none().then_some(())
+        named(hwnd, "Studio ･ studio.exe").is_none().then_some(())
     })?;
     assert_eq!(counts(&db)?, before);
     key(hwnd, 13)?;
     ready(hwnd)?;
     key(hwnd, 0x1b)?;
     wait("escape cancels", || {
-        named(hwnd, "Studio · studio.exe").is_none().then_some(())
+        named(hwnd, "Studio ･ studio.exe").is_none().then_some(())
     })?;
     assert_eq!(counts(&db)?, before);
 
@@ -158,11 +156,11 @@ fn classification_delete_records() -> Result<(), Error> {
     ready(hwnd)?;
     click(hwnd, "Delete application")?;
     wait("deleted", || {
-        named(hwnd, "Studio · studio.exe").is_none().then_some(())
+        named(hwnd, "Studio ･ studio.exe").is_none().then_some(())
     })?;
     assert_eq!(counts(&db)?, [0, 0, 0, 0, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1, 1]);
     wait("application removed from classification", || {
-        named(hwnd, "Category · Studio").is_none().then_some(())
+        named(hwnd, "Category ･ Studio").is_none().then_some(())
     })?;
     let tray = wait("tray", || window(pid, w!("Patina GPUI")))?;
     command(tray, 2)?;

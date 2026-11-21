@@ -384,9 +384,8 @@ impl Render for ColorPicker {
         );
         let hue = quietpro::hue_strip(self.surface(1, cx), self.hue, c);
         let view = cx.weak_entity();
-        let formats = quietpro::segmented(
-            "color-format",
-            tr("accessibility.color.colorFormat"),
+        let formats = quietpro::segmented_with_medium_labels(
+            ("color-format", tr("accessibility.color.colorFormat")),
             std::array::from_fn::<_, 3, _>(|i| {
                 (
                     i,
@@ -398,6 +397,7 @@ impl Render for ColorPicker {
             self.format,
             true,
             c,
+            quietpro::ControlSize::Medium,
             move |format, win, cx| {
                 let _ = view.update(cx, |t, cx| {
                     t.format = format;
@@ -407,11 +407,10 @@ impl Render for ColorPicker {
                 });
             },
         );
-        let mut fields = div()
-            .flex()
-            .items_center()
-            .gap(px(8.))
-            .child(quietpro::caption(["HEX", "RGB", "HSL"][self.format], c));
+        let mut fields = div().flex().items_center().gap(px(8.)).child(
+            quietpro::caption(["HEX", "RGB", "HSL"][self.format], c)
+                .font_weight(FontWeight::MEDIUM),
+        );
         for index in if self.format == 0 { 0..1 } else { 1..4 } {
             fields = fields.child(
                 quietpro::TextInput::new(("color-value", index), &self.fields[index], c)
@@ -435,6 +434,7 @@ impl Render for ColorPicker {
                             tr("mapping.restoreDefaultColor"),
                             Icon::RotateCcw,
                         )
+                        .with_tooltip()
                         .action(
                             c,
                             cx.listener(|t, _, win, cx| {
@@ -452,6 +452,7 @@ impl Render for ColorPicker {
                             tr("accessibility.color.eyedropper"),
                             Icon::Pipette,
                         )
+                        .with_tooltip()
                         .track_focus(&self.pick_focus)
                         .disabled(self.picking.is_some())
                         .action(c, cx.listener(|t, _, win, cx| t.pick_screen_color(win, cx))),

@@ -63,7 +63,7 @@ fn classification_app_web_switch_preserves_drafts() -> Result<(), Error> {
                 .spawn()?,
         );
         let hwnd = wait("Today", || {
-            children::find(host.0.id(), |p| window(p, w!("Patina UI")))
+            children::find(host.0.id(), |p| window(p, w!("Patina")))
         })?;
         click(hwnd, "Classification")?;
         Ok((host, hwnd))
@@ -72,6 +72,9 @@ fn classification_app_web_switch_preserves_drafts() -> Result<(), Error> {
     wait("app totals", || {
         (classification_filter_counts(hwnd) == Some([2, 2, 0])).then_some(())
     })?;
+    for label in ["All (2)", "Apps", "Web"] {
+        assert_control_height(hwnd, &wait(label, || segment(hwnd, label))?, 28)?;
+    }
     set(hwnd, "Search apps", "studio.exe")?;
     click(hwnd, "Edit app name")?;
     set(hwnd, "Edit app name", "Temporary")?;
@@ -100,20 +103,39 @@ fn classification_app_web_switch_preserves_drafts() -> Result<(), Error> {
     super::classification_color::format(hwnd, "HSL")?;
     key(hwnd, 0x1b)?;
     click(hwnd, "Manage")?;
-    click(hwnd, "Color · Office")?;
+    click(hwnd, "Color ･ Office")?;
     wait("category shares web HSL format", || {
         field(hwnd, "Lightness")
     })?;
     super::classification_color::format(hwnd, "HEX")?;
-    key(hwnd, 0x1b)?;
-    click(hwnd, "Close")?;
+    super::category_manager::finish_color(hwnd)?;
+    super::category_manager::close_manager(hwnd)?;
     wait("format changes alone remain clean", || unsafe {
         (!button(hwnd, "Save")?.CurrentIsEnabled().ok()?.as_bool()).then_some(())
     })?;
     click(hwnd, "Automatic group: example.com")?;
-    wait("website member menu", || {
+    let separate = wait("website member menu", || {
         button(hwnd, "Show separately: a.example.com")
+    })
+    .map_err(|e| format!("{e}; current classification controls: {:?}", names(hwnd)))?;
+    let panel = wait("automatic group panel", || {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentControlType().ok() == Some(UIA_GroupControlTypeId)
+                && el.CurrentName().is_ok_and(|name| name == "Automatic group")
+        })
     })?;
+    let main_domain = wait("main domain marker", || named(hwnd, "Main domain"))?;
+    assert_control_height(hwnd, &main_domain, 28)?;
+    let panel_bounds = unsafe { panel.CurrentBoundingRectangle()? };
+    let scale = unsafe { GetDpiForWindow(hwnd) } as f32 / 96.;
+    let panel_width = (panel_bounds.right - panel_bounds.left) as f32 / scale;
+    assert!(
+        (panel_width - 280.).abs() <= 1.,
+        "group width {panel_width}"
+    );
+    let marker = unsafe { main_domain.CurrentBoundingRectangle()? };
+    let action = unsafe { separate.CurrentBoundingRectangle()? };
+    assert!((marker.right - action.right).abs() <= 1);
     let member_title = wait("member title policy", || {
         named(hwnd, "Record titles: a.example.com")
     })?;
@@ -169,7 +191,7 @@ fn classification_app_web_switch_preserves_drafts() -> Result<(), Error> {
     })?;
     set(hwnd, "Search apps", "writer")?;
     wait("linked executable search finds root", || {
-        named(hwnd, "Category · Studio")
+        named(hwnd, "Category ･ Studio")
     })?;
     click(hwnd, "Clear search")?;
     click(hwnd, "Linked applications: studio.exe")?;
@@ -205,16 +227,16 @@ fn classification_app_web_switch_preserves_drafts() -> Result<(), Error> {
         (!button(hwnd, "Save")?.CurrentIsEnabled().ok()?.as_bool()).then_some(())
     })?;
     select_segment(hwnd, "Web")?;
-    assert!(named(hwnd, "Category · Studio").is_none());
+    assert!(named(hwnd, "Category ･ Studio").is_none());
     set(hwnd, "Search websites", "a.example.com")?;
     wait("group member search finds its website", || {
-        named(hwnd, "Category · Example")
+        named(hwnd, "Category ･ Example")
     })?;
     set(hwnd, "Search websites", "Example")?;
-    wait("website filtered", || named(hwnd, "Category · Example"))?;
+    wait("website filtered", || named(hwnd, "Category ･ Example"))?;
     click(hwnd, "Edit website name")?;
     set(hwnd, "Edit website name", "Work web")?;
-    wait("website renamed", || named(hwnd, "Category · Work web"))?;
+    wait("website renamed", || named(hwnd, "Category ･ Work web"))?;
     click(hwnd, "Color")?;
     set(hwnd, "Hex color value", "#123456")?;
     key(hwnd, 0x1b)?;
@@ -227,16 +249,16 @@ fn classification_app_web_switch_preserves_drafts() -> Result<(), Error> {
     select_segment(hwnd, "Web")?;
     click(hwnd, "Clear search")?;
     wait("website draft survives switching", || {
-        named(hwnd, "Category · Work web")
+        named(hwnd, "Category ･ Work web")
     })?;
     assert!(unsafe { button(hwnd, "Save").unwrap().CurrentIsEnabled()?.as_bool() });
     click(hwnd, "Cancel")?;
     wait("website draft discarded", || {
-        named(hwnd, "Category · Example")
+        named(hwnd, "Category ･ Example")
     })?;
     select_segment(hwnd, "Apps")?;
     wait("application draft discarded", || {
-        named(hwnd, "Category · Studio")
+        named(hwnd, "Category ･ Studio")
     })?;
     select_segment(hwnd, "Web")?;
     set(hwnd, "Search websites", "Example")?;
@@ -263,7 +285,7 @@ fn classification_app_web_switch_preserves_drafts() -> Result<(), Error> {
     })?;
     click(hwnd, "Delete website")?;
     desktop::wait_observed("website deletion confirmation", || {
-        let ready = named(hwnd, "Saved web · example.com").is_some()
+        let ready = named(hwnd, "Saved web ･ example.com").is_some()
             && button(hwnd, "Delete website")
                 .is_some_and(|b| unsafe { b.CurrentIsEnabled().is_ok_and(|v| v.as_bool()) });
         if ready {

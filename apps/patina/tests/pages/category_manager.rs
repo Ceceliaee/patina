@@ -23,14 +23,14 @@ fn setting(db: &Path, key: &str) -> Option<String> {
                 .flatten()
         })
 }
-fn close_manager(hwnd: HWND) -> Result<(), Error> {
+pub(super) fn close_manager(hwnd: HWND) -> Result<(), Error> {
     click(hwnd, "Close")?;
     wait("manager closed", || {
         button(hwnd, "Close").is_none().then_some(())
     })?;
     Ok(())
 }
-fn finish_color(hwnd: HWND) -> Result<(), Error> {
+pub(super) fn finish_color(hwnd: HWND) -> Result<(), Error> {
     key(hwnd, 0x1b)?;
     wait("category color picker closed", || {
         field(hwnd, "Hex color value").is_none().then_some(())
@@ -170,7 +170,7 @@ fn category_manager_content_width_and_narrow_layout() -> Result<(), Error> {
                 .spawn()?,
         );
         let hwnd = wait("Today", || {
-            children::find(host.0.id(), |p| window(p, w!("Patina UI")))
+            children::find(host.0.id(), |p| window(p, w!("Patina")))
         })?;
         let locale = patina_activity::Locale::from_tag(Some(tag));
         navigate_sidebar(hwnd, locale, "mapping.title")?;
@@ -188,7 +188,7 @@ fn category_manager_content_width_and_narrow_layout() -> Result<(), Error> {
         let second_name = action("mapping.renameCategory", labels[1]);
         let delete_name = action("mapping.deleteCategory", labels[0]);
         let color_name = format!(
-            "{} · {}",
+            "{} ･ {}",
             patina_activity::text(locale, "mapping.color"),
             labels[0]
         );
@@ -212,7 +212,7 @@ fn category_manager_content_width_and_narrow_layout() -> Result<(), Error> {
                 let second = bounds(&second_name)?;
                 let color = bounds(&color_name)?;
                 let second_color = bounds(&format!(
-                    "{} · {}",
+                    "{} ･ {}",
                     patina_activity::text(locale, "mapping.color"),
                     labels[1]
                 ))?;
@@ -302,9 +302,7 @@ fn category_manager_drafts_and_persistence() -> Result<(), Error> {
             .spawn()?,
     );
     let pid = host.0.id();
-    let hwnd = wait("Today", || {
-        children::find(pid, |p| window(p, w!("Patina UI")))
-    })?;
+    let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
     click(hwnd, "Classification")?;
     click(hwnd, "Manage")?;
     wait("learning category rendered", || {
@@ -319,18 +317,18 @@ fn category_manager_drafts_and_persistence() -> Result<(), Error> {
     let close = bounds("Close")?;
     assert_eq!(create.top, close.top);
     assert!(create.left < close.left);
-    let first = bounds("Color · Browser")?;
+    let first = bounds("Color ･ Browser")?;
     assert!(close.bottom < first.top);
-    let second = bounds("Color · Creation")?;
-    let third = bounds("Color · Development")?;
+    let second = bounds("Color ･ Creation")?;
+    let third = bounds("Color ･ Development")?;
     assert_eq!(first.top, second.top);
     assert!(first.left < second.left);
     assert!(third.top > first.top);
     assert_eq!(third.left, first.left);
     assert!(button(hwnd, "Delete category: Unclassified").is_none());
     for name in ["Browser", "Creation", "Social", "Utility"] {
-        let trigger = bounds(&format!("Color · {name}"))?;
-        click(hwnd, &format!("Color · {name}"))?;
+        let trigger = bounds(&format!("Color ･ {name}"))?;
+        click(hwnd, &format!("Color ･ {name}"))?;
         let panel = wait("category color panel above or below its trigger", || {
             let panel = controls(hwnd).ok()?.into_iter().find(|el| unsafe {
                 el.CurrentControlType().ok() == Some(UIA_GroupControlTypeId)
@@ -370,7 +368,7 @@ fn category_manager_drafts_and_persistence() -> Result<(), Error> {
         close.top,
         "manager keeps its original height"
     );
-    click(hwnd, "Color · Research")?;
+    click(hwnd, "Color ･ Research")?;
     wait("stored category color", || {
         (value(hwnd, "Hex color value").as_deref() == Some("#112233")).then_some(())
     })
@@ -389,7 +387,7 @@ fn category_manager_drafts_and_persistence() -> Result<(), Error> {
         (!button(hwnd, "Cancel")?.CurrentIsEnabled().ok()?.as_bool()).then_some(())
     })?;
     click(hwnd, "Manage")?;
-    click(hwnd, "Color · Research")?;
+    click(hwnd, "Color ･ Research")?;
     wait("cancel restores category color", || {
         (value(hwnd, "Hex color value").as_deref() == Some("#112233")).then_some(())
     })?;
@@ -409,7 +407,7 @@ fn category_manager_drafts_and_persistence() -> Result<(), Error> {
         (!button(hwnd, "Save")?.CurrentIsEnabled().ok()?.as_bool()).then_some(())
     })?;
     click(hwnd, "Manage")?;
-    click(hwnd, "Color · Research")?;
+    click(hwnd, "Color ･ Research")?;
     wait("reopened default category color", || {
         (value(hwnd, "Hex color value").as_deref() == Some("#5A9861")).then_some(())
     })?;

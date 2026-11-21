@@ -1,9 +1,78 @@
 use super::*;
 use gpui_kit::base::Button;
 
+pub(super) fn member_panel(id: &'static str, title: String, c: quietpro::Palette) -> Stateful<Div> {
+    content_card(c.border, c.panel)
+        .id(id)
+        .role(Role::Group)
+        .aria_label(title)
+        .w(px(280.))
+        .p(px(12.) + px(1.))
+        .max_w_full()
+        .gap(px(quietpro::CARD_TITLE_GAP))
+}
+
+pub(super) fn member_heading(title: String) -> Div {
+    div()
+        .flex()
+        .min_h(ControlSize::Medium.height())
+        .items_center()
+        .child(quietpro::group_heading(title).flex_1())
+}
+
+pub(super) fn member_list(id: &'static str) -> Stateful<Div> {
+    div()
+        .id(id)
+        .max_h(px(240.))
+        .overflow_y_scroll()
+        .flex()
+        .flex_col()
+        .gap(px(4.))
+}
+
+pub(super) fn member_row(name: String) -> Div {
+    div()
+        .flex()
+        .h(ControlSize::Medium.height())
+        .flex_none()
+        .items_center()
+        .child(
+            label(name)
+                .mr(px(8.))
+                .min_w_0()
+                .flex_1()
+                .truncate()
+                .text_size(px(12.)),
+        )
+}
+
+pub(super) fn main_member_row(
+    name: String,
+    id: &'static str,
+    hint: String,
+    c: quietpro::Palette,
+) -> Div {
+    member_row(name).child(quietpro::with_text_tooltip(
+        div()
+            .id(id)
+            .relative()
+            .role(Role::Image)
+            .aria_label(hint.clone())
+            .size(ControlSize::Medium.height())
+            .flex_none()
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(quietpro::glyph(Icon::House, c.secondary).size(px(16.))),
+        hint,
+        c,
+    ))
+}
+
 impl Classification {
     pub(super) fn matches_card(&self, card: &Card, query: &str) -> bool {
-        card.matches_query(query)
+        query.is_empty()
+            || card.matches_query(query)
             || (!card.is_web()
                 && self.app_links().iter().any(|(member, parent)| {
                     parent == &card.identity
@@ -98,7 +167,7 @@ impl Classification {
         }
     }
 
-    pub(super) fn app_identity_control(
+    pub(super) fn identity_control(
         &self,
         card: &Card,
         titles_enabled: bool,
@@ -106,12 +175,29 @@ impl Classification {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let locale = self.client.locale.get();
-        let title = text(locale, "mapping.linkedApps");
+        let site = match &card.source {
+            card::Source::Web(site) if site.identity == site.domain => {
+                return label(card.identity.clone())
+                    .id("app-filename")
+                    .text_size(px(12.))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(c.secondary)
+                    .into_any_element();
+            }
+            card::Source::Web(site) => Some(site.clone()),
+            card::Source::App(_) => None,
+        };
+        let is_app = site.is_none();
+        let (popup_id, title) = if is_app {
+            ("app-links-popup", text(locale, "mapping.linkedApps"))
+        } else {
+            ("web-members-popup", text(locale, "mapping.webLinks"))
+        };
         let key = card.key.clone();
         let parent = card.identity.clone();
         let focus = self.web_group_focus.get(&key).cloned();
         let view = cx.weak_entity();
-        gpui_kit::base::Popover::new("app-links-popup")
+        gpui_kit::base::Popover::new(popup_id)
             .open(self.web_group.as_ref() == Some(&key))
             .anchor(Anchor::TopLeft)
             .offset(px(4.))
@@ -126,21 +212,26 @@ impl Classification {
                     .justify_start()
                     .gap(px(4.))
                     .text_size(px(12.))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(c.secondary)
                     .line_height(px(18.))
                     .cursor_pointer()
                     .focus_visible(move |b| b.bg(c.track))
                     .child(label(parent.clone()).truncate())
-                    .when(self.app_links().values().any(|p| p == &parent), |b| {
-                        b.child(quietpro::glyph(Icon::ChevronDown, c.secondary).size(px(12.)))
-                    }),
+                    .when(
+                        !is_app || self.app_links().values().any(|p| p == &parent),
+                        |b| b.child(quietpro::glyph(Icon::ChevronDown, c.secondary).size(px(12.))),
+                    ),
             )
             .on_open_change(cx.listener(move |t, open: &bool, win, cx| {
                 t.finish_name(cx);
                 t.color_picker = None;
                 t.web_group = open.then(|| key.clone());
-                t.adding_link = false;
-                t.link_search
-                    .update(cx, |input, cx| input.set_value("", win, cx));
+                if is_app {
+                    t.adding_link = false;
+                    t.link_search
+                        .update(cx, |input, cx| input.set_value("", win, cx));
+                }
                 if !open
                     && !t.link_layout.pointer_down
                     && let Some(focus) = &focus
@@ -150,8 +241,9 @@ impl Classification {
                 cx.notify();
             }))
             .content(move |_, win, cx| {
-                view.update(cx, |t, cx| {
-                    t.app_members(&parent, titles_enabled, c, win, cx)
+                view.update(cx, |t, cx| match &site {
+                    Some(site) => t.web_members(site, titles_enabled, c, cx),
+                    None => t.app_members(&parent, titles_enabled, c, win, cx),
                 })
                 .unwrap_or_else(|_| div().into_any_element())
             })
@@ -173,20 +265,9 @@ impl Classification {
             input.set_disabled(self.busy, cx);
         });
         let query = self.link_search.read(cx).value().trim().to_lowercase();
-        let mut body = content_card(c.border, c.panel)
-            .id("app-link-members")
-            .role(Role::Group)
-            .aria_label(text(locale, "mapping.linkedApps"))
-            .w(px(280.))
-            .max_w_full()
-            .gap(px(12.));
-        let mut rows = div()
-            .id("app-members-list")
-            .max_h(px(240.))
-            .overflow_y_scroll()
-            .flex()
-            .flex_col()
-            .gap(px(4.));
+        let title = text(locale, "mapping.linkedApps");
+        let mut body = member_panel("app-link-members", title.clone(), c);
+        let mut rows = member_list("app-members-list");
         if self.adding_link {
             body = body.child(
                 div()
@@ -220,6 +301,7 @@ impl Classification {
                             win,
                             cx,
                         )
+                        .h(ControlSize::Medium.height())
                         .flex_1()
                         .min_w_0(),
                     ),
@@ -243,7 +325,10 @@ impl Classification {
                 let icon = quietpro::unframed_app_icon(
                     SharedString::from(format!("link-icon-{member}")),
                     member.clone(),
-                    self.icons.get(&member).map(|i| i.image.clone()),
+                    self.icons
+                        .get(&member)
+                        .and_then(Option::as_ref)
+                        .and_then(|i| Some(i.raster()?.pixels.clone())),
                     Icon::AppWindow,
                     c,
                 );
@@ -255,7 +340,7 @@ impl Classification {
                         .flex()
                         .items_center()
                         .gap(px(8.))
-                        .h(px(32.))
+                        .h(ControlSize::Medium.height())
                         .flex_none()
                         .cursor_pointer()
                         .child(icon)
@@ -289,53 +374,29 @@ impl Classification {
             body.child(rows).into_any_element()
         } else {
             body = body.child(
-                div()
-                    .flex()
-                    .items_center()
-                    .child(
-                        heading(text(locale, "mapping.linkedApps"))
-                            .flex_1()
-                            .text_size(px(14.))
-                            .line_height(px(20.)),
+                member_heading(title).child(
+                    quietpro::IconControl::new(
+                        "add-link",
+                        text(locale, "mapping.addLinkedApp"),
+                        Icon::Plus,
                     )
-                    .child(
-                        quietpro::IconControl::new(
-                            "add-link",
-                            text(locale, "mapping.addLinkedApp"),
-                            Icon::Plus,
-                        )
-                        .disabled(self.busy)
-                        .action(
-                            c,
-                            cx.listener(|t, _, win, cx| {
-                                t.adding_link = true;
-                                t.link_search.update(cx, |input, cx| input.focus(win, cx));
-                                cx.notify();
-                            }),
-                        ),
+                    .disabled(self.busy)
+                    .action(
+                        c,
+                        cx.listener(|t, _, win, cx| {
+                            t.adding_link = true;
+                            t.link_search.update(cx, |input, cx| input.focus(win, cx));
+                            cx.notify();
+                        }),
                     ),
+                ),
             );
-            rows = rows.child(
-                div()
-                    .flex()
-                    .h(px(32.))
-                    .flex_none()
-                    .items_center()
-                    .gap(px(8.))
-                    .child(
-                        label(parent.to_owned())
-                            .min_w_0()
-                            .flex_1()
-                            .truncate()
-                            .text_size(px(12.)),
-                    )
-                    .child(
-                        label(text(locale, "mapping.mainApp"))
-                            .text_size(px(10.))
-                            .flex_none()
-                            .text_color(c.secondary),
-                    ),
-            );
+            rows = rows.child(main_member_row(
+                parent.to_owned(),
+                "linked-main-app",
+                text(locale, "mapping.mainApp"),
+                c,
+            ));
             for (member, _) in links.iter().filter(|(_, p)| *p == parent) {
                 let Some(card) = self.name_rule(&format!("app:{member}")) else {
                     continue;
@@ -347,21 +408,8 @@ impl Classification {
                 let title_view = view.clone();
                 let track_view = view.clone();
                 rows = rows.child(
-                    div()
+                    member_row(member.clone())
                         .id(SharedString::from(member.clone()))
-                        .flex()
-                        .h(px(32.))
-                        .flex_none()
-                        .items_center()
-                        .gap_0()
-                        .child(
-                            label(member.clone())
-                                .mr(px(8.))
-                                .min_w_0()
-                                .flex_1()
-                                .truncate()
-                                .text_size(px(12.)),
-                        )
                         .child(
                             quietpro::IconControl::new(
                                 "title",

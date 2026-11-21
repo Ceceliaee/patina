@@ -1,5 +1,5 @@
 use super::*;
-use gpui_kit::base::{self, Dialog, DialogPopup, Popover};
+use gpui_kit::base::{Dialog, Popover};
 use std::cmp::Ordering;
 use windows::{
     Win32::Globalization::{
@@ -43,7 +43,14 @@ impl Classification {
         {
             rule.category = target.clone();
         }
-        if !self.categories().iter().any(|(id, _)| id == &rule.category) {
+        let exists = match self.category_edits.get(&rule.category) {
+            Some(edit) => edit.replacement.is_none(),
+            None => self
+                .rules
+                .as_ref()
+                .is_some_and(|rules| rules.categories.iter().any(|(id, _)| id == &rule.category)),
+        };
+        if !exists {
             rule.category = "other".into();
         }
         rule
@@ -284,7 +291,8 @@ impl Classification {
         let name_width = categories
             .iter()
             .map(|(_, name)| {
-                let run = win.text_style().to_run(name.len());
+                let mut run = win.text_style().to_run(name.len());
+                run.font.weight = FontWeight::MEDIUM;
                 f32::from(
                     win.text_system()
                         .shape_line(name.clone().into(), px(14.), &[run], None)
@@ -294,7 +302,7 @@ impl Classification {
             .fold(0_f32, f32::max);
         let title = tr("mapping.categoryDialogTitle");
         let mut title_run = win.text_style().to_run(title.len());
-        title_run.font.weight = FontWeight::SEMIBOLD;
+        title_run.font.weight = FontWeight::BOLD;
         let title_width = f32::from(
             win.text_system()
                 .shape_line(title.clone().into(), px(16.), &[title_run], None)
@@ -421,7 +429,7 @@ impl Classification {
                 .trigger(
                     quietpro::color_swatch_button(
                         "color",
-                        format!("{} · {name}", tr("mapping.color")),
+                        format!("{} ･ {name}", tr("mapping.color")),
                         display,
                         true,
                         c,
@@ -504,6 +512,7 @@ impl Classification {
                                     .min_w_0()
                                     .text_ellipsis()
                                     .text_size(px(14.))
+                                    .font_weight(FontWeight::MEDIUM)
                                     .child(name.clone()),
                             )
                             .child(
@@ -544,19 +553,17 @@ impl Classification {
         content = content.child(list);
         let view = cx.weak_entity();
         let editing = self.category_editing || self.category_confirmation.is_some();
-        base::Dialog::new(cx)
-            .layer(0, !editing)
-            .close_on_escape(!editing)
-            .focus_handle(self.category_title_focus.clone())
-            .accessibility_label(tr("mapping.categoryDialogTitle"))
-            .on_ok(|_, _, _| false)
-            .backdrop(quietpro::dialog_backdrop())
-            .popup(DialogPopup::new().child(content))
-            .on_open_change(move |open, _, win, cx| {
-                if !open {
-                    let _ = view.update(cx, |t, cx| t.dismiss_category_layer(win, cx));
-                }
-            })
+        quietpro::modal_dialog(
+            tr("mapping.categoryDialogTitle"),
+            self.category_title_focus.clone(),
+            content,
+            move |win, cx| {
+                let _ = view.update(cx, |t, cx| t.dismiss_category_layer(win, cx));
+            },
+            cx,
+        )
+        .layer(0, !editing)
+        .close_on_escape(!editing)
     }
 
     pub(super) fn render_category_confirmation(
@@ -625,18 +632,16 @@ impl Classification {
                     ),
             );
         let view = cx.weak_entity();
-        Dialog::new(cx)
-            .layer(1, true)
-            .focus_handle(self.category_editor_focus.clone())
-            .accessibility_label(title)
-            .on_ok(|_, _, _| false)
-            .backdrop(quietpro::dialog_backdrop())
-            .popup(DialogPopup::new().child(content))
-            .on_open_change(move |open, _, win, cx| {
-                if !open {
-                    let _ = view.update(cx, |t, cx| t.dismiss_category_layer(win, cx));
-                }
-            })
+        quietpro::modal_dialog(
+            title,
+            self.category_editor_focus.clone(),
+            content,
+            move |win, cx| {
+                let _ = view.update(cx, |t, cx| t.dismiss_category_layer(win, cx));
+            },
+            cx,
+        )
+        .layer(1, true)
     }
 
     pub(super) fn render_category_name_dialog(
@@ -683,18 +688,16 @@ impl Classification {
                     ),
             );
         let view = cx.weak_entity();
-        Dialog::new(cx)
-            .layer(1, true)
-            .focus_handle(self.category_editor_focus.clone())
-            .accessibility_label(title)
-            .on_ok(|_, _, _| false)
-            .backdrop(quietpro::dialog_backdrop())
-            .popup(DialogPopup::new().child(content))
-            .on_open_change(move |open, _, win, cx| {
-                if !open {
-                    let _ = view.update(cx, |t, cx| t.dismiss_category_layer(win, cx));
-                }
-            })
+        quietpro::modal_dialog(
+            title,
+            self.category_editor_focus.clone(),
+            content,
+            move |win, cx| {
+                let _ = view.update(cx, |t, cx| t.dismiss_category_layer(win, cx));
+            },
+            cx,
+        )
+        .layer(1, true)
     }
 }
 

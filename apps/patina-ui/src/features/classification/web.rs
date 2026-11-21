@@ -1,5 +1,7 @@
-use super::*;
-use gpui_kit::base::Button;
+use super::{
+    links::{main_member_row, member_heading, member_list, member_panel, member_row},
+    *,
+};
 use patina_activity_model::{WebsiteRule, WebsiteRuleDraft};
 
 impl Classification {
@@ -34,127 +36,15 @@ impl Classification {
         cx.notify();
     }
 
-    pub(super) fn card_icon(&self, card: &Card) -> Option<&AppIcon> {
-        if let card::Source::Web(site) = &card.source {
-            site.favicon
-                .as_ref()
-                .and_then(|url| self.web_icons.get(url))
-                .and_then(Option::as_ref)
-        } else {
-            self.icons.get(&card.identity)
-        }
-    }
-
-    pub(super) fn load_web_icons(&mut self, cx: &mut Context<Self>) {
-        if self.favicon_read.is_some() || !self.web {
-            return;
-        }
-        let sources: std::collections::BTreeSet<_> = self
-            .websites()
-            .into_iter()
-            .filter_map(|s| s.favicon)
-            .filter(|s| !self.web_icons.contains_key(s))
-            .collect();
-        if sources.is_empty() {
-            return;
-        }
-        let renderer = cx.svg_renderer();
-        self.favicon_read = Some(cx.spawn(async move |view, cx| {
-            for source in sources {
-                let url = source.clone();
-                let executor = cx.background_executor().clone();
-                let renderer = renderer.clone();
-                let icon = cx
-                    .background_executor()
-                    .spawn(async move {
-                        crate::features::source_icon::favicon(&url, &executor, renderer)
-                            .await
-                            .map(|bytes| AppIcon {
-                                color: patina_activity_model::icon_color(&bytes),
-                                image: Arc::new(Image::from_bytes(ImageFormat::Png, bytes)),
-                            })
-                    })
-                    .await;
-                if view
-                    .update(cx, |this, cx| {
-                        this.web_icons.insert(source, icon);
-                        cx.notify();
-                    })
-                    .is_err()
-                {
-                    return;
-                }
-            }
-            let _ = view.update(cx, |this, cx| {
-                this.favicon_read = None;
-                cx.notify();
-            });
-        }));
-    }
-
-    pub(super) fn identity_control(
-        &self,
-        card: &Card,
-        titles_enabled: bool,
-        c: quietpro::Palette,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let card::Source::Web(site) = &card.source else {
-            return self.app_identity_control(card, titles_enabled, c, cx);
+    pub(super) fn card_icon(&self, card: &Card) -> Option<&SourceIcon> {
+        let key = match &card.source {
+            card::Source::Web(site) => site.favicon.as_ref()?,
+            card::Source::App(_) => &card.identity,
         };
-        if site.identity == site.domain {
-            return label(card.identity.clone())
-                .id("app-filename")
-                .text_size(px(12.))
-                .into_any_element();
-        }
-        let locale = self.client.locale.get();
-        let key = card.key.clone();
-        let title = text(locale, "mapping.webLinks");
-        let focus = self.web_group_focus.get(&key).cloned();
-        let view = cx.weak_entity();
-        let source = site.clone();
-        gpui_kit::base::Popover::new("web-members-popup")
-            .open(self.web_group.as_ref() == Some(&key))
-            .anchor(Anchor::TopLeft)
-            .offset(px(4.))
-            .trigger(
-                Button::new("app-filename")
-                    .accessibility_label(format!("{title}: {}", site.domain))
-                    .when_some(focus.clone(), |b, f| b.track_focus(&f))
-                    .disabled(self.busy)
-                    .min_w_0()
-                    .flex()
-                    .items_center()
-                    .justify_start()
-                    .gap(px(4.))
-                    .text_size(px(12.))
-                    .line_height(px(18.))
-                    .cursor_pointer()
-                    .focus_visible(move |b| b.bg(c.track))
-                    .child(label(site.domain.clone()).truncate())
-                    .child(quietpro::glyph(Icon::ChevronDown, c.secondary).size(px(12.))),
-            )
-            .on_open_change(cx.listener(move |t, open: &bool, win, cx| {
-                t.finish_name(cx);
-                t.color_picker = None;
-                t.web_group = open.then(|| key.clone());
-                if !open
-                    && !t.link_layout.pointer_down
-                    && let Some(focus) = &focus
-                {
-                    win.focus(focus, cx);
-                }
-                cx.notify();
-            }))
-            .content(move |_, _, cx| {
-                view.update(cx, |t, cx| t.web_members(&source, titles_enabled, c, cx))
-                    .unwrap_or_else(|_| div().into_any_element())
-            })
-            .into_any_element()
+        self.icons.get(key)?.as_ref()
     }
 
-    fn web_members(
+    pub(super) fn web_members(
         &self,
         site: &WebsiteRule,
         titles_enabled: bool,
@@ -164,25 +54,12 @@ impl Classification {
         let locale = self.client.locale.get();
         let title = text(locale, "mapping.webLinks");
         let view = cx.weak_entity();
-        let mut rows = div()
-            .id("web-member-list")
-            .max_h(px(240.))
-            .overflow_y_scroll()
-            .flex()
-            .flex_col()
-            .gap(px(4.));
-        rows = rows.child(
-            div()
-                .flex()
-                .items_center()
-                .gap(px(8.))
-                .child(label(site.domain.clone()).flex_1().min_w_0().truncate())
-                .child(
-                    label(text(locale, "mapping.mainWebDomain"))
-                        .text_size(px(12.))
-                        .text_color(c.secondary),
-                ),
-        );
+        let mut rows = member_list("web-member-list").child(main_member_row(
+            site.domain.clone(),
+            "linked-main-website",
+            text(locale, "mapping.mainWebDomain"),
+            c,
+        ));
         for member in &site.member_rules {
             let domain = member.domain.clone();
             let member_title = member.titles;
@@ -194,18 +71,8 @@ impl Classification {
             let track_domain = domain.clone();
             let unlink_domain = domain.clone();
             rows = rows.child(
-                div()
+                member_row(domain.clone())
                     .id(SharedString::from(domain.clone()))
-                    .flex()
-                    .items_center()
-                    .gap(px(4.))
-                    .child(
-                        label(domain.clone())
-                            .min_w_0()
-                            .flex_1()
-                            .truncate()
-                            .text_size(px(12.)),
-                    )
                     .child(
                         quietpro::IconControl::new(
                             "title",
@@ -226,6 +93,7 @@ impl Classification {
                                 Icon::CaptionsOff
                             },
                         )
+                        .with_tooltip()
                         .disabled(self.busy || !titles_enabled)
                         .toggle(c, member_title, move |_, _, _, cx| {
                             let _ = title_view.update(cx, |t, cx| {
@@ -246,6 +114,7 @@ impl Classification {
                                 Icon::ListPlus
                             },
                         )
+                        .with_tooltip()
                         .disabled(self.busy)
                         .toggle(c, !member_track, move |_, _, _, cx| {
                             let _ = track_view.update(cx, |t, cx| {
@@ -262,6 +131,7 @@ impl Classification {
                             format!("{}: {domain}", text(locale, "mapping.webIndependent")),
                             Icon::X,
                         )
+                        .with_tooltip()
                         .disabled(self.busy)
                         .action(c, move |_, win, cx| {
                             let _ = unlink_view.update(cx, |t, cx| {
@@ -280,14 +150,8 @@ impl Classification {
                     ),
             );
         }
-        content_card(c.border, c.panel)
-            .id("website-members")
-            .role(Role::Group)
-            .aria_label(title.clone())
-            .w(px(350.))
-            .max_w_full()
-            .gap(px(8.))
-            .child(heading(title.clone()))
+        member_panel("website-members", title.clone(), c)
+            .child(member_heading(title))
             .child(rows)
             .into_any_element()
     }

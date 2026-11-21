@@ -89,15 +89,13 @@ fn classification_color_editor() -> Result<(), Error> {
             .spawn()?,
     );
     let pid = host.0.id();
-    let hwnd = wait("Today", || {
-        children::find(pid, |p| window(p, w!("Patina UI")))
-    })?;
+    let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
     click(hwnd, "Classification")?;
     set(hwnd, "Search apps", "Studio")?;
     wait("single card", || {
         (names(hwnd)
             .iter()
-            .filter(|n| n.starts_with("Category · "))
+            .filter(|n| n.starts_with("Category ･ "))
             .count()
             == 1)
             .then_some(())
