@@ -1,7 +1,7 @@
 {
   "native.export.completed": {"$type":"message","body":{"$op":"concat","parts":["Se exportaron ",{"$op":"arg","name":"count"}," registros","\n",{"$op":"arg","name":"path"}]}},
   "data.overview": "Resumen",
-  "data.detailedAnalysis": "Análisis detallado",
+  "data.detailedAnalysis": "Detalles",
   "native.category.learning": "Aprendizaje",
   "native.tools.freeFocusTitle": "Concentración libre",
   "native.tools.pomodoroGroupCompleted": "Ciclo de pomodoro completado",

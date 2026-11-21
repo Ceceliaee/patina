@@ -1,6 +1,6 @@
 {
   "history.activeDuration": "Время активности",
-  "history.activeSpan": "Период",
+  "history.activeSpan": "Начало и конец",
   "history.activitySegmentCount": {"$type":"message","body":{"$op":"concat","parts":["Фрагменты: ",{"$op":"arg","name":"count"},""]}},
   "history.appDistribution": "Распределение по прил.",
   "history.dailyHourlyActivity": "Активность за день",
@@ -23,6 +23,7 @@
   "history.peakHour": "Пик",
   "history.sessionCount": {"$type":"message","body":{"$op":"concat","parts":["Записей: ",{"$op":"arg","name":"count"}]}},
   "history.showHourlyActivityByCategory": "Показать по категориям",
+  "history.summaryDuration": "Длительность",
   "history.showTimelineByApp": "Показать по прил.",
   "history.showTimelineByCategory": "Показать по категориям",
   "history.showTimelineByWeb": "Показать по сайтам",

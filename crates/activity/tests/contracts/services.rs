@@ -15,7 +15,7 @@ fn web_sync_guide_data_is_localized_and_preserves_actions() {
             guide[1]["details"][0]["links"][0]["href"],
             "https://github.com/Ceceliaee/patina-web-sync/releases/latest"
         );
-        assert_eq!(guide[2]["details"].as_array().unwrap().len(), 5);
+        assert_eq!(guide[2]["details"].as_array().unwrap().len(), 4);
         assert_eq!(guide[3]["details"].as_array().unwrap().len(), 3);
     }
     assert!(data(Locale::EnUs, "settings.webActivityHelpTitle").is_none());
