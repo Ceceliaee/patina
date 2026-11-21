@@ -791,390 +791,7 @@ impl Render for Classification {
                     row = row.child(div().h(px(92.)));
                     continue;
                 };
-                let draft = (*a).clone();
-                let selected_category = categories
-                    .iter()
-                    .position(|v| v.0 == a.category)
-                    .unwrap_or(0);
-                let category_action = draft.clone();
-                let category_ids: Vec<_> = categories.iter().map(|(id, _)| id.clone()).collect();
-                let view = cx.weak_entity();
-                let category_select = quietpro::Dropdown::new(
-                    "classify",
-                    format!("{} · {}", tr("native.export.field.category"), a.name),
-                    categories
-                        .iter()
-                        .enumerate()
-                        .map(|(i, (_, name))| (i, name.clone())),
-                    selected_category,
-                    c,
-                    move |index, _, cx| {
-                        let _ = view.update(cx, |t, cx| {
-                            let mut rule = t
-                                .pending
-                                .get(&category_action.key)
-                                .unwrap_or(&category_action)
-                                .clone();
-                            if rule.category != category_ids[index] {
-                                rule.category = category_ids[index].clone();
-                                t.pending.insert(rule.key.clone(), rule);
-                                cx.notify();
-                            }
-                        });
-                    },
-                )
-                .disabled(self.busy);
-                let name_action = draft.clone();
-                let color_action = draft.clone();
-                let default_color =
-                    if let Some(color) = self.card_icon(a).and_then(|icon| icon.color) {
-                        rgb(color)
-                    } else if a.category == "other" {
-                        rgb(patina_activity_model::default_app_color(&a.identity))
-                    } else {
-                        color_picker::parse_hex(&self.category_color(&a.category)).unwrap_or_else(
-                            || rgb(patina_activity_model::default_app_color(&a.identity)),
-                        )
-                    };
-                let display_color = color_picker::parse_hex(&a.color).unwrap_or(default_color);
-                let mut track = draft.clone();
-                track.track = !track.track;
-                let mut titles = draft.clone();
-                titles.titles = !titles.titles;
-                let fallback_icon = if a.is_web() {
-                    Icon::Globe
-                } else {
-                    Icon::AppWindow
-                };
-                let icon =
-                    quietpro::app_icon_frame(display_color, c).child(match self.card_icon(a) {
-                        Some(image) => div()
-                            .id("app-icon")
-                            .role(Role::Image)
-                            .aria_label(a.name.clone())
-                            .size(px(24.))
-                            .child(
-                                img(image.image.clone())
-                                    .size_full()
-                                    .object_fit(ObjectFit::Contain)
-                                    .with_fallback(move || {
-                                        quietpro::glyph(fallback_icon, c.secondary)
-                                            .size(px(24.))
-                                            .into_any_element()
-                                    })
-                                    .with_loading(move || {
-                                        quietpro::glyph(fallback_icon, c.secondary)
-                                            .size(px(24.))
-                                            .into_any_element()
-                                    }),
-                            )
-                            .into_any_element(),
-                        None => quietpro::glyph(fallback_icon, c.secondary)
-                            .size(px(24.))
-                            .into_any_element(),
-                    });
-                let details = div()
-                    .min_w_0()
-                    .flex_1()
-                    .flex()
-                    .flex_col()
-                    .gap(px(4.))
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .child(if self.editing_name.as_ref() == Some(&a.key) {
-                                div()
-                                    .flex()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .on_mouse_down_out(cx.listener(|t, _, win, cx| {
-                                        t.finish_name(cx);
-                                        if t.name.focus_handle(cx).is_focused(win) {
-                                            win.blur(cx);
-                                        }
-                                    }))
-                                    .on_action(cx.listener(
-                                        |t, _: &gpui_kit::base::input::Escape, win, cx| {
-                                            if let Some(exe) = t.editing_name.take() {
-                                                t.focus_rename(&exe, win, cx);
-                                            }
-                                            cx.notify();
-                                        },
-                                    ))
-                                    .child(
-                                        quietpro::TextInput::new("app-name-input", &self.name, c)
-                                            .disabled(self.busy),
-                                    )
-                                    .into_any_element()
-                            } else {
-                                heading(a.name.clone())
-                                    .id("app-name")
-                                    .truncate()
-                                    .into_any_element()
-                            })
-                            .child(
-                                quietpro::IconControl::new(
-                                    "rename",
-                                    tr(if a.is_web() {
-                                        "mapping.editWebDomainName"
-                                    } else {
-                                        "mapping.editAppName"
-                                    }),
-                                    Icon::Pencil,
-                                )
-                                .disabled(self.busy)
-                                .track_focus(&self.rename_focus[&a.key])
-                                .action(
-                                    c,
-                                    cx.listener(move |t, _, win, cx| {
-                                        t.finish_name(cx);
-                                        let name = t
-                                            .name_rule(&name_action.key)
-                                            .unwrap_or_else(|| name_action.clone())
-                                            .name
-                                            .clone();
-                                        t.editing_name = Some(name_action.key.clone());
-                                        let label = text(
-                                            t.client.locale.get(),
-                                            if name_action.is_web() {
-                                                "mapping.editWebDomainName"
-                                            } else {
-                                                "mapping.editAppName"
-                                            },
-                                        );
-                                        t.name.update(cx, |input, cx| {
-                                            input.set_accessibility(
-                                                InputAccessibility::new(Some(Role::TextInput))
-                                                    .with_label(Some(label.into())),
-                                            );
-                                            input.set_value(name, win, cx);
-                                            input.focus(win, cx);
-                                            input.select_all(win, cx);
-                                        });
-                                        cx.notify();
-                                    }),
-                                ),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .min_w_0()
-                            .gap(px(8.))
-                            .child(self.identity_control(a, titles_enabled, c, cx))
-                            .when(!a.track && !a.tracking_mixed(), |d| {
-                                d.child(
-                                    label(tr("mapping.noStats"))
-                                        .flex_none()
-                                        .text_size(px(12.))
-                                        .text_color(c.secondary),
-                                )
-                            }),
-                    );
-                let picker = self
-                    .color_picker
-                    .as_ref()
-                    .filter(|(exe, _)| exe == &a.key)
-                    .map(|(_, picker)| picker.clone());
-                let color_open = picker.is_some();
-                let client = self.client.clone();
-                let color_focus = self.color_focus[&a.key].clone();
-                let color_bounds = win.use_keyed_state(
-                    SharedString::from(format!("app-color-bounds-{}", a.key)),
-                    cx,
-                    |_, _| Bounds::<Pixels>::default(),
-                );
-                let bounds = *color_bounds.read(cx);
-                let color_anchor = if bounds.top() > win.viewport_size().height - bounds.bottom() {
-                    Anchor::BottomLeft
-                } else {
-                    Anchor::TopLeft
-                };
-                let color_button = gpui_kit::base::Popover::new("color-popup")
-                    .open(color_open)
-                    .anchor(color_anchor)
-                    .offset(px(4.))
-                    .trigger(
-                        quietpro::color_swatch_button(
-                            "color",
-                            tr("mapping.color"),
-                            display_color,
-                            !self.busy && !self.icons_loading,
-                            c,
-                        )
-                        .track_focus(&color_focus)
-                        .child(
-                            canvas(
-                                move |bounds, _, cx| {
-                                    color_bounds.update(cx, |current, cx| {
-                                        if *current != bounds {
-                                            *current = bounds;
-                                            cx.notify();
-                                        }
-                                    });
-                                },
-                                |_, _, _, _| {},
-                            )
-                            .absolute()
-                            .inset_0()
-                            .size_full(),
-                        ),
-                    )
-                    .on_open_change(cx.listener(move |t, open, win, cx| {
-                        if *open && !t.busy && !t.icons_loading {
-                            let picker = cx.new(|cx| {
-                                color_picker::ColorPicker::new(
-                                    client.clone(),
-                                    display_color,
-                                    default_color,
-                                    t.color_format,
-                                    win,
-                                    cx,
-                                )
-                            });
-                            cx.subscribe(
-                                &picker,
-                                |t, _, format: &color_picker::FormatChanged, _| {
-                                    t.color_format = format.0;
-                                },
-                            )
-                            .detach();
-                            let draft = color_action.clone();
-                            cx.subscribe(
-                                &picker,
-                                move |t, _, color: &color_picker::Changed, cx| {
-                                    let mut rule =
-                                        t.pending.get(&draft.key).unwrap_or(&draft).clone();
-                                    rule.color = color.0.clone().unwrap_or_default();
-                                    t.pending.insert(rule.key.clone(), rule);
-                                    cx.notify();
-                                },
-                            )
-                            .detach();
-                            t.color_picker = Some((color_action.key.clone(), picker));
-                        } else {
-                            t.color_picker = None;
-                            win.focus(&color_focus, cx);
-                        }
-                        cx.notify();
-                    }))
-                    .content(move |_, _, _| div().children(picker));
-                let buttons = div()
-                    .flex()
-                    .gap(px(0.))
-                    .child(color_button)
-                    .child(
-                        quietpro::IconControl::new(
-                            "title-policy",
-                            tr(if titles_enabled {
-                                "mapping.titleRecorded"
-                            } else {
-                                "mapping.globalTitleDisabled"
-                            }),
-                            if a.titles_mixed() {
-                                Icon::Minus
-                            } else if a.titles {
-                                Icon::Captions
-                            } else {
-                                Icon::CaptionsOff
-                            },
-                        )
-                        .disabled(self.busy || !titles_enabled)
-                        .mixed_toggle(c, a.titles, a.titles_mixed(), {
-                            let view = cx.weak_entity();
-                            move |_, _, _, cx| {
-                                let _ = view.update(cx, |t, cx| {
-                                    let mut rule =
-                                        t.name_rule(&titles.key).unwrap_or_else(|| titles.clone());
-                                    rule.titles = titles.titles;
-                                    t.pending.insert(rule.key.clone(), rule);
-                                    cx.notify();
-                                });
-                            }
-                        }),
-                    )
-                    .child(
-                        quietpro::IconControl::new(
-                            "tracking-policy",
-                            tr("mapping.excludeStats"),
-                            if a.tracking_mixed() {
-                                Icon::Minus
-                            } else if a.track {
-                                Icon::ListX
-                            } else {
-                                Icon::ListPlus
-                            },
-                        )
-                        .disabled(self.busy)
-                        .mixed_toggle(c, !a.track, a.tracking_mixed(), {
-                            let view = cx.weak_entity();
-                            move |_, _, _, cx| {
-                                let _ = view.update(cx, |t, cx| {
-                                    let mut rule =
-                                        t.name_rule(&track.key).unwrap_or_else(|| track.clone());
-                                    rule.track = track.track;
-                                    t.pending.insert(rule.key.clone(), rule);
-                                    cx.notify();
-                                });
-                            }
-                        }),
-                    )
-                    .child(self.merge_control(a, c, cx))
-                    .child(
-                        quietpro::IconControl::new(
-                            "delete-records",
-                            tr(if a.is_web() {
-                                "mapping.deleteWebRecords"
-                            } else {
-                                "mapping.deleteAppRecords"
-                            }),
-                            Icon::Trash,
-                        )
-                        .track_focus(&self.delete_focus[&a.key])
-                        .disabled(self.dirty(cx))
-                        .action(
-                            quietpro::Palette {
-                                secondary: c.danger,
-                                text: c.danger,
-                                disabled_text: c.danger.opacity(0.5),
-                                ..c
-                            },
-                            cx.listener({
-                                let target = (*a).clone();
-                                move |t, _, win, cx| {
-                                    if !t.dirty(cx) {
-                                        t.deleting = Some(target.clone());
-                                        t.delete_failed = false;
-                                        t.delete_impact = None;
-                                        t.color_picker = None;
-                                        win.focus(&t.delete_cancel, cx);
-                                        t.delete_application(false, win, cx);
-                                    }
-                                }
-                            }),
-                        ),
-                    );
-                let card = content_card(c.border, c.canvas)
-                    .id(SharedString::from(a.key.clone()))
-                    .h(px(92.))
-                    .py(px(12.) + px(1.))
-                    .flex_row()
-                    .items_center()
-                    .gap(px(12.))
-                    .child(icon)
-                    .child(details)
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .items_end()
-                            .gap(px(5.))
-                            .child(category_select)
-                            .child(buttons),
-                    );
-                row = row.child(card);
+                row = row.child(self.rule_card(a, &categories, titles_enabled, win, cx));
             }
             grid = grid.child(row);
         }
@@ -1328,3 +945,401 @@ impl Render for Classification {
 }
 
 impl gpui_kit::EventEmitter<crate::windows::main::Saved> for Classification {}
+
+impl Classification {
+    fn rule_card(
+        &mut self,
+        a: &Card,
+        categories: &[(String, String)],
+        titles_enabled: bool,
+        win: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Stateful<Div> {
+        let c = self.client.palette(win);
+        let locale = self.client.locale.get();
+        let tr = |k| text(locale, k);
+        let draft = (*a).clone();
+        let selected_category = categories
+            .iter()
+            .position(|v| v.0 == a.category)
+            .unwrap_or(0);
+        let category_action = draft.clone();
+        let category_ids: Vec<_> = categories.iter().map(|(id, _)| id.clone()).collect();
+        let view = cx.weak_entity();
+        let category_select = quietpro::Dropdown::new(
+            "classify",
+            format!("{} · {}", tr("native.export.field.category"), a.name),
+            categories
+                .iter()
+                .enumerate()
+                .map(|(i, (_, name))| (i, name.clone())),
+            selected_category,
+            c,
+            move |index, _, cx| {
+                let _ = view.update(cx, |t, cx| {
+                    let mut rule = t
+                        .pending
+                        .get(&category_action.key)
+                        .unwrap_or(&category_action)
+                        .clone();
+                    if rule.category != category_ids[index] {
+                        rule.category = category_ids[index].clone();
+                        t.pending.insert(rule.key.clone(), rule);
+                        cx.notify();
+                    }
+                });
+            },
+        )
+        .disabled(self.busy);
+        let name_action = draft.clone();
+        let color_action = draft.clone();
+        let default_color =
+            if let Some(color) = self.card_icon(a).and_then(|icon| icon.color) {
+                rgb(color)
+            } else if a.category == "other" {
+                rgb(patina_activity_model::default_app_color(&a.identity))
+            } else {
+                color_picker::parse_hex(&self.category_color(&a.category)).unwrap_or_else(
+                    || rgb(patina_activity_model::default_app_color(&a.identity)),
+                )
+            };
+        let display_color = color_picker::parse_hex(&a.color).unwrap_or(default_color);
+        let mut track = draft.clone();
+        track.track = !track.track;
+        let mut titles = draft.clone();
+        titles.titles = !titles.titles;
+        let fallback_icon = if a.is_web() {
+            Icon::Globe
+        } else {
+            Icon::AppWindow
+        };
+        let icon =
+            quietpro::app_icon_frame(display_color, c).child(match self.card_icon(a) {
+                Some(image) => div()
+                    .id("app-icon")
+                    .role(Role::Image)
+                    .aria_label(a.name.clone())
+                    .size(px(24.))
+                    .child(
+                        img(image.image.clone())
+                            .size_full()
+                            .object_fit(ObjectFit::Contain)
+                            .with_fallback(move || {
+                                quietpro::glyph(fallback_icon, c.secondary)
+                                    .size(px(24.))
+                                    .into_any_element()
+                            })
+                            .with_loading(move || {
+                                quietpro::glyph(fallback_icon, c.secondary)
+                                    .size(px(24.))
+                                    .into_any_element()
+                            }),
+                    )
+                    .into_any_element(),
+                None => quietpro::glyph(fallback_icon, c.secondary)
+                    .size(px(24.))
+                    .into_any_element(),
+            });
+        let details = div()
+            .min_w_0()
+            .flex_1()
+            .flex()
+            .flex_col()
+            .gap(px(4.))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .child(if self.editing_name.as_ref() == Some(&a.key) {
+                        div()
+                            .flex()
+                            .flex_1()
+                            .min_w_0()
+                            .on_mouse_down_out(cx.listener(|t, _, win, cx| {
+                                t.finish_name(cx);
+                                if t.name.focus_handle(cx).is_focused(win) {
+                                    win.blur(cx);
+                                }
+                            }))
+                            .on_action(cx.listener(
+                                |t, _: &gpui_kit::base::input::Escape, win, cx| {
+                                    if let Some(exe) = t.editing_name.take() {
+                                        t.focus_rename(&exe, win, cx);
+                                    }
+                                    cx.notify();
+                                },
+                            ))
+                            .child(
+                                quietpro::TextInput::new("app-name-input", &self.name, c)
+                                    .disabled(self.busy),
+                            )
+                            .into_any_element()
+                    } else {
+                        heading(a.name.clone())
+                            .id("app-name")
+                            .truncate()
+                            .into_any_element()
+                    })
+                    .child(
+                        quietpro::IconControl::new(
+                            "rename",
+                            tr(if a.is_web() {
+                                "mapping.editWebDomainName"
+                            } else {
+                                "mapping.editAppName"
+                            }),
+                            Icon::Pencil,
+                        )
+                        .disabled(self.busy)
+                        .track_focus(&self.rename_focus[&a.key])
+                        .action(
+                            c,
+                            cx.listener(move |t, _, win, cx| {
+                                t.finish_name(cx);
+                                let name = t
+                                    .name_rule(&name_action.key)
+                                    .unwrap_or_else(|| name_action.clone())
+                                    .name
+                                    .clone();
+                                t.editing_name = Some(name_action.key.clone());
+                                let label = text(
+                                    t.client.locale.get(),
+                                    if name_action.is_web() {
+                                        "mapping.editWebDomainName"
+                                    } else {
+                                        "mapping.editAppName"
+                                    },
+                                );
+                                t.name.update(cx, |input, cx| {
+                                    input.set_accessibility(
+                                        InputAccessibility::new(Some(Role::TextInput))
+                                            .with_label(Some(label.into())),
+                                    );
+                                    input.set_value(name, win, cx);
+                                    input.focus(win, cx);
+                                    input.select_all(win, cx);
+                                });
+                                cx.notify();
+                            }),
+                        ),
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .min_w_0()
+                    .gap(px(8.))
+                    .child(self.identity_control(a, titles_enabled, c, cx))
+                    .when(!a.track && !a.tracking_mixed(), |d| {
+                        d.child(
+                            label(tr("mapping.noStats"))
+                                .flex_none()
+                                .text_size(px(12.))
+                                .text_color(c.secondary),
+                        )
+                    }),
+            );
+        let picker = self
+            .color_picker
+            .as_ref()
+            .filter(|(exe, _)| exe == &a.key)
+            .map(|(_, picker)| picker.clone());
+        let color_open = picker.is_some();
+        let client = self.client.clone();
+        let color_focus = self.color_focus[&a.key].clone();
+        let color_bounds = win.use_keyed_state(
+            SharedString::from(format!("app-color-bounds-{}", a.key)),
+            cx,
+            |_, _| Bounds::<Pixels>::default(),
+        );
+        let bounds = *color_bounds.read(cx);
+        let color_anchor = if bounds.top() > win.viewport_size().height - bounds.bottom() {
+            Anchor::BottomLeft
+        } else {
+            Anchor::TopLeft
+        };
+        let color_button = gpui_kit::base::Popover::new("color-popup")
+            .open(color_open)
+            .anchor(color_anchor)
+            .offset(px(4.))
+            .trigger(
+                quietpro::color_swatch_button(
+                    "color",
+                    tr("mapping.color"),
+                    display_color,
+                    !self.busy && !self.icons_loading,
+                    c,
+                )
+                .track_focus(&color_focus)
+                .child(
+                    canvas(
+                        move |bounds, _, cx| {
+                            color_bounds.update(cx, |current, cx| {
+                                if *current != bounds {
+                                    *current = bounds;
+                                    cx.notify();
+                                }
+                            });
+                        },
+                        |_, _, _, _| {},
+                    )
+                    .absolute()
+                    .inset_0()
+                    .size_full(),
+                ),
+            )
+            .on_open_change(cx.listener(move |t, open, win, cx| {
+                if *open && !t.busy && !t.icons_loading {
+                    let picker = cx.new(|cx| {
+                        color_picker::ColorPicker::new(
+                            client.clone(),
+                            display_color,
+                            default_color,
+                            t.color_format,
+                            win,
+                            cx,
+                        )
+                    });
+                    cx.subscribe(
+                        &picker,
+                        |t, _, format: &color_picker::FormatChanged, _| {
+                            t.color_format = format.0;
+                        },
+                    )
+                    .detach();
+                    let draft = color_action.clone();
+                    cx.subscribe(
+                        &picker,
+                        move |t, _, color: &color_picker::Changed, cx| {
+                            let mut rule =
+                                t.pending.get(&draft.key).unwrap_or(&draft).clone();
+                            rule.color = color.0.clone().unwrap_or_default();
+                            t.pending.insert(rule.key.clone(), rule);
+                            cx.notify();
+                        },
+                    )
+                    .detach();
+                    t.color_picker = Some((color_action.key.clone(), picker));
+                } else {
+                    t.color_picker = None;
+                    win.focus(&color_focus, cx);
+                }
+                cx.notify();
+            }))
+            .content(move |_, _, _| div().children(picker));
+        let buttons = div()
+            .flex()
+            .gap(px(0.))
+            .child(color_button)
+            .child(
+                quietpro::IconControl::new(
+                    "title-policy",
+                    tr(if titles_enabled {
+                        "mapping.titleRecorded"
+                    } else {
+                        "mapping.globalTitleDisabled"
+                    }),
+                    if a.titles_mixed() {
+                        Icon::Minus
+                    } else if a.titles {
+                        Icon::Captions
+                    } else {
+                        Icon::CaptionsOff
+                    },
+                )
+                .disabled(self.busy || !titles_enabled)
+                .mixed_toggle(c, a.titles, a.titles_mixed(), {
+                    let view = cx.weak_entity();
+                    move |_, _, _, cx| {
+                        let _ = view.update(cx, |t, cx| {
+                            let mut rule =
+                                t.name_rule(&titles.key).unwrap_or_else(|| titles.clone());
+                            rule.titles = titles.titles;
+                            t.pending.insert(rule.key.clone(), rule);
+                            cx.notify();
+                        });
+                    }
+                }),
+            )
+            .child(
+                quietpro::IconControl::new(
+                    "tracking-policy",
+                    tr("mapping.excludeStats"),
+                    if a.tracking_mixed() {
+                        Icon::Minus
+                    } else if a.track {
+                        Icon::ListX
+                    } else {
+                        Icon::ListPlus
+                    },
+                )
+                .disabled(self.busy)
+                .mixed_toggle(c, !a.track, a.tracking_mixed(), {
+                    let view = cx.weak_entity();
+                    move |_, _, _, cx| {
+                        let _ = view.update(cx, |t, cx| {
+                            let mut rule =
+                                t.name_rule(&track.key).unwrap_or_else(|| track.clone());
+                            rule.track = track.track;
+                            t.pending.insert(rule.key.clone(), rule);
+                            cx.notify();
+                        });
+                    }
+                }),
+            )
+            .child(self.merge_control(a, c, cx))
+            .child(
+                quietpro::IconControl::new(
+                    "delete-records",
+                    tr(if a.is_web() {
+                        "mapping.deleteWebRecords"
+                    } else {
+                        "mapping.deleteAppRecords"
+                    }),
+                    Icon::Trash,
+                )
+                .track_focus(&self.delete_focus[&a.key])
+                .disabled(self.dirty(cx))
+                .action(
+                    quietpro::Palette {
+                        secondary: c.danger,
+                        text: c.danger,
+                        disabled_text: c.danger.opacity(0.5),
+                        ..c
+                    },
+                    cx.listener({
+                        let target = (*a).clone();
+                        move |t, _, win, cx| {
+                            if !t.dirty(cx) {
+                                t.deleting = Some(target.clone());
+                                t.delete_failed = false;
+                                t.delete_impact = None;
+                                t.color_picker = None;
+                                win.focus(&t.delete_cancel, cx);
+                                t.delete_application(false, win, cx);
+                            }
+                        }
+                    }),
+                ),
+            );
+        content_card(c.border, c.canvas)
+            .id(SharedString::from(a.key.clone()))
+            .h(px(92.))
+            .py(px(12.) + px(1.))
+            .flex_row()
+            .items_center()
+            .gap(px(12.))
+            .child(icon)
+            .child(details)
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .items_end()
+                    .gap(px(5.))
+                    .child(category_select)
+                    .child(buttons),
+            )
+    }
+}
