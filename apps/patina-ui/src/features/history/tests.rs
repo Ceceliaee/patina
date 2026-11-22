@@ -108,6 +108,7 @@ fn overview_keeps_its_layout_and_only_restores_the_selected_day(cx: &mut TestApp
     cx.update(gpui_kit::init);
     let (client, requests) = Client::test_connection();
     let (window, _) = cx.update(|cx| MainWindow::open(cx, client.clone()).unwrap());
+    crate::features::today::tests::answer_empty_today(cx, &client, &requests);
     let click = |cx: &mut TestAppContext, id: &'static str| {
         cx.update_window(window, |_, win, cx| {
             win.render_frame(cx);

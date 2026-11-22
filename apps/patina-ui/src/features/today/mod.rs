@@ -3,7 +3,7 @@ use quietpro::{CARD_TITLE_GAP, CONTENT_INSET, content_card};
 mod apps;
 mod charts;
 #[cfg(all(test, feature = "test-support"))]
-mod tests;
+pub(crate) mod tests;
 use apps::Popup;
 
 use crate::features::format::duration;
@@ -99,6 +99,10 @@ impl Today {
 
     fn summary(&self) -> Option<&DaySummary> {
         self.snapshot.as_ref().map(|s| &s.summary)
+    }
+
+    pub(crate) fn ready_to_present(&self) -> bool {
+        self.snapshot.is_some() || self.error.is_some()
     }
 
     pub(crate) fn refresh(&mut self, repeat: bool, cx: &mut Context<Self>) {

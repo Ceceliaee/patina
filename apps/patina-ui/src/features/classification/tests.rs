@@ -313,6 +313,7 @@ fn cold_entry_waits_for_icons_and_cached_cards_survive_refresh_and_retry(cx: &mu
     cx.update(gpui_kit::init);
     let (client, requests) = Client::test_connection();
     let (window, _) = cx.update(|cx| MainWindow::open(cx, client.clone()).unwrap());
+    crate::features::today::tests::answer_empty_today(cx, &client, &requests);
     let click = |cx: &mut TestAppContext, id: &'static str| {
         cx.update_window(window, |_, win, cx| {
             win.render_frame(cx);

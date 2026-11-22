@@ -47,6 +47,20 @@ fn summary() -> DaySummary {
     }
 }
 
+pub(crate) fn answer_empty_today(
+    cx: &mut TestAppContext,
+    client: &Client,
+    requests: &Receiver<FromWindow>,
+) {
+    cx.run_until_parked();
+    let id = next_request(requests, |r| matches!(r, WindowRequest::Today));
+    let mut empty = summary();
+    empty.apps.clear();
+    empty.total_duration_ms = 0;
+    client.test_answer(id, Reply::Today(empty));
+    cx.run_until_parked();
+}
+
 #[gpui_kit::test]
 fn cold_and_cached_navigation_keep_the_same_cards_while_requests_are_pending(
     cx: &mut TestAppContext,
@@ -78,15 +92,21 @@ fn cold_and_cached_navigation_keep_the_same_cards_while_requests_are_pending(
     };
 
     let leave_today = |cx: &mut TestAppContext| {
-        click(cx, "tools.title");
-        let list = request(|r| {
-            matches!(
-                r,
-                WindowRequest::Tools(patina_desktop_protocol::tools::ToolRequest::List)
-            )
-        });
-        client.test_answer(list, Reply::Tools((vec![], false, None)));
+        click(cx, "about.title");
+        let status = request(|r| matches!(r, WindowRequest::Update(_)));
+        client.test_answer(
+            status,
+            Reply::Update(patina_updater::Snapshot::idle("1.0.0")),
+        );
         cx.run_until_parked();
+    };
+    let still_on_about = |cx: &mut TestAppContext| {
+        cx.update_window(handle, |_, win, cx| {
+            win.render_frame(cx);
+            win.find("about-update-card");
+            assert!(win.try_find("today-ranking-panel").is_none());
+        })
+        .unwrap();
     };
     cx.run_until_parked();
     let first = request(|r| matches!(r, WindowRequest::Today));
@@ -102,11 +122,11 @@ fn cold_and_cached_navigation_keep_the_same_cards_while_requests_are_pending(
     let today = request(|r| matches!(r, WindowRequest::Today));
     client.test_answer(first, Reply::Today(summary()));
     cx.run_until_parked();
-    assert_eq!(panels(cx, false), cold);
+    still_on_about(cx);
     client.test_answer(today, Reply::Today(summary()));
     cx.run_until_parked();
     let icons = request(|r| matches!(r, WindowRequest::Icons(keys) if keys == &["editor.exe"]));
-    assert_eq!(panels(cx, false), cold);
+    still_on_about(cx);
     let icon_png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNQCeoBAAGgAQNhYOe6AAAAAElFTkSuQmCC";
     client.test_answer(
         icons,
@@ -127,12 +147,32 @@ fn cold_and_cached_navigation_keep_the_same_cards_while_requests_are_pending(
     })
     .unwrap();
     click(cx, "retry");
-    let retry = request(|r| matches!(r, WindowRequest::Today));
-    let mut empty = summary();
-    empty.apps.clear();
-    empty.total_duration_ms = 0;
-    client.test_answer(retry, Reply::Today(empty));
+    answer_empty_today(cx, &client, &requests);
+    assert_eq!(panels(cx, false), cold);
+
+    leave_today(cx);
+    drop(client.edit_app(
+        "editor.exe".into(),
+        patina_activity_model::AppEdit::Name("Writer".into()),
+    ));
+    click(cx, "dashboard.title");
+    let cancelled = request(|r| matches!(r, WindowRequest::Today));
+    still_on_about(cx);
+    click(cx, "about.title");
+    client.test_answer(cancelled, Reply::Today(summary()));
     cx.run_until_parked();
+    still_on_about(cx);
+    click(cx, "dashboard.title");
+    let failed = request(|r| matches!(r, WindowRequest::Today));
+    client.test_reject(failed, RequestError::Busy);
+    cx.run_until_parked();
+    cx.update_window(handle, |_, win, cx| {
+        win.render_frame(cx);
+        win.find("today-ranking-panel");
+        win.click("retry", cx);
+    })
+    .unwrap();
+    answer_empty_today(cx, &client, &requests);
     assert_eq!(panels(cx, false), cold);
 }
 
