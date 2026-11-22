@@ -1,4 +1,17 @@
+mod clock;
+mod composition;
+mod fields;
+mod home;
+mod panel;
+mod schedule;
+mod settings;
+mod store;
+mod target_picker;
+#[cfg(all(test, feature = "test-support"))]
+mod tests;
+
 use crate::{client::Client, features::page_controls::label};
+use gpui_kit::base::TestSupportExt;
 use gpui_kit::base::input::{InputAccessibility, InputEvent, InputState};
 use gpui_kit::{prelude::*, *};
 use patina_desktop_protocol::FromReply;
@@ -6,34 +19,63 @@ use patina_desktop_protocol::FromReply;
 use patina_desktop_protocol::tools::{Control, Installed, Preview};
 use patina_desktop_protocol::tools::{ToolCall, call};
 use patina_i18n::text;
-use quietpro::{content_card, page, page_actions, page_title_row};
+use quietpro::{content_card, page, page_title_row};
 use std::{path::PathBuf, rc::Rc};
 
 #[derive(Clone)]
 enum Confirm {
     Install(PathBuf, Preview),
-    Remove(Installed, Vec<String>),
+    Remove(Installed, Vec<String>, FocusHandle),
 }
 
-fn tool_name(id: &str, fallback: &str, locale: patina_activity_model::Locale) -> String {
-    match id {
-        "patina.focus" => text(locale, "tools.pomodoroTitle"),
-        "patina.reminders" => text(locale, "tools.remindersTitle"),
-        _ => fallback.to_owned(),
-    }
+fn task_list_frame(id: &'static str, title: String, c: quietpro::Palette) -> Stateful<Div> {
+    div()
+        .id(id)
+        .role(Role::Group)
+        .aria_label(title)
+        .flex()
+        .flex_col()
+        .flex_1()
+        .min_h(px(quietpro::SETTINGS_ROW_HEIGHT))
+        .rounded(px(16.))
+        .border_1()
+        .border_dashed()
+        .border_color(c.border)
+        .p(px(quietpro::SUBHEADING_GAP))
+}
+
+fn tool_name(tool: &Installed, locale: patina_activity_model::Locale) -> String {
+    manifest_name(&tool.manifest, locale)
+}
+
+fn manifest_name(
+    manifest: &patina_desktop_protocol::tools::Manifest,
+    locale: patina_activity_model::Locale,
+) -> String {
+    manifest
+        .presentation
+        .as_ref()
+        .and_then(|p| p.names.get(locale.tag()))
+        .unwrap_or(&manifest.name)
+        .clone()
 }
 
 pub(crate) struct Tools {
     client: Rc<Client>,
     tools: Vec<Installed>,
     selected: Option<Installed>,
-    controls: Vec<Control>,
+    showing_home: bool,
+    home_focus: FocusHandle,
+    controls: Option<Rc<[Control]>>,
+    panel: panel::State,
+    focus_dialog_pending: bool,
+    saved_tabs: std::collections::BTreeMap<String, String>,
     inputs: std::collections::BTreeMap<String, Entity<InputState>>,
     choices: std::collections::BTreeMap<String, String>,
     manager: bool,
-    preferences: Option<patina_activity_model::NoticePreferences>,
-    delivery_focus: [FocusHandle; 2],
-    sound_focus: [FocusHandle; 4],
+    store_focus: Option<store::StoreFocus>,
+    settings: Option<settings::SettingsDialog>,
+    settings_focus: FocusHandle,
     target: Option<patina_activity_model::ToolTarget>,
     pending: Option<Confirm>,
     modal_focus: Option<FocusHandle>,
@@ -56,13 +98,18 @@ impl Tools {
             client,
             tools: Vec::new(),
             selected: None,
-            controls: Vec::new(),
+            showing_home: false,
+            home_focus: cx.focus_handle(),
+            controls: None,
+            panel: panel::State::new(cx),
+            focus_dialog_pending: false,
+            saved_tabs: Default::default(),
             inputs: Default::default(),
             choices: Default::default(),
             manager: false,
-            preferences: None,
-            delivery_focus: std::array::from_fn(|_| cx.focus_handle()),
-            sound_focus: std::array::from_fn(|_| cx.focus_handle()),
+            store_focus: None,
+            settings: None,
+            settings_focus: cx.focus_handle(),
             target,
             pending: None,
             modal_focus: None,
@@ -74,7 +121,7 @@ impl Tools {
             display_failed: false,
             error: None,
         };
-        page.list(cx);
+        page.list(call::list(), cx);
         page
     }
 
@@ -108,36 +155,70 @@ impl Tools {
         cx.notify();
     }
 
-    fn list(&mut self, cx: &mut Context<Self>) {
+    fn list(
+        &mut self,
+        request: ToolCall<patina_desktop_protocol::ToolList>,
+        cx: &mut Context<Self>,
+    ) {
         self.run(
-            call::list(),
+            request,
             |this, (mut tools, failed, last): (Vec<Installed>, bool, Option<String>), cx| {
-                tools.sort_by_key(|tool| match tool.manifest.id.as_str() {
-                    "patina.reminders" => 0,
-                    "patina.focus" => 1,
-                    _ => 2,
+                tools.sort_by_key(|tool| {
+                    tool.manifest
+                        .presentation
+                        .as_ref()
+                        .map_or(u16::MAX, |p| p.order)
                 });
                 this.display_failed = failed;
                 let target = this.target.take();
-                let preferred = target
-                    .map(|t| t.id())
-                    .or_else(|| this.selected.as_ref().map(|p| p.manifest.id.as_str()))
-                    .or(last.as_deref());
-                if target.is_some()
-                    && !tools
+                let requested = target.and_then(|target| {
+                    use patina_activity_model::ToolTarget;
+                    use patina_desktop_protocol::tools::Capability;
+                    if let Some(generation) = target.generation() {
+                        return tools.iter().find(|tool| tool.generation == generation);
+                    }
+                    let capability = match target {
+                        ToolTarget::Focus => Capability::Focus,
+                        ToolTarget::Reminders => Capability::Reminders,
+                        ToolTarget::Plugin { .. } => unreachable!(),
+                    };
+                    tools
                         .iter()
-                        .any(|t| Some(t.manifest.id.as_str()) == preferred)
-                {
-                    this.manager = true;
-                }
-                this.selected = tools
+                        .find(|tool| tool.manifest.capabilities.contains(&capability))
+                });
+                let preferred = if target.is_some() {
+                    this.manager = requested.is_none();
+                    requested.map(|tool| tool.manifest.id.as_str())
+                } else {
+                    this.selected
+                        .as_ref()
+                        .map(|t| t.manifest.id.as_str())
+                        .or(last.as_deref())
+                };
+                let selected = tools
                     .iter()
                     .find(|p| Some(p.manifest.id.as_str()) == preferred)
-                    .or_else(|| tools.first())
                     .cloned();
+                if selected.is_none() {
+                    this.showing_home = true;
+                }
+                let changed = this
+                    .selected
+                    .as_ref()
+                    .map(|t| (&t.manifest.id, &t.generation))
+                    != selected.as_ref().map(|t| (&t.manifest.id, &t.generation));
+                this.selected = selected;
                 this.tools = tools;
-                if !this.manager {
+                if changed {
+                    this.controls = None;
+                }
+                if this.showing_home {
+                    return;
+                }
+                if this.controls.is_none() {
                     this.load(None, cx);
+                } else if !this.manager {
+                    this.background_refresh(cx);
                 }
             },
             cx,
@@ -145,28 +226,34 @@ impl Tools {
     }
 
     pub fn background_refresh(&mut self, cx: &mut Context<Self>) {
-        if self.pending.is_some() || self.manager || self.preferences.is_some() {
+        if self.showing_home {
             return;
         }
-        if self.busy {
+        if self.busy || self.manager || self.settings.is_some() || self.panel.expanded.is_some() {
             self.refresh_pending = true;
             return;
         }
+        self.refresh_panel(false, cx);
+    }
+
+    fn refresh_panel(&mut self, remember: bool, cx: &mut Context<Self>) {
         let Some(t) = &self.selected else {
             return;
         };
         self.run(
-            call::panel(t.manifest.id.clone(), t.generation.clone(), None, false),
-            |t, controls, _| {
-                t.controls = controls;
-            },
+            call::panel(t.manifest.id.clone(), t.generation.clone(), None, remember),
+            |t, controls, _| t.update_panel(controls, None),
             cx,
         );
     }
 
+    pub(crate) fn ready_to_present(&self) -> bool {
+        self.controls.is_some() || !self.busy
+    }
+
     fn load(&mut self, action: Option<String>, cx: &mut Context<Self>) {
         let Some(tool) = &self.selected else {
-            self.controls.clear();
+            self.controls = None;
             return;
         };
         let remember = action.is_none();
@@ -178,11 +265,128 @@ impl Tools {
         );
         self.run(
             request,
-            |this, controls, _| {
-                this.inputs.clear();
-                this.choices.clear();
-                this.controls = controls;
+            move |this, controls, cx| {
+                if remember || panel::layout(&controls).is_none() {
+                    this.inputs.clear();
+                    this.choices.clear();
+                    this.panel = panel::State::new(cx);
+                    this.panel.tab = this
+                        .selected
+                        .as_ref()
+                        .and_then(|t| this.saved_tabs.get(&t.manifest.id))
+                        .cloned();
+                }
+                this.update_panel(controls, None);
             },
+            cx,
+        );
+    }
+
+    fn update_panel(&mut self, controls: Vec<Control>, submitted: Option<&str>) {
+        let next = panel::layout(&controls);
+        let old = self.controls.as_deref().and_then(panel::layout);
+        self.focus_dialog_pending = next.and_then(|p| p.dialog.as_ref()).is_some()
+            && old.and_then(|p| p.dialog.as_ref()).is_none();
+        if let Some(old) = old {
+            for form in old.tabs.iter().filter_map(|t| t.form.as_ref()) {
+                if submitted == Some(&form.submit)
+                    || !next.is_some_and(|p| {
+                        p.tabs
+                            .iter()
+                            .any(|t| t.form.as_ref().is_some_and(|f| f.submit == form.submit))
+                    })
+                {
+                    let mut keys = Vec::new();
+                    for field in &form.fields {
+                        field.bindings(&mut keys);
+                    }
+                    for key in keys {
+                        self.choices.remove(key);
+                        self.inputs.remove(key);
+                    }
+                    self.panel.close_picker();
+                }
+            }
+        } else if submitted.is_some() {
+            self.inputs.clear();
+            self.choices.clear();
+        }
+        self.controls = Some(controls.into());
+    }
+
+    fn input(
+        &mut self,
+        id: &str,
+        name: &str,
+        value: &str,
+        placeholder: &str,
+        win: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Entity<InputState> {
+        let input = self.inputs.entry(id.to_owned()).or_insert_with(|| {
+            let input = cx.new(|cx| {
+                let mut input = InputState::new(win, cx).placeholder(placeholder.to_owned());
+                input.set_accessibility(
+                    InputAccessibility::new(Some(Role::TextInput))
+                        .with_label(Some(name.to_owned().into())),
+                );
+                input.set_value(value.to_owned(), win, cx);
+                input
+            });
+            cx.subscribe(&input, |this, _, event, cx| {
+                if matches!(event, InputEvent::Focus | InputEvent::Blur)
+                    || this.panel.expanded.is_some() && matches!(event, InputEvent::Change)
+                {
+                    cx.notify();
+                }
+            })
+            .detach();
+            input
+        });
+        input.clone()
+    }
+
+    fn submit(&mut self, button: &str, cx: &mut Context<Self>) {
+        let Some(tool) = &self.selected else { return };
+        let mut fields = self.choices.clone();
+        fields.extend(
+            self.inputs
+                .iter()
+                .map(|(key, input)| (key.clone(), input.read(cx).value().to_string())),
+        );
+        if let Some(controls) = self.controls.as_deref()
+            && let Some(page) = panel::layout(controls)
+        {
+            let Some(form) = page
+                .tabs
+                .iter()
+                .filter_map(|t| t.form.as_ref())
+                .find(|f| f.submit == button)
+            else {
+                return;
+            };
+            let mut keys = Vec::new();
+            for f in &form.fields {
+                f.bindings(&mut keys);
+            }
+            fields.retain(|key, _| keys.contains(&key.as_str()));
+            for c in controls {
+                if let Control::Input { id, value, .. } | Control::Select { id, value, .. } = c
+                    && keys.contains(&id.as_str())
+                {
+                    fields.entry(id.clone()).or_insert_with(|| value.clone());
+                }
+            }
+        }
+        let submitted = button.to_owned();
+        self.run(
+            call::submit(
+                tool.manifest.id.clone(),
+                tool.generation.clone(),
+                button.to_owned(),
+                fields,
+            ),
+            move |t, controls, _| t.update_panel(controls, Some(&submitted)),
             cx,
         );
     }
@@ -229,16 +433,17 @@ impl Tools {
                 call::install(path, preview),
                 |this, tool: Installed, cx| {
                     this.manager = false;
+                    this.showing_home = false;
+                    this.controls = None;
                     this.selected = Some(tool);
-                    this.list(cx);
+                    this.list(call::list(), cx);
                 },
                 cx,
             ),
-            Some(Confirm::Remove(tool, _)) => self.run(
+            Some(Confirm::Remove(tool, _, _)) => self.run(
                 call::uninstall(tool.manifest.id, tool.generation),
                 |this, (): (), cx| {
-                    this.controls.clear();
-                    this.list(cx);
+                    this.list(call::list(), cx);
                 },
                 cx,
             ),
@@ -252,216 +457,141 @@ impl Render for Tools {
         let colors = self.client.palette(win);
         let locale = self.client.locale.get();
         let tr = |key| text(locale, key);
-        let ready = !self.busy && self.pending.is_none();
-        let mut content = content_card(colors.border, colors.panel).gap(px(12.));
-        let manager = quietpro::text_button("tool-manager", tr("tools.manager"), colors, ready)
-            .track_focus(&self.manager_focus)
-            .on_click(cx.listener(|this, _, _, cx| {
-                this.manager = !this.manager;
-                this.preferences = None;
-                this.list(cx);
-            }));
-        let preferences =
-            quietpro::text_button("tool-settings", tr("tools.settingsTitle"), colors, ready)
-                .on_click(cx.listener(|t, _, _, cx| {
-                    if t.preferences.take().is_some() {
-                        cx.notify();
-                    } else {
-                        t.run(call::preferences(), |t, p, _| t.preferences = Some(p), cx);
-                    }
-                }));
-        let selected = self.selected.as_ref().and_then(|selected| {
-            self.tools
-                .iter()
-                .position(|tool| tool.manifest.id == selected.manifest.id)
-        });
-        let view = cx.weak_entity();
-        let tool_dropdown = quietpro::Dropdown::new(
-            "tool-select",
-            tr("tools.title"),
-            self.tools.iter().enumerate().map(|(index, tool)| {
-                (
-                    index,
-                    tool_name(&tool.manifest.id, &tool.manifest.name, locale),
-                )
-            }),
-            selected.unwrap_or(0),
-            colors,
-            move |index, _, cx| {
-                let _ = view.update(cx, |this, cx| {
-                    if this.busy || this.pending.is_some() {
-                        return;
-                    }
-                    this.manager = false;
-                    this.preferences = None;
-                    let Some(tool) = this.tools.get(index) else {
-                        return;
-                    };
-                    this.selected = Some(tool.clone());
-                    this.controls.clear();
-                    this.load(None, cx);
-                });
-            },
+        let controls_for_page = self.controls.clone();
+        let page_spec = controls_for_page
+            .as_deref()
+            .filter(|_| !self.showing_home)
+            .and_then(panel::layout);
+        let details = page_spec.and_then(|p| p.dialog.as_ref());
+        let ready = !self.busy && !self.manager && self.settings.is_none() && details.is_none();
+        if !self.manager && self.store_focus.take().is_some() {
+            win.focus(&self.manager_focus, cx);
+        }
+        let mut content = if self.showing_home && !self.tools.is_empty() {
+            div().flex().flex_col().min_w_0()
+        } else {
+            content_card(colors.border, colors.panel).when(
+                self.tools.is_empty() && self.error.is_none() && !self.display_failed,
+                |card| card.h_full().items_center().justify_center().text_center(),
+            )
+        }
+        .gap(px(quietpro::SECTION_GROUP_GAP));
+        let field_group = || {
+            div()
+                .flex()
+                .flex_col()
+                .flex_none()
+                .gap(px(quietpro::SUBHEADING_GAP))
+        };
+        let header_button = |id: &'static str, key, icon, focus: &FocusHandle| {
+            quietpro::IconControl::new(id, tr(key), icon)
+                .icon_size(px(20.))
+                .track_focus(focus)
+                .with_tooltip()
+                .disabled(!ready)
+        };
+        let home = header_button(
+            "plugin-home",
+            "tools.home",
+            quietpro::Icon::HousePlug,
+            &self.home_focus,
         )
-        .disabled(!ready);
-        let top = page_title_row(tr("tools.title"), quietpro::Icon::ToolCase, colors).child(
-            page_actions()
-                .when(!self.tools.is_empty(), |actions| {
-                    actions.child(tool_dropdown)
-                })
-                .child(manager)
-                .child(preferences),
+        .action(
+            colors,
+            cx.listener(|this, _, _, cx| {
+                this.panel.close_picker();
+                this.showing_home = true;
+                this.list(call::open_home(), cx);
+            }),
         );
-        if let Some(p) = &self.preferences {
-            use patina_activity_model::{
-                NoticeDelivery as D, NoticePreferencesPatch as Patch, NoticeSound as S,
-            };
-            content = content.child(label(tr("tools.notificationDelivery")));
-            let delivery_options = [
-                (D::Notification, "tools.notificationSoftware"),
-                (D::Dialog, "tools.notificationDialog"),
-            ];
-            let view = cx.weak_entity();
-            content = content.child(div().flex().child(quietpro::segmented(
-                "notification-delivery",
-                tr("tools.notificationDelivery"),
-                std::array::from_fn::<_, 2, _>(|i| {
-                    let (value, key) = delivery_options[i];
-                    (value, tr(key), None, self.delivery_focus[i].clone())
-                }),
-                p.delivery,
-                ready,
-                colors,
-                move |d, _, cx| {
-                    let _ = view.update(cx, |t, cx| {
-                        if t.preferences.as_ref().is_some_and(|p| p.delivery != d) {
-                            t.run(
-                                call::save_preferences(Patch {
-                                    delivery: Some(d),
-                                    sound: None,
-                                }),
-                                |t, p, _| t.preferences = Some(p),
-                                cx,
-                            );
-                        }
-                    });
+        let manager = header_button(
+            "tool-manager",
+            "tools.manager",
+            quietpro::Icon::Store,
+            &self.manager_focus,
+        )
+        .action(
+            colors,
+            cx.listener(|this, _, _, cx| {
+                this.panel.close_picker();
+                this.manager = true;
+                this.list(call::list(), cx);
+            }),
+        );
+        let preferences = header_button(
+            "tool-settings",
+            "tools.settingsTitle",
+            quietpro::Icon::Settings,
+            &self.settings_focus,
+        )
+        .action(
+            colors,
+            cx.listener(|t, _, win, cx| t.open_settings(win, cx)),
+        );
+        let action_size = quietpro::ControlSize::Large.height();
+        let top = page_title_row(tr("tools.title"), quietpro::Icon::ToolCase, colors).child(
+            quietpro::icon_actions()
+                .child(home.size(action_size))
+                .child(manager.size(action_size))
+                .child(preferences.size(action_size)),
+        );
+        if self.tools.is_empty() {
+            if !self.busy && !self.manager {
+                content = content.child(label(tr("tools.empty")).test_support());
+            }
+        } else if self.showing_home {
+            content = content.child(self.home_grid(ready, colors, win, cx));
+        } else if let (Some(spec), Some(controls)) = (page_spec, controls_for_page.as_deref()) {
+            content = self.render_page(
+                content,
+                spec,
+                fields::PanelView {
+                    in_popover: false,
+                    controls,
+                    colors,
+                    ready,
                 },
-            )));
-            content = content.child(label(tr("tools.notificationSound")));
-            let sound_options = [
-                (S::Default, "tools.notificationSoundDefault"),
-                (S::Bell, "tools.notificationSoundBell"),
-                (S::Clear, "tools.notificationSoundClear"),
-                (S::None, "tools.notificationSoundNone"),
-            ];
-            let view = cx.weak_entity();
-            content = content.child(div().flex().child(quietpro::segmented(
-                "notification-sound",
-                tr("tools.notificationSound"),
-                std::array::from_fn::<_, 4, _>(|i| {
-                    let (value, key) = sound_options[i];
-                    (value, tr(key), None, self.sound_focus[i].clone())
-                }),
-                p.sound,
-                ready,
-                colors,
-                move |s, _, cx| {
-                    let _ = view.update(cx, |t, cx| {
-                        if t.preferences.as_ref().is_some_and(|p| p.sound != s) {
-                            t.run(
-                                call::save_preferences(Patch {
-                                    delivery: None,
-                                    sound: Some(s),
-                                }),
-                                |t, p, _| t.preferences = Some(p),
-                                cx,
-                            );
-                        }
-                    });
-                },
-            )));
-        } else if self.manager || self.tools.is_empty() {
-            if self.tools.is_empty() && !self.busy {
-                content = content.child(label(tr("tools.empty")));
-            }
-            if !self.tools.is_empty() || !self.busy {
-                content = content.child({
-                    let accessible_name = tr("tools.install");
-                    quietpro::text_button("install-tool", tr("tools.install"), colors, ready)
-                        .accessibility_label(accessible_name)
-                        .on_click(cx.listener(|t, _, _, cx| t.choose(cx)))
-                });
-            }
-            for tool in &self.tools {
-                let tool = tool.clone();
-                let title = tool_name(&tool.manifest.id, &tool.manifest.name, locale);
-                content = content.child(
-                    div()
-                        .flex()
-                        .gap(px(8.))
-                        .items_center()
-                        .child(label(title.clone()))
-                        .child({
-                            let accessible_name = format!("{} {}", tr("tools.uninstall"), title);
-                            quietpro::text_button(
-                                SharedString::from(format!("remove-{}", tool.manifest.id)),
-                                tr("tools.uninstall"),
-                                colors,
-                                ready,
-                            )
-                            .accessibility_label(accessible_name)
-                            .on_click(cx.listener(
-                                move |t, _, _, cx| {
-                                    let selected = tool.clone();
-                                    t.run(
-                                        call::stopping(
-                                            tool.manifest.id.clone(),
-                                            tool.generation.clone(),
-                                        ),
-                                        move |t, labels, cx| {
-                                            t.pending = Some(Confirm::Remove(selected, labels));
-                                            cx.notify();
-                                        },
-                                        cx,
-                                    );
-                                },
-                            ))
-                        }),
-                );
-            }
-            for id in patina_desktop_protocol::tools::BUNDLED_IDS {
-                if !self.tools.iter().any(|p| p.manifest.id == id) {
-                    let title =
-                        format!("{} · {}", tr("tools.reinstall"), tool_name(id, id, locale));
-                    content = content.child({
-                        let accessible_name = title.clone();
-                        quietpro::text_button(id, title, colors, ready)
-                            .accessibility_label(accessible_name)
-                            .on_click(cx.listener(move |t, _, _, cx| {
-                                t.run(
-                                    call::restore(id.into()),
-                                    |t, tool: Installed, cx| {
-                                        t.selected = Some(tool);
-                                        t.manager = false;
-                                        t.list(cx);
-                                    },
-                                    cx,
-                                );
-                            }))
-                    });
-                }
-            }
+                win,
+                cx,
+            );
         } else {
             if let Some(tool) = &self.selected {
-                content = content.child(quietpro::heading(tool_name(
-                    &tool.manifest.id,
-                    &tool.manifest.name,
-                    locale,
-                )));
+                content = content.child(quietpro::heading(tool_name(tool, locale)));
             }
-            for (index, control) in self.controls.iter().enumerate() {
+            let controls = self.controls.clone();
+            for (index, control) in controls.as_deref().unwrap_or_default().iter().enumerate() {
                 content = match control {
+                    Control::Page(_) => content,
                     Control::Text(s) => content.child(label(s.clone()).id(("tool-text", index))),
+                    Control::ListRow {
+                        title,
+                        detail,
+                        actions,
+                        id,
+                        clock,
+                    } => {
+                        let mut row = quietpro::settings_row()
+                            .child(label(title.clone()))
+                            .when_some(clock.as_ref(), |row, clock| {
+                                row.child(clock::row_clock(id, clock, win, cx))
+                            })
+                            .child(quietpro::caption(detail.clone(), colors));
+                        for (id, name) in actions {
+                            let id = id.clone();
+                            row = row.child(
+                                quietpro::text_button(
+                                    SharedString::from(id.clone()),
+                                    name.clone(),
+                                    colors,
+                                    ready,
+                                )
+                                .on_click(
+                                    cx.listener(move |t, _, _, cx| t.load(Some(id.clone()), cx)),
+                                ),
+                            );
+                        }
+                        content.child(row)
+                    }
                     Control::Clock {
                         label: title,
                         anchor_ms,
@@ -476,7 +606,7 @@ impl Render for Tools {
                         .max(0)
                             / 1000;
                         content.child(
-                            label(format!("{title} · {:02}:{:02}", seconds / 60, seconds % 60))
+                            label(format!("{title} ･ {:02}:{:02}", seconds / 60, seconds % 60))
                                 .id(("tool-clock", index)),
                         )
                     }
@@ -512,45 +642,32 @@ impl Render for Tools {
                                 ))
                             });
                         }
-                        content
-                            .child(label(name.clone()).id(("tool-choice", index)))
-                            .child(row)
+                        content.child(
+                            field_group()
+                                .child(label(name.clone()).id(("tool-choice", index)))
+                                .child(row),
+                        )
                     }
                     Control::Input {
                         id,
                         label: name,
                         value,
                     } => {
-                        let input = self.inputs.entry(id.clone()).or_insert_with(|| {
-                            let input = cx.new(|cx| {
-                                let mut input = InputState::new(win, cx);
-                                input.set_accessibility(
-                                    InputAccessibility::new(Some(Role::TextInput))
-                                        .with_label(Some(name.clone().into())),
-                                );
-                                input.set_value(value.clone(), win, cx);
-                                input
-                            });
-                            cx.subscribe(&input, |_, _, event, cx| {
-                                if matches!(event, InputEvent::Focus | InputEvent::Blur) {
-                                    cx.notify();
-                                }
-                            })
-                            .detach();
-                            input
-                        });
-                        content
-                            .child(label(name.clone()).id(("tool-field", index)))
-                            .child(
-                                div().flex().flex_none().child(
-                                    quietpro::TextInput::new(
-                                        SharedString::from(format!("tool-input-{id}")),
-                                        input,
-                                        colors,
-                                    )
-                                    .disabled(!ready),
+                        let input = self.input(id, name, value, "", win, cx);
+                        content.child(
+                            field_group()
+                                .child(label(name.clone()).id(("tool-field", index)))
+                                .child(
+                                    div().flex().flex_none().child(
+                                        quietpro::TextInput::new(
+                                            SharedString::from(format!("tool-input-{id}")),
+                                            &input,
+                                            colors,
+                                        )
+                                        .disabled(!ready),
+                                    ),
                                 ),
-                            )
+                        )
                     }
                     Control::Submit { id, label: name } => {
                         let button = id.clone();
@@ -565,27 +682,7 @@ impl Render for Tools {
                             .accessibility_label(accessible_name)
                             .on_click(cx.listener(
                                 move |t, _, _, cx| {
-                                    if let Some(tool) = &t.selected {
-                                        let mut fields = t.choices.clone();
-                                        fields.extend(t.inputs.iter().map(|(k, v)| {
-                                            (k.clone(), v.read(cx).value().to_string())
-                                        }));
-                                        let request = call::submit(
-                                            tool.manifest.id.clone(),
-                                            tool.generation.clone(),
-                                            button.clone(),
-                                            fields,
-                                        );
-                                        t.run(
-                                            request,
-                                            |t, controls, _| {
-                                                t.controls = controls;
-                                                t.inputs.clear();
-                                                t.choices.clear();
-                                            },
-                                            cx,
-                                        );
-                                    }
+                                    t.submit(&button, cx);
                                 },
                             ))
                         })
@@ -607,15 +704,18 @@ impl Render for Tools {
                 };
             }
         }
-        if let Some(error) = &self.error {
+        if let Some(error) = &self.error
+            && self.settings.is_none()
+            && !self.manager
+        {
             content = content.child(label(error.clone())).child({
                 let accessible_name = tr("common.retry");
                 quietpro::text_button("retry-tools", tr("common.retry"), colors, ready)
                     .accessibility_label(accessible_name)
-                    .on_click(cx.listener(|t, _, _, cx| t.list(cx)))
+                    .on_click(cx.listener(|t, _, _, cx| t.list(call::list(), cx)))
             });
         }
-        if self.busy {
+        if self.busy && !self.manager && self.controls.is_none() {
             content = content.child(label(tr("common.loading")));
         }
         if self.display_failed {
@@ -626,7 +726,11 @@ impl Render for Tools {
                     quietpro::text_button("retry-notice", tr("common.retry"), colors, ready)
                         .accessibility_label(accessible_name)
                         .on_click(cx.listener(|t, _, _, cx| {
-                            t.run(call::retry_display(), |t, (): (), cx| t.list(cx), cx)
+                            t.run(
+                                call::retry_display(),
+                                |t, (): (), cx| t.list(call::list(), cx),
+                                cx,
+                            )
                         }))
                 });
         }
@@ -636,8 +740,21 @@ impl Render for Tools {
             .min_w_0()
             .min_h_0()
             .overflow_y_scroll()
-            .child(content);
-        let shell = page(colors).child(top).child(panel);
+            .child(content)
+            .test_support();
+        let mut shell = page(colors).child(top).child(panel);
+        if let (Some(details), Some(controls)) = (details, controls_for_page.as_deref()) {
+            if std::mem::take(&mut self.focus_dialog_pending) {
+                self.focus_dialog(win, cx);
+            }
+            return shell.child(self.details_dialog(details, controls, win, cx));
+        }
+        if let Some(settings) = &self.settings {
+            return shell.child(self.settings_dialog(settings, win, cx));
+        }
+        if self.manager {
+            shell = shell.child(self.store_dialog(win, cx));
+        }
         if let Some(confirm) = &self.pending {
             let mut content = div()
                 .id("tool-consent-body")
@@ -650,11 +767,12 @@ impl Render for Tools {
                 Confirm::Install(path, preview) => {
                     content = content
                         .child(label(format!(
-                            "{} · {}",
-                            preview.manifest.name, preview.manifest.version
+                            "{} ･ {}",
+                            manifest_name(&preview.manifest, locale),
+                            preview.manifest.version
                         )))
                         .child(label(preview.manifest.id.clone()))
-                        .child(label(format!("Ed25519 · {}", preview.publisher)))
+                        .child(label(format!("Ed25519 ･ {}", preview.publisher)))
                         .child(label(path.display().to_string()))
                         .child(label(tr("tools.panelAccess")));
                     if preview
@@ -664,15 +782,25 @@ impl Render for Tools {
                     {
                         content = content.child(label(tr("tools.timerAccess")));
                     }
+                    for (cap, key) in [
+                        (
+                            patina_desktop_protocol::tools::Capability::Focus,
+                            "tools.focusAccess",
+                        ),
+                        (
+                            patina_desktop_protocol::tools::Capability::Reminders,
+                            "tools.remindersAccess",
+                        ),
+                    ] {
+                        if preview.manifest.capabilities.contains(&cap) {
+                            content = content.child(label(tr(key)));
+                        }
+                    }
                 }
-                Confirm::Remove(tool, stopping) => {
+                Confirm::Remove(tool, stopping, _) => {
                     content = content
-                        .child(label(tool_name(
-                            &tool.manifest.id,
-                            &tool.manifest.name,
-                            locale,
-                        )))
-                        .child(label(tr("tools.retain")));
+                        .child(label(tool_name(tool, locale)))
+                        .child(label(tr("tools.uninstallDeletesData")));
                     for (i, name) in stopping.iter().enumerate() {
                         content = content.child(label(name.clone()).id(("stopping", i)));
                     }
@@ -682,16 +810,14 @@ impl Render for Tools {
                 .child(
                     quietpro::text_button("cancel-tool", tr("common.cancel"), colors, true)
                         .on_click(cx.listener(|t, _, win, cx| {
-                            win.focus(&t.manager_focus, cx);
-                            t.pending = None;
-                            cx.notify();
+                            t.cancel_store_confirmation(win, cx);
                         }))
                         .track_focus(&self.cancel_focus),
                 )
                 .child(
                     quietpro::text_button("confirm-tool", tr("common.confirm"), colors, true)
                         .on_click(cx.listener(|t, _, win, cx| {
-                            win.focus(&t.manager_focus, cx);
+                            t.focus_store_install(win, cx);
                             t.confirm(cx);
                         }))
                         .track_focus(&self.confirm_focus),
@@ -704,40 +830,39 @@ impl Render for Tools {
                 .modal_focus
                 .get_or_insert_with(|| {
                     let f = cx.focus_handle();
-                    win.focus(&f, cx);
+                    win.focus(&self.cancel_focus, cx);
                     f
                 })
                 .clone();
             let weak = cx.weak_entity();
             let keyboard = weak.clone();
             return shell.child(
-                gpui_kit::base::Dialog::new(cx)
-                    .focus_handle(focus)
-                    .accessibility_label(tr("tools.manager"))
-                    .on_ok(move |_, win, cx| {
-                        let _ = keyboard.update(cx, |t, cx| {
-                            if t.confirm_focus.is_focused(win) {
-                                win.focus(&t.manager_focus, cx);
-                                t.confirm(cx);
-                            } else if t.cancel_focus.is_focused(win) {
-                                t.pending = None;
-                                win.focus(&t.manager_focus, cx);
-                                cx.notify();
-                            }
-                        });
-                        false
-                    })
-                    .backdrop(quietpro::dialog_backdrop())
-                    .popup(gpui_kit::base::DialogPopup::new().child(content.id("tool-consent")))
-                    .on_open_change(move |open, _, win, cx| {
-                        if !open {
-                            let _ = weak.update(cx, |t, cx| {
-                                t.pending = None;
-                                win.focus(&t.manager_focus, cx);
-                                cx.notify();
-                            });
-                        }
+                quietpro::modal_dialog(
+                    tr(match confirm {
+                        Confirm::Remove(..) => "tools.uninstall",
+                        Confirm::Install(..) => "tools.install",
                     }),
+                    focus,
+                    content.id("tool-consent"),
+                    move |win, cx| {
+                        let _ = weak.update(cx, |t, cx| {
+                            t.cancel_store_confirmation(win, cx);
+                        });
+                    },
+                    cx,
+                )
+                .layer(1, true)
+                .on_ok(move |_, win, cx| {
+                    let _ = keyboard.update(cx, |t, cx| {
+                        if t.confirm_focus.is_focused(win) {
+                            t.focus_store_install(win, cx);
+                            t.confirm(cx);
+                        } else if t.cancel_focus.is_focused(win) {
+                            t.cancel_store_confirmation(win, cx);
+                        }
+                    });
+                    false
+                }),
             );
         }
         self.modal_focus = None;
