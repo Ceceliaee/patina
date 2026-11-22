@@ -100,6 +100,7 @@
   "settings.increaseCleanupRange": "延长清理范围",
   "settings.increaseMinute": {"$type":"message","body":{"$op":"concat","parts":["",{"$op":"arg","name":"label"},"增加 1 分钟"]}},
   "settings.languageLabel": "语言",
+  "settings.windowScale": "缩放",
   "settings.languageLoadFailed": "语言加载失败，继续使用当前语言。",
   "settings.languageOptions.enUS": "English",
   "settings.languageOptions.zhCN": "中文",

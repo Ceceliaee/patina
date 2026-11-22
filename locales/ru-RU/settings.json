@@ -100,6 +100,7 @@
   "settings.increaseCleanupRange": "Расширить период очистки",
   "settings.increaseMinute": {"$type":"message","body":{"$op":"concat","parts":["Увеличить ",{"$op":"arg","name":"label"}," на 1 минуту"]}},
   "settings.languageLabel": "Язык",
+  "settings.windowScale": "Масштаб",
   "settings.languageLoadFailed": "Язык недоступен. Сохранён текущий язык.",
   "settings.languageOptions.enUS": "English",
   "settings.languageOptions.zhCN": "中文",

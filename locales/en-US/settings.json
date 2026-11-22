@@ -100,6 +100,7 @@
   "settings.increaseCleanupRange": "Extend clear range",
   "settings.increaseMinute": {"$type":"message","body":{"$op":"concat","parts":["Increase ",{"$op":"arg","name":"label"}," by 1 minute"]}},
   "settings.languageLabel": "Language",
+  "settings.windowScale": "Scale",
   "settings.languageLoadFailed": "Language unavailable. Using current language.",
   "settings.languageOptions.enUS": "English",
   "settings.languageOptions.zhCN": "中文",

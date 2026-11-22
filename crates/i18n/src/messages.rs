@@ -180,6 +180,8 @@ pub fn destination_detail_next_day(locale: Locale) -> String { super::format_tex
 pub fn destination_detail_no_activity(locale: Locale) -> String { super::format_text(locale, "destinationDetail.noActivity", &[]) }
 pub fn destination_detail_no_activity_at_minimum(locale: Locale, minutes: i64) -> String { super::format_text(locale, "destinationDetail.noActivityAtMinimum", &[("minutes", minutes.to_string())]) }
 pub fn destination_detail_no_activity_in_window(locale: Locale) -> String { super::format_text(locale, "destinationDetail.noActivityInWindow", &[]) }
+pub fn destination_detail_object_type_app(locale: Locale) -> String { super::format_text(locale, "destinationDetail.objectTypeApp", &[]) }
+pub fn destination_detail_object_type_web(locale: Locale) -> String { super::format_text(locale, "destinationDetail.objectTypeWeb", &[]) }
 pub fn destination_detail_open(locale: Locale, name: &str) -> String { super::format_text(locale, "destinationDetail.open", &[("name", name.to_owned())]) }
 pub fn destination_detail_previous_day(locale: Locale) -> String { super::format_text(locale, "destinationDetail.previousDay", &[]) }
 pub fn destination_detail_records(locale: Locale) -> String { super::format_text(locale, "destinationDetail.records", &[]) }
@@ -610,8 +612,10 @@ pub fn settings_web_dav_upload_title(locale: Locale) -> String { super::format_t
 pub fn settings_web_dav_username(locale: Locale) -> String { super::format_text(locale, "settings.webDavUsername", &[]) }
 pub fn settings_web_sync_setup(locale: Locale) -> String { super::format_text(locale, "settings.webSyncSetup", &[]) }
 pub fn settings_window_behavior_title(locale: Locale) -> String { super::format_text(locale, "settings.windowBehaviorTitle", &[]) }
+pub fn settings_window_scale(locale: Locale) -> String { super::format_text(locale, "settings.windowScale", &[]) }
 pub fn time_hours(locale: Locale) -> String { super::format_text(locale, "time.hours", &[]) }
 pub fn time_minutes(locale: Locale) -> String { super::format_text(locale, "time.minutes", &[]) }
+pub fn time_selected_duration(locale: Locale, hours: i64, minutes: i64) -> String { super::format_text(locale, "time.selectedDuration", &[("hours", hours.to_string()), ("minutes", minutes.to_string())]) }
 pub fn toast_backup_export_failed(locale: Locale) -> String { super::format_text(locale, "toast.backupExportFailed", &[]) }
 pub fn toast_backup_export_success(locale: Locale, path: &str) -> String { super::format_text(locale, "toast.backupExportSuccess", &[("path", path.to_owned())]) }
 pub fn toast_backup_preview_failed(locale: Locale) -> String { super::format_text(locale, "toast.backupPreviewFailed", &[]) }
@@ -635,30 +639,18 @@ pub fn toast_web_dav_test_success(locale: Locale) -> String { super::format_text
 pub fn toast_web_dav_upload_failed(locale: Locale) -> String { super::format_text(locale, "toast.webDavUploadFailed", &[]) }
 pub fn toast_web_dav_upload_index_warning(locale: Locale, file_name: &str) -> String { super::format_text(locale, "toast.webDavUploadIndexWarning", &[("fileName", file_name.to_owned())]) }
 pub fn toast_web_dav_upload_success(locale: Locale, file_name: &str) -> String { super::format_text(locale, "toast.webDavUploadSuccess", &[("fileName", file_name.to_owned())]) }
-pub fn tools_activity_reminder_delete(locale: Locale) -> String { super::format_text(locale, "tools.activityReminderDelete", &[]) }
-pub fn tools_activity_reminder_disable(locale: Locale) -> String { super::format_text(locale, "tools.activityReminderDisable", &[]) }
-pub fn tools_activity_reminder_duration_label(locale: Locale) -> String { super::format_text(locale, "tools.activityReminderDurationLabel", &[]) }
-pub fn tools_activity_reminder_edit(locale: Locale) -> String { super::format_text(locale, "tools.activityReminderEdit", &[]) }
-pub fn tools_activity_reminder_target_label(locale: Locale) -> String { super::format_text(locale, "tools.activityReminderTargetLabel", &[]) }
+pub fn tools_activity_reminder_candidates_load_failed(locale: Locale) -> String { super::format_text(locale, "tools.activityReminderCandidatesLoadFailed", &[]) }
+pub fn tools_activity_reminder_no_matching_targets(locale: Locale) -> String { super::format_text(locale, "tools.activityReminderNoMatchingTargets", &[]) }
+pub fn tools_activity_reminder_target_placeholder(locale: Locale) -> String { super::format_text(locale, "tools.activityReminderTargetPlaceholder", &[]) }
 pub fn tools_empty(locale: Locale) -> String { super::format_text(locale, "tools.empty", &[]) }
-pub fn tools_focus_details(locale: Locale) -> String { super::format_text(locale, "tools.focusDetails", &[]) }
-pub fn tools_focus_duration(locale: Locale) -> String { super::format_text(locale, "tools.focusDuration", &[]) }
-pub fn tools_focus_history_empty(locale: Locale) -> String { super::format_text(locale, "tools.focusHistoryEmpty", &[]) }
-pub fn tools_focus_history_ended(locale: Locale) -> String { super::format_text(locale, "tools.focusHistoryEnded", &[]) }
-pub fn tools_focus_history_open(locale: Locale) -> String { super::format_text(locale, "tools.focusHistoryOpen", &[]) }
-pub fn tools_focus_mode_free(locale: Locale) -> String { super::format_text(locale, "tools.focusModeFree", &[]) }
-pub fn tools_focus_mode_pomodoro(locale: Locale) -> String { super::format_text(locale, "tools.focusModePomodoro", &[]) }
-pub fn tools_free_focus_finish(locale: Locale) -> String { super::format_text(locale, "tools.freeFocusFinish", &[]) }
-pub fn tools_free_focus_rest(locale: Locale) -> String { super::format_text(locale, "tools.freeFocusRest", &[]) }
+pub fn tools_focus_access(locale: Locale) -> String { super::format_text(locale, "tools.focusAccess", &[]) }
 pub fn tools_free_focus_start(locale: Locale) -> String { super::format_text(locale, "tools.freeFocusStart", &[]) }
-pub fn tools_free_rest_proportion(locale: Locale) -> String { super::format_text(locale, "tools.freeRestProportion", &[]) }
+pub fn tools_home(locale: Locale) -> String { super::format_text(locale, "tools.home", &[]) }
 pub fn tools_install(locale: Locale) -> String { super::format_text(locale, "tools.install", &[]) }
-pub fn tools_long_break_duration(locale: Locale) -> String { super::format_text(locale, "tools.longBreakDuration", &[]) }
-pub fn tools_long_break_every(locale: Locale) -> String { super::format_text(locale, "tools.longBreakEvery", &[]) }
 pub fn tools_manager(locale: Locale) -> String { super::format_text(locale, "tools.manager", &[]) }
-pub fn tools_new_reminder(locale: Locale) -> String { super::format_text(locale, "tools.newReminder", &[]) }
 pub fn tools_notification_delivery(locale: Locale) -> String { super::format_text(locale, "tools.notificationDelivery", &[]) }
 pub fn tools_notification_dialog(locale: Locale) -> String { super::format_text(locale, "tools.notificationDialog", &[]) }
+pub fn tools_notification_group(locale: Locale) -> String { super::format_text(locale, "tools.notificationGroup", &[]) }
 pub fn tools_notification_software(locale: Locale) -> String { super::format_text(locale, "tools.notificationSoftware", &[]) }
 pub fn tools_notification_sound(locale: Locale) -> String { super::format_text(locale, "tools.notificationSound", &[]) }
 pub fn tools_notification_sound_bell(locale: Locale) -> String { super::format_text(locale, "tools.notificationSoundBell", &[]) }
@@ -666,39 +658,17 @@ pub fn tools_notification_sound_clear(locale: Locale) -> String { super::format_
 pub fn tools_notification_sound_default(locale: Locale) -> String { super::format_text(locale, "tools.notificationSoundDefault", &[]) }
 pub fn tools_notification_sound_none(locale: Locale) -> String { super::format_text(locale, "tools.notificationSoundNone", &[]) }
 pub fn tools_panel_access(locale: Locale) -> String { super::format_text(locale, "tools.panelAccess", &[]) }
-pub fn tools_pause(locale: Locale) -> String { super::format_text(locale, "tools.pause", &[]) }
 pub fn tools_pomodoro_start_next_group(locale: Locale) -> String { super::format_text(locale, "tools.pomodoroStartNextGroup", &[]) }
-pub fn tools_pomodoro_task_create(locale: Locale) -> String { super::format_text(locale, "tools.pomodoroTaskCreate", &[]) }
-pub fn tools_pomodoro_task_name(locale: Locale) -> String { super::format_text(locale, "tools.pomodoroTaskName", &[]) }
 pub fn tools_pomodoro_title(locale: Locale) -> String { super::format_text(locale, "tools.pomodoroTitle", &[]) }
-pub fn tools_reinstall(locale: Locale) -> String { super::format_text(locale, "tools.reinstall", &[]) }
-pub fn tools_reminder_confirm_complete(locale: Locale) -> String { super::format_text(locale, "tools.reminderConfirmComplete", &[]) }
-pub fn tools_reminder_edit_title(locale: Locale) -> String { super::format_text(locale, "tools.reminderEditTitle", &[]) }
-pub fn tools_reminder_empty(locale: Locale) -> String { super::format_text(locale, "tools.reminderEmpty", &[]) }
-pub fn tools_reminder_label(locale: Locale) -> String { super::format_text(locale, "tools.reminderLabel", &[]) }
 pub fn tools_reminder_minutes_unit(locale: Locale) -> String { super::format_text(locale, "tools.reminderMinutesUnit", &[]) }
-pub fn tools_reminder_mode_app(locale: Locale) -> String { super::format_text(locale, "tools.reminderModeApp", &[]) }
-pub fn tools_reminder_mode_category(locale: Locale) -> String { super::format_text(locale, "tools.reminderModeCategory", &[]) }
-pub fn tools_reminder_mode_usage(locale: Locale) -> String { super::format_text(locale, "tools.reminderModeUsage", &[]) }
-pub fn tools_reminder_mode_web(locale: Locale) -> String { super::format_text(locale, "tools.reminderModeWeb", &[]) }
-pub fn tools_reminder_repeat_daily(locale: Locale) -> String { super::format_text(locale, "tools.reminderRepeatDaily", &[]) }
-pub fn tools_reminder_repeat_interval(locale: Locale) -> String { super::format_text(locale, "tools.reminderRepeatInterval", &[]) }
-pub fn tools_reminder_repeat_label(locale: Locale) -> String { super::format_text(locale, "tools.reminderRepeatLabel", &[]) }
-pub fn tools_reminder_repeat_monthly(locale: Locale) -> String { super::format_text(locale, "tools.reminderRepeatMonthly", &[]) }
-pub fn tools_reminder_repeat_none(locale: Locale) -> String { super::format_text(locale, "tools.reminderRepeatNone", &[]) }
-pub fn tools_reminder_repeat_weekly(locale: Locale) -> String { super::format_text(locale, "tools.reminderRepeatWeekly", &[]) }
-pub fn tools_reminder_repeat_yearly(locale: Locale) -> String { super::format_text(locale, "tools.reminderRepeatYearly", &[]) }
-pub fn tools_reminder_snooze(locale: Locale) -> String { super::format_text(locale, "tools.reminderSnooze", &[]) }
-pub fn tools_reminder_time_label(locale: Locale) -> String { super::format_text(locale, "tools.reminderTimeLabel", &[]) }
+pub fn tools_reminders_access(locale: Locale) -> String { super::format_text(locale, "tools.remindersAccess", &[]) }
 pub fn tools_reminders_title(locale: Locale) -> String { super::format_text(locale, "tools.remindersTitle", &[]) }
-pub fn tools_reset(locale: Locale) -> String { super::format_text(locale, "tools.reset", &[]) }
-pub fn tools_retain(locale: Locale) -> String { super::format_text(locale, "tools.retain", &[]) }
 pub fn tools_settings_title(locale: Locale) -> String { super::format_text(locale, "tools.settingsTitle", &[]) }
-pub fn tools_short_break_duration(locale: Locale) -> String { super::format_text(locale, "tools.shortBreakDuration", &[]) }
 pub fn tools_start(locale: Locale) -> String { super::format_text(locale, "tools.start", &[]) }
 pub fn tools_timer_access(locale: Locale) -> String { super::format_text(locale, "tools.timerAccess", &[]) }
 pub fn tools_title(locale: Locale) -> String { super::format_text(locale, "tools.title", &[]) }
 pub fn tools_uninstall(locale: Locale) -> String { super::format_text(locale, "tools.uninstall", &[]) }
+pub fn tools_uninstall_deletes_data(locale: Locale) -> String { super::format_text(locale, "tools.uninstallDeletesData", &[]) }
 pub fn update_app_update(locale: Locale) -> String { super::format_text(locale, "update.appUpdate", &[]) }
 pub fn update_check_again(locale: Locale) -> String { super::format_text(locale, "update.checkAgain", &[]) }
 pub fn update_check_error_detail(locale: Locale) -> String { super::format_text(locale, "update.checkErrorDetail", &[]) }

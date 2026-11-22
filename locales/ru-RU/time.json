@@ -1,5 +1,6 @@
 {
   "time.hours": "Час",
   "time.minutes": "Минута",
-  "time.pickTime": "Выберите время"
+  "time.pickTime": "Выберите время",
+  "time.selectedDuration": {"$type":"message","body":{"$op":"if","when":{"$op":"eq","left":{"$op":"arg","name":"hours"},"right":"0"},"then":{"$op":"concat","parts":[{"$op":"arg","name":"minutes"}," мин"]},"else":{"$op":"if","when":{"$op":"eq","left":{"$op":"arg","name":"minutes"},"right":"0"},"then":{"$op":"concat","parts":[{"$op":"arg","name":"hours"}," ч"]},"else":{"$op":"concat","parts":[{"$op":"arg","name":"hours"}," ч ",{"$op":"arg","name":"minutes"}," мин"]}}}}
 }

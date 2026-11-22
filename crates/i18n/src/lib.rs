@@ -155,6 +155,18 @@ mod tests {
     }
 
     #[test]
+    fn selected_duration_uses_only_nonzero_units() {
+        let locale = Locale::from_tag(Some("zh-CN"));
+        for (hours, minutes, label) in [(0, 30, "30 分钟"), (1, 0, "1小时"), (1, 30, "1小时30分钟")]
+        {
+            assert_eq!(
+                messages::time_selected_duration(locale, hours, minutes),
+                label
+            );
+        }
+    }
+
+    #[test]
     fn russian_cardinal_categories_follow_cldr() {
         for &(value, expected) in generated::RUSSIAN_CARDINAL_CASES {
             assert_eq!(cardinal_category("ru-RU", value).unwrap(), expected);

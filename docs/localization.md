@@ -17,6 +17,10 @@
 <a id="2-不变量"></a>
 <a id="4-修改或新增文案"></a>
 
+## 插件翻译
+
+提醒和专注各自维护 `locales/<语言标签>.json`。文件中的键对应插件界面，`plugin.name` 同时用于工具列表和页面标题。编辑译文后，用原清单、原 Wasm 和原发布者密钥重新签名打包，再安装 ZIP。预装副本使用插件目录里已签名的 `plugin.wasm` 和语言文件。修改插件 Rust 代码后须重新构建模块并签名。宿主在每次调用时按当前界面语言传入词条，缺失的词条依次使用父语言、`en-US` 和键名。桌面的安装确认与通用日期选择器使用主程序的语言资源。[提醒词条](../plugins/bundled/reminders/locales) · [专注词条](../plugins/bundled/focus/locales) · [插件打包](../plugins/counter/README.md#构建与安装)
+
 ## 修改或新增文案
 
 1. 在消息契约中定义 key、种类和参数。原生专用消息使用 `surface: "native"`，其他已有消息增加原生消费者时使用 `alsoNative: true`。对有歧义的短文案、品牌名或无障碍标签填写 `description` 或 `translatorNote`，导出的工作簿会给译者展示。
@@ -105,7 +109,7 @@ cargo xtask i18n import-kit artifacts/i18n/patina-fr-from-en-US-translation-kit.
 
 ## 原生资源与回退
 
-GPUI 页面、无障碍标签、托盘、提醒和 Markdown 导出显式传入 `Locale`。语言相关缓存将 locale 作为键的一部分。动态字段可用 `text` 或 `format_text`，结构化资源可用 `localized_data`。读取无效的持久化语言标签会记录诊断并回退到标准语言。消息在所选语言无法解析时重试标准语言，仍失败则记录诊断并显示 key。结构化资源重试后仍缺失时返回 `None`。
+桌面页面、无障碍标签、托盘、提醒和 Markdown 导出显式传入 `Locale`。语言相关缓存将 locale 作为键的一部分。动态字段可用 `text` 或 `format_text`，结构化资源可用 `localized_data`。读取无效的持久化语言标签会记录诊断并回退到标准语言。消息在所选语言无法解析时重试标准语言，仍失败则记录诊断并显示 key。结构化资源重试后仍缺失时返回 `None`。
 
 原生界面和导出中的用户文案使用消息资源。`i18n check` 检查源码中重复的原生标准译文。协议和数据库字段、用户自定义名称、程序名、URL、配色数值及 CSV、SQLite、Parquet 的稳定字段保持原值。
 

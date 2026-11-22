@@ -1,5 +1,6 @@
 {
   "time.hours": "Hour",
   "time.minutes": "Minute",
-  "time.pickTime": "Select time"
+  "time.pickTime": "Select time",
+  "time.selectedDuration": {"$type":"message","body":{"$op":"if","when":{"$op":"eq","left":{"$op":"arg","name":"hours"},"right":"0"},"then":{"$op":"concat","parts":[{"$op":"arg","name":"minutes"},"m"]},"else":{"$op":"if","when":{"$op":"eq","left":{"$op":"arg","name":"minutes"},"right":"0"},"then":{"$op":"concat","parts":[{"$op":"arg","name":"hours"},"h"]},"else":{"$op":"concat","parts":[{"$op":"arg","name":"hours"},"h ",{"$op":"arg","name":"minutes"},"m"]}}}}
 }

@@ -1,5 +1,6 @@
 {
   "time.hours": "小时",
   "time.minutes": "分钟",
-  "time.pickTime": "选择时间"
+  "time.pickTime": "选择时间",
+  "time.selectedDuration": {"$type":"message","body":{"$op":"if","when":{"$op":"eq","left":{"$op":"arg","name":"hours"},"right":"0"},"then":{"$op":"concat","parts":[{"$op":"arg","name":"minutes"}," 分钟"]},"else":{"$op":"if","when":{"$op":"eq","left":{"$op":"arg","name":"minutes"},"right":"0"},"then":{"$op":"concat","parts":[{"$op":"arg","name":"hours"},"小时"]},"else":{"$op":"concat","parts":[{"$op":"arg","name":"hours"},"小时",{"$op":"arg","name":"minutes"},"分钟"]}}}}
 }

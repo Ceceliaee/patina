@@ -100,6 +100,7 @@
   "settings.increaseCleanupRange": "Ampliar intervalo de eliminación",
   "settings.increaseMinute": {"$type":"message","body":{"$op":"concat","parts":["Aumentar ",{"$op":"arg","name":"label"}," en un minuto"]}},
   "settings.languageLabel": "Idioma",
+  "settings.windowScale": "Escala",
   "settings.languageLoadFailed": "Idioma no disponible. Se mantiene el idioma actual.",
   "settings.languageOptions.enUS": "English",
   "settings.languageOptions.zhCN": "中文",
