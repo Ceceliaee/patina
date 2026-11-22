@@ -3146,8 +3146,6 @@ dependencies = [
 [[package]]
 name = "gpui-pre-windows"
 version = "0.3.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7201762420222d5b5ce5bdf0056996199212a3349bfb2457a3a0238c688681f3"
 dependencies = [
  "accesskit",
  "accesskit_windows",
@@ -5213,11 +5211,13 @@ dependencies = [
  "embed-resource",
  "patina-activity",
  "patina-desktop-protocol",
+ "patina-i18n",
  "patina-plugin-host",
  "patina-test-support",
  "patina-ui",
  "patina-updater",
  "patina-windows-integration",
+ "ring",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -5275,6 +5275,7 @@ dependencies = [
  "serde",
  "serde_json",
  "url",
+ "uuid",
 ]
 
 [[package]]
@@ -5311,7 +5312,9 @@ dependencies = [
  "sha2 0.10.9",
  "tempfile",
  "uuid",
+ "wasmtime",
  "wat",
+ "zip",
 ]
 
 [[package]]
@@ -5374,7 +5377,6 @@ name = "patina-updater"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
- "flate2",
  "minisign-verify",
  "patina-test-support",
  "semver",
@@ -5386,6 +5388,7 @@ dependencies = [
  "url",
  "windows 0.62.2",
  "winreg",
+ "zip",
 ]
 
 [[package]]

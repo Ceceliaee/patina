@@ -1,7 +1,7 @@
 [workspace]
 members = ["xtask", "apps/*", "crates/*"]
 default-members = ["xtask"]
-exclude = ["vendor/accesskit_windows", "vendor/gpui-platform/fast", "vendor/gpui-platform/pre", "plugins/official", "plugins/counter", "examples/remote-status-bridge-worker"]
+exclude = ["vendor/accesskit_windows", "vendor/gpui-platform/fast", "vendor/gpui-platform/pre", "vendor/gpui-pre-windows", "plugins/bundled", "plugins/counter", "examples/remote-status-bridge-worker"]
 resolver = "3"
 
 [workspace.package]
@@ -17,6 +17,7 @@ sqlx = { git = "https://github.com/transact-rs/sqlx", rev = "10462fa4414c6c7f1ed
 accesskit_windows = { path = "vendor/accesskit_windows" }
 gpui-fast-platform = { path = "vendor/gpui-platform/fast" }
 gpui-pre-platform = { path = "vendor/gpui-platform/pre" }
+gpui-pre-windows = { path = "vendor/gpui-pre-windows" }
 
 [profile.dev]
 debug = "line-tables-only"
