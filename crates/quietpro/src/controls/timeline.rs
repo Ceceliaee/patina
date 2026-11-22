@@ -65,12 +65,17 @@ impl Render for LegendTip {
     }
 }
 
-fn visible_legend_count(widths: &[f32], available: f32, overflow_width: f32) -> usize {
+fn visible_legend_count(
+    widths: &[f32],
+    total: usize,
+    available: f32,
+    overflow_width: f32,
+) -> usize {
     let mut used = 0.;
     let mut visible = 0;
-    for (i, width) in widths.iter().take(7).enumerate() {
+    for (i, width) in widths.iter().enumerate() {
         let next = used + if i == 0 { 0. } else { 12. } + width;
-        let remaining = if i + 1 < widths.len() {
+        let remaining = if i + 1 < total {
             12. + overflow_width
         } else {
             0.
@@ -85,7 +90,7 @@ fn visible_legend_count(widths: &[f32], available: f32, overflow_width: f32) -> 
 }
 
 impl RenderOnce for TimelineOverview {
-    fn render(self, win: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, win: &mut Window, _: &mut App) -> impl IntoElement {
         let c = self.colors;
         let measure = |text: &str| {
             let run = win.text_style().to_run(text.len());
@@ -98,60 +103,52 @@ impl RenderOnce for TimelineOverview {
         let widths: Vec<_> = self
             .legends
             .iter()
+            .take(7)
             .map(|(name, _)| measure(name).min(88.) + LEGEND_DOT_SIZE + LEGEND_LABEL_GAP)
             .collect();
         let overflow_width = measure(&format!("+{}", self.legends.len())) + 8.;
-        let width = win.use_keyed_state("timeline-legend-width", cx, |_, _| 0_f32);
-        let visible = visible_legend_count(&widths, *width.read(cx), overflow_width);
-        let hidden = self.legends[visible..].to_vec();
-        let mut legends = div()
-            .relative()
-            .flex()
-            .flex_1()
-            .min_w_0()
-            .h(px(28.))
-            .items_center()
-            .justify_end()
-            .gap(px(12.))
-            .children(self.legends.into_iter().take(visible).zip(widths).map(
-                |((name, color), width)| legend_entry(name, color, c).flex_none().w(px(width)),
-            ))
-            .child(
-                canvas(
-                    move |bounds, _, cx| {
-                        width.update(cx, |width, cx| {
-                            let measured = f32::from(bounds.size.width);
-                            if (*width - measured).abs() > 0.5 {
-                                *width = measured;
-                                cx.notify();
-                            }
-                        });
-                    },
-                    |_, _, _, _| {},
+        let legends = container_query(move |size, _, _| {
+            let mut entries = self.legends;
+            let visible =
+                visible_legend_count(&widths, entries.len(), size.width.into(), overflow_width);
+            let hidden = entries.split_off(visible);
+            div()
+                .size_full()
+                .flex()
+                .items_center()
+                .justify_end()
+                .gap(px(12.))
+                .children(
+                    entries
+                        .into_iter()
+                        .zip(widths)
+                        .map(|((name, color), width)| {
+                            legend_entry(name, color, c).flex_none().w(px(width))
+                        }),
                 )
-                .absolute()
-                .inset_0()
-                .size_full(),
-            );
-        if !hidden.is_empty() {
-            legends = legends.child(
-                div()
-                    .id("timeline-legend-overflow")
-                    .role(Role::Label)
-                    .aria_label(
-                        hidden
-                            .iter()
-                            .map(|(name, _)| name.as_str())
-                            .collect::<Vec<_>>()
-                            .join(", "),
+                .when(!hidden.is_empty(), |row| {
+                    row.child(
+                        div()
+                            .id("timeline-legend-overflow")
+                            .role(Role::Label)
+                            .aria_label(
+                                hidden
+                                    .iter()
+                                    .map(|(name, _)| name.as_str())
+                                    .collect::<Vec<_>>()
+                                    .join(", "),
+                            )
+                            .flex_none()
+                            .text_size(px(12.))
+                            .text_color(c.secondary)
+                            .child(format!("+{}", hidden.len()))
+                            .tooltip(move |_, cx| cx.new(|_| LegendTip(hidden.clone(), c)).into()),
                     )
-                    .flex_none()
-                    .text_size(px(12.))
-                    .text_color(c.secondary)
-                    .child(format!("+{}", hidden.len()))
-                    .tooltip(move |_, cx| cx.new(|_| LegendTip(hidden.clone(), c)).into()),
-            );
-        }
+                })
+        })
+        .flex_1()
+        .min_w_0()
+        .h(px(28.));
         let header = div()
             .flex()
             .items_center()
@@ -234,11 +231,68 @@ mod tests {
     #[test]
     fn legend_overflow_reserves_counter_and_handles_resize() {
         let widths = [60., 80., 100.];
-        assert_eq!(visible_legend_count(&widths, 264., 24.), 3);
-        assert_eq!(visible_legend_count(&widths, 188., 24.), 2);
-        assert_eq!(visible_legend_count(&widths, 95., 24.), 0);
-        assert_eq!(visible_legend_count(&[], 0., 24.), 0);
-        assert_eq!(visible_legend_count(&[20.; 12], 1000., 24.), 7);
+        assert_eq!(visible_legend_count(&widths, 3, 264., 24.), 3);
+        assert_eq!(visible_legend_count(&widths, 3, 188., 24.), 2);
+        assert_eq!(visible_legend_count(&widths, 3, 95., 24.), 0);
+        assert_eq!(visible_legend_count(&[], 0, 0., 24.), 0);
+        assert_eq!(visible_legend_count(&[20.; 7], 12, 212., 24.), 6);
+    }
+
+    #[cfg(feature = "test-support")]
+    #[gpui_kit::test]
+    fn legend_paints_the_fitting_entries_on_the_first_frame(cx: &mut gpui_kit::TestAppContext) {
+        use super::*;
+        use gpui_kit::test::TestWindowExt;
+
+        struct Preview(f32);
+        impl Render for Preview {
+            fn render(&mut self, win: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                let colors = Palette::from(win.appearance());
+                div().w(px(self.0)).when(self.0 > 0., |row| {
+                    row.child(TimelineOverview {
+                        title: "Timeline".into(),
+                        legends: (1..=11)
+                            .map(|i| (format!("App {i}"), rgb(0x123456)))
+                            .collect(),
+                        segments: vec![],
+                        actions: div().w(px(84.)).into_any_element(),
+                        notice: None,
+                        colors,
+                    })
+                })
+            }
+        }
+
+        cx.update(gpui_kit::init);
+        let (handle, preview) = cx.update(|cx| {
+            gpui_kit::open_window(WindowOptions::default(), cx, |_, cx| {
+                cx.new(|_| Preview(0.))
+            })
+            .unwrap()
+        });
+        cx.update_window(handle, |_, win, cx| {
+            for width in [900., 320., 0., 900.] {
+                preview.update(cx, |p, cx| {
+                    p.0 = width;
+                    cx.notify();
+                });
+                win.render_frame(cx);
+                let count = win
+                    .painted_quads()
+                    .iter()
+                    .filter(|q| q.background == rgb(0x123456).into())
+                    .count();
+                match width {
+                    0. => assert_eq!(count, 0),
+                    320. => assert!(
+                        (1..7).contains(&count),
+                        "narrow legend painted {count} entries"
+                    ),
+                    _ => assert_eq!(count, 7),
+                }
+            }
+        })
+        .unwrap();
     }
 
     #[cfg(feature = "test-support")]
