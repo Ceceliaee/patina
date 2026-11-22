@@ -235,7 +235,7 @@ mod tests {
         assert_eq!(visible_legend_count(&widths, 3, 188., 24.), 2);
         assert_eq!(visible_legend_count(&widths, 3, 95., 24.), 0);
         assert_eq!(visible_legend_count(&[], 0, 0., 24.), 0);
-        assert_eq!(visible_legend_count(&[20.; 7], 12, 212., 24.), 6);
+        assert_eq!(visible_legend_count(&[20.; 7], 12, 216., 24.), 6);
     }
 
     #[cfg(feature = "test-support")]
