@@ -17,9 +17,9 @@ pub(super) const WATCHED_DIRECTORIES: &[(&str, bool)] = &[
     ("crates", true),
     ("locales", true),
     ("packaging/windows", true),
-    ("plugins/official", false),
-    ("plugins/official/focus", true),
-    ("plugins/official/reminders", true),
+    ("plugins/bundled", false),
+    ("plugins/bundled/focus", true),
+    ("plugins/bundled/reminders", true),
     ("vendor", true),
 ];
 

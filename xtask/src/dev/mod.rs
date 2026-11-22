@@ -81,14 +81,22 @@ pub(super) fn run(root: &Path, mut args: Vec<String>) -> io::Result<()> {
             "Usage: cargo xtask dev [--main | --today | --mini]",
         ));
     }
-    let profile = if let Some(parent) = env::var_os("PATINA_GPUI_PROFILE_PARENT") {
+    let profile = if let Some(parent) =
+        env::var_os("PATINA_PROFILE_PARENT").or_else(|| env::var_os("PATINA_GPUI_PROFILE_PARENT"))
+    {
         PathBuf::from(parent)
     } else {
         let local =
             env::var_os("LOCALAPPDATA").ok_or_else(|| io::Error::other("missing LOCALAPPDATA"))?;
-        let path = PathBuf::from(local).join("Patina.GPUI.Dev");
-        fs::create_dir_all(&path)?;
-        path
+        let local = PathBuf::from(local);
+        let path = local.join("Patina.Dev");
+        let previous = local.join("Patina.GPUI.Dev");
+        if !path.try_exists()? && previous.join("Patina.GPUI.Experimental").try_exists()? {
+            previous
+        } else {
+            fs::create_dir_all(&path)?;
+            path
+        }
     };
     if unsafe { SetConsoleCtrlHandler(Some(interrupt), 1) } == 0 {
         return Err(io::Error::last_os_error());
@@ -104,7 +112,7 @@ fn develop(root: &Path, profile: &Path, args: &[String]) -> io::Result<()> {
     let mut running_build: Option<SystemTime> = None;
     let mut changed = true;
     eprintln!(
-        "Watching GPUI sources. Ctrl+C to exit. Profile: {}",
+        "Watching Patina sources. Ctrl+C to exit. Profile: {}",
         profile.display()
     );
     while !STOP.load(Ordering::Relaxed) {
@@ -120,7 +128,7 @@ fn develop(root: &Path, profile: &Path, args: &[String]) -> io::Result<()> {
             }
             if !status.success() {
                 return Err(io::Error::other(format!(
-                    "GPUI exited with {status} (profile {})",
+                    "Patina exited with {status} (profile {})",
                     profile.display()
                 )));
             }
@@ -139,16 +147,16 @@ fn develop(root: &Path, profile: &Path, args: &[String]) -> io::Result<()> {
                 preview = Some(
                     Command::new(&executable)
                         .args(args)
-                        .env("PATINA_GPUI_PROFILE_PARENT", profile)
-                        .env("PATINA_GPUI_DEV_SESSION", session.path())
-                        .env("PATINA_GPUI_DEV_BINARY", &binary)
+                        .env("PATINA_PROFILE_PARENT", profile)
+                        .env("PATINA_DEV_SESSION", session.path())
+                        .env("PATINA_DEV_BINARY", &binary)
                         .creation_flags(CREATE_NO_WINDOW)
                         .stdin(Stdio::piped())
                         .spawn()?,
                 );
                 running_dir.replace(staged);
                 running_build = Some(version);
-                eprintln!("GPUI preview started.");
+                eprintln!("Patina started.");
             }
         }
         changed = watcher.wait_for_change(250)?;

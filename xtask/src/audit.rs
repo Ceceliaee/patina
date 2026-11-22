@@ -71,7 +71,7 @@ fn findings(report: &[u8], lock: &str) -> Result<Vec<String>, Box<dyn Error>> {
 
 pub(super) const LOCKS: [&str; 4] = [
     "Cargo.lock",
-    "plugins/official/Cargo.lock",
+    "plugins/bundled/Cargo.lock",
     "plugins/counter/Cargo.lock",
     "examples/remote-status-bridge-worker/Cargo.lock",
 ];

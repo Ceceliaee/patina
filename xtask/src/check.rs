@@ -54,7 +54,7 @@ fn tools(root: &Path) -> Result<()> {
     )?;
     for project in [
         "examples/remote-status-bridge-worker",
-        "plugins/official",
+        "plugins/bundled",
         "plugins/counter",
     ] {
         let project = root.join(project);

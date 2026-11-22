@@ -67,7 +67,7 @@ fn main() {
         r#"
 use std::{env, fs, io::{self, Read}, path::PathBuf};
 fn main() {
-    let profile = PathBuf::from(env::var_os("PATINA_GPUI_PROFILE_PARENT").unwrap());
+    let profile = PathBuf::from(env::var_os("PATINA_PROFILE_PARENT").unwrap());
     let executable = env::current_exe().unwrap();
     assert_eq!(executable.file_name().unwrap(), "patina.exe");
     assert_eq!(fs::read_dir(executable.parent().unwrap()).unwrap().count(), 1);

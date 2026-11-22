@@ -1,4 +1,4 @@
-use std::{env, path::PathBuf, process::Command};
+use std::{env, path::PathBuf};
 #[path = "../../packaging/windows/executable.rs"]
 mod executable;
 
@@ -21,29 +21,26 @@ fn main() {
         }
     }
     let desktop = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap()).join("../..");
-    let manifest = desktop.join("plugins/official/Cargo.toml");
-    println!("cargo:rerun-if-changed=../../plugins/official");
-    println!("cargo:rerun-if-changed=../../crates/plugin-sdk");
+    println!("cargo:rerun-if-changed=../../plugins/bundled");
+
     let out = PathBuf::from(env::var_os("OUT_DIR").unwrap());
-    let status = Command::new(env::var_os("CARGO").unwrap())
-        .arg("build")
-        .arg("--locked")
-        .arg("--workspace")
-        .args([
-            "--release",
-            "--target",
-            "wasm32-unknown-unknown",
-            "--manifest-path",
-        ])
-        .arg(manifest)
-        .arg("--target-dir")
-        .arg(out.join("guests"))
-        .env_remove("CARGO_ENCODED_RUSTFLAGS")
-        .env_remove("RUSTFLAGS")
-        .status()
-        .expect("start Rust plugin build");
-    assert!(
-        status.success(),
-        "Could not build bundled Rust tools. Install the desktop toolchain's wasm32-unknown-unknown target."
-    );
+    for plugin in ["focus", "reminders"] {
+        let dir = desktop.join("plugins/bundled").join(plugin).join("locales");
+        let mut entries = Vec::new();
+        for entry in std::fs::read_dir(dir).expect("plugin locales") {
+            let path = entry.expect("locale file").path();
+            let tag = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .expect("locale tag");
+            assert_eq!(path.extension().unwrap(), "json");
+            entries.push(format!("({tag:?}, include_str!({path:?}))"));
+        }
+        entries.sort();
+        std::fs::write(
+            out.join(format!("{plugin}-locales.rs")),
+            format!("&[{}]", entries.join(",")),
+        )
+        .unwrap();
+    }
 }
