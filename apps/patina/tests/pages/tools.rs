@@ -755,7 +755,7 @@ fn mini_opens_the_selected_tool_and_keeps_dirty_settings() -> Result<(), Error> 
     }
     let _com = ComApartment::init()?;
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina::APP_ID);
+    let profile = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&profile)?;
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -772,11 +772,11 @@ fn mini_opens_the_selected_tool_and_keeps_dirty_settings() -> Result<(), Error> 
     let mut app = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
             .arg("--mini")
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env("PATINA_PROFILE_PARENT", root.path())
             .spawn()?,
     );
     let pid = app.0.id();
-    let main = || children::find(pid, |p| window(p, w!("Patina UI")));
+    let main = || children::find(pid, |p| window(p, w!("Patina")));
     let mini = wait("Mini", || {
         children::find(pid, |p| window(p, w!("Patina Mini")))
     })?;
@@ -791,12 +791,17 @@ fn mini_opens_the_selected_tool_and_keeps_dirty_settings() -> Result<(), Error> 
             pin.Toggle()?;
         }
     }
-    let shortcut = "Reminder · Review";
+    let shortcut = "Reminder ･ Review";
     assert!(main().is_none());
     press(mini, shortcut)?;
     let hwnd = wait("rebuilt main", main)?;
-    wait("opened reminder panel", || button(hwnd, "New reminder"))?;
-    assert!(button(mini, "Reminder · Tomorrow").is_none());
+    wait("opened reminder panel", || button(hwnd, "Create"))?;
+    click(hwnd, "Plugin home")?;
+    activate_control(hwnd, &titlebar_shortcut(hwnd, shortcut)?, true)?;
+    wait("title bar shortcut opens the reminder panel", || {
+        button(hwnd, "Create")
+    })?;
+    assert!(button(mini, "Reminder ･ Tomorrow").is_none());
     click(hwnd, "Settings")?;
     let plus = wait("setting increment", || {
         controls(hwnd)
@@ -814,10 +819,8 @@ fn mini_opens_the_selected_tool_and_keeps_dirty_settings() -> Result<(), Error> 
     press(mini, shortcut)?;
     wait("save prompt", || named(hwnd, "Save changes"))?;
     click(hwnd, "Save")?;
-    wait("requested reminder restored", || {
-        button(hwnd, "New reminder")
-    })?;
-    click(hwnd, "Manage tools")?;
+    wait("requested reminder restored", || button(hwnd, "Create"))?;
+    click(hwnd, "Plugin store")?;
     click(hwnd, "Uninstall tool Reminder")?;
     click(hwnd, "Confirm")?;
     wait("old shortcut withdrawn", || {
@@ -826,7 +829,7 @@ fn mini_opens_the_selected_tool_and_keeps_dirty_settings() -> Result<(), Error> 
     click(hwnd, "Uninstall tool Focus")?;
     click(hwnd, "Confirm")?;
     wait("both absent", || named(hwnd, "No tools installed"))?;
-    command(window(pid, w!("Patina GPUI")).ok_or("tray")?, 2)?;
+    command(window(pid, w!("Patina Tray")).ok_or("tray")?, 2)?;
     assert!(wait("exit", || app.0.try_wait().ok().flatten())?.success());
     Ok(())
 }
@@ -843,7 +846,7 @@ fn navigation_and_consent_keyboard() -> Result<(), Error> {
         .build()?;
     for (locale, theme, compat) in [("en-US", "dark", false), ("zh-CN", "light", true)] {
         let root = tempfile::tempdir()?;
-        let profile = root.path().join(patina::APP_ID);
+        let profile = root.path().join(patina::PROFILE_DIRECTORY);
         fs::create_dir(&profile)?;
         let local = patina_activity::Locale::from_tag(Some(locale));
         let tr = |k| patina_activity::text(local, k);
@@ -854,7 +857,7 @@ fn navigation_and_consent_keyboard() -> Result<(), Error> {
         })?;
         let mut command_line = Command::new(env!("CARGO_BIN_EXE_patina"));
         command_line
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env("PATINA_PROFILE_PARENT", root.path())
             .arg("--today");
         if compat {
             command_line.env("__COMPAT_LAYER", "DPIUNAWARE");
@@ -862,13 +865,13 @@ fn navigation_and_consent_keyboard() -> Result<(), Error> {
         let mut host = TestChild(command_line.spawn()?);
         let pid = host.0.id();
         let hwnd = wait("main window", || {
-            children::find(pid, |p| window(p, w!("Patina UI")))
+            children::find(pid, |p| window(p, w!("Patina")))
         })?;
         let dpi = unsafe { GetDpiForWindow(hwnd) };
         observed.insert(dpi);
         println!("Tool geometry: {locale} {theme} {dpi} DPI");
         if unsafe { GetForegroundWindow() } != hwnd {
-            let tray = wait("tray", || window(pid, w!("Patina GPUI")))?;
+            let tray = wait("tray", || window(pid, w!("Patina Tray")))?;
             command(tray, 4)?;
             wait("main window activated from tray", || {
                 (unsafe { GetForegroundWindow() } == hwnd).then_some(())
@@ -922,7 +925,7 @@ fn navigation_and_consent_keyboard() -> Result<(), Error> {
             PostMessageW(Some(file_dialog), WM_COMMAND, WPARAM(2), LPARAM(0))?;
         }
         wait("picker cancelled", || picker(hwnd).is_none().then_some(()))?;
-        let invalid = root.path().join("invalid.patina-tool");
+        let invalid = root.path().join("invalid.zip");
         fs::write(&invalid, b"{}")?;
         press(hwnd, &tr("tools.install"))?;
         pick_file(hwnd, &invalid)?;
@@ -942,8 +945,8 @@ fn navigation_and_consent_keyboard() -> Result<(), Error> {
         wait("dismissed confirmation", || {
             button(hwnd, &tr("common.confirm")).is_none().then_some(())
         })?;
-        wait("focus returned to manager", || {
-            button(hwnd, &tr("tools.manager"))
+        wait("focus returned to the uninstall button", || {
+            button(hwnd, &remove)
                 .filter(|e| unsafe { e.CurrentHasKeyboardFocus().is_ok_and(|v| v.as_bool()) })
         })?;
         press(hwnd, &remove)?;
@@ -952,10 +955,10 @@ fn navigation_and_consent_keyboard() -> Result<(), Error> {
             button(hwnd, &remove).is_none().then_some(())
         })?;
         wait("focus after uninstall", || {
-            button(hwnd, &tr("tools.manager"))
+            button(hwnd, &tr("tools.install"))
                 .filter(|e| unsafe { e.CurrentHasKeyboardFocus().is_ok_and(|v| v.as_bool()) })
         })?;
-        command(window(pid, w!("Patina GPUI")).ok_or("tray")?, 2)?;
+        command(window(pid, w!("Patina Tray")).ok_or("tray")?, 2)?;
         wait("exit", || host.0.try_wait().ok().flatten())?;
     }
     assert!(observed.len() >= 2, "DPI values {observed:?}");
@@ -1003,7 +1006,7 @@ fn bundled_tools_can_be_removed_independently() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina::APP_ID);
+    let profile = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&profile)?;
     let db = profile.join("patina.db");
     let rt = tokio::runtime::Builder::new_current_thread()
@@ -1019,24 +1022,30 @@ fn bundled_tools_can_be_removed_independently() -> Result<(), Error> {
     let launch = || -> Result<_, Error> {
         let app = TestChild(
             Command::new(env!("CARGO_BIN_EXE_patina"))
-                .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+                .env("PATINA_PROFILE_PARENT", root.path())
                 .arg("--today")
                 .spawn()?,
         );
         let pid = app.0.id();
         let hwnd = wait("main window", || {
-            children::find(pid, |p| window(p, w!("Patina UI")))
+            children::find(pid, |p| window(p, w!("Patina")))
         })?;
         click(hwnd, "Tools")?;
         Ok((app, hwnd, pid))
     };
     let quit = |mut app: TestChild, pid| -> Result<(), Error> {
-        command(window(pid, w!("Patina GPUI")).ok_or("no tray")?, 2)?;
+        command(window(pid, w!("Patina Tray")).ok_or("no tray")?, 2)?;
         assert!(wait("exit", || app.0.try_wait().ok().flatten())?.success());
         Ok(())
     };
     let remove = |hwnd, name: &str| -> Result<(), Error> {
         click(hwnd, &format!("Uninstall tool {name}"))?;
+        wait("local data deletion warning", || {
+            named(
+                hwnd,
+                "Uninstalling this plugin will delete its data on this device.",
+            )
+        })?;
         click(hwnd, "Confirm")?;
         wait("uninstalled", || {
             button(hwnd, &format!("Uninstall tool {name}"))
@@ -1047,45 +1056,76 @@ fn bundled_tools_can_be_removed_independently() -> Result<(), Error> {
     };
     let (app, hwnd, pid) = launch()?;
     choose_tool(hwnd, "Focus")?;
-    press(hwnd, "New focus session")?;
-    click(hwnd, "Start")?;
-    wait("running focus", || button(hwnd, "Pause"))?;
+    wait("initial focus form", || named(hwnd, "No Pomodoro tasks"))?;
+    click(hwnd, "Create")?;
+    click(hwnd, "Start ･ Pomodoro task")?;
+    wait("running focus", || button(hwnd, "Pause ･ Pomodoro task"))?;
     choose_tool(hwnd, "Reminder")?;
-    press(hwnd, "New reminder")?;
-    wait("scheduled", || button(hwnd, "Pause"))?;
-    click(hwnd, "Manage tools")?;
+    wait("initial reminder form", || named(hwnd, "No reminders"))?;
+    click(hwnd, "Create")?;
+    wait("scheduled", || button(hwnd, "Pause ･ Time is up"))?;
+    click(hwnd, "Plugin store")?;
+    click(hwnd, "Uninstall tool Reminder")?;
+    click(hwnd, "Cancel")?;
+    click(hwnd, "Close")?;
+    wait("cancel kept the scheduled reminder", || {
+        button(hwnd, "Pause ･ Time is up")
+    })?;
+    click(hwnd, "Plugin store")?;
     remove(hwnd, "Reminder")?;
-    choose_tool(hwnd, "Focus")?;
-    wait("focus still running", || button(hwnd, "Pause"))?;
-    click(hwnd, "Manage tools")?;
+    wait("store lists only the remaining focus plugin", || {
+        button(hwnd, "Uninstall tool Focus")?;
+        named(hwnd, "Reminder").is_none().then_some(())
+    })?;
+    assert!(button(hwnd, "Reinstall ･ Reminder").is_none());
+    click(hwnd, "Close")?;
+    click(hwnd, "Focus")?;
+    wait("focus still running", || {
+        button(hwnd, "Pause ･ Pomodoro task")
+    })?;
+    click(hwnd, "Plugin home")?;
+    wait("remaining focus card", || button(hwnd, "Focus"))?;
+    assert!(button(hwnd, "Reminder").is_none());
+    click(hwnd, "Plugin store")?;
     remove(hwnd, "Focus")?;
-    wait("empty tools", || named(hwnd, "No tools installed"))?;
+    let check_empty_store = |hwnd| -> Result<(), Error> {
+        wait("empty plugin store", || {
+            button(hwnd, "Install from file")?;
+            named(hwnd, "No tools installed")
+        })?;
+        for name in ["Focus", "Reminder"] {
+            assert!(named(hwnd, name).is_none());
+            assert!(button(hwnd, &format!("Reinstall ･ {name}")).is_none());
+        }
+        Ok(())
+    };
+    check_empty_store(hwnd)?;
     quit(app, pid)?;
     let (app, hwnd, pid) = launch()?;
     wait("removals survived restart", || {
         named(hwnd, "No tools installed")
     })?;
-    click(hwnd, "Reinstall · Reminder")?;
-    wait("old reminder paused", || button(hwnd, "Start"))?;
-    click(hwnd, "Manage tools")?;
-    click(hwnd, "Reinstall · Focus")?;
-    wait("focus retained and paused", || button(hwnd, "Start"))?;
-    assert!(button(hwnd, "Pause").is_none());
+    click(hwnd, "Plugin home")?;
+    wait("empty plugin home", || named(hwnd, "No tools installed"))?;
+    for name in ["Focus", "Reminder"] {
+        assert!(button(hwnd, name).is_none());
+    }
+    click(hwnd, "Plugin store")?;
+    check_empty_store(hwnd)?;
     quit(app, pid)?;
     rt.block_on(async {
         let pool = patina_activity::open_database(&db).await?;
-        let focus: String = sqlx::query_scalar("SELECT status FROM tool_pomodoro_runs")
+        let focus: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tool_pomodoro_runs")
             .fetch_one(&pool)
             .await?;
-        let reminder: String = sqlx::query_scalar("SELECT status FROM tool_reminders")
+        let reminder: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tool_reminders")
             .fetch_one(&pool)
             .await?;
-        assert_eq!((focus.as_str(), reminder.as_str()), ("paused", "paused"));
-        let active: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM focus_history_spans WHERE ended_at IS NULL")
-                .fetch_one(&pool)
-                .await?;
-        assert_eq!(active, 0);
+        assert_eq!((focus, reminder), (0, 0));
+        let spans: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM focus_history_spans")
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(spans, 0);
         pool.close().await;
         Ok::<_, Error>(())
     })
@@ -1116,10 +1156,45 @@ fn in_window_reminder_uses_the_selected_delivery() -> Result<(), Error> {
     verify_reminder_delivery(true)
 }
 
+fn verify_notice_hover(hwnd: HWND, footer: &str) -> Result<RECT, Error> {
+    let rect = || unsafe {
+        let mut bounds = RECT::default();
+        GetWindowRect(hwnd, &mut bounds).ok()?;
+        Some(bounds)
+    };
+    let control = wait(footer, || button(hwnd, footer))
+        .map_err(|e| format!("{e}; notification {:?}, nodes {:?}", rect(), names(hwnd)))?;
+    let bounds = wait("notification fitted around visible actions", || {
+        let outer = rect()?;
+        let action = unsafe { control.CurrentBoundingRectangle().ok()? };
+        let scale = unsafe { GetDpiForWindow(hwnd) } as f32 / 96.;
+        let inset = (outer.bottom - action.bottom) as f32 / scale;
+        ((12.0..=24.0).contains(&inset) && action.top > outer.top).then_some(outer)
+    })
+    .map_err(|e| {
+        format!("{e}; notification {:?}, footer {:?}", rect(), unsafe {
+            control.CurrentBoundingRectangle()
+        })
+    })?;
+    let position = client_center(hwnd, &control)?;
+    for _ in 0..8 {
+        for point in [position, LPARAM(0)] {
+            unsafe {
+                PostMessageW(Some(hwnd), WM_MOUSEMOVE, WPARAM(0), point)?;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(40));
+            assert_eq!(rect(), Some(bounds), "hover changed notification geometry");
+            let action = unsafe { control.CurrentBoundingRectangle()? };
+            assert!(action.bottom <= bounds.bottom && action.top >= bounds.top);
+        }
+    }
+    Ok(bounds)
+}
+
 fn verify_reminder_delivery(dialog: bool) -> Result<(), Error> {
     let _com = ComApartment::init()?;
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina::APP_ID);
+    let profile = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&profile)?;
     let db = profile.join("patina.db");
     let rt = tokio::runtime::Builder::new_current_thread()
@@ -1135,17 +1210,17 @@ fn verify_reminder_delivery(dialog: bool) -> Result<(), Error> {
     })?;
     let mut app = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env("PATINA_PROFILE_PARENT", root.path())
             .arg("--today")
             .spawn()?,
     );
     let pid = app.0.id();
     let main = wait("main window", || {
-        children::find(pid, |p| window(p, w!("Patina UI")))
+        children::find(pid, |p| window(p, w!("Patina")))
     })?;
     press(main, "Close window")?;
     wait("main released before expiry", || {
-        children::find(pid, |p| window(p, w!("Patina UI")))
+        children::find(pid, |p| window(p, w!("Patina")))
             .is_none()
             .then_some(())
     })?;
@@ -1154,26 +1229,62 @@ fn verify_reminder_delivery(dialog: bool) -> Result<(), Error> {
             window(
                 p,
                 if dialog {
-                    w!("Patina UI")
+                    w!("Patina")
                 } else {
-                    w!("Patina · Tools")
+                    w!("Patina ･ Tools")
                 },
             )
         })
     })?;
     wait("correct notification", || named(notice, "Tray deadline"))?;
     if dialog {
-        assert!(children::find(pid, |p| window(p, w!("Patina · Tools"))).is_none());
+        assert!(children::find(pid, |p| window(p, w!("Patina ･ Tools"))).is_none());
     } else {
         assert_ne!(unsafe { GetForegroundWindow() }, notice);
-        assert!(children::find(pid, |p| window(p, w!("Patina UI"))).is_none());
+        assert!(children::find(pid, |p| window(p, w!("Patina"))).is_none());
+        use windows::Win32::Graphics::Dwm::{
+            DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE, DwmGetWindowAttribute,
+        };
+        let mut border = 0u32;
+        if unsafe {
+            DwmGetWindowAttribute(
+                notice,
+                DWMWA_BORDER_COLOR,
+                (&raw mut border).cast(),
+                size_of_val(&border) as u32,
+            )
+        }
+        .is_ok()
+        {
+            assert_eq!(
+                border, DWMWA_COLOR_NONE,
+                "native border duplicates the card border"
+            );
+        }
     }
-    click(notice, "Confirm")?;
+    let first_bounds = if dialog {
+        None
+    } else {
+        Some(verify_notice_hover(notice, "Mark complete")?)
+    };
+    click(notice, "Remind me later")?;
+    let option = wait("snooze choices", || segment(notice, "In 15 min"))?;
+    activate_control(notice, &option, false)?;
+    wait("selected snooze", || selected_segment(notice, "In 15 min"))?;
+    if let Some(first) = first_bounds {
+        let second = verify_notice_hover(notice, "Confirm")?;
+        assert!(second.top < first.top && second.bottom == first.bottom);
+    }
+    click(notice, "Cancel")?;
+    if let Some(first) = first_bounds {
+        assert_eq!(verify_notice_hover(notice, "Mark complete")?, first);
+    }
+    click(notice, "Mark complete")?;
     wait("notification released", || {
         if dialog {
             return named(notice, "Tray deadline").is_none().then_some(());
         }
-        children::find(pid, |p| window(p, w!("Patina · Tools")))
+        children::find(pid, |p| window(p, w!("Patina ･ Tools")))
             .is_none()
             .then_some(())
     })?;
@@ -1182,14 +1293,14 @@ fn verify_reminder_delivery(dialog: bool) -> Result<(), Error> {
             .fetch_one(&pool),
     )?;
     assert_eq!(status, "fired");
-    command(window(pid, w!("Patina GPUI")).ok_or("no tray")?, 2)?;
+    command(window(pid, w!("Patina Tray")).ok_or("no tray")?, 2)?;
     assert!(wait("exit", || app.0.try_wait().ok().flatten())?.success());
     rt.block_on(pool.close());
     Ok(())
 }
 
 #[test]
-#[ignore = "dedicated Windows session: tray resource samples"]
+#[ignore = "dedicated Windows session: tray resource samples and compiled counter package"]
 fn tool_tray_resources() -> Result<(), Error> {
     patina_test_support::dedicated_session()?;
     use windows::Win32::System::Threading::{
@@ -1201,8 +1312,9 @@ fn tool_tray_resources() -> Result<(), Error> {
         std::env::var_os("PATINA_TOOL_SAMPLES")
             .ok_or("Set PATINA_TOOL_SAMPLES to the run output directory")?,
     );
+    let package = counter_package("PATINA_COUNTER_PACKAGE")?;
     fs::create_dir_all(&out)?;
-    let profile = root.path().join(patina::APP_ID);
+    let profile = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&profile)?;
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -1218,14 +1330,14 @@ fn tool_tray_resources() -> Result<(), Error> {
     )?;
     let mut app = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env("PATINA_PROFILE_PARENT", root.path())
             .env("PATINA_E2E_DATA_ROOT", root.path())
             .env("PATINA_E2E", "1")
             .env("PATINA_E2E_NATIVE_FIXTURE", "1")
             .spawn()?,
     );
     let pid = app.0.id();
-    let tray = wait("tray", || window(pid, w!("Patina GPUI")))?;
+    let tray = wait("tray", || window(pid, w!("Patina Tray")))?;
     let recording = || {
         rt.block_on(sqlx::query_as::<_,(i64,i64)>("SELECT s.id,CAST(t.value AS INTEGER) FROM sessions s JOIN settings t ON t.key='__tracker_last_successful_sample_ms' WHERE s.exe_name='fixture.exe' AND s.end_time IS NULL").fetch_optional(&pool)).ok().flatten()
     };
@@ -1260,12 +1372,10 @@ fn tool_tray_resources() -> Result<(), Error> {
     };
     let open = || -> Result<_, Error> {
         command(tray, 4)?;
-        let hwnd = wait("main", || {
-            children::find(pid, |p| window(p, w!("Patina UI")))
-        })?;
+        let hwnd = wait("main", || children::find(pid, |p| window(p, w!("Patina"))))?;
         click(hwnd, "Tools")?;
         wait("tools loaded", || {
-            button(hwnd, "Manage tools")
+            button(hwnd, "Plugin store")
                 .filter(|el| unsafe { el.CurrentIsEnabled().is_ok_and(|b| b.as_bool()) })
         })?;
         Ok(hwnd)
@@ -1273,7 +1383,7 @@ fn tool_tray_resources() -> Result<(), Error> {
     let close = |hwnd| -> Result<(), Error> {
         click(hwnd, "Close window")?;
         wait("renderer exited", || {
-            children::find(pid, |p| window(p, w!("Patina UI")))
+            children::find(pid, |p| window(p, w!("Patina")))
                 .is_none()
                 .then_some(())
         })?;
@@ -1281,13 +1391,14 @@ fn tool_tray_resources() -> Result<(), Error> {
     };
     measure("idle")?;
     let hwnd = open()?;
-    press(hwnd, "New focus session")?;
-    click(hwnd, "Start")?;
-    wait("running", || button(hwnd, "Pause"))?;
+    click(hwnd, "Focus")?;
+    press(hwnd, "Create")?;
+    click(hwnd, "Start ･ Pomodoro task")?;
+    wait("running", || button(hwnd, "Pause ･ Pomodoro task"))?;
     close(hwnd)?;
     measure("timing")?;
     let hwnd = open()?;
-    click(hwnd, "Manage tools")?;
+    click(hwnd, "Plugin store")?;
     for name in ["Focus", "Reminder"] {
         click(hwnd, &format!("Uninstall tool {name}"))?;
         click(hwnd, "Confirm")?;
@@ -1300,17 +1411,14 @@ fn tool_tray_resources() -> Result<(), Error> {
     close(hwnd)?;
     measure("empty")?;
     let hwnd = open()?;
+    click(hwnd, "Plugin store")?;
     for _ in 0..5 {
-        click(hwnd, "Reinstall · Reminder")?;
-        wait("restored tool", || button(hwnd, "New reminder"))?;
-        click(hwnd, "Manage tools")?;
-        click(hwnd, "Uninstall tool Reminder")?;
+        install_from_file(hwnd, &package)?;
+        wait("installed counter", || button(hwnd, "Add one"))?;
+        click(hwnd, "Plugin store")?;
+        click(hwnd, "Uninstall tool Counter")?;
         click(hwnd, "Confirm")?;
-        wait("removed", || {
-            button(hwnd, "Uninstall tool Reminder")
-                .is_none()
-                .then_some(())
-        })?;
+        wait("counter removed", || named(hwnd, "No tools installed"))?;
     }
     close(hwnd)?;
     measure("cycled")?;
@@ -1327,8 +1435,9 @@ fn focus_completes_in_tray_and_starts_break_from_notice() -> Result<(), Error> {
         return Ok(());
     }
     let _com = ComApartment::init()?;
+    unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina::APP_ID);
+    let profile = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&profile)?;
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -1337,15 +1446,22 @@ fn focus_completes_in_tray_and_starts_break_from_notice() -> Result<(), Error> {
     rt.block_on(sqlx::query("INSERT OR REPLACE INTO settings(key,value) VALUES ('language','en-US'),('show_tray_icon','0'),('tracking_paused','1'),('tools_notification_preferences','{\"delivery\":\"notification\",\"sound\":\"none\"}')").execute(&pool))?;
     let mut app = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env("PATINA_PROFILE_PARENT", root.path())
             .arg("--today")
             .spawn()?,
     );
     let pid = app.0.id();
-    let main = || children::find(pid, |p| window(p, w!("Patina UI")));
+    let main = || children::find(pid, |p| window(p, w!("Patina")));
     let hwnd = wait("main", main)?;
     click(hwnd, "Tools")?;
     choose_tool(hwnd, "Focus")?;
+    let timing = wait("timer settings", || {
+        controls(hwnd).ok()?.into_iter().find(|e| unsafe {
+            e.CurrentControlType().ok() == Some(UIA_ComboBoxControlTypeId)
+                && e.CurrentName().is_ok_and(|n| n == "Timer settings")
+        })
+    })?;
+    activate_control(hwnd, &timing, true)?;
     wait("focus duration set to one minute", || {
         let field = controls(hwnd).ok()?.into_iter().find_map(|e| unsafe {
             if e.CurrentControlType().ok()? != UIA_EditControlTypeId
@@ -1364,14 +1480,15 @@ fn focus_completes_in_tray_and_starts_break_from_notice() -> Result<(), Error> {
         }
         None
     })?;
-    press(hwnd, "New focus session")?;
-    click(hwnd, "Start")?;
-    wait("running timer", || button(hwnd, "Pause"))?;
-    click(hwnd, "Close window")?;
+    key(hwnd, 27)?;
+    press(hwnd, "Create")?;
+    click(hwnd, "Start ･ Pomodoro task")?;
+    wait("running timer", || button(hwnd, "Pause ･ Pomodoro task"))?;
+    press(hwnd, "Close window")?;
     wait("main released", || main().is_none().then_some(()))?;
     let until = std::time::Instant::now() + std::time::Duration::from_secs(80);
     let notice = loop {
-        if let Some(h) = children::find(pid, |p| window(p, w!("Patina · Tools"))) {
+        if let Some(h) = children::find(pid, |p| window(p, w!("Patina ･ Tools"))) {
             break h;
         }
         if std::time::Instant::now() > until {
@@ -1380,18 +1497,19 @@ fn focus_completes_in_tray_and_starts_break_from_notice() -> Result<(), Error> {
         std::thread::sleep(std::time::Duration::from_millis(150));
     };
     assert!(main().is_none());
-    click(notice, "Start")?;
+    click(notice, "Start break").map_err(|e| format!("Start break in notification: {e}"))?;
     wait("focus notification dismissed", || {
-        children::find(pid, |p| window(p, w!("Patina · Tools")))
+        children::find(pid, |p| window(p, w!("Patina ･ Tools")))
             .is_none()
             .then_some(())
     })?;
-    let tray = window(pid, w!("Patina GPUI")).ok_or("tray")?;
+    let tray = window(pid, w!("Patina Tray")).ok_or("tray")?;
     command(tray, 4)?;
     let hwnd = wait("main rebuilt", main)?;
-    click(hwnd, "Tools")?;
-    choose_tool(hwnd, "Focus")?;
-    wait("break running", || button(hwnd, "Pause"))?;
+    press(hwnd, "Tools")?;
+    press(hwnd, "Plugin home")?;
+    press(hwnd, "Focus")?;
+    wait("break running", || button(hwnd, "Pause ･ Pomodoro task"))?;
     let state: (String, String, i64) = rt.block_on(
         sqlx::query_as("SELECT status,phase,completed_focus_count FROM tool_pomodoro_runs")
             .fetch_one(&pool),
@@ -1404,15 +1522,86 @@ fn focus_completes_in_tray_and_starts_break_from_notice() -> Result<(), Error> {
 }
 
 #[test]
-#[ignore = "isolated Win32 desktop and compiled counter packages"]
-fn install_update_uninstall_counter() -> Result<(), Error> {
+#[ignore = "isolated Win32 desktop and native ZIP picker"]
+fn restore_preinstalled_tools_from_signed_zip() -> Result<(), Error> {
     if !patina_test_support::run_case()? {
         return Ok(());
     }
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina::APP_ID);
+    let profile = root.path().join(patina::PROFILE_DIRECTORY);
+    fs::create_dir(&profile)?;
+    seed(&profile.join("patina.db"))?;
+    let mut app = TestChild(
+        Command::new(env!("CARGO_BIN_EXE_patina"))
+            .arg("--today")
+            .env("PATINA_PROFILE_PARENT", root.path())
+            .spawn()?,
+    );
+    let pid = app.0.id();
+    let hwnd = wait("main", || children::find(pid, |p| window(p, w!("Patina"))))?;
+    click(hwnd, "Tools")?;
+    for (folder, title, file) in [
+        ("reminders", "Reminder", "提醒.zip"),
+        ("focus", "Focus", "专注.zip"),
+    ] {
+        let source = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../plugins/bundled")
+            .join(folder);
+        let zip = if let Some(dir) = std::env::var_os("PATINA_TEST_PLUGIN_ZIPS") {
+            PathBuf::from(dir).join(file)
+        } else {
+            let path = root.path().join(file);
+            patina_plugin_host::Package::read_directory(&source)?
+                .write_zip(fs::File::create(&path)?)?;
+            path
+        };
+        click(hwnd, "Plugin store")?;
+        let remove = format!("Uninstall tool {title}");
+        click(hwnd, &remove)?;
+        click(hwnd, "Confirm")?;
+        wait("tool removed", || {
+            button(hwnd, &remove).is_none().then_some(())
+        })?;
+        install_from_file(hwnd, &zip)?;
+        wait("restored plugin page", || button(hwnd, "Create"))?;
+    }
+    command(window(pid, w!("Patina Tray")).ok_or("missing tray")?, 2)?;
+    assert!(wait("exit", || app.0.try_wait().ok().flatten())?.success());
+    let plugins = patina_plugin_host::Host::open(profile.join("tools"))?.list();
+    assert_eq!(plugins.len(), 2);
+    Ok(())
+}
+
+fn counter_package(name: &str) -> Result<PathBuf, Error> {
+    Ok(std::path::absolute(PathBuf::from(
+        std::env::var_os(name).ok_or_else(|| format!("Missing counter package in {name}"))?,
+    ))?)
+}
+
+fn install_from_file(hwnd: HWND, path: &Path) -> Result<(), Error> {
+    click(hwnd, "Install from file")?;
+    pick_file(hwnd, path)?;
+    click(hwnd, "Confirm")
+}
+
+#[test]
+#[ignore = "isolated Win32 desktop and compiled counter packages"]
+fn install_update_uninstall_counter() -> Result<(), Error> {
+    if !patina_test_support::run_case()? {
+        return Ok(());
+    }
+    let original = counter_package("PATINA_COUNTER_PACKAGE")?;
+    let manifest = patina_plugin_host::Package::read_verified(&original)?
+        .0
+        .manifest;
+    let name = manifest.name;
+    let uninstall = format!("Uninstall tool {name}");
+    let _com = ComApartment::init()?;
+    unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
+    let root = tempfile::tempdir()?;
+    let profile = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&profile)?;
     tokio::runtime::Builder::new_current_thread().enable_all().build()?.block_on(async {
         let pool = patina_activity::open_database(&profile.join("patina.db")).await?;
@@ -1422,28 +1611,15 @@ fn install_update_uninstall_counter() -> Result<(), Error> {
     })?;
     let mut host = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env("PATINA_PROFILE_PARENT", root.path())
             .arg("--today")
             .spawn()?,
     );
     let pid = host.0.id();
-    let hwnd = wait("Today", || {
-        children::find(pid, |p| window(p, w!("Patina UI")))
-    })?;
+    let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
     click(hwnd, "Tools")?;
-    let file = |name| -> Result<PathBuf, Error> {
-        Ok(std::path::absolute(PathBuf::from(
-            std::env::var_os(name).ok_or("Missing counter package")?,
-        ))?)
-    };
-    let install = |path: &Path| -> Result<(), Error> {
-        click(hwnd, "Install from file")?;
-        pick_file(hwnd, path)?;
-        click(hwnd, "Confirm")
-    };
-    wait("tool registry", || tool_dropdown(hwnd))?;
-    click(hwnd, "Manage tools")?;
-    install(&file("PATINA_COUNTER_PACKAGE")?)?;
+    click(hwnd, "Plugin store")?;
+    install_from_file(hwnd, &original)?;
     click(hwnd, "Add one")?;
     wait("counter after click", || named(hwnd, "1"))?;
     press(hwnd, "Add one")?;
@@ -1453,24 +1629,31 @@ fn install_update_uninstall_counter() -> Result<(), Error> {
         named(hwnd, "Top Apps")
     })?;
     click(hwnd, "Tools")?;
-    wait("restored counter panel and saved value", || {
-        named(hwnd, "Counter")?;
+    wait("counter panel and saved value", || {
+        named(hwnd, &name)?;
         button(hwnd, "Add one")?;
         named(hwnd, "2")
     })?;
-    click(hwnd, "Manage tools")?;
-    install(&file("PATINA_COUNTER_UPDATE")?)?;
+    click(hwnd, "Plugin store")?;
+    install_from_file(hwnd, &counter_package("PATINA_COUNTER_UPDATE")?)?;
     press(hwnd, "Increment")?;
     wait("updated counter", || named(hwnd, "3"))?;
-    click(hwnd, "Manage tools")?;
-    click(hwnd, "Uninstall tool Counter")?;
+    click(hwnd, "Plugin store")?;
+    click(hwnd, &uninstall)?;
     click(hwnd, "Confirm")?;
     wait("counter removed", || {
-        button(hwnd, "Uninstall tool Counter")
-            .is_none()
-            .then_some(())
+        button(hwnd, &uninstall).is_none().then_some(())
     })?;
-    command(window(pid, w!("Patina GPUI")).ok_or("missing tray")?, 2)?;
+    command(window(pid, w!("Patina Tray")).ok_or("missing tray")?, 2)?;
     assert!(wait("exit", || host.0.try_wait().ok().flatten())?.success());
+    let registry = profile.join("tools");
+    assert!(registry.join("tools.json").is_file());
+    let reopened = patina_plugin_host::Host::open(registry)?;
+    assert!(
+        reopened
+            .list()
+            .iter()
+            .all(|tool| tool.manifest.id != manifest.id)
+    );
     Ok(())
 }
