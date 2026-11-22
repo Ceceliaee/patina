@@ -43,19 +43,25 @@ impl ToolService {
         let worker = std::thread::Builder::new()
             .name("patina-tools".into())
             .spawn(move || {
-                let mut pending = crate::bundled_tools::IDS.to_vec();
+                let mut pending = crate::bundled_tools::BUNDLES.iter().collect::<Vec<_>>();
                 let mut bind_pending = |host: &mut Host, locale: &str| {
-                    pending.retain(|id| {
-                        if let Err(error) = crate::bundled_tools::start(host, &storage, id, locale)
+                    pending.retain(|bundle| {
+                        if let Err(error) =
+                            crate::bundled_tools::start(host, &storage, bundle, locale)
                         {
-                            eprintln!("Bind bundled tool {id}: {error}");
+                            eprintln!("Bind bundled tool: {error}");
                             true
                         } else {
                             false
                         }
                     });
                 };
-                let mut host = Host::open(root.clone());
+                let open = || {
+                    let mut host = Host::open(root.clone())?;
+                    crate::bundled_tools::configure(&mut host, &storage)?;
+                    Ok::<_, String>(host)
+                };
+                let mut host = open();
                 if let Ok(h) = host.as_mut() {
                     bind_pending(h, &language);
                 }
@@ -157,16 +163,28 @@ impl ToolService {
                     language.clone_from(&locale);
                     let result = (|| {
                         if host.is_err() {
-                            host = Host::open(root.clone());
+                            host = open();
                         }
                         let host = host.as_mut().map_err(|e| e.clone())?;
                         bind_pending(host, &locale);
                         let response = match request {
-                            ToolRequest::List => Reply::Tools((
-                                host.list(),
-                                display_failures > 0 && !events.list(host, &storage)?.is_empty(),
-                                storage.last_section()?,
-                            )),
+                            ToolRequest::List | ToolRequest::OpenHome => {
+                                let tools = host.list();
+                                let mut last = storage.last_section()?;
+                                if let Some(id) = &last
+                                    && (matches!(request, ToolRequest::OpenHome)
+                                        || !tools.iter().any(|t| &t.manifest.id == id))
+                                {
+                                    storage.clear_section()?;
+                                    last = None;
+                                }
+                                Reply::Tools((
+                                    tools,
+                                    display_failures > 0
+                                        && !events.list(host, &storage)?.is_empty(),
+                                    last,
+                                ))
+                            }
                             ToolRequest::DisplayFailed => {
                                 display_failures = display_failures.saturating_add(1);
                                 retry_display_at = (display_failures <= 3)
@@ -183,20 +201,39 @@ impl ToolService {
                                 host.uninstall_impact_labels(&id, &gen_id, &locale)?,
                             ),
                             ToolRequest::Shortcuts => {
-                                let has = |id: &str| host.bound_installation(id).is_some();
-                                Reply::Shortcuts(storage.shortcuts(
-                                    has("patina.focus"),
-                                    has("patina.reminders"),
-                                    &locale,
-                                    now_ms(),
-                                )?)
+                                let mut items = Vec::new();
+                                for (cap, kind) in [
+                                    (
+                                        patina_plugin_host::Capability::Focus,
+                                        patina_activity::TaskKind::Focus,
+                                    ),
+                                    (
+                                        patina_plugin_host::Capability::Reminders,
+                                        patina_activity::TaskKind::Reminders,
+                                    ),
+                                ] {
+                                    for tool in host.providers(cap) {
+                                        let db = storage.plugin_tasks(&tool.manifest.id, kind)?;
+                                        for mut item in db.shortcuts(
+                                            kind == patina_activity::TaskKind::Focus,
+                                            kind == patina_activity::TaskKind::Reminders,
+                                            &locale,
+                                            now_ms(),
+                                        )? {
+                                            item.target =
+                                                item.target.for_installation(&tool.generation);
+                                            items.push(item);
+                                        }
+                                    }
+                                }
+                                Reply::Shortcuts(items)
                             }
                             ToolRequest::Restore(id) => Reply::Installed(
-                                host.restore_bundled(crate::bundled_tools::package(&id)?, &locale)?,
+                                host.restore_default(crate::bundled_tools::package(&id)?, &locale)?,
                             ),
                             ToolRequest::Notices(dialog) => Reply::Notices(
                                 if events.delivery(host, &storage)? == Some(dialog) {
-                                    events.list(host, &storage)?
+                                    events.for_display(host, &storage, &locale)?
                                 } else {
                                     vec![]
                                 },
@@ -229,6 +266,11 @@ impl ToolService {
                                 events.acknowledge(&n, &choice, host, &storage, &locale)?;
                                 Reply::Done
                             }
+                            ToolRequest::SelectTab {
+                                id,
+                                generation,
+                                tab,
+                            } => Reply::Panel(host.select_tab(&id, &generation, tab, &locale)?),
                             ToolRequest::Inspect(path) => Reply::Preview(host.inspect(&path)?),
                             ToolRequest::Install(path, preview) => {
                                 Reply::Installed(host.install(&path, &preview, &locale).map_err(
@@ -319,7 +361,7 @@ mod tests {
             sender,
             Arc::new(AtomicBool::new(false)),
         )?;
-        let file = tmp.path().join("counter.patina-tool");
+        let file = tmp.path().join("counter.zip");
         std::fs::copy(std::env::var("PATINA_COUNTER_PACKAGE")?, &file)?;
         let Reply::Preview(preview) =
             runtime.block_on(tools.request(ToolRequest::Inspect(file.clone()), "en-US"))?
@@ -400,8 +442,12 @@ mod tests {
         wait_dialog()?;
         request(ToolRequest::Presented(notice.clone()))?;
         request(ToolRequest::Presented(notice.clone()))?;
-        request(ToolRequest::Acknowledge(notice.clone(), "5".into()))?;
-        assert!(request(ToolRequest::Acknowledge(notice, "5".into())).is_err());
+        let content = notice.content.as_ref().unwrap();
+        assert_eq!(content.title, "Pending");
+        assert_eq!(content.choices.as_ref().unwrap().options[0].1, "In 5 min");
+        assert!(request(ToolRequest::Acknowledge(notice.clone(), "start".into())).is_err());
+        request(ToolRequest::Acknowledge(notice.clone(), "snooze-5".into()))?;
+        assert!(request(ToolRequest::Acknowledge(notice, "snooze-5".into())).is_err());
         assert!(matches!(
             request(ToolRequest::List)?,
             Reply::Tools((_, false, _))

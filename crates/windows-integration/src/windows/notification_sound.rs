@@ -1,12 +1,9 @@
 use patina_activity_model::tool_notifications::Sound;
-use std::sync::Mutex;
-
-static PLAYBACK: Mutex<()> = Mutex::new(());
-
-#[link(name = "winmm")]
-unsafe extern "system" {
-    fn PlaySoundW(sound: *const u8, module: *mut std::ffi::c_void, flags: u32) -> i32;
-}
+use std::sync::LazyLock;
+use windows::core::PCWSTR;
+use windows::Win32::Media::Audio::{
+    PlaySoundW, SND_ASYNC, SND_FLAGS, SND_MEMORY, SND_NODEFAULT, SND_NOSTOP,
+};
 
 fn partial(t: f64, frequency: f64, decay: f64) -> f64 {
     (t * frequency * std::f64::consts::TAU).sin() * (-t * decay).exp()
@@ -85,24 +82,40 @@ fn wave(sound: Sound) -> Vec<u8> {
     out
 }
 
-pub fn play(sound: Sound) {
-    if sound == Sound::None {
-        return;
+fn waveform(sound: Sound) -> Option<&'static [u8]> {
+    static DEFAULT: LazyLock<Vec<u8>> = LazyLock::new(|| wave(Sound::Default));
+    static BELL: LazyLock<Vec<u8>> = LazyLock::new(|| wave(Sound::Bell));
+    static CLEAR: LazyLock<Vec<u8>> = LazyLock::new(|| wave(Sound::Clear));
+    match sound {
+        Sound::Default => Some(&DEFAULT),
+        Sound::Bell => Some(&BELL),
+        Sound::Clear => Some(&CLEAR),
+        Sound::None => None,
     }
-    if let Err(error) = std::thread::Builder::new()
-        .name("tool-notification-sound".into())
-        .spawn(move || {
-            let Ok(_guard) = PLAYBACK.try_lock() else {
-                return;
-            };
-            let data = wave(sound);
-            // SND_MEMORY | SND_NODEFAULT; synchronous playback keeps the buffer alive.
-            if unsafe { PlaySoundW(data.as_ptr(), std::ptr::null_mut(), 0x0004 | 0x0002) } == 0 {
-                eprintln!("[tool-notification] local sound playback failed");
-            }
-        })
-    {
-        eprintln!("[tool-notification] could not start sound playback: {error}");
+}
+
+fn start(data: &'static [u8], flags: SND_FLAGS) -> bool {
+    // SND_MEMORY takes a WAVE image. WinMM can read it after this call returns.
+    let image = PCWSTR(data.as_ptr().cast());
+    unsafe { PlaySoundW(image, None, SND_MEMORY | SND_ASYNC | SND_NODEFAULT | flags) }.as_bool()
+}
+
+pub fn preview(sound: Sound) -> bool {
+    let accepted = if let Some(data) = waveform(sound) {
+        start(data, SND_FLAGS(0))
+    } else {
+        unsafe { PlaySoundW(PCWSTR::null(), None, SND_FLAGS(0)) }.as_bool()
+    };
+    if !accepted {
+        eprintln!("[tool-notification] could not preview {sound:?}");
+    }
+    accepted
+}
+
+pub fn play(sound: Sound) {
+    let Some(data) = waveform(sound) else { return };
+    if !start(data, SND_NOSTOP) {
+        eprintln!("[tool-notification] local sound playback unavailable or busy");
     }
 }
 
