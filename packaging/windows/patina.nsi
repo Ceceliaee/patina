@@ -5,9 +5,24 @@ SetCompressor /SOLID lzma
 !include "MUI2.nsh"
 !include "FileFunc.nsh"
 !include "LogicLib.nsh"
+!include "Win\COM.nsh"
+!include "Win\Propkey.nsh"
 !ifndef INSTALLATION_ID
-  !define INSTALLATION_ID "Patina.GPUI"
+  !define INSTALLATION_ID "Ceceliaee.Patina"
+  !define PREVIOUS_INSTALLATION_ID "Patina.Desktop"
+  !define PREVIOUS_SHORTCUT_NAME "Patina Desktop"
+  !define EARLY_INSTALLATION_ID "Patina.GPUI"
+  !define SHORTCUT_NAME "Patina"
+!else
+  !define SHORTCUT_NAME "${INSTALLATION_ID}"
 !endif
+!ifdef PREVIOUS_INSTALLATION_ID
+  !define /ifndef PREVIOUS_SHORTCUT_NAME "${PREVIOUS_INSTALLATION_ID}"
+!endif
+!define /ifndef TAURI_PRODUCT "Patina"
+!define /ifndef TAURI_STORAGE_KEY "Software\Patina\Storage\production"
+!define /ifndef TAURI_DATA_DIR "$APPDATA\Patina"
+!define TAURI_UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${TAURI_PRODUCT}"
 
 !ifndef APP_VERSION
   !error "APP_VERSION is required"
@@ -21,10 +36,13 @@ SetCompressor /SOLID lzma
 !ifndef OUTPUT_FILE
   !error "OUTPUT_FILE is required"
 !endif
+!ifndef DEFAULT_INSTALL_DIR
+  !define DEFAULT_INSTALL_DIR "$LOCALAPPDATA\Programs\Patina"
+!endif
 
 Name "Patina"
 OutFile "${OUTPUT_FILE}"
-InstallDir "$LOCALAPPDATA\Programs\Patina GPUI"
+InstallDir "${DEFAULT_INSTALL_DIR}"
 InstallDirRegKey HKCU "Software\${INSTALLATION_ID}" "InstallLocation"
 VIProductVersion "${RESOURCE_VERSION}"
 VIAddVersionKey /LANG=1033 "ProductName" "Patina"
@@ -40,7 +58,17 @@ Var UpdatePid
 Var UpdateGate
 Var ProfileParent
 Var ProcessHandle
+Var TauriUpdate
+Var TauriLogin
+Var ShortcutPath
+!ifdef PREVIOUS_INSTALLATION_ID
+Var PreviousInstallDir
+!endif
+!ifdef EARLY_INSTALLATION_ID
+Var EarlyInstallDir
+!endif
 
+!define MUI_PAGE_CUSTOMFUNCTION_PRE SkipTauriDirectory
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_UNPAGE_CONFIRM
@@ -48,20 +76,43 @@ Var ProcessHandle
 !insertmacro MUI_LANGUAGE "English"
 !insertmacro MUI_LANGUAGE "SimpChinese"
 
-!macro SetupMutex
-  System::Call 'kernel32::CreateMutexW(p 0, i 0, w "Local\${INSTALLATION_ID}.Setup") p.r1 ?e'
+!macro LockSetup ID
+  System::Call 'kernel32::CreateMutexW(p 0, i 0, w "Local\${ID}.Setup") p.r1 ?e'
   Pop $2
   ${If} $1 == 0
   ${OrIf} $2 == 183
     SetErrorLevel 1
     Abort "A Patina installation is already in progress."
   ${EndIf}
+!macroend
+
+!macro LockPreviousSetup ID DIRECTORY
+  ReadRegStr ${DIRECTORY} HKCU "Software\${ID}" "InstallLocation"
+  ${If} ${DIRECTORY} != ""
+    !insertmacro LockSetup "${ID}"
+  ${EndIf}
+!macroend
+
+!macro SetupMutex
   SetRegView 64
   SetShellVarContext current
+  !insertmacro LockSetup "${INSTALLATION_ID}"
+!ifdef PREVIOUS_INSTALLATION_ID
+  !insertmacro LockPreviousSetup "${PREVIOUS_INSTALLATION_ID}" $PreviousInstallDir
+!endif
+!ifdef EARLY_INSTALLATION_ID
+  !insertmacro LockPreviousSetup "${EARLY_INSTALLATION_ID}" $EarlyInstallDir
+!endif
 !macroend
 
 Function un.onInit
   !insertmacro SetupMutex
+FunctionEnd
+
+Function SkipTauriDirectory
+  ${If} $TauriUpdate == 1
+    Abort
+  ${EndIf}
 FunctionEnd
 
 !macro ReadSetupOption PREFIX DESTINATION
@@ -69,6 +120,18 @@ FunctionEnd
   StrCpy $5 $3 $4
   ${If} $5 == "${PREFIX}"
     StrCpy ${DESTINATION} $3 "" $4
+  ${EndIf}
+!macroend
+
+!macro UsePreviousDirectory DIRECTORY
+  ${If} ${DIRECTORY} != ""
+    ${If} ${FileExists} "${DIRECTORY}\patina-installation"
+    ${OrIf} ${FileExists} "${DIRECTORY}\.patina-previous\patina-installation"
+    ${OrIf} ${FileExists} "${DIRECTORY}\patina-gpui-installation"
+    ${OrIf} ${FileExists} "${DIRECTORY}\.patina-previous\patina-gpui-installation"
+      StrCpy $INSTDIR ${DIRECTORY}
+      Goto options_done
+    ${EndIf}
   ${EndIf}
 !macroend
 
@@ -85,16 +148,75 @@ Function .onInit
     IntOp $1 $1 - 1
     IntPtrOp $2 $2 + ${NSIS_PTR_SIZE}
     System::Call '*$2(w .r3)'
+    ${If} $3 == "/UPDATE"
+      StrCpy $TauriUpdate 1
+    ${ElseIf} $3 == "/ARGS"
+      ${ExitWhile}
+    ${EndIf}
     ; NSIS consumes the rest of the command line as the unquoted /D= destination.
     StrCpy $4 $3 3
     ${If} $4 == "/D="
-      ${Break}
+      Goto options_done
     ${EndIf}
     !insertmacro ReadSetupOption "/UPDATEPID=" $UpdatePid
     !insertmacro ReadSetupOption "/UPDATEGATE=" $UpdateGate
     !insertmacro ReadSetupOption "/PROFILEPARENT=" $ProfileParent
   ${EndWhile}
+  ReadRegStr $3 HKCU "Software\${INSTALLATION_ID}" "InstallLocation"
+  ${If} $3 != ""
+    StrCpy $INSTDIR $3
+  ${Else}
+!ifdef PREVIOUS_INSTALLATION_ID
+    !insertmacro UsePreviousDirectory $PreviousInstallDir
+!endif
+!ifdef EARLY_INSTALLATION_ID
+    !insertmacro UsePreviousDirectory $EarlyInstallDir
+!endif
+  ${EndIf}
+options_done:
   System::Call 'kernel32::LocalFree(p r0)'
+  ${If} $TauriUpdate == 1
+    ReadRegStr $1 HKCU "${TAURI_UNINSTALL_KEY}" "InstallLocation"
+    ReadRegStr $2 HKCU "${TAURI_UNINSTALL_KEY}" "MainBinaryName"
+    StrCpy $3 $1 1
+    ${If} $3 == '"'
+      StrCpy $1 $1 -1 1
+    ${EndIf}
+    ReadRegStr $3 HKCU "${TAURI_UNINSTALL_KEY}" "UninstallString"
+    ${If} $1 == ""
+    ${OrIf} $2 != "Patina.exe"
+    ${OrIf} $3 != '"$1\uninstall.exe"'
+      Goto invalid_previous_install
+    ${EndIf}
+    ReadRegStr $3 HKCU "Software\${INSTALLATION_ID}" "InstallLocation"
+    ${If} $3 != ""
+    ${AndIf} $3 != $1
+      Goto invalid_previous_install
+    ${EndIf}
+    StrCpy $INSTDIR $1
+    ; Tauri starts NSIS before its process exits. Wait for the installed executable to be released.
+    StrCpy $4 0
+    ${DoWhile} ${FileExists} "$INSTDIR\Patina.exe"
+      System::Call 'kernel32::CreateFileW(w "$INSTDIR\Patina.exe", i 0x40000000, i 0, p 0, i 3, i 0, p 0) p.r2'
+      ${If} $2 P<> -1
+        System::Call 'kernel32::CloseHandle(p r2)'
+        ${ExitDo}
+      ${EndIf}
+      IntOp $4 $4 + 1
+      ${If} $4 >= 150
+        Goto shutdown_failed
+      ${EndIf}
+      Sleep 100
+    ${Loop}
+    ReadRegStr $2 HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${TAURI_PRODUCT}"
+    StrCpy $TauriLogin 0
+    ${If} $2 == '"$INSTDIR\Patina.exe" --autostart'
+    ${OrIf} $2 == '$INSTDIR\Patina.exe --autostart'
+    ${OrIf} $2 == '"$INSTDIR\Patina.exe"'
+      StrCpy $TauriLogin 1
+    ${EndIf}
+    SetAutoClose true
+  ${EndIf}
   ${If} $UpdatePid != ""
     ${If} $UpdateGate == ""
       Goto shutdown_failed
@@ -120,6 +242,10 @@ Function .onInit
     ${EndIf}
   ${EndIf}
   Return
+invalid_previous_install:
+  MessageBox MB_OK|MB_ICONSTOP "Patina could not identify the existing installation for this update." /SD IDOK
+  SetErrorLevel 1
+  Quit
 shutdown_failed:
   MessageBox MB_OK|MB_ICONSTOP "Patina could not finish shutting down. The update was not installed." /SD IDOK
   SetErrorLevel 1
@@ -158,6 +284,7 @@ FunctionEnd
   Delete "$INSTDIR\${DIRECTORY}\patina-probe.exe"
   Delete "$INSTDIR\${DIRECTORY}\patina-gpui.exe"
   Delete "$INSTDIR\${DIRECTORY}\patina-gpui-installation"
+  Delete "$INSTDIR\${DIRECTORY}\patina-installation"
   Delete "$INSTDIR\${DIRECTORY}\Uninstall.exe"
   RMDir "$INSTDIR\${DIRECTORY}"
 !macroend
@@ -170,6 +297,7 @@ Function ${NAME}
     !insertmacro RemoveCurrent "patina-ui.exe"
     !insertmacro RemoveCurrent "patina-probe.exe"
     !insertmacro RemoveCurrent "Uninstall.exe"
+    !insertmacro RemoveCurrent "patina-installation"
     !insertmacro RemoveCurrent "patina-gpui-installation"
     ClearErrors
     Rename "$INSTDIR\.patina-publishing" "$INSTDIR\.patina-backing"
@@ -178,11 +306,12 @@ backing:
   IfFileExists "$INSTDIR\.patina-backing" 0 done
   !insertmacro Restore "Font-Licenses.txt"
   !insertmacro Restore "patina-gpui.exe"
+  !insertmacro Restore "patina-gpui-installation"
   !insertmacro Restore "patina.exe"
   !insertmacro Restore "patina-ui.exe"
   !insertmacro Restore "patina-probe.exe"
   !insertmacro Restore "Uninstall.exe"
-  !insertmacro Restore "patina-gpui-installation"
+  !insertmacro Restore "patina-installation"
   Delete "$INSTDIR\.patina-backing"
   IfFileExists "$INSTDIR\.patina-backing" recovery_failed
 done:
@@ -198,9 +327,67 @@ FunctionEnd
 !insertmacro RecoveryFunction "Recover"
 !insertmacro RecoveryFunction "un.Recover"
 
+!macro RemovePreviousRegistration ID DIRECTORY SHORTCUT
+  ${If} ${DIRECTORY} == $INSTDIR
+    DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${ID}"
+    DeleteRegValue HKCU "Software\${ID}" "InstallLocation"
+    DeleteRegKey /ifempty HKCU "Software\${ID}"
+    Delete "$SMPROGRAMS\${SHORTCUT}.lnk"
+  ${EndIf}
+!macroend
+
+Function SetShortcutAppId
+  ; Open the link itself for writing its System.AppUserModel.ID property.
+  System::Call 'shell32::SHGetPropertyStoreFromParsingName(w "$ShortcutPath", p 0, i 2, g "${IID_IPropertyStore}", *p .r0) i.r1'
+  ${If} $1 == 0
+    System::Call '*${SYSSTRUCT_PROPERTYKEY}(${PKEY_AppUserModel_ID})p.r2'
+    System::Call '*(&w${NSIS_MAX_STRLEN} "${INSTALLATION_ID}")p.r3'
+    System::Call '*${SYSSTRUCT_PROPVARIANT}(${VT_LPWSTR},,p r3)p.r4'
+    ${IPropertyStore::SetValue} $0 '($2,$4).r1'
+    ${If} $1 == 0
+      ${IPropertyStore::Commit} $0 ""
+    ${EndIf}
+    System::Free $4
+    System::Free $3
+    System::Free $2
+    ${IUnknown::Release} $0 ""
+  ${EndIf}
+FunctionEnd
+
+!macro CheckShortcutTarget PREFIX
+Function ${PREFIX}CheckShortcutTarget
+  StrCpy $9 0
+  IfFileExists "$ShortcutPath" 0 done
+  !insertmacro ComHlpr_CreateInProcInstance ${CLSID_ShellLink} ${IID_IShellLink} r0 ""
+  ${If} $0 P<> 0
+    ${IUnknown::QueryInterface} $0 '("${IID_IPersistFile}",.r1)'
+    ${If} $1 P<> 0
+      ${IPersistFile::Load} $1 '("$ShortcutPath",0).r2'
+      ${If} $2 == 0
+        ${IShellLink::GetPath} $0 '(.r3,${NSIS_MAX_STRLEN},0,0).r2'
+        ${If} $2 == 0
+        ${AndIf} $3 == "$INSTDIR\Patina.exe"
+          StrCpy $9 1
+        ${EndIf}
+      ${EndIf}
+      ${IUnknown::Release} $1 ""
+    ${EndIf}
+    ${IUnknown::Release} $0 ""
+  ${EndIf}
+done:
+FunctionEnd
+!macroend
+!insertmacro CheckShortcutTarget ""
+!insertmacro CheckShortcutTarget "un."
+
 Section "Patina"
   SetOutPath "$INSTDIR"
   Call Recover
+  ${If} $TauriUpdate == 1
+  ${AndIfNot} ${FileExists} "$INSTDIR\Patina.exe"
+    SetErrorLevel 1
+    Abort "The installed Patina executable is missing."
+  ${EndIf}
   ; The previous installation can contain separate window and probe executables.
   CreateDirectory "$INSTDIR\.patina-previous"
   SetOutPath "$INSTDIR\.patina-staging"
@@ -208,8 +395,8 @@ Section "Patina"
   File /oname=patina.exe "${APP_BINARY}"
   File "..\..\crates\quietpro\assets\fonts\Font-Licenses.txt"
   WriteUninstaller "$INSTDIR\.patina-staging\Uninstall.exe"
-  FileOpen $0 "$INSTDIR\.patina-staging\patina-gpui-installation" w
-  FileWrite $0 "patina-gpui"
+  FileOpen $0 "$INSTDIR\.patina-staging\patina-installation" w
+  FileWrite $0 "patina-desktop"
   FileClose $0
   IfErrors stage_failed
   SetOutPath "$INSTDIR"
@@ -217,18 +404,32 @@ Section "Patina"
   IfErrors stage_failed
   FileClose $0
   !insertmacro Backup "patina-gpui.exe"
+  !insertmacro Backup "patina-gpui-installation"
   !insertmacro Backup "Font-Licenses.txt"
   !insertmacro Backup "patina.exe"
   !insertmacro Backup "patina-ui.exe"
   !insertmacro Backup "patina-probe.exe"
   !insertmacro Backup "Uninstall.exe"
-  !insertmacro Backup "patina-gpui-installation"
+  !insertmacro Backup "patina-installation"
+  ${If} $TauriUpdate == 1
+    StrCpy $1 ""
+    ${If} $ProfileParent != ""
+      StrCpy $1 "$ProfileParent\."
+    ${EndIf}
+    nsExec::ExecToStack '"$INSTDIR\.patina-staging\patina.exe" --upgrade-tauri-profile "$1" "${TAURI_DATA_DIR}" "${TAURI_STORAGE_KEY}" "$TauriLogin"'
+    Pop $1
+    Pop $2
+    ${If} $1 != 0
+      MessageBox MB_OK|MB_ICONSTOP "Unable to open the existing Patina data. The previous application will be restored.$\r$\n$2" /SD IDOK
+      Goto rollback
+    ${EndIf}
+  ${EndIf}
   ClearErrors
   Rename "$INSTDIR\.patina-backing" "$INSTDIR\.patina-publishing"
   IfErrors rollback
   !insertmacro Publish "Uninstall.exe"
   !insertmacro Publish "Font-Licenses.txt"
-  !insertmacro Publish "patina-gpui-installation"
+  !insertmacro Publish "patina-installation"
   !insertmacro Publish "patina.exe"
   Delete "$INSTDIR\.patina-publishing"
   IfFileExists "$INSTDIR\.patina-publishing" rollback
@@ -247,7 +448,32 @@ Section "Patina"
   WriteRegDWORD HKCU "${UNINSTALL_KEY}" "NoRepair" 1
   ${GetSize} "$INSTDIR" "/S=0K" $0 $1 $2
   WriteRegDWORD HKCU "${UNINSTALL_KEY}" "EstimatedSize" $0
-  CreateShortcut "$SMPROGRAMS\${INSTALLATION_ID}.lnk" "$INSTDIR\patina.exe" "--main"
+  StrCpy $ShortcutPath "$SMPROGRAMS\${SHORTCUT_NAME}.lnk"
+  CreateShortcut "$ShortcutPath" "$INSTDIR\patina.exe" "--main"
+  Call SetShortcutAppId
+  ${If} $TauriUpdate == 1
+    StrCpy $ShortcutPath "$SMPROGRAMS\${TAURI_PRODUCT}\${TAURI_PRODUCT}.lnk"
+    Call CheckShortcutTarget
+    ${If} $9 == 1
+      Delete "$ShortcutPath"
+      RMDir "$SMPROGRAMS\${TAURI_PRODUCT}"
+    ${EndIf}
+    StrCpy $ShortcutPath "$DESKTOP\${TAURI_PRODUCT}.lnk"
+    Call CheckShortcutTarget
+    ${If} $9 == 1
+      Call SetShortcutAppId
+    ${EndIf}
+    DeleteRegKey HKCU "${TAURI_UNINSTALL_KEY}"
+    ${If} $TauriLogin == 1
+      DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${TAURI_PRODUCT}"
+    ${EndIf}
+  ${EndIf}
+!ifdef PREVIOUS_INSTALLATION_ID
+  !insertmacro RemovePreviousRegistration "${PREVIOUS_INSTALLATION_ID}" $PreviousInstallDir "${PREVIOUS_SHORTCUT_NAME}"
+!endif
+!ifdef EARLY_INSTALLATION_ID
+  !insertmacro RemovePreviousRegistration "${EARLY_INSTALLATION_ID}" $EarlyInstallDir "${EARLY_INSTALLATION_ID}"
+!endif
   Goto finished
 rollback:
   Call Recover
@@ -292,10 +518,15 @@ Section "Uninstall"
   Delete "$INSTDIR\.patina-backing"
   IfFileExists "$INSTDIR\.patina-backing" rollback
   !insertmacro CleanOwned ".patina-previous"
-  Delete "$INSTDIR\patina-gpui-installation"
+  Delete "$INSTDIR\patina-installation"
   Delete "$INSTDIR\Uninstall.exe"
   RMDir "$INSTDIR"
-  Delete "$SMPROGRAMS\${INSTALLATION_ID}.lnk"
+  Delete "$SMPROGRAMS\${SHORTCUT_NAME}.lnk"
+  StrCpy $ShortcutPath "$DESKTOP\${TAURI_PRODUCT}.lnk"
+  Call un.CheckShortcutTarget
+  ${If} $9 == 1
+    Delete "$ShortcutPath"
+  ${EndIf}
   DeleteRegKey HKCU "${UNINSTALL_KEY}"
   DeleteRegKey HKCU "Software\${INSTALLATION_ID}"
   Goto done

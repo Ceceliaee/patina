@@ -17,11 +17,11 @@ pub(super) fn fixture() -> (Config, Value, Vec<u8>) {
         .decode(fixture["payload"].as_str().unwrap())
         .unwrap();
     let config = Config {
-        application: "patina-gpui".into(),
+        application: "patina-desktop".into(),
         endpoints: vec!["https://updates.invalid/manifest".into()],
         public_key: fixture["public_key"].as_str().unwrap().into(),
     };
-    let manifest = json!({"schema":1,"application":"patina-gpui","version":"0.2.0","notes":"Test release","platforms":{"windows-x86_64":{"url":"https://updates.invalid/setup.exe","signature":fixture["signature"],"size":payload.len()}}});
+    let manifest = json!({"schema":1,"application":"patina-desktop","version":"0.2.0","notes":"Test release","platforms":{"windows-x86_64":{"url":"https://updates.invalid/setup.exe","signature":fixture["signature"],"size":payload.len()}}});
     (config, manifest, payload)
 }
 fn parse(value: &Value, config: &Config, current: &str, target: Target) -> Result<Option<Release>> {

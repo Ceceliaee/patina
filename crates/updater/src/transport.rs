@@ -55,7 +55,7 @@ impl Transport for WindowsHttp {
         let run = || -> windows::core::Result<()> {
             unsafe {
                 let session = Handle::new(WinHttpOpen(
-                    w!("Patina GPUI Updater/1"),
+                    w!("Patina Updater/1"),
                     WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
                     PCWSTR::null(),
                     PCWSTR::null(),

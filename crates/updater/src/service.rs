@@ -77,8 +77,12 @@ impl Service {
                 .open(entry.path().join("owner.lock"))
             {
                 // NSIS may still be running when it starts the updated app.
-                if let Err(error) = fs::remove_file(entry.path().join("Patina-GPUI-setup.exe"))
-                    && error.kind() != std::io::ErrorKind::NotFound
+                if ["Patina-setup.exe", "Patina-GPUI-setup.exe"]
+                    .iter()
+                    .any(|name| {
+                        fs::remove_file(entry.path().join(name))
+                            .is_err_and(|e| e.kind() != std::io::ErrorKind::NotFound)
+                    })
                 {
                     continue;
                 }
@@ -207,7 +211,7 @@ impl Service {
             .share_mode(0)
             .open(directory.path().join("owner.lock"))
             .map_err(|e| e.to_string())?;
-        let installer = directory.path().join("Patina-GPUI-setup.exe");
+        let installer = directory.path().join("Patina-setup.exe");
         let mut file = File::create(&installer).map_err(|e| e.to_string())?;
         self.transport
             .get(&release.url, release.size, &mut file, &mut |received| {
@@ -264,10 +268,10 @@ impl Service {
             command.arg(format!("/PROFILEPARENT={}", parent.display()));
         }
         // Installed builds have a marker; development/portable builds use the installer's default destination.
-        if let Some(dir) = executable
-            .parent()
-            .filter(|dir| dir.join("patina-gpui-installation").is_file())
-        {
+        if let Some(dir) = executable.parent().filter(|dir| {
+            dir.join("patina-installation").is_file()
+                || dir.join("patina-gpui-installation").is_file()
+        }) {
             command.raw_arg(format!("/D={}", dir.display()));
         }
         launch(&mut command)?;
@@ -316,7 +320,7 @@ mod tests {
                     command
                         .get_program()
                         .to_string_lossy()
-                        .ends_with("Patina-GPUI-setup.exe")
+                        .ends_with("Patina-setup.exe")
                 );
                 Ok(())
             })
@@ -390,7 +394,7 @@ mod tests {
         let pending = root.path().join("pending-installed");
         fs::create_dir(&pending).unwrap();
         fs::write(pending.join("owner.lock"), []).unwrap();
-        let installer = pending.join("Patina-GPUI-setup.exe");
+        let installer = pending.join("Patina-setup.exe");
         fs::write(&installer, b"running installer").unwrap();
         let lock = OpenOptions::new()
             .read(true)

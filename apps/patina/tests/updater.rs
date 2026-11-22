@@ -66,7 +66,7 @@ fn native_update_download_confirmation_and_navigation() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let dir = root.path().join(patina::APP_ID);
+    let dir = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&dir)?;
     seed(&dir.join("patina.db"))?;
     let fixture = root.path().join("updater-fixture");
@@ -79,7 +79,7 @@ fn native_update_download_confirmation_and_navigation() -> Result<(), Error> {
     fs::write(
         fixture.join("config.json"),
         serde_json::to_vec(
-            &json!({"application":"patina-gpui","endpoints":["https://fixture.invalid/manifest"],"public_key":signed["public_key"]}),
+            &json!({"application":"patina-desktop","endpoints":["https://fixture.invalid/manifest"],"public_key":signed["public_key"]}),
         )?,
     )?;
     let (platform, signature) = if cfg!(target_arch = "aarch64") {
@@ -90,14 +90,14 @@ fn native_update_download_confirmation_and_navigation() -> Result<(), Error> {
     fs::write(
         fixture.join("manifest.json"),
         serde_json::to_vec(
-            &json!({"schema":1,"application":"patina-gpui","version":"0.2.0","notes":"Migration fixture release notes","platforms":{platform:{"url":"https://fixture.invalid/setup.exe","size":payload.len(),"signature":signature}}}),
+            &json!({"schema":1,"application":"patina-desktop","version":"0.2.0","notes":"Migration fixture release notes","platforms":{platform:{"url":"https://fixture.invalid/setup.exe","size":payload.len(),"signature":signature}}}),
         )?,
     )?;
     let mut child = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
             .arg("--today")
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
-            .env("PATINA_GPUI_UPDATE_FIXTURE", &fixture)
+            .env("PATINA_PROFILE_PARENT", root.path())
+            .env("PATINA_UPDATE_FIXTURE", &fixture)
             .spawn()?,
     );
     let hwnd = wait("main", || {

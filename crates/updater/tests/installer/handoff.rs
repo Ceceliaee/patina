@@ -21,7 +21,7 @@ use winreg::{
 
 fn resident(exe: &Path) -> Result<(HWND, u32), Error> {
     Ok(wait_observed("installed host tray", || {
-        let hwnd = unsafe { FindWindowW(None, w!("Patina GPUI")) }.map_err(|e| e.to_string())?;
+        let hwnd = unsafe { FindWindowW(None, w!("Patina Tray")) }.map_err(|e| e.to_string())?;
         let mut pid = 0;
         unsafe {
             GetWindowThreadProcessId(hwnd, Some(&mut pid));
@@ -58,14 +58,22 @@ fn published_profile_copy_survives_install_upgrade_and_uninstall() -> Result<(),
     let old_dir = fixtures.join("custom-data");
     fs::create_dir_all(&old_dir)?;
     // Built from the 27 migrations in v1.10.0 (6469dc51) with one synthetic session.
-    let mut archived =
-        flate2::read::GzDecoder::new(&include_bytes!("../fixtures/patina-1.10.0.sqlite.gz")[..]);
+    let mut archived = zip::ZipArchive::new(std::io::Cursor::new(include_bytes!(
+        "../../../test-support/fixtures/patina-1.10.0.zip"
+    )))?;
     let mut file = fs::File::create(old_dir.join("patina.db"))?;
-    std::io::copy(&mut archived, &mut file)?;
+    std::io::copy(&mut archived.by_name("database/patina.db")?, &mut file)?;
     drop(file);
+    let parent = root.path().join("Roaming");
+    let local = root.path().join("Local");
+    fs::create_dir(&parent)?;
+    let profile = parent.join("Patina");
+    let custom = root.path().join("custom data");
+    fs::create_dir_all(custom.join("backups"))?;
+    fs::write(custom.join("backups/retained.zip"), b"previous backup")?;
     let old_control = serde_json::to_vec(&serde_json::json!({
         "format":"patina.storage-control.v1","profile":"production",
-        "dataRoot":old_dir,"webviewRoot":null,"pending":null,"maintenance":{},"cleanupFiles":[]
+        "dataRoot":custom,"webviewRoot":null,"pending":null,"maintenance":{},"cleanupFiles":[]
     }))?;
     let bins = PathBuf::from(
         env::var_os("PATINA_TEST_RELEASE_BIN_DIR")
@@ -75,13 +83,7 @@ fn published_profile_copy_survives_install_upgrade_and_uninstall() -> Result<(),
     let state: serde_json::Value = serde_json::from_slice(&old_control)?;
     assert_eq!(state["format"], "patina.storage-control.v1");
     assert_eq!(state["profile"], "production");
-    let source = Path::new(
-        state["dataRoot"]
-            .as_str()
-            .ok_or("Missing historical custom data root")?,
-    )
-    .join("patina.db")
-    .canonicalize()?;
+    let source = old_dir.join("patina.db").canonicalize()?;
     assert!(source.starts_with(&fixtures));
     let old_bytes = fs::read(&source)?;
     assert_eq!(sample(&source)?, (27, 60000, "v1.10.0".into()));
@@ -91,7 +93,8 @@ fn published_profile_copy_survives_install_upgrade_and_uninstall() -> Result<(),
     let previous = Cleanup {
         id: format!("{id}.Previous"),
     };
-    let (legacy, _) = hkcu.create_subkey(format!("Software\\{}\\ReleasedProfile", previous.id))?;
+    let storage_key = format!("Software\\{}\\ReleasedProfile", previous.id);
+    let (legacy, _) = hkcu.create_subkey(&storage_key)?;
     legacy.set_raw_value(
         "State",
         &RegValue {
@@ -99,36 +102,79 @@ fn published_profile_copy_survives_install_upgrade_and_uninstall() -> Result<(),
             bytes: old_control.as_slice().into(),
         },
     )?;
-    let parent = root.path().join("profile-parent");
-    let profile = parent.join("Patina.GPUI.Experimental");
-    let custom = root.path().join("gpui-custom-data");
-    fs::create_dir_all(&custom)?;
-    fs::create_dir_all(&profile)?;
     let database = custom.join("patina.db");
-    fs::copy(&source, &database)?;
     let control = profile.join("database-location.json");
-    let location = serde_json::to_vec(&serde_json::json!({"active":custom,"pending":null}))?;
-    fs::write(&control, &location)?;
-    let install = root.path().join("installation");
+    let install = local.join("Patina");
+    fs::create_dir_all(&install)?;
+    fs::write(install.join("Patina.exe"), b"previous Patina")?;
+    fs::write(install.join("uninstall.exe"), b"previous uninstaller")?;
+    let old_registration = format!(
+        "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{}",
+        previous.id
+    );
+    let (old_key, _) = hkcu.create_subkey(&old_registration)?;
+    old_key.set_value("InstallLocation", &format!("\"{}\"", install.display()))?;
+    old_key.set_value("MainBinaryName", &"Patina.exe")?;
+    old_key.set_value(
+        "UninstallString",
+        &format!("\"{}\\uninstall.exe\"", install.display()),
+    )?;
+    drop(old_key);
     let setup = root.path().join("setup.exe");
     let installer =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packaging/windows/patina.nsi");
     run(Command::new(env::var("PATINA_TEST_MAKENSIS")?)
         .arg("/V2")
-        .arg("/DAPP_VERSION=1.10.0")
-        .arg("/DRESOURCE_VERSION=1.10.0.0")
+        .arg("/DAPP_VERSION=1.10.1")
+        .arg("/DRESOURCE_VERSION=1.10.1.0")
         .arg(format!("/DINSTALLATION_ID={id}"))
+        .arg(format!("/DTAURI_PRODUCT={}", previous.id))
+        .arg(format!("/DTAURI_STORAGE_KEY={storage_key}"))
+        .arg(format!("/DTAURI_DATA_DIR={}", old_dir.display()))
         .arg(format!("/DOUTPUT_FILE={}", setup.display()))
         .arg(format!(
             "/DAPP_BINARY={}",
             bins.join("patina.exe").display()
         ))
         .arg(installer))?;
-    let setup_and_exit = || -> Result<(), Error> {
-        run(Command::new(&setup)
+    let tauri_update = || {
+        let mut cmd = Command::new(&setup);
+        cmd.env("APPDATA", &parent)
+            .env("LOCALAPPDATA", &local)
+            .env_remove("PATINA_PROFILE_PARENT")
+            .env_remove("PATINA_GPUI_PROFILE_PARENT")
             .arg("/S")
-            .arg(format!("/PROFILEPARENT={}", parent.display()))
-            .raw_arg(format!("/D={}", install.display())))?;
+            .args(["/P", "/R", "/UPDATE", "/ARGS", "--autostart"]);
+        cmd
+    };
+    assert!(
+        !tauri_update().status()?.success(),
+        "unavailable custom data must block upgrade"
+    );
+    assert_eq!(fs::read(install.join("Patina.exe"))?, b"previous Patina");
+    assert_eq!(
+        fs::read(install.join("uninstall.exe"))?,
+        b"previous uninstaller"
+    );
+    assert!(hkcu.open_subkey(&old_registration).is_ok());
+    assert!(!control.exists());
+    fs::copy(&source, &database)?;
+    let existing = profile.join("patina.db");
+    fs::write(&existing, b"independent desktop data")?;
+    assert!(!tauri_update().status()?.success());
+    assert_eq!(fs::read(&existing)?, b"independent desktop data");
+    assert_eq!(fs::read(&database)?, old_bytes);
+    assert_eq!(fs::read(install.join("Patina.exe"))?, b"previous Patina");
+    fs::remove_file(existing)?;
+    let setup_and_exit = |tauri: bool| -> Result<(), Error> {
+        if tauri {
+            run(&mut tauri_update())?;
+        } else {
+            run(Command::new(&setup)
+                .arg("/S")
+                .arg(format!("/PROFILEPARENT={}", parent.display()))
+                .raw_arg(format!("/D={}", install.display())))?;
+        }
         let application = install.join("patina.exe").canonicalize()?;
         assert!(fs::read(&application)? == fs::read(bins.join("patina.exe"))?);
         for retired in ["patina-ui.exe", "patina-probe.exe"] {
@@ -199,7 +245,22 @@ fn published_profile_copy_survives_install_upgrade_and_uninstall() -> Result<(),
         assert_eq!(sample(&database)?, (27, 60000, "v1.10.0".into()));
         Ok(())
     };
-    setup_and_exit()?;
+    setup_and_exit(true)?;
+    assert!(hkcu.open_subkey(&old_registration).is_err());
+    let location = fs::read(&control)?;
+    let selected: serde_json::Value = serde_json::from_slice(&location)?;
+    assert_eq!(
+        Path::new(selected["active"].as_str().unwrap()),
+        custom.canonicalize()?
+    );
+    assert_eq!(
+        Path::new(selected["backups"].as_str().unwrap()),
+        custom.canonicalize()?.join("backups")
+    );
+    assert_eq!(
+        fs::read(custom.join("backups/retained.zip"))?,
+        b"previous backup"
+    );
     // A previous build's real application files can be supplied for a release rehearsal.
     if let Some(previous) = env::var_os("PATINA_TEST_PREVIOUS_BIN_DIR") {
         let previous = PathBuf::from(previous);
@@ -207,15 +268,42 @@ fn published_profile_copy_survives_install_upgrade_and_uninstall() -> Result<(),
             fs::copy(previous.join(name), install.join(name))?;
         }
     }
-    setup_and_exit()?;
-    // The old registry entry belongs to the other installation.
+    setup_and_exit(false)?;
+    // Uninstall owns the program files, while storage and its location belong to the user.
     assert_eq!(legacy.get_raw_value("State")?.bytes, old_control);
     run(Command::new(install.join("Uninstall.exe"))
         .arg("/S")
         .raw_arg(format!("_?={}", install.display())))?;
     assert_eq!(legacy.get_raw_value("State")?.bytes, old_control);
     assert_eq!(fs::read(&control)?, location);
+    assert!(!parent.join("Patina.Desktop").exists());
+    assert!(!parent.join("Patina.GPUI.Experimental").exists());
     assert_eq!(sample(&database)?, (27, 60000, "v1.10.0".into()));
-    assert_eq!(fs::read(source)?, old_bytes);
+    assert_eq!(fs::read(&source)?, old_bytes);
+    // An installation without a custom directory uses its roaming database.
+    let default_parent = root.path().join("fresh-roaming");
+    let roaming = default_parent.join("Patina");
+    fs::create_dir_all(&roaming)?;
+    fs::copy(&source, roaming.join("patina.db"))?;
+    let adopt_default = |parent: &Path| {
+        run(Command::new(bins.join("patina.exe"))
+            .env("APPDATA", parent)
+            .env("LOCALAPPDATA", &local)
+            .env_remove("PATINA_PROFILE_PARENT")
+            .env_remove("PATINA_GPUI_PROFILE_PARENT")
+            .arg("--upgrade-tauri-profile")
+            .arg("")
+            .arg(parent.join("Patina"))
+            .arg(format!("{storage_key}\\Absent"))
+            .arg("0"))
+    };
+    adopt_default(&default_parent)?;
+    let moved_parent = root.path().join("another-account-path");
+    fs::rename(&default_parent, &moved_parent)?;
+    adopt_default(&moved_parent)?;
+    assert_eq!(
+        sample(&moved_parent.join("Patina/patina.db"))?,
+        (27, 60000, "v1.10.0".into())
+    );
     Ok(())
 }

@@ -56,8 +56,11 @@ fn native_install_upgrade_shutdown_and_uninstall() -> Result<(), Error> {
         return Ok(());
     }
     let root = tempfile::tempdir()?;
-    let id = format!("Patina.GPUI.Test.{}", std::process::id());
+    let id = format!("Patina.Setup.Test.{}", std::process::id());
     let _cleanup = Cleanup { id: id.clone() };
+    let previous = Cleanup {
+        id: format!("{id}.Previous"),
+    };
     let nsis = env::var_os("PATINA_TEST_MAKENSIS")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
@@ -89,23 +92,39 @@ fn main() {
         .arg("/DAPP_VERSION=0.2.0")
         .arg("/DRESOURCE_VERSION=0.2.0.0")
         .arg(format!("/DINSTALLATION_ID={id}"))
+        .arg(format!("/DPREVIOUS_INSTALLATION_ID={}", previous.id))
+        .arg(format!(
+            "/DDEFAULT_INSTALL_DIR={}",
+            root.path().join("fresh install").display()
+        ))
         .arg(format!("/DAPP_BINARY={}", binary.display()))
         .arg(format!("/DOUTPUT_FILE={}", setup.display()))
         .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packaging/windows/patina.nsi")))?;
     let destination = root.path().join("install with spaces");
-    // The first GPUI installer had one executable and the same installation identity.
+    // An earlier installer shipped this executable and installation marker.
     fs::create_dir_all(&destination)?;
     fs::write(destination.join("patina-gpui.exe"), b"previous application")?;
     fs::write(destination.join("patina-gpui-installation"), b"patina-gpui")?;
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let previous_key = format!("Software\\{}", previous.id);
+    hkcu.create_subkey(&previous_key)?
+        .0
+        .set_value("InstallLocation", &destination.as_os_str())?;
+    run(Command::new(&setup).arg("/S"))?;
+    wait_file(&destination.join("started.txt"));
+    assert!(!destination.join("patina-gpui-installation").exists());
+    assert!(hkcu.open_subkey(previous_key).is_err());
+    let shell_id = run(Command::new("powershell.exe")
+        .env("PATINA_TEST_LINK", format!("{id}.lnk"))
+        .args(["-NoProfile", "-NonInteractive", "-Command",
+            "$folder = (New-Object -ComObject Shell.Application).Namespace([Environment]::GetFolderPath('Programs')); $folder.ParseName($env:PATINA_TEST_LINK).ExtendedProperty('System.AppUserModel.ID')"]))?;
+    assert_eq!(String::from_utf8(shell_id.stdout)?.trim(), id);
     let mut install = Command::new(&setup);
     install
         .arg("/S")
         .raw_arg(format!("/D={}", destination.display()));
-    run(&mut install)?;
-    wait_file(&destination.join("started.txt"));
     assert!(!destination.join("patina-gpui.exe").exists());
-    assert!(destination.join("patina-gpui-installation").is_file());
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    assert!(destination.join("patina-installation").is_file());
     let registration = hkcu.open_subkey(format!(
         "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{id}"
     ))?;
@@ -178,7 +197,7 @@ fn main() {
         "patina-ui.exe",
         "patina-probe.exe",
         "Uninstall.exe",
-        "patina-gpui-installation",
+        "patina-installation",
     ] {
         fs::rename(destination.join(name), prior.join(name))?;
     }
@@ -208,10 +227,7 @@ fn main() {
     }
     assert!(!prior.exists());
     fs::remove_file(destination.join("started.txt"))?;
-    fs::write(
-        destination.join("patina-gpui-installation"),
-        b"previous install",
-    )?;
+    fs::write(destination.join("patina-installation"), b"previous install")?;
     let profile_parent = root.path().join("Patina 测试资料");
     let staging = profile_parent.join("update staging");
     fs::create_dir_all(&staging)?;
@@ -230,7 +246,7 @@ fn main() {
         assert!(!bad.status.success());
         assert!(fs::read(destination.join("patina.exe"))? == expected);
         assert_eq!(
-            fs::read(destination.join("patina-gpui-installation"))?,
+            fs::read(destination.join("patina-installation"))?,
             b"previous install"
         );
         assert!(!destination.join("started.txt").exists());
@@ -248,8 +264,8 @@ fn main() {
     run(&mut upgrade)?;
     assert!(host.wait()?.success());
     assert_eq!(
-        fs::read(destination.join("patina-gpui-installation"))?,
-        b"patina-gpui"
+        fs::read(destination.join("patina-installation"))?,
+        b"patina-desktop"
     );
     wait_file(&destination.join("started.txt"));
     let started = fs::read_to_string(destination.join("started.txt"))?;
