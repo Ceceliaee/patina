@@ -31,16 +31,15 @@ use windows::{
 };
 
 fn hourly_keyboard(hwnd: HWND, toggle: &IUIAutomationElement, grouped: bool) -> Result<(), Error> {
-    let tooltip = || -> Option<String> {
-        controls(hwnd).ok()?.into_iter().find_map(|el| unsafe {
-            (el.CurrentControlType().ok()? == UIA_ToolTipControlTypeId
+    let tooltip_element = || {
+        controls(hwnd).ok()?.into_iter().find(|el| unsafe {
+            el.CurrentControlType().ok() == Some(UIA_ToolTipControlTypeId)
                 && el
                     .CurrentAutomationId()
-                    .is_ok_and(|id| id == "hour-tooltip"))
-            .then(|| el.CurrentName().ok().map(|s| s.to_string()))
-            .flatten()
+                    .is_ok_and(|id| id == "hour-tooltip")
         })
     };
+    let tooltip = || unsafe { tooltip_element()?.CurrentName().ok().map(|s| s.to_string()) };
     let first_hour = wait("first hour", || {
         controls(hwnd).ok()?.into_iter().find(|el| unsafe {
             el.CurrentName()
@@ -60,6 +59,16 @@ fn hourly_keyboard(hwnd: HWND, toggle: &IUIAutomationElement, grouped: bool) -> 
     wait("pointer opens the hour tooltip", || {
         tooltip().filter(|s| s.starts_with("00:00 ･ Active 60m"))
     })?;
+    let detail =
+        unsafe { wait("hour tooltip bounds", &tooltip_element)?.CurrentBoundingRectangle()? };
+    let column = unsafe { first_hour.CurrentBoundingRectangle()? };
+    assert!(detail.left >= column.right && detail.bottom <= column.bottom);
+    let toggle_rect = unsafe { toggle.CurrentBoundingRectangle()? };
+    let scale = f64::from(toggle_rect.bottom - toggle_rect.top) / 28.;
+    assert!(
+        (f64::from(detail.right - detail.left) - 144. * scale).abs() <= 1.,
+        "tooltip width: {detail:?}"
+    );
     move_to(toggle)?;
     wait("pointer leaves the hour", || {
         tooltip().is_none().then_some(())
@@ -523,7 +532,7 @@ fn main_window_lifecycle() -> Result<(), Error> {
     let fixture = out.join("fixture.db");
     seed_profile(&fixture, true)?;
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina::APP_ID);
+    let profile = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&profile)?;
     fs::copy(&fixture, profile.join("patina.db"))?;
     let exe = r"C:\fixture\fixture.exe";
@@ -536,14 +545,14 @@ fn main_window_lifecycle() -> Result<(), Error> {
     )?;
     let mut child = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env("PATINA_PROFILE_PARENT", root.path())
             .env("PATINA_E2E_DATA_ROOT", root.path())
             .env("PATINA_E2E", "1")
             .env("PATINA_E2E_NATIVE_FIXTURE", "1")
             .spawn()?,
     );
     let pid = child.0.id();
-    let tray = wait("tray", || window(pid, w!("Patina GPUI")))?;
+    let tray = wait("tray", || window(pid, w!("Patina Tray")))?;
     let main = || children::find(pid, |p| window(p, w!("Patina")));
     let sample = |state: &str| -> Result<u64, Error> {
         let sampler = repo.join("target/debug/examples/windows-resource-sample.exe");
@@ -594,7 +603,7 @@ fn main_window_lifecycle() -> Result<(), Error> {
         unsafe { GetDpiForWindow(hwnd) }
     );
     fs::write(
-        out.join("gpui.json"),
+        out.join("desktop.json"),
         serde_json::to_vec_pretty(
             &serde_json::json!({"labels":labels,"headings":headings(hwnd)?,"client":[rect.right,rect.bottom],"dpi":unsafe{GetDpiForWindow(hwnd)},
                 "fixtureHash":hash(&fixture)?,"binaryHash":hash(Path::new(env!("CARGO_BIN_EXE_patina")))?}),
@@ -774,12 +783,12 @@ fn ranked_app_actions() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina::APP_ID);
+    let profile = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&profile)?;
     seed(&profile.join("patina.db"))?;
     let mut child = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env("PATINA_PROFILE_PARENT", root.path())
             .env("RUST_BACKTRACE", "1")
             .stderr(fs::File::create(root.path().join("stderr.log"))?)
             .arg("--today")
@@ -833,7 +842,7 @@ fn ranked_app_actions() -> Result<(), Error> {
         )
         .into());
     }
-    let tray = wait("tray", || window(child.0.id(), w!("Patina GPUI")))?;
+    let tray = wait("tray", || window(child.0.id(), w!("Patina Tray")))?;
     command(tray, 2)?;
     assert!(wait("exit", || child.0.try_wait().ok().flatten())?.success());
     Ok(())

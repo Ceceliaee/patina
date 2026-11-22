@@ -1,13 +1,19 @@
 mod activity;
+mod drag;
+#[cfg(all(test, feature = "native-tests", feature = "test-support"))]
+mod frame_tests;
 pub(crate) mod geometry;
 mod interaction;
 mod native;
-use geometry::logical_dock_bounds;
+use geometry::{CORNER_RADIUS, Layout, Monitor, initial_bounds};
 use gpui_kit::{prelude::*, *};
 use interaction::{Interaction, LEAVE_GRACE, motion_progress};
 use patina_activity_model::CurrentActivity;
+use patina_activity_model::views::mini::{Edge, MiniPreferences};
 use quietpro::{Icon, IconControl, Palette};
 use std::{rc::Rc, time::Instant};
+
+const HEADER_HEIGHT: f32 = 32.;
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum StatusTone {
@@ -41,7 +47,11 @@ pub struct Mini {
     tone: StatusTone,
     focus: FocusHandle,
     interaction: Interaction,
-    pinned: bool,
+    preferences: MiniPreferences,
+    saved: MiniPreferences,
+    save_revision: u64,
+    dock: Option<(Monitor, Layout)>,
+    drag: Option<drag::Drag>,
     leave: Option<Task<()>>,
     pointer_inside: Option<bool>,
     awaiting_entry: bool,
@@ -58,18 +68,20 @@ impl Mini {
         cx: &mut App,
         client: Rc<crate::client::Client>,
         focus: bool,
+        preferences: MiniPreferences,
     ) -> Result<(AnyWindowHandle, WeakEntity<Self>)> {
-        let area = cx.primary_display().map(|d| d.visible_bounds());
+        let monitor = native::restore_monitor(preferences.placement.monitor.as_ref())
+            .map_err(std::io::Error::other)?;
+        let panel = monitor.layout(&preferences.placement).panel;
         let options = WindowOptions {
-            window_bounds: area.map(|work| {
-                let mut bounds = logical_dock_bounds(work.size, true);
-                bounds.origin += work.origin;
-                WindowBounds::Windowed(bounds)
-            }),
+            display_id: Some(native::display_for(panel)),
+            window_bounds: Some(WindowBounds::Windowed(initial_bounds(panel, monitor.scale))),
             app_id: Some(crate::APP_ID.into()),
             kind: WindowKind::PopUp,
+            window_background: WindowBackgroundAppearance::Transparent,
             titlebar: None,
-            focus,
+            show: false,
+            focus: false,
             is_movable: false,
             is_resizable: false,
             is_minimizable: false,
@@ -82,6 +94,9 @@ impl Mini {
                 cx.observe_window_appearance(window, |_, _, cx| cx.notify())
                     .detach();
                 cx.observe_window_activation(window, |mini, window, cx| {
+                    if mini.drag.is_some() && !native::captured(window) {
+                        mini.cancel_drag(window, cx);
+                    }
                     mini.sync_pointer(window, cx);
                 })
                 .detach();
@@ -92,7 +107,11 @@ impl Mini {
                         expanded: true,
                         ..Default::default()
                     },
-                    pinned: false,
+                    saved: preferences.clone(),
+                    preferences,
+                    save_revision: 0,
+                    dock: None,
+                    drag: None,
                     leave: None,
                     pointer_inside: None,
                     awaiting_entry: true,
@@ -111,8 +130,13 @@ impl Mini {
             })
         })?;
         handle
-            .update(cx, |_, win, _| {
-                let placed = native::place(win);
+            .update(cx, |_, win, cx| {
+                let placed = view
+                    .update(cx, |mini, cx| mini.place_on(monitor, win, cx))
+                    .and_then(|()| {
+                        win.draw(cx).clear(cx);
+                        native::show(win, panel, focus)
+                    });
                 if placed.is_err() {
                     win.remove_window();
                 }
@@ -125,13 +149,13 @@ impl Mini {
     pub fn reopen(&mut self, focus: bool, window: &mut Window, cx: &mut Context<Self>) {
         self.expand(true, cx);
         if focus {
-            window.activate_window();
+            native::activate(window);
             window.focus(&self.focus, cx);
         }
     }
 
     fn expand(&mut self, value: bool, cx: &mut Context<Self>) {
-        if !value && self.pinned {
+        if !value && (self.preferences.held || self.preferences.placement.edge.is_none()) {
             return;
         }
         self.leave = None;
@@ -191,12 +215,16 @@ impl Mini {
     }
 
     fn sync_pointer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.drag.is_some() {
+            return;
+        }
         let inside = native::contains_cursor(window);
         if inside {
             self.awaiting_entry = false;
         }
         let protected = self.awaiting_entry
-            || self.pinned
+            || self.preferences.held
+            || self.preferences.placement.edge.is_none()
             || (window.is_window_active()
                 && window.last_input_was_keyboard()
                 && !self.focus.is_focused(window)
@@ -234,10 +262,11 @@ impl Mini {
         let view = cx.weak_entity();
         let pin = IconControl::new("pin", self.text("miniWindow.hold"), Icon::Pin)
             .with_tooltip()
-            .selected_icon(quietpro::FILLED_PIN_ICON)
-            .toggle(colors, self.pinned, move |held, _, window, cx| {
+            .with_selected_background()
+            .toggle(colors, self.preferences.held, move |held, _, window, cx| {
                 let _ = view.update(cx, |mini, cx| {
-                    mini.pinned = held;
+                    mini.preferences.held = held;
+                    mini.persist(window, cx);
                     mini.sync_pointer(window, cx);
                     cx.notify();
                 });
@@ -254,23 +283,30 @@ impl Mini {
                 patina_desktop_protocol::MainTarget::Resume,
             ));
         });
-        let close = IconControl::new("close", self.text("common.close"), Icon::X)
-            .action(colors, |_, window, _| window.remove_window());
+        let close = super::caption::Caption::Mini
+            .button("close", self.text("common.close"), Icon::X, colors)
+            .on_click(|_, window, _| window.remove_window());
         div()
             .flex()
             .items_center()
             .justify_between()
             .w_full()
             .flex_none()
-            .h(px(32.))
+            .h(px(HEADER_HEIGHT))
             .px(px(8.))
-            .bg(colors.chrome)
             .border_b_1()
             .border_color(colors.border)
-            .child(quietpro::glyph(Icon::AppWindow, self.tone.color(colors)))
+            .child(
+                self.drag_region(cx)
+                    .flex_1()
+                    .h_full()
+                    .flex()
+                    .items_center()
+                    .child(quietpro::glyph(Icon::AppWindow, self.tone.color(colors)).size(px(16.))),
+            )
             .child(
                 quietpro::icon_actions()
-                    .children(self.client.shortcut_buttons(true))
+                    .children(self.client.shortcut_buttons(colors))
                     .child(pin)
                     .child(main)
                     .child(close),
@@ -285,9 +321,9 @@ impl Mini {
         }
     }
 
-    fn content(&self, colors: Palette) -> Div {
+    fn content(&self, colors: Palette, dark: bool) -> Div {
         match &self.recent {
-            Some(Ok(data)) => activity::render(data, colors),
+            Some(Ok(data)) => activity::render(data, colors, dark),
             other => div()
                 .flex_1()
                 .flex()
@@ -316,19 +352,43 @@ impl Mini {
             .items_center()
             .justify_center()
             .focus_visible(move |s| s.border_1().border_color(colors.secondary))
-            .child(Self::mark(self.tone.color(colors)))
+            .child(self.mark(self.tone.color(colors)))
             .on_click(cx.listener(|this, _, _, cx| this.expand(true, cx)))
     }
 
-    fn mark(color: Rgba) -> Div {
-        div().w(px(38.)).h(px(4.)).rounded(px(3.)).bg(color)
+    fn mark(&self, color: Rgba) -> Div {
+        let side = matches!(
+            self.preferences.placement.edge,
+            Some(Edge::Left | Edge::Right)
+        );
+        div()
+            .w(px(if side { 4. } else { 38. }))
+            .h(px(if side { 38. } else { 4. }))
+            .rounded(px(3.))
+            .bg(color)
     }
+}
+
+fn titlebar_fill(color: Rgba) -> impl IntoElement {
+    canvas(
+        |_, _, _| (),
+        move |frame, (), window, _| {
+            let mut band = frame;
+            band.size.height = band.size.height.min(px(HEADER_HEIGHT));
+            window.with_content_mask(Some(ContentMask { bounds: band }), |window| {
+                window.paint_quad(fill(frame, color).corner_radii(px(CORNER_RADIUS)));
+            });
+        },
+    )
+    .absolute()
+    .inset_0()
 }
 
 impl Render for Mini {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // Windows reports a native mouse leave as a hover-status refresh. It may not
         // deliver another MouseMove to the panel, especially across a child control.
+        self.sync_environment(window, cx);
         self.sync_pointer(window, cx);
         let target = if self.interaction.expanded { 1. } else { 0. };
         self.progress = motion_progress(target, self.motion, Instant::now(), cx.reduce_motion());
@@ -341,14 +401,16 @@ impl Render for Mini {
             window.request_animation_frame();
         }
         let p = self.progress * self.progress * (3. - 2. * self.progress);
-        let viewport = window.viewport_size();
-        let handle = logical_dock_bounds(viewport, false).size;
-        let width = handle.width * (1. - p) + viewport.width * p;
-        let height = handle.height * (1. - p) + viewport.height * p;
-        let bounds = Bounds {
-            origin: point((viewport.width - width) / 2., px(0.)),
-            size: size(width, height),
-        };
+        // The swap chain can already be resized while GPUI waits for the posted bounds update.
+        let viewport = native::client_size(window).unwrap_or_else(|| window.viewport_size());
+        let bounds = self.dock.as_ref().map_or(
+            Bounds {
+                origin: point(px(0.), px(0.)),
+                size: viewport,
+            },
+            |(_, layout)| layout.visible(viewport, p),
+        );
+        let Size { width, height } = bounds.size;
         let clip = (bounds, window.scale_factor());
         if width > px(0.) && height > px(0.) && self.clipped != Some(clip) {
             match native::clip(window, bounds) {
@@ -363,13 +425,13 @@ impl Render for Mini {
             .aria_label(self.text("miniWindow.title"))
             .absolute()
             .left(bounds.origin.x)
-            .top_0()
+            .top(bounds.origin.y)
             .w(width)
             .h(height)
             .flex()
             .flex_col()
             .bg(if p == 0. { colors.panel } else { colors.canvas })
-            .rounded(px(8.))
+            .rounded(px(CORNER_RADIUS))
             .border_1()
             .border_color(colors.border)
             .overflow_hidden()
@@ -378,15 +440,19 @@ impl Render for Mini {
             .on_hover(cx.listener(|this, _: &bool, win, cx| {
                 this.sync_pointer(win, cx);
             }))
-            .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
+            .on_key_down(cx.listener(|this, event: &KeyDownEvent, win, cx| {
                 if event.keystroke.key == "escape" {
-                    this.expand(false, cx);
+                    if this.drag.is_some() {
+                        this.cancel_drag(win, cx);
+                    } else {
+                        this.expand(false, cx);
+                    }
                     cx.stop_propagation();
                 }
             }));
         let panel = panel
             .when(p > 0., |panel| {
-                panel.child(
+                panel.child(titlebar_fill(colors.chrome.opacity(p))).child(
                     div()
                         .absolute()
                         .left_0()
@@ -397,10 +463,14 @@ impl Render for Mini {
                         .flex()
                         .flex_col()
                         .child(self.header(colors, cx))
-                        .child(self.content(colors)),
+                        .child(self.content(colors, self.client.dark(window))),
                 )
             })
             .when(p < 1., |panel| {
+                let folded = self
+                    .dock
+                    .as_ref()
+                    .map_or(bounds.size, |(_, layout)| layout.visible(viewport, 0.).size);
                 panel.child(
                     div()
                         .absolute()
@@ -409,19 +479,33 @@ impl Render for Mini {
                         .when(
                             self.interaction.expanded || self.motion.is_some(),
                             |marker| {
-                                marker
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .child(Self::mark(self.tone.color(colors)))
+                                marker.flex().items_center().justify_center().child(
+                                    self.drag_region(cx)
+                                        .w(folded.width)
+                                        .h(folded.height)
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .child(self.mark(self.tone.color(colors))),
+                                )
                             },
                         )
                         .when(
                             !self.interaction.expanded && self.motion.is_none(),
-                            |marker| marker.child(self.expand_button(colors, cx)),
+                            |marker| {
+                                marker.child(
+                                    self.drag_region(cx)
+                                        .size_full()
+                                        .child(self.expand_button(colors, cx)),
+                                )
+                            },
                         ),
                 )
             });
-        div().relative().size_full().child(panel)
+        div()
+            .relative()
+            .size_full()
+            .child(panel)
+            .child(self.drag_events(cx))
     }
 }

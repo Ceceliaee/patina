@@ -86,10 +86,15 @@ impl Run<'_> {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()?;
+        let previous_profile = root.path().join("Patina.GPUI.Experimental");
         if isolated {
             // A private desktop has no Explorer notification area. Exercise the real tray owner
             // through its callback and use the same resident preferences for both revisions.
-            let profile = root.path().join(patina::APP_ID);
+            let profile = if self.previous {
+                previous_profile.clone()
+            } else {
+                root.path().join(patina::PROFILE_DIRECTORY)
+            };
             fs::create_dir(&profile)?;
             rt.block_on(async {
                 let pool=patina_activity::open_database(&profile.join("patina.db")).await?;
@@ -99,21 +104,37 @@ impl Run<'_> {
             })?;
         }
         let mut cmd = Command::new(self.binary);
+        if self.previous {
+            cmd.env("PATINA_GPUI_PROFILE_PARENT", root.path());
+        }
         if scenario != "tray" {
             cmd.arg("--mini");
         }
         let mut app = TestChild(
-            cmd.env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            cmd.env("PATINA_PROFILE_PARENT", root.path())
                 .env("PATINA_E2E_DATA_ROOT", root.path())
                 .env("PATINA_E2E", "1")
                 .env("PATINA_E2E_NATIVE_FIXTURE", "1")
                 .spawn()?,
         );
         let pid = app.0.id();
-        let tray = wait("tray owner", || window(pid, w!("Patina GPUI")))?;
+        let tray = wait("tray owner", || {
+            window(pid, w!("Patina Tray")).or_else(|| {
+                self.previous
+                    .then(|| window(pid, w!("Patina GPUI")))
+                    .flatten()
+            })
+        })?;
         let dpi = unsafe { GetDpiForWindow(tray) };
+        let profile = if self.previous && previous_profile.is_dir() {
+            previous_profile
+        } else if self.previous && root.path().join("Patina.Desktop").is_dir() {
+            root.path().join("Patina.Desktop")
+        } else {
+            root.path().join(patina::PROFILE_DIRECTORY)
+        };
         let db = SqliteConnectOptions::new()
-            .filename(root.path().join(patina::APP_ID).join("patina.db"))
+            .filename(profile.join("patina.db"))
             .read_only(true);
         let mut conn = rt.block_on(SqliteConnection::connect_with(&db))?;
         wait("fixture recording", || {
@@ -287,7 +308,7 @@ impl Run<'_> {
             PostMessageW(Some(tray), WM_COMMAND, WPARAM(2), LPARAM(0))?;
         }
         if !wait("clean exit", || app.0.try_wait().ok().flatten())?.success() {
-            return Err("GPUI exit failed".into());
+            return Err("Patina exit failed".into());
         }
         Ok(
             json!({"scenario":scenario,"round":round,"pid":pid,"uiPid":ui_pid,"size":expected,"reopenMs":reopen_ms,"dpi":dpi,"sampleCount":end["sampleCount"],
@@ -365,9 +386,10 @@ fn run(smoke: bool, isolated: bool) -> Result<(), Error> {
     } else {
         "baseline"
     };
-    let output = repo
-        .join("artifacts/runtime-smoke")
-        .join(format!("gpui-{label}-{}", now.format("%Y%m%dT%H%M%S%.3fZ")));
+    let output = repo.join("artifacts/runtime-smoke").join(format!(
+        "desktop-{label}-{}",
+        now.format("%Y%m%dT%H%M%S%.3fZ")
+    ));
     fs::create_dir_all(output.parent().unwrap())?;
     fs::create_dir(&output)?;
     println!("Writing {label} to {}", output.display());

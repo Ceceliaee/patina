@@ -74,7 +74,7 @@ fn mini_windows() -> Vec<HWND> {
 }
 
 fn tray_command(command: usize) -> Outcome {
-    let windows = windows_for(process::id(), "Patina GPUI");
+    let windows = windows_for(process::id(), "Patina Tray");
     let [tray] = windows[..] else {
         return Err("expected one tray owner".into());
     };
@@ -208,7 +208,8 @@ fn verify_pointer_leave(hwnd: HWND) -> Outcome {
             wait("pointer leave collapses Mini", || {
                 visible_height() == folded
             })?;
-            if start.elapsed() > Duration::from_millis(650) {
+            // Includes the 450 ms leave grace, 180 ms animation and the polling interval.
+            if start.elapsed() > Duration::from_millis(800) {
                 return Err("late auto-collapse".into());
             }
         }
@@ -283,7 +284,7 @@ fn exercise(
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
-    let path = root.join(patina::APP_ID).join("patina.db");
+    let path = root.join(patina::PROFILE_DIRECTORY).join("patina.db");
     wait("database", || path.is_file())?;
     let pool = open_read_only(&path, &rt)?;
     let active = |exe: &str| {
@@ -302,7 +303,7 @@ fn exercise(
     check_rejected_start(
         process::Command::new(env::current_exe()?)
             .arg("--invalid-root")
-            .env("PATINA_GPUI_PROFILE_PARENT", "relative"),
+            .env("PATINA_PROFILE_PARENT", "relative"),
         "relative profile parent rejected",
     )?;
     check_rejected_start(
@@ -427,13 +428,11 @@ fn main() -> Outcome {
         );
         return Ok(());
     }
-    let root = tempfile::Builder::new()
-        .prefix("patina-gpui-smoke-")
-        .tempdir()?;
+    let root = tempfile::Builder::new().prefix("patina-smoke-").tempdir()?;
     fixture(root.path(), "first.exe")?;
     // This standalone executable sets the environment before starting any threads.
     unsafe {
-        env::set_var("PATINA_GPUI_PROFILE_PARENT", root.path());
+        env::set_var("PATINA_PROFILE_PARENT", root.path());
         env::set_var("PATINA_E2E_DATA_ROOT", root.path());
         env::set_var("PATINA_E2E", "1");
         env::set_var("PATINA_E2E_NATIVE_FIXTURE", "1");
@@ -457,7 +456,13 @@ fn main() -> Outcome {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
-    let pool = open_read_only(&root.path().join(patina::APP_ID).join("patina.db"), &rt)?;
+    let pool = open_read_only(
+        &root
+            .path()
+            .join(patina::PROFILE_DIRECTORY)
+            .join("patina.db"),
+        &rt,
+    )?;
     assert_eq!(
         rt.block_on(
             sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM sessions WHERE end_time IS NULL")

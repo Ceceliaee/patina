@@ -122,19 +122,19 @@ fn profile(fixture: &Path, out: &Path, uia: bool) -> Result<(), Error> {
         None
     };
     let root = tempfile::tempdir()?;
-    let dir = root.path().join(patina::APP_ID);
+    let dir = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&dir)?;
     fs::copy(fixture, dir.join("patina.db"))?;
     let diagnostics = out.with_extension("stderr.log");
     let mut child = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env("PATINA_PROFILE_PARENT", root.path())
             .stderr(fs::File::create(&diagnostics)?)
             .spawn()?,
     );
     let proc = HANDLE(child.0.as_raw_handle());
     let pid = child.0.id();
-    let tray = wait("tray", || window(pid, w!("Patina GPUI")))?;
+    let tray = wait("tray", || window(pid, w!("Patina Tray")))?;
     let cold = census(proc)?;
     let mut cycles = Vec::new();
     for cycle in 1..=15 {
@@ -220,19 +220,19 @@ fn renderer_recovery() -> Result<(), Error> {
     use windows::Win32::UI::Shell::{NIN_SELECT, NINF_KEY};
     let _com = ComApartment::init()?;
     let root = tempfile::tempdir()?;
-    let dir = root.path().join(patina::APP_ID);
+    let dir = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&dir)?;
     seed(&dir.join("patina.db"))?;
     let mut diagnostics = run_path("recovery")?;
     diagnostics.add_extension("stderr.log");
     let mut host = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env("PATINA_PROFILE_PARENT", root.path())
             .stderr(fs::File::create(&diagnostics)?)
             .spawn()?,
     );
     let pid = host.0.id();
-    let tray = wait("tray", || window(pid, w!("Patina GPUI")))?;
+    let tray = wait("tray", || window(pid, w!("Patina Tray")))?;
     let ready = || {
         children::find(pid, |p| {
             let hwnd = window(p, w!("Patina"))?;
@@ -302,20 +302,20 @@ fn mini_window_handles() -> Result<(), Error> {
     };
     let _com = ComApartment::init()?;
     let root = tempfile::tempdir()?;
-    let dir = root.path().join(patina::APP_ID);
+    let dir = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&dir)?;
     seed(&dir.join("patina.db"))?;
     let mut diagnostics = run_path("mini-handles")?;
     diagnostics.add_extension("stderr.log");
     let mut host = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env("PATINA_PROFILE_PARENT", root.path())
             .arg("--mini")
             .stderr(fs::File::create(&diagnostics)?)
             .spawn()?,
     );
     let pid = host.0.id();
-    let tray = wait("tray", || window(pid, w!("Patina GPUI")))?;
+    let tray = wait("tray", || window(pid, w!("Patina Tray")))?;
     let (renderer, mini) = wait("Mini", || {
         children::find(pid, |p| window(p, w!("Patina Mini")).map(|w| (p, w)))
     })?;
