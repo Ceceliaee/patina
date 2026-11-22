@@ -31,6 +31,8 @@ mod support;
 mod tools;
 #[path = "pages/trend_chart.rs"]
 mod trend_chart;
+#[path = "pages/window_scale.rs"]
+mod window_scale;
 use chrono::{Local, Utc};
 use desktop::{ComApartment, Error, TestChild, controls, wait, window};
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
@@ -155,7 +157,17 @@ fn activate_control(hwnd: HWND, el: &IUIAutomationElement, keyboard: bool) -> Re
         // the non-input desktop. The caller observes this key's resulting state.
         return Ok(key(hwnd, 13)?);
     }
-    // Bring lower cards in the scrolling page into view before invoking their button.
+    reveal_control(hwnd, el, 20)?;
+    let position = client_center(hwnd, el)?;
+    unsafe {
+        PostMessageW(Some(hwnd), WM_MOUSEMOVE, WPARAM(0), position)?;
+        PostMessageW(Some(hwnd), WM_LBUTTONDOWN, WPARAM(1), position)?;
+        PostMessageW(Some(hwnd), WM_LBUTTONUP, WPARAM(0), position)?;
+    }
+    Ok(())
+}
+
+fn reveal_control(hwnd: HWND, el: &IUIAutomationElement, bottom_inset: i32) -> Result<(), Error> {
     for attempt in 0..=16 {
         let r = unsafe { el.CurrentBoundingRectangle()? };
         let mut window = RECT::default();
@@ -163,7 +175,7 @@ fn activate_control(hwnd: HWND, el: &IUIAutomationElement, keyboard: bool) -> Re
             GetWindowRect(hwnd, &mut window)?;
         }
         let center = (r.top + r.bottom) / 2;
-        if r.bottom > r.top && center > window.top + 60 && center < window.bottom - 20 {
+        if r.bottom > r.top && center > window.top + 60 && center < window.bottom - bottom_inset {
             break;
         }
         if attempt == 16 {
@@ -172,7 +184,7 @@ fn activate_control(hwnd: HWND, el: &IUIAutomationElement, keyboard: bool) -> Re
             )
             .into());
         }
-        let direction = if center >= window.bottom - 20 {
+        let direction = if center >= window.bottom - bottom_inset {
             -1i32
         } else {
             1
@@ -196,12 +208,6 @@ fn activate_control(hwnd: HWND, el: &IUIAutomationElement, keyboard: bool) -> Re
             }
         })?;
     }
-    let position = client_center(hwnd, el)?;
-    unsafe {
-        PostMessageW(Some(hwnd), WM_MOUSEMOVE, WPARAM(0), position)?;
-        PostMessageW(Some(hwnd), WM_LBUTTONDOWN, WPARAM(1), position)?;
-        PostMessageW(Some(hwnd), WM_LBUTTONUP, WPARAM(0), position)?;
-    }
     Ok(())
 }
 #[test]
@@ -213,7 +219,7 @@ fn sidebar_opens_empty_history() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina::APP_ID);
+    let profile = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&profile)?;
     let db = profile.join("patina.db");
     let rt = tokio::runtime::Builder::new_current_thread()
@@ -229,7 +235,7 @@ fn sidebar_opens_empty_history() -> Result<(), Error> {
     let stderr = root.path().join("renderer.log");
     let mut host = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env("PATINA_PROFILE_PARENT", root.path())
             .stderr(fs::File::create(&stderr)?)
             .arg("--today")
             .spawn()?,
@@ -250,7 +256,7 @@ fn sidebar_opens_empty_history() -> Result<(), Error> {
     .map_err(|e| format!("{e}: {}", fs::read_to_string(&stderr).unwrap_or_default()))?;
     click(hwnd, "今天")?;
     wait("returned to Today", || named(hwnd, "今日活动"))?;
-    command(window(pid, w!("Patina GPUI")).ok_or("missing tray")?, 2)?;
+    command(window(pid, w!("Patina Tray")).ok_or("missing tray")?, 2)?;
     assert!(wait("exit", || host.0.try_wait().ok().flatten())?.success());
     Ok(())
 }
@@ -285,7 +291,7 @@ fn repeated_sidebar_navigation_keeps_window_alive() -> Result<(), Error> {
 
 fn navigate_in_locale(tag: &str) -> Result<(), Error> {
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina::APP_ID);
+    let profile = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&profile)?;
     seed(&profile.join("patina.db"))?;
     let rt = tokio::runtime::Builder::new_current_thread()
@@ -306,8 +312,8 @@ fn navigate_in_locale(tag: &str) -> Result<(), Error> {
     let stderr = root.path().join("renderer.log");
     let mut host = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
-            .env_remove("PATINA_GPUI_DEV_SESSION")
+            .env("PATINA_PROFILE_PARENT", root.path())
+            .env_remove("PATINA_DEV_SESSION")
             .env("RUST_BACKTRACE", "1")
             .stderr(fs::File::create(&stderr)?)
             .arg("--today")
@@ -400,7 +406,7 @@ fn navigate_in_locale(tag: &str) -> Result<(), Error> {
                 &patina_activity::text(next_locale, "settings.themeModeLabel"),
             )
         })?;
-        command(window(pid, w!("Patina GPUI")).ok_or("missing tray")?, 2)?;
+        command(window(pid, w!("Patina Tray")).ok_or("missing tray")?, 2)?;
         assert!(wait("exit", || host.0.try_wait().ok().flatten())?.success());
         Ok(())
     })();
@@ -541,7 +547,7 @@ fn history_navigation() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina::APP_ID);
+    let profile = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&profile)?;
     let db = profile.join("patina.db");
     seed(&db)?;
@@ -567,13 +573,13 @@ fn history_navigation() -> Result<(), Error> {
     })?;
     let mut child = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env("PATINA_PROFILE_PARENT", root.path())
             .arg("--today")
             .spawn()?,
     );
     let pid = child.0.id();
     let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
-    let tray = wait("tray", || window(pid, w!("Patina GPUI")))?;
+    let tray = wait("tray", || window(pid, w!("Patina Tray")))?;
     let out = std::env::var_os("PATINA_MEASURE_HISTORY").map(|_| {
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../artifacts/runtime-smoke")
@@ -720,7 +726,7 @@ fn data_navigation() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina::APP_ID);
+    let profile = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&profile)?;
     let db = profile.join("patina.db");
     seed(&db)?;
@@ -734,7 +740,7 @@ fn data_navigation() -> Result<(), Error> {
         })?;
     let mut host = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env("PATINA_PROFILE_PARENT", root.path())
             .arg("--today")
             .spawn()?,
     );
@@ -895,7 +901,7 @@ fn data_navigation() -> Result<(), Error> {
         })
     })?;
     trend_chart::double_click_day(hwnd, &column, yesterday)?;
-    let tray = window(pid, w!("Patina GPUI")).unwrap();
+    let tray = window(pid, w!("Patina Tray")).unwrap();
     command(tray, 2)?;
     assert!(wait("exit", || host.0.try_wait().ok().flatten())?.success());
     Ok(())
@@ -910,7 +916,7 @@ fn classification_navigation() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let dir = root.path().join(patina::APP_ID);
+    let dir = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&dir)?;
     let db = dir.join("patina.db");
     seed(&db)?;
@@ -929,7 +935,7 @@ fn classification_navigation() -> Result<(), Error> {
     let stderr = root.path().join("classification.log");
     let mut host = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env("PATINA_PROFILE_PARENT", root.path())
             .stderr(fs::File::create(&stderr)?)
             .arg("--today")
             .spawn()?,
@@ -1450,7 +1456,7 @@ fn classification_navigation() -> Result<(), Error> {
             })
         },
     )?;
-    command(window(pid, w!("Patina GPUI")).unwrap(), 2)?;
+    command(window(pid, w!("Patina Tray")).unwrap(), 2)?;
     assert!(wait("exit", || host.0.try_wait().ok().flatten())?.success());
     Ok(())
 }
@@ -1464,13 +1470,13 @@ fn classification_totals() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let dir = root.path().join(patina::APP_ID);
+    let dir = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&dir)?;
     seed(&dir.join("patina.db"))?;
     let mut host = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
-            .env_remove("PATINA_GPUI_DEV_SESSION")
+            .env("PATINA_PROFILE_PARENT", root.path())
+            .env_remove("PATINA_DEV_SESSION")
             .arg("--today")
             .spawn()?,
     );
@@ -1525,7 +1531,7 @@ fn classification_totals() -> Result<(), Error> {
     })?;
     click(hwnd, "Delete application")?;
     totals([1, 1, 0])?;
-    command(window(pid, w!("Patina GPUI")).ok_or("missing host")?, 2)?;
+    command(window(pid, w!("Patina Tray")).ok_or("missing host")?, 2)?;
     assert!(wait("exit", || host.0.try_wait().ok().flatten())?.success());
     Ok(())
 }
@@ -1539,31 +1545,18 @@ fn settings_navigation() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let dir = root.path().join(patina::APP_ID);
+    let dir = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&dir)?;
     let path = dir.join("patina.db");
     seed(&path)?;
     let mut host = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env("PATINA_PROFILE_PARENT", root.path())
             .arg("--today")
             .spawn()?,
     );
     let pid = host.0.id();
     let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
-    // Keep the first two settings groups visible regardless of the app's default window size.
-    let dpi = unsafe { GetDpiForWindow(hwnd) } as i32;
-    unsafe {
-        SetWindowPos(
-            hwnd,
-            None,
-            0,
-            0,
-            1200 * dpi / 96,
-            800 * dpi / 96,
-            SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOZORDER,
-        )?;
-    }
     click(hwnd, "Settings")?;
     let titles = wait("Global titles switch", || button(hwnd, "Global titles"))?;
     unsafe {
@@ -1630,6 +1623,11 @@ fn settings_navigation() -> Result<(), Error> {
                 && el.CurrentName().is_ok_and(|s| s == name)
         })
     };
+    reveal_control(
+        hwnd,
+        &language,
+        64 * unsafe { GetDpiForWindow(hwnd) } as i32 / 96,
+    )?;
     let initial = unsafe { language.CurrentBoundingRectangle()? };
     assert_control_height(hwnd, &language, 28)?;
     activate_control(hwnd, &language, false)?;
@@ -1744,7 +1742,7 @@ fn settings_navigation() -> Result<(), Error> {
     click(hwnd, "Today")?;
     click(hwnd, "Settings")?;
     wait("persisted stepper", || named(hwnd, "4 min"))?;
-    command(window(pid, w!("Patina GPUI")).unwrap(), 2)?;
+    command(window(pid, w!("Patina Tray")).unwrap(), 2)?;
     assert!(wait("exit", || host.0.try_wait().ok().flatten())?.success());
     Ok(())
 }
@@ -1763,13 +1761,13 @@ fn about_navigation() -> Result<(), Error> {
         root.path().join("config.json"),
         include_bytes!("../../../crates/updater/config.json"),
     )?;
-    let dir = root.path().join(patina::APP_ID);
+    let dir = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&dir)?;
     seed(&dir.join("patina.db"))?;
     let mut host = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
-            .env("PATINA_GPUI_UPDATE_FIXTURE", root.path())
+            .env("PATINA_PROFILE_PARENT", root.path())
+            .env("PATINA_UPDATE_FIXTURE", root.path())
             .arg("--today")
             .spawn()?,
     );
@@ -1860,7 +1858,7 @@ fn about_navigation() -> Result<(), Error> {
         let control = wait(name, || button(hwnd, name))?;
         assert_control_height(hwnd, &control, height)?;
     }
-    command(window(pid, w!("Patina GPUI")).unwrap(), 2)?;
+    command(window(pid, w!("Patina Tray")).unwrap(), 2)?;
     assert!(wait("exit", || host.0.try_wait().ok().flatten())?.success());
     Ok(())
 }
@@ -1874,12 +1872,12 @@ fn page_header_layout() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let dir = root.path().join(patina::APP_ID);
+    let dir = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&dir)?;
     seed(&dir.join("patina.db"))?;
     let mut host = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env("PATINA_PROFILE_PARENT", root.path())
             .arg("--today")
             .spawn()?,
     );
@@ -1938,7 +1936,7 @@ fn page_header_layout() -> Result<(), Error> {
         Ok(())
     };
     click(hwnd, "Tools")?;
-    check_header("Tools", &["Manage tools", "Tools settings"])?;
+    check_header("Tools", &["Plugin store", "Tools settings"])?;
     for page in ["History", "Data", "Classification", "Settings", "About"] {
         click(hwnd, page)?;
         let actions: &[&str] = match page {
@@ -1948,7 +1946,7 @@ fn page_header_layout() -> Result<(), Error> {
         };
         check_header(page, actions)?;
     }
-    command(window(pid, w!("Patina GPUI")).unwrap(), 2)?;
+    command(window(pid, w!("Patina Tray")).unwrap(), 2)?;
     assert!(wait("exit", || host.0.try_wait().ok().flatten())?.success());
     Ok(())
 }

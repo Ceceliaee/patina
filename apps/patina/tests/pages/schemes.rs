@@ -9,14 +9,14 @@ fn settings_color_schemes() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let dir = root.path().join(patina::APP_ID);
+    let dir = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&dir)?;
     let path = dir.join("patina.db");
     seed(&path)?;
     let start = || -> Result<_, Error> {
         let host = TestChild(
             Command::new(env!("CARGO_BIN_EXE_patina"))
-                .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+                .env("PATINA_PROFILE_PARENT", root.path())
                 .arg("--today")
                 .spawn()?,
         );
@@ -29,7 +29,7 @@ fn settings_color_schemes() -> Result<(), Error> {
     };
     let stop = |mut host: TestChild| -> Result<(), Error> {
         command(
-            window(host.0.id(), w!("Patina GPUI")).ok_or("missing tray")?,
+            window(host.0.id(), w!("Patina Tray")).ok_or("missing tray")?,
             2,
         )?;
         assert!(wait("exit", || host.0.try_wait().ok().flatten())?.success());

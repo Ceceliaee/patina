@@ -10,13 +10,13 @@ fn settings_storage_card() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let dir = root.path().join(patina::APP_ID);
+    let dir = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&dir)?;
     seed(&dir.join("patina.db"))?;
     let mut child = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
             .arg("--today")
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env("PATINA_PROFILE_PARENT", root.path())
             .spawn()?,
     );
     let pid = child.0.id();
@@ -420,7 +420,7 @@ fn settings_storage_card() -> Result<(), Error> {
     wait("backdrop dismisses dialog", || {
         dialog("Data Export").is_none().then_some(())
     })?;
-    let tray = window(pid, w!("Patina GPUI")).ok_or("missing tray")?;
+    let tray = window(pid, w!("Patina Tray")).ok_or("missing tray")?;
     command(tray, 2)?;
     assert!(wait("exit", || child.0.try_wait().ok().flatten())?.success());
     Ok(())
@@ -435,13 +435,13 @@ fn settings_webdav_layout() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let dir = root.path().join(patina::APP_ID);
+    let dir = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&dir)?;
     seed(&dir.join("patina.db"))?;
     let mut child = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
             .arg("--today")
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env("PATINA_PROFILE_PARENT", root.path())
             .spawn()?,
     );
     let pid = child.0.id();
@@ -500,7 +500,7 @@ fn settings_webdav_layout() -> Result<(), Error> {
     wait("WebDAV Escape", || {
         named(hwnd, "Server address").is_none().then_some(())
     })?;
-    let tray = window(pid, w!("Patina GPUI")).ok_or("missing tray")?;
+    let tray = window(pid, w!("Patina Tray")).ok_or("missing tray")?;
     command(tray, 2)?;
     assert!(wait("exit", || child.0.try_wait().ok().flatten())?.success());
     Ok(())
@@ -515,13 +515,13 @@ fn storage_refresh_feedback() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let dir = root.path().join(patina::APP_ID);
+    let dir = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&dir)?;
     seed(&dir.join("patina.db"))?;
     let mut child = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
             .arg("--today")
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env("PATINA_PROFILE_PARENT", root.path())
             .spawn()?,
     );
     let pid = child.0.id();
@@ -561,7 +561,7 @@ fn storage_refresh_feedback() -> Result<(), Error> {
             .is_none()
             .then_some(())
     })?;
-    let tray = window(pid, w!("Patina GPUI")).ok_or("missing tray")?;
+    let tray = window(pid, w!("Patina Tray")).ok_or("missing tray")?;
     command(tray, 2)?;
     assert!(wait("exit", || child.0.try_wait().ok().flatten())?.success());
     Ok(())

@@ -24,12 +24,12 @@ fn anchored_calendar() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina::APP_ID);
+    let profile = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&profile)?;
     seed(&profile.join("patina.db"))?;
     let mut app = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env("PATINA_PROFILE_PARENT", root.path())
             .arg("--today")
             .spawn()?,
     );
@@ -187,7 +187,7 @@ fn anchored_calendar() -> Result<(), Error> {
     })?;
     click(hwnd, "Next day")?;
     wait("today again", || button(hwnd, &today_name))?;
-    let tray = window(app.0.id(), w!("Patina GPUI")).ok_or("tray")?;
+    let tray = window(app.0.id(), w!("Patina Tray")).ok_or("tray")?;
     command(tray, 2)?;
     assert!(wait("exit", || app.0.try_wait().ok().flatten())?.success());
     Ok(())

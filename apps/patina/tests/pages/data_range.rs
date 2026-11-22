@@ -54,12 +54,12 @@ fn range_draft_apply_and_dismiss() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina::APP_ID);
+    let profile = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&profile)?;
     seed(&profile.join("patina.db"))?;
     let mut host = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env("PATINA_PROFILE_PARENT", root.path())
             .arg("--today")
             .spawn()?,
     );
@@ -242,7 +242,7 @@ fn range_draft_apply_and_dismiss() -> Result<(), Error> {
     select_segment(hwnd, "Details")?;
     assert!(popup(hwnd).is_none());
     assert!(named(hwnd, "Total ･ 1h 15m").is_some());
-    let tray = window(host.0.id(), w!("Patina GPUI")).ok_or("tray")?;
+    let tray = window(host.0.id(), w!("Patina Tray")).ok_or("tray")?;
     command(tray, 2)?;
     assert!(wait("exit", || host.0.try_wait().ok().flatten())?.success());
     Ok(())
@@ -392,7 +392,7 @@ fn destination_heatmap_year_range() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina::APP_ID);
+    let profile = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&profile)?;
     let db = profile.join("patina.db");
     let today = Local::now().date_naive();
@@ -422,7 +422,7 @@ fn destination_heatmap_year_range() -> Result<(), Error> {
     })?;
     let mut host = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env("PATINA_PROFILE_PARENT", root.path())
             .arg("--today")
             .spawn()?,
     );
@@ -594,7 +594,7 @@ fn destination_heatmap_year_range() -> Result<(), Error> {
         heat_selected("Weekly").is_some(),
         "destination mode must preserve granularity"
     );
-    let tray = window(host.0.id(), w!("Patina GPUI")).ok_or("tray")?;
+    let tray = window(host.0.id(), w!("Patina Tray")).ok_or("tray")?;
     command(tray, 2)?;
     assert!(wait("exit", || host.0.try_wait().ok().flatten())?.success());
     Ok(())
@@ -608,7 +608,7 @@ fn restored_data_tab_follows_the_profile() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina::APP_ID);
+    let profile = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&profile)?;
     let db = profile.join("patina.db");
     seed(&db)?;
@@ -622,7 +622,7 @@ fn restored_data_tab_follows_the_profile() -> Result<(), Error> {
         })?;
     let launch = || {
         Command::new(env!("CARGO_BIN_EXE_patina"))
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env("PATINA_PROFILE_PARENT", root.path())
             .arg("--main")
             .spawn()
             .map(TestChild)
@@ -661,7 +661,7 @@ fn restored_data_tab_follows_the_profile() -> Result<(), Error> {
         selected_segment(hwnd, "Categories")
     })?;
     select_segment(hwnd, "Web")?;
-    let tray = wait("tray", || window(pid, w!("Patina GPUI")))?;
+    let tray = wait("tray", || window(pid, w!("Patina Tray")))?;
     press(hwnd, "Close window")?;
     wait("main released", || main_window(pid).is_none().then_some(()))?;
     command(tray, 4)?;
@@ -685,7 +685,7 @@ fn restored_data_tab_follows_the_profile() -> Result<(), Error> {
     labels(hwnd, ToggleState_Off)?;
     select_segment(hwnd, "Overview")?;
     wait("overview displayed", || selected_segment(hwnd, "Overview"))?;
-    let tray = wait("restarted tray", || window(pid, w!("Patina GPUI")))?;
+    let tray = wait("restarted tray", || window(pid, w!("Patina Tray")))?;
     command(tray, 2)?;
     assert!(wait("second exit", || host.0.try_wait().ok().flatten())?.success());
     let host = launch()?;

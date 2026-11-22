@@ -45,7 +45,7 @@ fn settings_services() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina::APP_ID);
+    let profile = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&profile)?;
     let db = profile.join("patina.db");
     seed(&db)?;
@@ -64,7 +64,7 @@ fn settings_services() -> Result<(), Error> {
     let launch = || {
         Command::new(env!("CARGO_BIN_EXE_patina"))
             .arg("--today")
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env("PATINA_PROFILE_PARENT", root.path())
             .env("PATINA_E2E_DATA_ROOT", root.path())
             .env("PATINA_E2E", "1")
             .env("PATINA_E2E_NATIVE_FIXTURE", "1")
@@ -343,7 +343,7 @@ fn settings_services() -> Result<(), Error> {
     ws.send(tungstenite::Message::text(r#"{"type":"ping"}"#))?;
     let pong: Value = serde_json::from_str(ws.read()?.to_text()?)?;
     assert_eq!(pong["type"], "pong");
-    let tray = window(pid, w!("Patina GPUI")).ok_or("missing tray")?;
+    let tray = window(pid, w!("Patina Tray")).ok_or("missing tray")?;
     command(tray, 3)?;
     wait("eligible browser observation", || {
         let (_, r) = post(port, &token)?;
@@ -356,7 +356,7 @@ fn settings_services() -> Result<(), Error> {
     assert!(wait("first host exit", || app.0.try_wait().ok().flatten())?.success());
     let mut app = launch()?;
     let pid = app.0.id();
-    let tray = wait("new host", || window(pid, w!("Patina GPUI")))?;
+    let tray = wait("new host", || window(pid, w!("Patina Tray")))?;
     let reopened = wait("reopened", || {
         children::find(pid, |p| window(p, w!("Patina")))
     })?;

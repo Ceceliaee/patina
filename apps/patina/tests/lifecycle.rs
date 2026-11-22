@@ -31,7 +31,7 @@ fn launch(root: &Path) -> Result<TestChild, Error> {
     Ok(TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
             .arg("--today")
-            .env("PATINA_GPUI_PROFILE_PARENT", root)
+            .env("PATINA_PROFILE_PARENT", root)
             .env("PATINA_E2E_DATA_ROOT", root)
             .env("PATINA_E2E", "1")
             .env("PATINA_E2E_NATIVE_FIXTURE", "1")
@@ -149,7 +149,9 @@ fn partial_startup_releases_the_profile_and_preserves_the_last_sample() -> Resul
         return Ok(());
     }
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina::APP_ID);
+    let profile = root.path().join("Patina.Desktop");
+    let current = root.path().join(patina::PROFILE_DIRECTORY);
+    fs::create_dir_all(current.join("EBWebView"))?;
     fs::create_dir(&profile)?;
     let database = profile.join("patina.db");
     const SESSION_START: i64 = 1_700_000_000_000;
@@ -168,11 +170,8 @@ fn partial_startup_releases_the_profile_and_preserves_the_last_sample() -> Resul
     })?;
     let mut failed = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
-            .env(
-                "PATINA_GPUI_UPDATE_FIXTURE",
-                root.path().join("missing-fixture"),
-            )
+            .env("PATINA_PROFILE_PARENT", root.path())
+            .env("PATINA_UPDATE_FIXTURE", root.path().join("missing-fixture"))
             .spawn()?,
     );
     assert!(
@@ -191,7 +190,7 @@ fn partial_startup_releases_the_profile_and_preserves_the_last_sample() -> Resul
     );
     let mut reopened = launch(root.path())?;
     let tray = wait("profile reopened after failed startup", || {
-        window(reopened.0.id(), w!("Patina GPUI"))
+        window(reopened.0.id(), w!("Patina Tray"))
     })?;
     unsafe {
         PostMessageW(Some(tray), WM_COMMAND, WPARAM(2), LPARAM(0))?;
@@ -212,6 +211,8 @@ fn partial_startup_releases_the_profile_and_preserves_the_last_sample() -> Resul
             .fetch_one(&mut db),
     )?;
     assert_eq!(record, (LAST_SAMPLE, LAST_SAMPLE - SESSION_START));
+    assert!(!current.join("instance.lock").exists());
+    assert!(!current.join("patina.db").exists());
     Ok(())
 }
 
@@ -223,7 +224,7 @@ fn concurrent_launch_and_renderer_crash_reopen_the_committed_snapshot() -> Resul
     }
     let _com = ComApartment::init()?;
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina::APP_ID);
+    let profile = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&profile)?;
     let path = profile.join("patina.db");
     let rt = tokio::runtime::Builder::new_current_thread()
@@ -256,7 +257,7 @@ fn concurrent_launch_and_renderer_crash_reopen_the_committed_snapshot() -> Resul
     let (owner, tray) = wait("resident owner for both launches", || {
         [first.0.id(), second.0.id()]
             .into_iter()
-            .find_map(|pid| window(pid, w!("Patina GPUI")).map(|tray| (pid, tray)))
+            .find_map(|pid| window(pid, w!("Patina Tray")).map(|tray| (pid, tray)))
     })?;
     let (host, forwarded) = if owner == first.0.id() {
         (&mut first, &mut second)

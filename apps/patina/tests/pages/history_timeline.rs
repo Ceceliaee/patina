@@ -107,19 +107,7 @@ pub(super) fn check_records(hwnd: HWND) -> Result<(), Error> {
     Ok(())
 }
 
-#[test]
-#[ignore = "isolated Win32 desktop"]
-fn website_history_navigation() -> Result<(), Error> {
-    if !patina_test_support::run_case()? {
-        return Ok(());
-    }
-    let _com = ComApartment::init()?;
-    unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
-    let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina::APP_ID);
-    fs::create_dir(&profile)?;
-    let db = profile.join("patina.db");
-    seed(&db)?;
+pub(super) fn seed_website_history(db: &Path) -> Result<(), Error> {
     let start = Local::now()
         .date_naive()
         .and_hms_opt(0, 0, 37)
@@ -132,7 +120,7 @@ fn website_history_navigation() -> Result<(), Error> {
         .enable_all()
         .build()?;
     rt.block_on(async {
-        let mut c = SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&db)).await?;
+        let mut c = SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(db)).await?;
         enable_web_history(&mut c).await?;
         for offset in [0, 420_000] {
             let from = start + offset;
@@ -143,16 +131,32 @@ fn website_history_navigation() -> Result<(), Error> {
         sqlx::query("INSERT INTO web_favicon_cache(normalized_domain,favicon_url,updated_at) VALUES('docs.example.com','data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGNQSDjwH4QZYAwASvQI/dnllI8AAAAASUVORK5CYII=',?)")
             .bind(start).execute(&mut c).await?;
         Ok::<_, Error>(())
-    })?;
+    })
+}
+
+#[test]
+#[ignore = "isolated Win32 desktop"]
+fn website_history_navigation() -> Result<(), Error> {
+    if !patina_test_support::run_case()? {
+        return Ok(());
+    }
+    let _com = ComApartment::init()?;
+    unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
+    let root = tempfile::tempdir()?;
+    let profile = root.path().join(patina::PROFILE_DIRECTORY);
+    fs::create_dir(&profile)?;
+    let db = profile.join("patina.db");
+    seed(&db)?;
+    seed_website_history(&db)?;
     let mut child = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
+            .env("PATINA_PROFILE_PARENT", root.path())
             .arg("--today")
             .spawn()?,
     );
     let pid = child.0.id();
     let hwnd = wait("Today", || children::find(pid, |p| window(p, w!("Patina"))))?;
-    let tray = wait("tray", || window(pid, w!("Patina GPUI")))?;
+    let tray = wait("tray", || window(pid, w!("Patina Tray")))?;
     click(hwnd, "History")?;
     assert!(
         !controls(hwnd)?

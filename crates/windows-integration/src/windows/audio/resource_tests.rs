@@ -119,7 +119,7 @@ fn audio_resource_boundaries() {
                 })
             );
         }
-        // Pace the experimental workload; no test state depends on this delay.
+        // Pace the test workload; no test state depends on this delay.
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
 }

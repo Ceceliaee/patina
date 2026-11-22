@@ -21,7 +21,7 @@ fn invalid_probe_role_exits_before_opening_a_profile() {
         let status = Command::new(env!("CARGO_BIN_EXE_patina"))
             .args(["--role", "Patina Probe"])
             .args(arguments)
-            .env("PATINA_GPUI_PROFILE_PARENT", profile.path())
+            .env("PATINA_PROFILE_PARENT", profile.path())
             .stdin(Stdio::null())
             .status()
             .unwrap();

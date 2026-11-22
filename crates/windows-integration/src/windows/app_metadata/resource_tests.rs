@@ -158,7 +158,7 @@ fn pump_messages() {
         DispatchMessageW, PeekMessageW, TranslateMessage, MSG, PM_REMOVE,
     };
     let mut message = MSG::default();
-    // Bound only this experimental pump; the process deadline remains external.
+    // Bound only this test loop; the process deadline remains external.
     for _ in 0..64 {
         if !unsafe { PeekMessageW(&mut message, None, 0, 0, PM_REMOVE) }.as_bool() {
             break;

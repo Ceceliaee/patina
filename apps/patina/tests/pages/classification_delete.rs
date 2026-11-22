@@ -57,7 +57,7 @@ fn classification_delete_records() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina::APP_ID);
+    let profile = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&profile)?;
     let db = profile.join("patina.db");
     seed(&db)?;
@@ -79,8 +79,8 @@ fn classification_delete_records() -> Result<(), Error> {
     assert_eq!(before, [2, 2, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1]);
     let mut host = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
-            .env_remove("PATINA_GPUI_DEV_SESSION")
+            .env("PATINA_PROFILE_PARENT", root.path())
+            .env_remove("PATINA_DEV_SESSION")
             .stderr(fs::File::create(root.path().join("renderer.log"))?)
             .arg("--today")
             .spawn()?,
@@ -162,7 +162,7 @@ fn classification_delete_records() -> Result<(), Error> {
     wait("application removed from classification", || {
         named(hwnd, "Category ･ Studio").is_none().then_some(())
     })?;
-    let tray = wait("tray", || window(pid, w!("Patina GPUI")))?;
+    let tray = wait("tray", || window(pid, w!("Patina Tray")))?;
     command(tray, 2)?;
     wait("exit", || host.0.try_wait().ok().flatten())?;
     Ok(())

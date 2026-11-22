@@ -133,7 +133,7 @@ fn category_manager_content_width_and_narrow_layout() -> Result<(), Error> {
         .build()?;
     for tag in ["zh-CN", "en-US", "ru-RU", "es"] {
         let root = tempfile::tempdir()?;
-        let profile = root.path().join(patina::APP_ID);
+        let profile = root.path().join(patina::PROFILE_DIRECTORY);
         fs::create_dir(&profile)?;
         let db = profile.join("patina.db");
         seed(&db)?;
@@ -163,8 +163,8 @@ fn category_manager_content_width_and_narrow_layout() -> Result<(), Error> {
         })?;
         let mut host = TestChild(
             Command::new(env!("CARGO_BIN_EXE_patina"))
-                .env("PATINA_GPUI_PROFILE_PARENT", root.path())
-                .env_remove("PATINA_GPUI_DEV_SESSION")
+                .env("PATINA_PROFILE_PARENT", root.path())
+                .env_remove("PATINA_DEV_SESSION")
                 .stderr(fs::File::create(root.path().join("renderer.log"))?)
                 .arg("--today")
                 .spawn()?,
@@ -258,7 +258,7 @@ fn category_manager_content_width_and_narrow_layout() -> Result<(), Error> {
             );
         }
         command(
-            window(host.0.id(), w!("Patina GPUI")).ok_or("missing tray")?,
+            window(host.0.id(), w!("Patina Tray")).ok_or("missing tray")?,
             2,
         )?;
         assert!(wait("exit", || host.0.try_wait().ok().flatten())?.success());
@@ -275,7 +275,7 @@ fn category_manager_drafts_and_persistence() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let profile = root.path().join(patina::APP_ID);
+    let profile = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&profile)?;
     let db = profile.join("patina.db");
     seed(&db)?;
@@ -295,8 +295,8 @@ fn category_manager_drafts_and_persistence() -> Result<(), Error> {
     })?;
     let mut host = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
-            .env_remove("PATINA_GPUI_DEV_SESSION")
+            .env("PATINA_PROFILE_PARENT", root.path())
+            .env_remove("PATINA_DEV_SESSION")
             .stderr(fs::File::create(root.path().join("renderer.log"))?)
             .arg("--today")
             .spawn()?,
@@ -567,7 +567,7 @@ fn category_manager_drafts_and_persistence() -> Result<(), Error> {
         count > 0,
         "category removal must retain application history"
     );
-    command(window(pid, w!("Patina GPUI")).ok_or("missing host")?, 2)?;
+    command(window(pid, w!("Patina Tray")).ok_or("missing host")?, 2)?;
     assert!(wait("exit", || host.0.try_wait().ok().flatten())?.success());
     Ok(())
 }

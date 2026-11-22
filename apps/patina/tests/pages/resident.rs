@@ -17,6 +17,10 @@ impl TestLoginEntry {
         let n = unsafe { GetClassNameW(hwnd, &mut class) };
         let name = String::from_utf16(&class[..n as usize])?;
         assert!(name.starts_with(patina::APP_ID));
+        Self::new(name)
+    }
+
+    fn new(name: String) -> Result<Self, Error> {
         let key = RegKey::predef(HKEY_CURRENT_USER).open_subkey_with_flags(
             r"Software\Microsoft\Windows\CurrentVersion\Run",
             KEY_QUERY_VALUE | KEY_SET_VALUE,
@@ -95,19 +99,19 @@ fn exercise_resident_preferences(check_shell_icon: bool) -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    let dir = root.path().join(patina::APP_ID);
+    let dir = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&dir)?;
     let db = dir.join("patina.db");
     seed_profile(&db, check_shell_icon)?;
     let launch = || {
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_patina"));
-        cmd.env("PATINA_GPUI_PROFILE_PARENT", root.path());
+        cmd.env("PATINA_PROFILE_PARENT", root.path());
         cmd
     };
     let mut host = TestChild(launch().spawn()?);
     let pid = host.0.id();
     let main = || children::find(pid, |p| window(p, w!("Patina")));
-    let tray = wait("silent startup", || window(pid, w!("Patina GPUI")))?;
+    let tray = wait("silent startup", || window(pid, w!("Patina Tray")))?;
     let icon = NOTIFYICONIDENTIFIER {
         cbSize: std::mem::size_of::<NOTIFYICONIDENTIFIER>() as u32,
         hWnd: tray,
@@ -191,6 +195,9 @@ fn exercise_resident_preferences(check_shell_icon: bool) -> Result<(), Error> {
     command(tray, 2)?;
     assert!(wait("tray exit", || host.0.try_wait().ok().flatten())?.success());
 
+    let previous = TestLoginEntry::new(entry.name.replacen(patina::APP_ID, "Patina.Desktop", 1))?;
+    entry.key.delete_value(&entry.name)?;
+    previous.key.set_value(&previous.name, &login_command)?;
     let mut registered = Command::new(env!("CARGO_BIN_EXE_patina"));
     let command = login_command
         .strip_prefix('"')
@@ -202,12 +209,24 @@ fn exercise_resident_preferences(check_shell_icon: bool) -> Result<(), Error> {
     );
     registered
         .raw_arg(args.trim_start())
-        .env_remove("PATINA_GPUI_PROFILE_PARENT");
+        .env_remove("PATINA_PROFILE_PARENT");
     let mut next = TestChild(registered.spawn()?);
     let next_pid = next.0.id();
     let hwnd = wait("foreground startup", || {
         children::find(next_pid, |p| window(p, w!("Patina")))
     })?;
+    assert_eq!(
+        entry.key.get_value::<String, _>(&entry.name)?,
+        login_command
+    );
+    assert_eq!(
+        previous
+            .key
+            .get_raw_value(&previous.name)
+            .unwrap_err()
+            .kind(),
+        std::io::ErrorKind::NotFound
+    );
     assert_eq!(
         unsafe { toggle(hwnd, "Launch silently")?.CurrentToggleState()? },
         ToggleState_Off

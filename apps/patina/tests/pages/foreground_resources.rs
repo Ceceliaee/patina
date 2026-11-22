@@ -218,7 +218,7 @@ impl Driver {
             ("Classification", "Apps", false, true),
             ("Apps", "Edit app name", false, false),
             ("Web", "Search websites", false, false),
-            ("Tools", "New reminder", false, true),
+            ("Tools", "Reminder", false, true),
             ("Settings", "+ Activity hold time", false, true),
             ("About", "Not checked", false, true),
             ("Today", rank_marker, false, true),
@@ -271,7 +271,7 @@ fn foreground_pages() -> Result<(), Error> {
     fs::create_dir(&out)?;
     prepare(&seed_path)?;
     let root = tempfile::tempdir()?;
-    let dir = root.path().join(patina::APP_ID);
+    let dir = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&dir)?;
     let db = dir.join("patina.db");
     fs::copy(seed_path, &db)?;
@@ -345,8 +345,8 @@ fn foreground_pages() -> Result<(), Error> {
     let started_at_ms = Utc::now().timestamp_millis();
     let mut app = TestChild(
         Command::new(binary)
-            .env("PATINA_GPUI_PROFILE_PARENT", root.path())
-            .env_remove("PATINA_GPUI_DEV_SESSION")
+            .env("PATINA_PROFILE_PARENT", root.path())
+            .env_remove("PATINA_DEV_SESSION")
             .env("PATINA_E2E", "1")
             .env("PATINA_E2E_DATA_ROOT", root.path())
             .env("PATINA_E2E_NATIVE_FIXTURE", "1")
@@ -367,7 +367,7 @@ fn foreground_pages() -> Result<(), Error> {
             .spawn()?,
     );
     let main_window = || children::find(pid, |child| window(child, w!("Patina")));
-    let tray = wait("tray", || window(pid, w!("Patina GPUI")))?;
+    let tray = wait("tray", || window(pid, w!("Patina Tray")))?;
     let hwnd = wait("main", main_window)?;
     let mut renderer = 0;
     let mut rect = RECT::default();
