@@ -60,16 +60,24 @@ pub struct AppPreferences {
     pub titles: bool,
     pub locale: crate::localization::Locale,
     pub theme: Theme,
+    #[serde(default = "AppPreferences::default_scale")]
+    pub window_scale: u16,
     pub schemes: [String; 2],
 }
 impl AppPreferences {
+    pub const MIN_SCALE: u16 = 50;
+    pub const MAX_SCALE: u16 = 150;
+    pub const fn default_scale() -> u16 {
+        100
+    }
     pub fn remote_endpoint_valid(&self) -> bool {
         url::Url::parse(&self.remote.url).is_ok_and(|u| {
             matches!(u.scheme(), "ws" | "wss") && u.host().is_some() && u.fragment().is_none()
         })
     }
     pub fn valid(&self) -> bool {
-        self.web.port >= crate::settings::WEB_ACTIVITY_PORT_MIN
+        (Self::MIN_SCALE..=Self::MAX_SCALE).contains(&self.window_scale)
+            && self.web.port >= crate::settings::WEB_ACTIVITY_PORT_MIN
             && (!self.web.enabled || !self.web.token.trim().is_empty())
             && (!self.remote.enabled
                 || (!self.remote.token.trim().is_empty() && self.remote_endpoint_valid()))
@@ -90,7 +98,7 @@ mod tests {
 
     #[test]
     fn app_preferences_preserve_the_desktop_wire_keys_and_second_values() {
-        let payload = json!({
+        let mut payload = json!({
             "web":{"enabled":false,"port":12345,"token":""},
             "remote":{"enabled":false,"url":"","token":"","machine_id":""},
             "desktop":{"show_tray_icon":true,"close_behavior":"tray",
@@ -103,6 +111,8 @@ mod tests {
         assert_eq!(preferences.idle_timeout_secs, 900);
         assert_eq!(preferences.min_session_secs, 300);
         assert_eq!(preferences.refresh_interval_secs, 2);
+        assert_eq!(preferences.window_scale, 100);
+        payload["window_scale"] = json!(100);
         assert_eq!(serde_json::to_value(preferences).unwrap(), payload);
     }
 }

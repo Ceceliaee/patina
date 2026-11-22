@@ -1,3 +1,4 @@
+pub use model::views::mini::MiniPreferences;
 pub use model::views::preferences::{MainNavigation, MainSection};
 use model::views::storage::StorageReply;
 use patina_activity_model as model;
@@ -10,8 +11,8 @@ use std::{
 };
 
 pub mod tools;
-pub const APP_ID: &str = "Patina.GPUI.Experimental";
-pub const WIRE_VERSION: &str = "6";
+pub const APP_ID: &str = "Ceceliaee.Patina";
+pub const WIRE_VERSION: &str = "15";
 pub const MAX_PENDING: usize = 256;
 const MAX_FRAME: u64 = 128 * 1024 * 1024;
 
@@ -38,6 +39,7 @@ pub enum WindowRequest {
     Tools(tools::ToolRequest),
     HistoryMinimum(bool, i64),
     DetailZoom(Option<f32>),
+    SaveMini(model::views::mini::MiniPreferences),
     HistoryZoom(Option<f32>),
     HistoryModes(Option<[u8; 2]>),
     Rules,
@@ -77,6 +79,7 @@ pub enum ToWindow {
         serial: u64,
         revision: u64,
         navigation: MainNavigation,
+        mini: Option<Box<model::views::mini::MiniPreferences>>,
         target: Target,
         activity: CurrentActivity,
         paused: bool,
@@ -195,6 +198,7 @@ impl FromReply for Option<String> {
 pub enum FromWindow {
     Open(Target),
     Navigation(MainNavigation),
+    WindowScale(u16),
     MainOpened(Option<usize>),
     MainClosed,
     Idle(u64),

@@ -219,6 +219,7 @@ fn is_allowed_app_setting_key(key: &str) -> bool {
             | "show_tray_icon"
             | "close_behavior"
             | "theme_mode"
+            | "window_scale"
             | "language"
             | "hourly_activity_chart_mode"
             | "history_timeline_mode"

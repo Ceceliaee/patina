@@ -73,6 +73,7 @@ impl Dispatch {
             }
             WindowRequest::Update(_)
             | WindowRequest::DetailZoom(_)
+            | WindowRequest::SaveMini(_)
             | WindowRequest::HistoryZoom(_)
             | WindowRequest::HistoryModes(_)
             | WindowRequest::SavePreferences(..) => Self::Serial,
@@ -171,6 +172,10 @@ impl DesktopRequests {
                 return self.tools.request(request, locale.tag()).await;
             }
             WindowRequest::DetailZoom(hours) => Reply::Zoom(prefs.detail_zoom(hours).await?),
+            WindowRequest::SaveMini(mini) => {
+                prefs.save_mini(&mini).await?;
+                Reply::Done
+            }
             WindowRequest::HistoryModes(modes) => {
                 Reply::HistoryModes(prefs.history_modes(modes).await?)
             }

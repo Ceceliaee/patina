@@ -4,6 +4,7 @@ pub mod dav;
 pub mod deletion;
 pub mod history;
 pub mod imports;
+pub mod mini;
 pub mod preferences;
 pub mod recent;
 pub mod shortcuts;

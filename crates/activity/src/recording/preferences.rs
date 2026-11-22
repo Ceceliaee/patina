@@ -1,6 +1,7 @@
 use crate::data::repositories::app_settings::{
     commit_app_setting_mutations, commit_app_setting_mutations_in_tx, AppSettingMutation,
 };
+use patina_activity_model::views::mini::MiniPreferences;
 use patina_activity_model::views::preferences::{MainNavigation, MainSection};
 use sqlx::SqlitePool;
 use std::collections::BTreeMap;
@@ -19,7 +20,7 @@ async fn load_preferences_in_tx(
     let values: BTreeMap<String, String> = sqlx::query_as::<_, (String, String)>(
         "SELECT key,value FROM settings WHERE key IN (
          'timeline_merge_gap_secs','idle_timeout_secs','min_session_secs','refresh_interval_secs',
-         'tracking_paused','title_recording_enabled','language','theme_mode','color_scheme_light','color_scheme_dark',
+         'tracking_paused','title_recording_enabled','language','theme_mode','window_scale','color_scheme_light','color_scheme_dark',
          'show_tray_icon','close_behavior','launch_at_login','start_minimized','web_activity_enabled','web_activity_port','web_activity_token',
          'remote_status_bridge_enabled','remote_status_bridge_url','remote_status_bridge_token','remote_status_bridge_machine_id')",
     )
@@ -31,7 +32,7 @@ async fn load_preferences_in_tx(
     let value = |key: &str| values.get(key).map(String::as_str);
     let mut desktop = crate::DesktopBehaviorSettings::from_storage_values(
         value("close_behavior"),
-        // The experimental host only registers for login after an explicit opt-in.
+        // Registering for login requires explicit opt-in.
         value("launch_at_login").or(Some("0")),
         value("start_minimized"),
     );
@@ -57,6 +58,10 @@ async fn load_preferences_in_tx(
         desktop,
         locale: crate::Locale::from_tag(values.get("language").map(String::as_str)),
         theme: Theme::read(values.get("theme_mode").map_or("light", String::as_str)),
+        window_scale: value("window_scale")
+            .and_then(|s| s.parse().ok())
+            .filter(|v| (AppPreferences::MIN_SCALE..=AppPreferences::MAX_SCALE).contains(v))
+            .unwrap_or_else(AppPreferences::default_scale),
         schemes: ["color_scheme_light", "color_scheme_dark"]
             .map(|key| value(key).unwrap_or("default").trim().to_ascii_lowercase()),
         timeline_merge_gap_secs: ((integer_setting("timeline_merge_gap_secs", 180).clamp(60, 300)
@@ -95,6 +100,7 @@ pub(super) async fn save_preferences(
             ("idle_timeout_secs", preferences.idle_timeout_secs),
             ("min_session_secs", preferences.min_session_secs),
             ("refresh_interval_secs", preferences.refresh_interval_secs),
+            ("window_scale", i64::from(preferences.window_scale)),
             ("tracking_paused", i64::from(preferences.paused)),
             ("title_recording_enabled", i64::from(preferences.titles)),
             ("web_activity_enabled", i64::from(preferences.web.enabled)),
@@ -251,15 +257,19 @@ async fn write_main_navigation(
     navigation: MainNavigation,
 ) -> Result<(), String> {
     sqlx::query(
-        "INSERT INTO settings(key,value) VALUES('__gpui_main_section',?),('__gpui_data_detailed',?),
-            ('__gpui_data_kind',?),('__gpui_sidebar_labels',?),('hourly_activity_chart_mode',?)
+        "INSERT INTO settings(key,value) VALUES('__ui_main_section',?),('__ui_data_detailed',?),
+            ('__ui_data_kind',?),('__ui_sidebar_labels',?),('hourly_activity_chart_mode',?)
          ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE value<>excluded.value",
     )
     .bind(serde_json::to_string(&navigation.section).map_err(|e| e.to_string())?)
     .bind(if navigation.data_detailed { "1" } else { "0" })
     .bind(serde_json::to_string(&navigation.data_kind).map_err(|e| e.to_string())?)
     .bind(if navigation.sidebar_labels { "1" } else { "0" })
-    .bind(if navigation.hourly_by_category { "category" } else { "total" })
+    .bind(if navigation.hourly_by_category {
+        "category"
+    } else {
+        "total"
+    })
     .execute(conn)
     .await
     .map_err(|e| e.to_string())?;
@@ -289,6 +299,33 @@ impl Preferences {
     pub fn locale(&self) -> crate::Locale {
         self.locale.get()
     }
+    pub async fn mini(&self) -> Result<MiniPreferences, String> {
+        let raw: Option<String> =
+            sqlx::query_scalar("SELECT value FROM settings WHERE key='mini_window_preferences'")
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|e| e.to_string())?;
+        Ok(raw
+            .and_then(|v| serde_json::from_str(&v).ok())
+            .unwrap_or_default())
+    }
+
+    pub async fn save_mini(&self, prefs: &MiniPreferences) -> Result<(), String> {
+        sqlx::query(
+            "INSERT INTO settings(key,value) VALUES('mini_window_preferences',?)
+             ON CONFLICT(key) DO UPDATE SET value=json_set(
+                CASE WHEN json_valid(value) THEN
+                    CASE WHEN json_type(value)='object' THEN value ELSE '{}' END
+                    ELSE '{}' END,
+                '$.placement',json_extract(excluded.value,'$.placement'),
+                '$.held',json(excluded.value -> '$.held'))",
+        )
+        .bind(serde_json::to_string(prefs).map_err(|e| e.to_string())?)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+        Ok(())
+    }
     pub async fn preferences(&self) -> Result<AppPreferences, crate::ActivityError> {
         Ok(load_preferences(self.pool.clone()).await?)
     }
@@ -301,7 +338,7 @@ impl Preferences {
         .await
         .map_err(|e| e.to_string())?;
         let history: Option<String> =
-            sqlx::query_scalar("SELECT value FROM settings WHERE key='__gpui_history_modes'")
+            sqlx::query_scalar("SELECT value FROM settings WHERE key='__ui_history_modes'")
                 .fetch_optional(&mut *tx)
                 .await
                 .map_err(|e| e.to_string())?;
@@ -309,8 +346,8 @@ impl Preferences {
             history.and_then(|v| serde_json::from_str::<[u8; 3]>(&v).ok())
         {
             sqlx::query(
-                "INSERT INTO settings(key,value) VALUES('hourly_activity_chart_mode',?),('__gpui_history_modes',?)
-                 ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE excluded.key='__gpui_history_modes'",
+                "INSERT INTO settings(key,value) VALUES('hourly_activity_chart_mode',?),('__ui_history_modes',?)
+                 ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE excluded.key='__ui_history_modes'",
             )
             .bind(if grouped == 1 { "category" } else { "total" })
             .bind(serde_json::to_string(&[distribution, timeline]).map_err(|e| e.to_string())?)
@@ -325,10 +362,10 @@ impl Preferences {
             bool,
             bool,
         ) = sqlx::query_as(
-            "SELECT (SELECT value FROM settings WHERE key='__gpui_main_section'),
-                    EXISTS(SELECT 1 FROM settings WHERE key='__gpui_data_detailed' AND value='1'),
-                    (SELECT value FROM settings WHERE key='__gpui_data_kind'),
-                    EXISTS(SELECT 1 FROM settings WHERE key='__gpui_sidebar_labels' AND value='1'),
+            "SELECT (SELECT value FROM settings WHERE key='__ui_main_section'),
+                    EXISTS(SELECT 1 FROM settings WHERE key='__ui_data_detailed' AND value='1'),
+                    (SELECT value FROM settings WHERE key='__ui_data_kind'),
+                    EXISTS(SELECT 1 FROM settings WHERE key='__ui_sidebar_labels' AND value='1'),
                     EXISTS(SELECT 1 FROM settings WHERE key='hourly_activity_chart_mode' AND value='category')",
         )
         .fetch_one(&mut *tx)
@@ -358,6 +395,21 @@ impl Preferences {
     pub async fn save_main_navigation(&self, navigation: MainNavigation) -> Result<(), String> {
         let mut conn = self.pool.acquire().await.map_err(|e| e.to_string())?;
         write_main_navigation(&mut conn, navigation).await
+    }
+
+    pub async fn save_window_scale(&self, percent: u16) -> Result<(), String> {
+        if !(AppPreferences::MIN_SCALE..=AppPreferences::MAX_SCALE).contains(&percent) {
+            return Err("invalid main window scale".into());
+        }
+        commit_app_setting_mutations(
+            &self.pool,
+            &[AppSettingMutation {
+                key: "window_scale".into(),
+                value: percent.to_string(),
+            }],
+        )
+        .await
+        .map_err(|e| e.to_string())
     }
     pub async fn save_preferences(
         &self,
@@ -396,7 +448,7 @@ impl Preferences {
         Ok(())
     }
     pub async fn detail_zoom(&self, hours: Option<f32>) -> Result<f32, String> {
-        self.zoom_preference("__gpui_detail_zoom_hours", 24., hours)
+        self.zoom_preference("__ui_detail_zoom_hours", 24., hours)
             .await
     }
 
@@ -407,11 +459,11 @@ impl Preferences {
             if modes[0] > 2 || modes[1] > 2 {
                 return Err("invalid history modes".into());
             }
-            sqlx::query("INSERT INTO settings(key,value) VALUES('__gpui_history_modes',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+            sqlx::query("INSERT INTO settings(key,value) VALUES('__ui_history_modes',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
                     .bind(serde_json::to_string(&modes).map_err(|e| e.to_string())?).execute(&pool).await.map_err(|e| e.to_string())?;
         }
         let modes = sqlx::query_scalar::<_, String>(
-            "SELECT value FROM settings WHERE key='__gpui_history_modes'",
+            "SELECT value FROM settings WHERE key='__ui_history_modes'",
         )
         .fetch_optional(&pool)
         .await
@@ -427,7 +479,7 @@ impl Preferences {
     }
 
     pub async fn history_zoom(&self, hours: Option<f32>) -> Result<f32, String> {
-        self.zoom_preference("__gpui_history_zoom_hours", 4., hours)
+        self.zoom_preference("__ui_history_zoom_hours", 4., hours)
             .await
     }
 
@@ -467,7 +519,7 @@ impl Preferences {
             return Err("invalid history minimum".into());
         }
         if detail {
-            sqlx::query("INSERT INTO settings(key,value) VALUES('__gpui_detail_min_secs',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(secs.to_string()).execute(&pool).await.map_err(|e|e.to_string())?;
+            sqlx::query("INSERT INTO settings(key,value) VALUES('__ui_detail_min_secs',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(secs.to_string()).execute(&pool).await.map_err(|e|e.to_string())?;
         } else {
             commit_app_setting_mutations(
                 &pool,

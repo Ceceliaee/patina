@@ -39,6 +39,7 @@ pub(crate) struct Client {
     pub(crate) locale: Cell<Locale>,
     pub(crate) activity_revision: Cell<u64>,
     pub(crate) theme: Cell<patina_activity_model::Theme>,
+    pub(crate) window_scale: Cell<u16>,
     pub(crate) schemes: RefCell<[String; 2]>,
     pub(crate) scheme_preview: Cell<Option<(gpui_kit::WindowId, bool, &'static str)>>,
     activity: RefCell<CurrentActivity>,
@@ -65,6 +66,7 @@ impl Client {
             locale: Cell::new(locale),
             activity_revision: Cell::new(0),
             theme: Cell::new(theme),
+            window_scale: Cell::new(patina_activity_model::AppPreferences::default_scale()),
             schemes: RefCell::new(schemes),
             scheme_preview: Cell::new(None),
             activity: RefCell::new(CurrentActivity::Waiting),
@@ -119,7 +121,7 @@ impl Client {
                     .shortcuts
                     .borrow()
                     .iter()
-                    .any(|s| s.target == patina_activity_model::ToolTarget::Focus)
+                    .any(|s| s.target.is_focus())
                 {
                     1000
                 } else {
@@ -134,59 +136,61 @@ impl Client {
         }));
     }
 
-    pub fn shortcut_buttons(self: &Rc<Self>, compact: bool) -> Vec<gpui_kit::AnyElement> {
-        use gpui_kit::{base::Button, prelude::*, *};
+    pub fn shortcut_buttons(
+        self: &Rc<Self>,
+        colors: quietpro::Palette,
+    ) -> Vec<gpui_kit::AnyElement> {
+        use gpui_kit::{prelude::*, *};
+        use quietpro::{Icon, IconControl};
         let now = patina_desktop_protocol::tools::now_ms();
         self.shortcuts
             .borrow()
             .iter()
             .filter_map(|s| {
                 let target = s.target;
-                if target == patina_activity_model::ToolTarget::Reminders
-                    && !(0..=86_400_000).contains(&(s.at - now))
-                {
-                    return None;
-                }
-                let (id, key, icon) = match target {
-                    patina_activity_model::ToolTarget::Focus => {
-                        ("status-focus", "tools.pomodoroTitle", quietpro::Icon::Clock)
-                    }
-                    patina_activity_model::ToolTarget::Reminders => (
-                        "status-reminder",
-                        "tools.remindersTitle",
-                        quietpro::Icon::Bell,
-                    ),
-                };
-                let display = if compact {
-                    quietpro::glyph(icon, rgba(0x828999ff)).into_any_element()
-                } else {
-                    let sec = (if s.counting_up {
-                        now - s.at
+                let (id, key, icon, time) = if target.is_focus() {
+                    let seconds = (if s.counting_up {
+                        now.saturating_sub(s.at)
                     } else {
-                        s.at - now
+                        s.at.saturating_sub(now)
                     })
                     .max(0)
                         / 1000;
-                    div()
-                        .child(format!("{} {:02}:{:02}", s.label, sec / 60, sec % 60))
-                        .into_any_element()
+                    (
+                        "status-focus",
+                        "tools.pomodoroTitle",
+                        Icon::AlarmClock,
+                        format!("{:02}:{:02}", seconds / 60, seconds % 60),
+                    )
+                } else {
+                    if !(0..=86_400_000).contains(&s.at.saturating_sub(now)) {
+                        return None;
+                    }
+                    let due = chrono::DateTime::from_timestamp_millis(s.at)?
+                        .with_timezone(&chrono::Local);
+                    (
+                        "status-reminder",
+                        "tools.remindersTitle",
+                        Icon::BellRing,
+                        due.format("%H:%M").to_string(),
+                    )
                 };
                 let client = self.clone();
-                let name = format!(
-                    "{} ･ {}",
-                    patina_i18n::text(self.locale.get(), key),
-                    s.label
-                );
-                Some(
-                    Button::new(id)
-                        .accessibility_label(name)
-                        .px(px(4.))
-                        .child(display)
-                        .on_click(move |_, _, _| {
-                            client.open(Target::Main(MainTarget::Tool(target)))
-                        })
-                        .into_any_element(),
-                )
+                let kind = patina_i18n::text(self.locale.get(), key);
+                let name = if s.label.is_empty() || s.label == kind {
+                    kind
+                } else {
+                    format!("{kind} ･ {}", s.label)
+                };
+                let id = target
+                    .generation()
+                    .map_or_else(|| id.into(), |g| format!("{id}-{g}"));
+                let tip = format!("{name} · {time}");
+                let button = IconControl::new(SharedString::from(id), name, icon)
+                    .action(colors, move |_, _, _| {
+                        client.open(Target::Main(MainTarget::Tool(target)))
+                    });
+                Some(quietpro::with_text_tooltip(button, tip, colors).into_any_element())
             })
             .collect()
     }
@@ -224,6 +228,11 @@ impl Client {
             .ok()
             .map(|h| h.0 as usize);
         let _ = self.tx.send(FromWindow::MainOpened(hwnd));
+    }
+    pub(crate) fn remember_window_scale(&self, percent: u16) {
+        if self.window_scale.replace(percent) != percent {
+            let _ = self.tx.send(FromWindow::WindowScale(percent));
+        }
     }
     pub(crate) fn remember_navigation(&self, navigation: MainNavigation) {
         self.navigation.set(navigation);
@@ -312,16 +321,21 @@ pub fn run_if_requested() -> Option<Result<(), Box<dyn std::error::Error>>> {
         args.next()
             .map_or_else(|| "default".into(), |s| s.to_string_lossy().into_owned())
     });
+    let scale = args
+        .next()
+        .and_then(|s| s.to_str()?.parse::<u16>().ok())
+        .unwrap_or_else(patina_activity_model::AppPreferences::default_scale);
     if args.next().is_some() {
         return Some(Err("unexpected window process argument".into()));
     }
-    Some(run(Locale::from_tag(tag.to_str()), theme, schemes))
+    Some(run(Locale::from_tag(tag.to_str()), theme, schemes, scale))
 }
 
 fn run(
     locale: Locale,
     theme: patina_activity_model::Theme,
     schemes: [String; 2],
+    scale: u16,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let host = handshake(io::stdin())?;
     crate::windows::placement::enable_monitor_dpi()?;
@@ -344,6 +358,7 @@ fn run(
                 eprintln!("Load bundled UI fonts: {error:#}");
             }
             let client = Rc::new(Client::new(locale, theme, schemes, tx));
+            client.window_scale.set(scale);
             let close = client.clone();
             cx.on_window_closed(move |cx, _| {
                 if cx.windows().is_empty() {
@@ -360,6 +375,7 @@ fn run(
                             revision,
                             target,
                             navigation,
+                            mini,
                             activity,
                             paused,
                         } => {
@@ -392,7 +408,14 @@ fn run(
                                     }
                                 }
                                 Target::Mini { focus } => {
-                                    windows.open_mini(focus, &client, cx).await
+                                    windows
+                                        .open_mini(
+                                            focus,
+                                            mini.map(|p| *p).unwrap_or_default(),
+                                            &client,
+                                            cx,
+                                        )
+                                        .await
                                 }
                             }
                             cx.update(|cx| client.refresh_shortcuts(cx));

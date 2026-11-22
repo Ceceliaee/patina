@@ -40,6 +40,12 @@ impl Client {
     pub(crate) fn recent(&self) -> impl Future<Output = Result<Recent, RequestError>> + 'static {
         self.request(WindowRequest::Recent)
     }
+    pub(crate) fn save_mini(
+        &self,
+        prefs: model::views::mini::MiniPreferences,
+    ) -> impl Future<Output = Result<(), RequestError>> + 'static {
+        self.request(WindowRequest::SaveMini(prefs))
+    }
     pub(crate) fn edit_app(
         &self,
         key: String,

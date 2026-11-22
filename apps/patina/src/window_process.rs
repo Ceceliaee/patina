@@ -57,6 +57,7 @@ impl WindowProcess {
                 preferences.theme.tag(),
             ])
             .args(&preferences.schemes)
+            .arg(preferences.window_scale.to_string())
             .creation_flags(0x08000000)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -111,6 +112,7 @@ impl WindowProcess {
         &mut self,
         target: Target,
         navigation: MainNavigation,
+        mini: Option<&patina_desktop_protocol::MiniPreferences>,
         recorder: &RecordingControl,
         revision: u64,
     ) -> io::Result<()> {
@@ -130,6 +132,7 @@ impl WindowProcess {
                 revision,
                 target,
                 navigation,
+                mini: mini.cloned().map(Box::new),
                 activity: recorder.current_activity(),
                 paused: recorder.paused(),
             })
@@ -229,6 +232,14 @@ pub(super) async fn serve(
                     let current = worker.as_mut().unwrap();
                     match msg {
                         FromWindow::Open(target) => Some(target),
+                        FromWindow::WindowScale(percent) => {
+                            if let Err(error) =
+                                requests.preferences.save_window_scale(percent).await
+                            {
+                                eprintln!("save main window scale: {error}");
+                            }
+                            None
+                        }
                         FromWindow::Navigation(current) => {
                             navigation = current;
                             if saved_navigation != Some(current) {
@@ -313,10 +324,22 @@ pub(super) async fn serve(
                 Event::Message(_, _) => None,
             };
             if let Some(target) = target {
+                let mini = if matches!(target, Target::Mini { .. }) {
+                    match requests.preferences.mini().await {
+                        Ok(prefs) => Some(prefs),
+                        Err(error) => {
+                            eprintln!("read Mini placement: {error}");
+                            continue;
+                        }
+                    }
+                } else {
+                    None
+                };
                 if let Some(w) = worker.as_mut()
                     && w.open(
                         target,
                         navigation,
+                        mini.as_ref(),
                         recorder,
                         revision.load(Ordering::Acquire),
                     )
@@ -339,6 +362,7 @@ pub(super) async fn serve(
                         w.open(
                             target,
                             navigation,
+                            mini.as_ref(),
                             recorder,
                             revision.load(Ordering::Acquire),
                         )?;
