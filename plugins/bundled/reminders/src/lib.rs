@@ -1,5 +1,5 @@
-mod page;
 mod notification;
+mod page;
 use extism_pdk::*;
 use patina_plugin_sdk::{Control, Event, Request, Response, Timer};
 use serde_json::{Value, json};
@@ -19,7 +19,8 @@ pub fn panel(Json(request): Json<Request>) -> FnResult<Json<Response>> {
     let label = |key: &str| request.text(key);
     let mut panel = Vec::new();
     let mut timer: Option<Timer> = None;
-    let mut command = notification::command(&request.event).or_else(|| matches!(request.event, Event::Due).then(|| json!({"kind":"due"})));
+    let mut command = notification::command(&request.event)
+        .or_else(|| matches!(request.event, Event::Due).then(|| json!({"kind":"due"})));
     let mut state = request.state.clone();
     let mut editing = None;
     let mut button = |actions: &mut Vec<(String, String)>, id: String, title: String, op: Value| {

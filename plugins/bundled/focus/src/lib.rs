@@ -1,5 +1,5 @@
-mod page;
 mod notification;
+mod page;
 use extism_pdk::*;
 use patina_plugin_sdk::{Control, Event, Request, Response, RowClock, Timer};
 use serde_json::{Value, json};
@@ -38,7 +38,8 @@ fn handle_event(request: &Request) -> Response {
     let mut response = Response {
         state: request.state.clone(),
         panel: Vec::new(),
-        command: notification::command(&request.event).or_else(|| matches!(request.event, Event::Due).then(|| json!({"kind":"due"}))),
+        command: notification::command(&request.event)
+            .or_else(|| matches!(request.event, Event::Due).then(|| json!({"kind":"due"}))),
         timer: None,
         reload: false,
     };
