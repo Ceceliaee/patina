@@ -1,0 +1,21 @@
+{
+  "id": "patina.reminders",
+  "name": "Reminder",
+  "version": "0.5.1",
+  "api": 8,
+  "entry": "panel",
+  "capabilities": [
+    "panel",
+    "timer",
+    "reminders"
+  ],
+  "presentation": {
+    "names": {
+      "en-US": "Reminder",
+      "zh-CN": "\u63d0\u9192",
+      "es": "Recordatorio",
+      "ru-RU": "\u041d\u0430\u043f\u043e\u043c\u0438\u043d\u0430\u043d\u0438\u0435"
+    },
+    "order": 0
+  }
+}
