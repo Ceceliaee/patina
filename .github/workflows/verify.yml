@@ -194,7 +194,7 @@ jobs:
           $env:PATINA_TEST_MAKENSIS = "${env:ProgramFiles(x86)}/NSIS/makensis.exe"
           cargo build --locked -p patina --bin patina
           if ($LASTEXITCODE -ne 0) { throw "Desktop program build failed" }
-          foreach ($case in @("tools::tool_dropdown_and_reminder_preferences_keep_keyboard_selections", "tools::mini_opens_the_selected_tool_and_keeps_dirty_settings", "tools::in_window_reminder_uses_the_selected_delivery", "tools::separate_reminder_survives_window_release")) {
+          foreach ($case in @("tools::plugin_home_and_reminder_preferences_keep_keyboard_selections", "tools::mini_opens_the_selected_tool_and_keeps_dirty_settings", "tools::in_window_reminder_uses_the_selected_delivery", "tools::separate_reminder_survives_window_release")) {
             cargo test --locked -p patina --features native-tests --test pages $case -- --ignored --exact --test-threads=1
             if ($LASTEXITCODE -ne 0) { throw "Native tool interaction failed: $case" }
           }
