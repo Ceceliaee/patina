@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-pub(super) const LEAVE_GRACE: Duration = Duration::from_millis(180);
+pub(super) const LEAVE_GRACE: Duration = Duration::from_millis(450);
 
 const MORPH_DURATION: Duration = Duration::from_millis(180);
 
