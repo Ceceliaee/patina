@@ -1,6 +1,3 @@
-> [!NOTE]
-> GPUI desktop development continues on `main`. The `tauri-maintenance` branch holds the Tauri code used by the [current stable release](https://github.com/Ceceliaee/patina/releases/latest). You can keep using your current installation.
-
 <div align="center">
 
 # Patina
@@ -10,7 +7,6 @@ Quiet, reliable time tracking that keeps your data local.
 English · [简体中文](README.zh-CN.md)
 
 ![Platform](https://img.shields.io/badge/platform-Windows-4f6f8f)
-![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri%20v2-4f7f8f)
 ![Local first](https://img.shields.io/badge/data-local--first-5f7f68)
 [![License](https://img.shields.io/badge/license-MIT-6f647a)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/Ceceliaee/patina?style=social)](https://github.com/Ceceliaee/patina/stargazers)
@@ -164,6 +160,8 @@ Report problems or suggest improvements through GitHub Issues or the Patina QQ c
 
 ## Development and Contributing
 
+Desktop development takes place on `main`. The `tauri-maintenance` branch maintains the [current stable release](https://github.com/Ceceliaee/patina/releases/latest).
+
 ### Run from Source
 
 <a id="requirements"></a>
@@ -171,17 +169,11 @@ Report problems or suggest improvements through GitHub Issues or the Patina QQ c
 <a id="run-in-development"></a>
 <a id="build-installer"></a>
 
-Follow the [first-run guide](CONTRIBUTING.md#34-install-dependencies) to set up the development environment and install dependencies, then run `pnpm run tauri dev`. The development build can run alongside the release build. Each uses its own data directory. To build a release installer, see the [release policy](docs/release.md#发布前的最低验证门槛).
+Follow the [first-run guide](CONTRIBUTING.md#34-install-dependencies) to set up the development environment and install dependencies, then run `cargo xtask dev`. The development build can run alongside the release build. Each uses its own data directory. To build a release installer, see the [release policy](docs/release.md#发布前的最低验证门槛).
 
 ### Tech Stack
 
-- **Desktop framework** — Tauri v2
-- **Backend** — Rust
-- **System integration** — Windows API
-- **Frontend** — React and TypeScript
-- **Styling** — Tailwind CSS
-- **Frontend build tool** — Vite
-- **Local storage** — SQLite
+Patina is written in Rust. It uses the Windows API for system integration and SQLite for local storage. The [architecture guide](docs/architecture.md) describes the recorder and desktop windows.
 
 ### Contributing
 

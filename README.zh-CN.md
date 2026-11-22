@@ -1,6 +1,3 @@
-> [!NOTE]
-> GPUI 桌面版在 `main` 分支开发。`tauri-maintenance` 分支维护[当前稳定版](https://github.com/Ceceliaee/patina/releases/latest)使用的 Tauri 代码。已安装的用户可以照常使用。
-
 <div align="center">
 
 # Patina
@@ -10,7 +7,6 @@
 [English](README.md) · 简体中文
 
 ![Platform](https://img.shields.io/badge/platform-Windows-4f6f8f)
-![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri%20v2-4f7f8f)
 ![Local first](https://img.shields.io/badge/data-local--first-5f7f68)
 [![License](https://img.shields.io/badge/license-MIT-6f647a)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/Ceceliaee/patina?style=social)](https://github.com/Ceceliaee/patina/stargazers)
@@ -164,6 +160,8 @@
 
 ## 开发与贡献
 
+桌面端在 `main` 分支开发。`tauri-maintenance` 分支维护[当前稳定版](https://github.com/Ceceliaee/patina/releases/latest)。
+
 ### 从源码运行
 
 <a id="环境要求"></a>
@@ -171,17 +169,11 @@
 <a id="开发运行"></a>
 <a id="构建安装包"></a>
 
-按[首次运行指南](CONTRIBUTING.md#34-安装依赖)配置开发环境、安装依赖，再运行 `pnpm run tauri dev` 启动开发版。开发版可与正式版同时运行，两者使用独立的数据目录。构建正式安装包请参阅[发布规范](docs/release.md#发布前的最低验证门槛)。
+按[首次运行指南](CONTRIBUTING.md#34-安装依赖)配置开发环境、安装依赖，再运行 `cargo xtask dev` 启动开发版。开发版可与正式版同时运行，两者使用独立的数据目录。构建正式安装包请参阅[发布规范](docs/release.md#发布前的最低验证门槛)。
 
 ### 技术栈
 
-- 桌面框架：Tauri v2
-- 后端开发：Rust
-- 系统集成：Windows API
-- 前端开发：React、TypeScript
-- 界面样式：Tailwind CSS
-- 前端构建：Vite
-- 本地存储：SQLite
+Patina 使用 Rust 开发，通过 Windows API 接入系统，使用 SQLite 保存本地数据。录制进程和桌面窗口的职责见[系统架构](docs/architecture.md)。
 
 ### 贡献
 

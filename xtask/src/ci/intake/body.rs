@@ -127,7 +127,7 @@ pub(super) fn assess(body: &str, files: &[Change], errors: &mut Vec<String>) {
         ("scope boundary", &["In scope", "Out of scope"][..]),
         (
             "owner check",
-            &["GPUI owner", "Rust owner", "Why this placement fits"][..],
+            &["UI owner", "Rust owner", "Why this placement fits"][..],
         ),
         (
             "risk review",
@@ -141,7 +141,11 @@ pub(super) fn assess(body: &str, files: &[Change], errors: &mut Vec<String>) {
         ),
     ] {
         for key in labels {
-            if field(get(section), key).is_none() {
+            let value = field(get(section), key).or_else(|| match *key {
+                "UI owner" => field(get(section), "GPUI owner"),
+                _ => None,
+            });
+            if value.is_none() {
                 errors.push(format!(
                     "incomplete-pr-sections: fill in {key} under {section}"
                 ))

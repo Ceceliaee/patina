@@ -9,7 +9,7 @@ fn change(path: &str) -> Change {
         ..Change::default()
     }
 }
-const BODY: &str = "## Purpose\nFix the report.\n## Accepted Scope\nRefs #123\n## Changes\nFix the report heading.\n## Scope Boundary\n- In scope: report\n- Out of scope: other reports\n## Owner Check\n- GPUI owner: report page\n- Rust owner: report model\n- Why this placement fits: owner handles headings\n## Risk Review\n- Tracking correctness: N/A\n- Local data safety: N/A\n- Privacy or security: N/A\n- Compatibility and migration: N/A\n- Failure and recovery behavior: N/A\n## UI Review\n- [x] UI follows Quiet Pro\n- [x] Screenshots attached externally\n- Affected states: empty\n- Keyboard and focus: unchanged order\n- Repeatable test or existing owner test: cargo test -p patina-ui\n## Validation\n- [x] \x60cargo xtask check\x60\n## Screenshots\nhttps://github.com/user-attachments/assets/test-id\n## Contributor Checklist\n- [x] Completed owner review.";
+const BODY: &str = "## Purpose\nFix the report.\n## Accepted Scope\nRefs #123\n## Changes\nFix the report heading.\n## Scope Boundary\n- In scope: report\n- Out of scope: other reports\n## Owner Check\n- UI owner: report page\n- Rust owner: report model\n- Why this placement fits: owner handles headings\n## Risk Review\n- Tracking correctness: N/A\n- Local data safety: N/A\n- Privacy or security: N/A\n- Compatibility and migration: N/A\n- Failure and recovery behavior: N/A\n## UI Review\n- [x] UI follows Quiet Pro\n- [x] Screenshots attached externally\n- Affected states: empty\n- Keyboard and focus: unchanged order\n- Repeatable test or existing owner test: cargo test -p patina-ui\n## Validation\n- [x] \x60cargo xtask check\x60\n## Screenshots\nhttps://github.com/user-attachments/assets/test-id\n## Contributor Checklist\n- [x] Completed owner review.";
 fn body_fails(body: &str, files: &[Change]) -> bool {
     let mut errors = vec![];
     body::assess(body, files, &mut errors);
@@ -20,10 +20,15 @@ fn body_fails(body: &str, files: &[Change]) -> bool {
 fn intake_requires_accepted_scope_complete_visible_fields_and_external_evidence() {
     let files = [change("apps/patina-ui/src/features/today/mod.rs")];
     assert!(!body_fails(BODY, &files));
+    assert!(!body_fails(
+        &BODY.replace("- UI owner:", "- GPUI owner:"),
+        &files
+    ));
     for (old, new) in [
         ("Refs #123", "<!-- Refs #123 -->"),
         ("- In scope: report", "- In scope:"),
         ("- Rust owner: report model", "- Rust owner:"),
+        ("- UI owner: report page", "- UI owner:"),
         ("## Changes", "## Else"),
         ("[x] Completed", "[ ] Completed"),
         ("[x] UI follows Quiet Pro", "[ ] UI follows Quiet Pro"),

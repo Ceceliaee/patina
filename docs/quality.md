@@ -9,16 +9,16 @@
 | 实际改动 | 本地验收范围 |
 | --- | --- |
 | 纯文档 | `cargo xtask docs check`，核对事实、UTF-8、链接和义务；治理或验证政策变化追加 `cargo test -p xtask docs::` 及受影响规则的正反场景 |
-| 局部 GPUI/QuietPro 界面或选项持久化 | 所属 Rust 模块或活动数据契约、受影响的具名原生交互用例，以及相关格式、编译或本地化检查；不运行无关页面与资源长测 |
+| 局部窗口、QuietPro 控件或选项持久化 | 所属 Rust 模块或活动数据契约、受影响的具名原生交互用例，以及相关格式、编译或本地化检查；不运行无关页面与资源长测 |
 | 局部 Rust、tracking、SQLite 或桌面 runtime 行为 | 受影响模块及真实消费者的测试、相关 Rust 静态检查和命中风险的原生/数据专项；不因涉及 Rust 或持久化就运行全仓测试 |
-| 跨模块改动 | GPUI workspace 运行 `cargo test-headless --locked` 及受影响 crate 的格式、编译和 Clippy 检查，并补命中风险的原生专项；仓库工具或公共构建链变化追加 `cargo xtask check tools`。 |
+| 跨模块改动 | 桌面工作区 运行 `cargo test-headless --locked` 及受影响 crate 的格式、编译和 Clippy 检查，并补命中风险的原生专项；仓库工具或公共构建链变化追加 `cargo xtask check tools`。 |
 | 正式发布 | `cargo xtask check` 和 `cargo xtask release validate-changelog`，并遵循[发布验收](release.md#发布前的最低验证门槛) |
 
 按行为影响判断跨模块，不按文件数量判断：一个功能的组件、存储 helper 和测试可以属于局部改动；公共 API、共享状态、全局样式、schema、权限或依赖变化若影响多个消费者，则覆盖这些消费者并使用跨模块门槛。影响范围不明时先追踪调用与数据流，再扩大到能覆盖影响的范围。
 
 涉及 changelog、更新器或发布的改动也运行 `cargo xtask release validate-changelog`。
 
-检查器、模板或操作说明变化还须验证真实使用路径，扩展名不能豁免风险。纯文档默认使用文档检查。[仓库检查入口](../xtask/src/check.rs)定义命令的执行顺序，`Cargo.toml` 与各 crate manifest、Cargo module tree 拥有 GPUI 测试入口；长期 prose 不复制执行图。顶层门禁不得静默移除既有检查、测试、coverage include 或阈值。
+检查器、模板或操作说明变化还须验证真实使用路径，扩展名不能豁免风险。纯文档默认使用文档检查。[仓库检查入口](../xtask/src/check.rs)定义命令的执行顺序，`Cargo.toml` 与各 crate manifest、Cargo module tree 拥有 桌面测试入口；长期 prose 不复制执行图。顶层门禁不得静默移除既有检查、测试、coverage include 或阈值。
 
 `cargo xtask check` 覆盖仓库工具、原生 Rust、格式、编译、测试、clippy 与依赖安全。依赖审计只允许经 Windows target 依赖树证明不可达的精确 advisory；受控离线模式仍须运行本地快照和例外可达性校验，但不能替代发布 CI 的联网新鲜度。
 
@@ -38,9 +38,9 @@
 
 ## 测试分层
 
-GPUI 桌面版和 QuietPro 的自动化测试统一用 Rust 编写，包括控件交互、Windows 桌面验收和资源采样测试。单元测试随被测模块维护，集成测试放在对应 crate 的 `tests/` 目录，通过 `cargo test` 运行。无头交互使用 GPUI `TestAppContext`，验证真实控件的输入、状态和回调，不创建原生窗口。真实窗口、Windows 集成及长时间采样目标通过 `native-tests` feature 显式启用，并保留 `#[ignore]`，验收时按测试名运行。默认 `cargo test` 不构建这些原生测试目标；`cargo test-headless` 聚合 workspace 单元、契约与无头交互测试。无头测试不替代像素渲染、UIA、托盘、安装和升级验收。
+桌面端和 QuietPro 的自动化测试统一用 Rust 编写，包括控件交互、Windows 桌面验收和资源采样测试。单元测试随被测模块维护，集成测试放在对应 crate 的 `tests/` 目录，通过 `cargo test` 运行。无头交互使用 GPUI `TestAppContext`，验证真实控件的输入、状态和回调，不创建原生窗口。真实窗口、Windows 集成及长时间采样目标通过 `native-tests` feature 显式启用，并保留 `#[ignore]`，验收时按测试名运行。默认 `cargo test` 不构建这些原生测试目标；`cargo test-headless` 聚合 workspace 单元、契约与无头交互测试。无头测试不替代像素渲染、UIA、托盘、安装和升级验收。
 
-### GPUI 测试文件与定向入口
+### 桌面测试文件与定向入口
 
 按被测行为放置测试：
 
@@ -63,7 +63,7 @@ cargo test --locked -p quietpro --features native-tests --test controls accessib
 
 一次执行同一领域时可使用模块过滤器；不能用 `--include-ignored` 无差别执行带资源、凭据或专用会话前提的用例。Cargo 零匹配可能返回成功退出码，验收还须核对实际执行数非零；`--no-run` 只证明编译。移动测试时核对新旧清单、断言与 ignore 理由，保持默认聚合可达。
 
-显式启用的原生 GPUI 窗口用例从 Cargo 入口自动进入[临时 Win32 测试桌面](../crates/test-support/src/lib.rs)，驱动、Patina 和渲染进程在同一非输入桌面完成交互，退出后释放。纯数据和控件模型用例直接运行。
+显式启用的原生窗口用例从 Cargo 入口自动进入[临时 Win32 测试桌面](../crates/test-support/src/lib.rs)，驱动、Patina 和渲染进程在同一非输入桌面完成交互，退出后释放。纯数据和控件模型用例直接运行。
 
 测试入口受阻时，标明未运行的用例。其他入口获得的证据单独说明实际覆盖的行为。
 

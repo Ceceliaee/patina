@@ -116,7 +116,7 @@ Before requesting review, confirm:
 - the change does not add standalone CSS, hardcoded visual styles, or a new
   visual direction outside the design system;
 - user-facing labels, placeholders, titles, and accessibility text are added to
-  the relevant copy owner instead of inline GPUI text literals;
+  the relevant copy owner instead of inline UI text literals;
 - tracking, SQLite, backup, restore, cleanup, export, migration, settings
   persistence, screen capture, and local or network interface changes include
   focused tests;
@@ -188,7 +188,7 @@ From the repository root, start the development app. Cargo builds the host, wind
 cargo xtask dev
 ```
 
-The development launcher uses a separate profile under LOCALAPPDATA. Use the [native build and release policy](docs/release.md#gpui-原生更新包) when preparing an installer.
+The development launcher uses a separate profile under LOCALAPPDATA. Use the [native build and release policy](docs/release.md#windows-安装与更新) when preparing an installer.
 
 ## 4. Branch And Commit Workflow
 
@@ -300,9 +300,9 @@ Refs #4
 
 Choose the owner before choosing a file. Use the [placement map](docs/architecture.md#代码落点).
 
-### 5.2 GPUI Window Rules
+### 5.2 Desktop Window Rules
 
-Keep page behavior with its GPUI owner, shared controls in QuietPro, and SQLite access in Recorder. See the [placement map](docs/architecture.md#代码落点).
+Keep page behavior with its UI owner, shared controls in QuietPro, and SQLite access in Recorder. See the [placement map](docs/architecture.md#代码落点).
 
 ### 5.3 Rust Rules
 
@@ -338,7 +338,7 @@ requesting review. Validation requirements are owned by
 [`docs/quality.md`](docs/quality.md#验证范围);
 [xtask](xtask/src/check.rs) defines repository checks and execution order. The
 [root workspace](Cargo.toml) and its crate manifests and module trees
-define GPUI test entry points.
+define the desktop test targets.
 
 For validation stages, evidence reuse and local/CI responsibilities, follow the
 [layered entry guide](docs/quality.md#测试分层).
@@ -355,12 +355,12 @@ cargo xtask check tools
 
 ### 6.2 Rust And Architecture Validation
 
-For GPUI, run Cargo from the repository root to use its pinned toolchain. Choose the crate,
+Run Cargo from the repository root to use its pinned toolchain. Choose the crate,
 test target and named case through the
-[GPUI test guide](docs/quality.md#gpui-测试文件与定向入口).
-Recorder data contracts do not require launching a GPUI window.
+[desktop test guide](docs/quality.md#桌面测试文件与定向入口).
+Recorder data contracts do not require launching a window.
 
-From the repository root, run `cargo test-headless --locked` for the native workspace. Use cargo xtask check from the root when the change also affects shared tooling or the build chain. Select additional native and performance checks through the [desktop validation guide](docs/quality.md#gpui-测试文件与定向入口).
+From the repository root, run `cargo test-headless --locked` for the native workspace. Use cargo xtask check from the root when the change also affects shared tooling or the build chain. Select additional native and performance checks through the [desktop validation guide](docs/quality.md#桌面测试文件与定向入口).
 
 ### 6.3 Release Validation
 
@@ -744,7 +744,7 @@ Pull Request 只有先通过项目准入门禁，才算准备好进入维护者 
 - UI 改动符合 Quiet Pro，并提供托管在仓库外的截图；
 - 没有新增独立 CSS、硬编码视觉样式，或设计系统之外的新视觉方向；
 - 用户可见文案、placeholder、title 和 accessibility 文案放在对应 copy owner 中，
-  而不是写成 GPUI 内联文案；
+  而不是写成界面内联文案；
 - 涉及 tracking、SQLite、备份、恢复、清理、导出、migration、settings persistence、
   截屏采集、本机或网络接口的改动，包含对应风险的专项测试；
 - 功能 PR 不改质量门禁脚本、CI workflow、bundle budget 或 hotspot budget，除非维护者
@@ -797,7 +797,7 @@ Draft PR 不运行准入 job。请先完成模板并获得范围批准，再将 
 cargo xtask dev
 ```
 
-启动器在 LOCALAPPDATA 下使用开发专用资料目录。安装包按[原生发布规范](docs/release.md#gpui-原生更新包)准备。
+启动器在 LOCALAPPDATA 下使用开发专用资料目录。安装包按[原生发布规范](docs/release.md#windows-安装与更新)准备。
 
 ### 4. 分支与提交工作流
 
@@ -898,9 +898,9 @@ Refs #4
 
 先选 owner，再选文件。使用[落点表](docs/architecture.md#代码落点)。
 
-#### 5.2 GPUI 窗口规则
+#### 5.2 桌面窗口规则
 
-页面行为归 GPUI 页面，共享控件归 QuietPro，SQLite 访问归 Recorder。参见[落点表](docs/architecture.md#代码落点)。
+页面行为归对应页面，共享控件归 QuietPro，SQLite 访问归 Recorder。参见[落点表](docs/architecture.md#代码落点)。
 
 #### 5.3 Rust 规则
 

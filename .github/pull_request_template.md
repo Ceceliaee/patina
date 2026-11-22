@@ -40,7 +40,7 @@ Explain why the changed files belong under these owners.
 Examples: apps/patina-ui, crates/storage, crates/activity.
 -->
 
-- GPUI owner:
+- UI owner:
 - Rust owner:
 - Why this placement fits:
 
