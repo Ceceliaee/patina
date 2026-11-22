@@ -1,0 +1,8 @@
+{
+  "id": "example.layout-counter",
+  "name": "Layout Counter",
+  "version": "0.1.0",
+  "api": 3,
+  "entry": "panel",
+  "capabilities": ["panel"]
+}

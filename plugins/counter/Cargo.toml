@@ -9,6 +9,11 @@ publish = false
 [lib]
 crate-type = ["cdylib"]
 
+[[example]]
+name = "layout-counter"
+path = "examples/layout.rs"
+crate-type = ["cdylib"]
+
 [dependencies]
 extism-pdk = "1"
 patina-plugin-sdk = { path = "../../crates/plugin-sdk" }

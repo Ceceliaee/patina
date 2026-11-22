@@ -1,6 +1,9 @@
 #[cfg(not(target_arch = "wasm32"))]
 pub mod installation;
 
+pub mod layout;
+pub mod notification;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -13,6 +16,15 @@ pub struct Manifest {
     pub api: u32,
     pub entry: String,
     pub capabilities: Vec<Capability>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub presentation: Option<Presentation>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Presentation {
+    pub names: std::collections::BTreeMap<String, String>,
+    pub order: u16,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
@@ -24,26 +36,45 @@ pub enum Capability {
     Reminders,
 }
 
+pub type Messages = std::collections::BTreeMap<String, String>;
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Request {
     pub state: Value,
     pub event: Event,
     pub locale: String,
+    #[serde(default, skip_serializing_if = "Messages::is_empty")]
+    pub messages: Messages,
     pub now_ms: i64,
     #[serde(default)]
     pub data: Value,
+}
+
+impl Request {
+    pub fn text(&self, key: &str) -> String {
+        self.messages
+            .get(key)
+            .map(String::as_str)
+            .unwrap_or(key)
+            .into()
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Event {
     Open,
+    SelectTab(String),
     Action(String),
     Submit {
         id: String,
         fields: std::collections::BTreeMap<String, String>,
     },
     Due,
+    Notification {
+        notice: notification::NoticeContext,
+        action: Option<String>,
+    },
     Uninstall,
 }
 
@@ -69,10 +100,38 @@ pub struct Timer {
     pub task: Option<(String, i64)>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub enum RowClock {
+    Duration(i64),
+    Until(i64),
+    Since(i64),
+}
+
+impl RowClock {
+    pub fn milliseconds(&self, now: i64) -> i64 {
+        match *self {
+            Self::Duration(ms) => ms,
+            Self::Until(at) => at.saturating_sub(now),
+            Self::Since(at) => now.saturating_sub(at),
+        }
+        .max(0)
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub enum Control {
+    Page(Box<layout::Page>),
     Text(String),
+    ListRow {
+        id: String,
+        title: String,
+        detail: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        clock: Option<RowClock>,
+        actions: Vec<(String, String)>,
+    },
     Clock {
         label: String,
         anchor_ms: i64,
