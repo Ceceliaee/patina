@@ -54,6 +54,7 @@ pub(crate) struct Saved {
     pub show_toast: bool,
 }
 mod save_toast;
+pub(crate) mod scale;
 struct PendingNavigation {
     target: Section,
     dialog_focus: FocusHandle,
@@ -303,7 +304,7 @@ impl MainWindow {
                 self.cancel_opening_page(cx);
                 let view =
                     cx.new(|cx| Tools::new(self.client.clone(), self.tool_target.take(), cx));
-                self.present_page(Page::Tools(view), win, cx);
+                self.open_when_ready(view, Tools::ready_to_present, Page::Tools, win, cx);
             }
             Section::About => {
                 self.cancel_opening_page(cx);
@@ -345,7 +346,11 @@ impl MainWindow {
                 self.cancel_opening_page(cx);
                 let view = cx
                     .new(|cx| Today::new(win, self.client.clone(), self.today_snapshot.take(), cx));
-                self.present_page(Page::Today(view), win, cx);
+                if matches!(self.page, Page::Opening(Section::Today)) {
+                    self.present_page(Page::Today(view), win, cx);
+                } else {
+                    self.open_when_ready(view, Today::ready_to_present, Page::Today, win, cx);
+                }
             }
             Section::Data => {
                 self.cancel_opening_page(cx);
@@ -395,10 +400,10 @@ impl MainWindow {
             focus: section == Section::Today,
             window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
                 None,
-                size(px(1080.), px(720.)),
+                size(scale::WIDTH, scale::HEIGHT)
+                    .map(|n| px(f32::from(n) * f32::from(client.window_scale.get()) / 100.)),
                 cx,
             ))),
-            window_min_size: Some(size(px(810.), px(540.))),
             titlebar: None,
             app_id: Some(crate::APP_ID.into()),
             ..Default::default()
@@ -436,6 +441,13 @@ impl MainWindow {
             view.update(cx, |main, cx| main.switch(section, window, cx));
             view
         })?;
+        handle.update(cx, |_, win, cx| {
+            let result = view.update(cx, |main, cx| main.observe_window_scale(win, cx));
+            if result.is_err() {
+                win.remove_window();
+            }
+            result
+        })??;
         Ok((handle, view.downgrade()))
     }
 }
@@ -450,15 +462,17 @@ impl Render for MainWindow {
         } else {
             ("accessibility.titleBar.maximize", Icon::Maximize2)
         };
+        let caption_button =
+            |id, key, icon| super::caption::Caption::Main.button(id, label(key), icon, colors);
+        let shortcuts = self.client.shortcut_buttons(colors);
         let titlebar = div()
-            .h(px(36.))
+            .relative()
+            .h(px(super::caption::MAIN_TITLEBAR_HEIGHT))
             .flex_none()
             .flex()
             .items_center()
-            .px(px(12.))
+            .pl(px(12.))
             .gap(px(8.))
-            .border_b_1()
-            .border_color(colors.border)
             .child(
                 div()
                     .h_full()
@@ -471,36 +485,50 @@ impl Render for MainWindow {
                     .child(crate::features::page_controls::logo().size(px(18.)))
                     .child("Patina"),
             )
-            .children(self.client.shortcut_buttons(false))
             .child(
                 quietpro::icon_actions()
+                    .when(!shortcuts.is_empty(), |actions| {
+                        actions.children(shortcuts).child(
+                            quietpro::vertical_divider(colors)
+                                .id("titlebar-shortcut-divider")
+                                .role(Role::Splitter)
+                                .aria_orientation(Orientation::Vertical)
+                                .h(px(24.))
+                                .mx(px(4.)),
+                        )
+                    })
                     .child(
-                        IconControl::new("mini", label("miniWindow.open"), Icon::AppWindow).action(
-                            colors,
+                        caption_button("mini", "miniWindow.open", Icon::AppWindow).on_click(
                             move |_, _, _| {
                                 client.open(patina_desktop_protocol::Target::Mini { focus: true });
                             },
                         ),
                     )
                     .child(
-                        IconControl::new(
-                            "minimize",
-                            label("accessibility.titleBar.minimize"),
-                            Icon::Minus,
-                        )
-                        .action(colors, |_, win, _| win.minimize_window()),
+                        caption_button("minimize", "accessibility.titleBar.minimize", Icon::Minus)
+                            .on_click(|_, win, _| win.minimize_window()),
                     )
                     .child(
-                        IconControl::new("zoom", label(zoom.0), zoom.1)
-                            .action(colors, |_, win, _| win.zoom_window()),
+                        caption_button("zoom", zoom.0, zoom.1)
+                            .on_click(|_, win, _| win.zoom_window()),
                     )
                     .child(
-                        IconControl::new("close", label("accessibility.titleBar.close"), Icon::X)
-                            .action(colors, {
+                        caption_button("close", "accessibility.titleBar.close", Icon::X).on_click(
+                            {
                                 let client = self.client.clone();
                                 move |_, win, _| client.close_main(win)
-                            }),
+                            },
+                        ),
                     ),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .bottom_0()
+                    .left_0()
+                    .right_0()
+                    .h(px(1.))
+                    .bg(colors.border),
             );
         let labels = self.client.navigation.get().sidebar_labels;
         let rail = quietpro::navigation_rail()

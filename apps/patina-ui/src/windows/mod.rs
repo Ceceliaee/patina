@@ -1,3 +1,4 @@
+mod caption;
 pub(crate) mod eyedropper;
 pub(crate) mod main;
 pub(crate) mod mini;
@@ -82,6 +83,7 @@ impl AppWindows {
     pub(crate) async fn open_mini(
         &mut self,
         focus: bool,
+        preferences: patina_activity_model::views::mini::MiniPreferences,
         client: &Rc<crate::client::Client>,
         cx: &AsyncApp,
     ) {
@@ -105,7 +107,7 @@ impl AppWindows {
             return;
         }
         cx.update(|cx| {
-            self.mini = match Mini::open(cx, client.clone(), focus) {
+            self.mini = match Mini::open(cx, client.clone(), focus, preferences) {
                 Ok(window) => Some(window),
                 Err(error) => {
                     eprintln!("open Mini: {error:#}");

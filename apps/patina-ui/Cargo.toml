@@ -23,8 +23,9 @@ chrono = "0.4"
 getrandom = "0.3"
 windows = { version = "0.62.2", features = [
  "Foundation", "Storage_Streams", "Web_Http",
- "Win32_Foundation", "Win32_Globalization", "Win32_Graphics_Gdi", "Win32_UI_Shell",
+ "Win32_Foundation", "Win32_Globalization", "Win32_Graphics_Gdi", "Win32_Graphics_Dwm", "Win32_UI_Shell",
  "Win32_UI_WindowsAndMessaging", "Win32_UI_HiDpi", "Win32_System_LibraryLoader",
+ "Win32_UI_Input_KeyboardAndMouse",
 ] }
 
 [features]

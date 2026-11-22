@@ -73,9 +73,103 @@ fn cold_resume_builds_only_the_saved_page_and_normal_reopen_keeps_it(cx: &mut Te
     cx.update(|cx| {
         assert_eq!(
             main.upgrade().unwrap().read(cx).page.section(),
+            Section::About
+        )
+    });
+    crate::features::today::tests::answer_empty_today(cx, &client, &messages);
+    cx.update(|cx| {
+        assert_eq!(
+            main.upgrade().unwrap().read(cx).page.section(),
             Section::Today
         )
     });
+}
+
+#[gpui_kit::test]
+fn tools_waits_for_the_installed_list_and_discards_a_cancelled_entry(cx: &mut TestAppContext) {
+    use patina_desktop_protocol::tools::{Installed, Manifest, ToolRequest};
+
+    cx.update(gpui_kit::init);
+    let (client, requests) = crate::client::Client::test_connection();
+    let (handle, main) = cx.update(|cx| MainWindow::open(cx, client.clone()).unwrap());
+    crate::features::today::tests::answer_empty_today(cx, &client, &requests);
+    let click = |cx: &mut TestAppContext, id: &'static str| {
+        cx.update_window(handle, |_, win, cx| {
+            win.render_frame(cx);
+            win.click(id, cx);
+        })
+        .unwrap();
+        cx.run_until_parked();
+    };
+    let tool_request = || {
+        requests
+            .try_iter()
+            .find_map(|message| {
+                if let FromWindow::Request(id, request) = message
+                    && let WindowRequest::Tools(query) = *request
+                {
+                    return Some((id, query));
+                }
+                None
+            })
+            .expect("expected tool request")
+    };
+    let visible =
+        |cx: &mut TestAppContext| cx.update(|cx| main.upgrade().unwrap().read(cx).page.section());
+    let tool = Installed {
+        manifest: Manifest {
+            presentation: None,
+            id: "fixture".into(),
+            name: "Fixture".into(),
+            version: "1".into(),
+            api: 1,
+            entry: "fixture.wasm".into(),
+            capabilities: vec![],
+        },
+        generation: "first".into(),
+    };
+    for cancel in [true, false] {
+        click(cx, "tools.title");
+        let (list, ToolRequest::List) = tool_request() else {
+            panic!("expected list")
+        };
+        assert!(visible(cx) == Section::Today);
+        if cancel {
+            click(cx, "dashboard.title");
+        }
+        client.test_answer(list, Reply::Tools((vec![tool.clone()], false, None)));
+        cx.run_until_parked();
+        assert!(
+            visible(cx)
+                == if cancel {
+                    Section::Today
+                } else {
+                    Section::Tools
+                }
+        );
+    }
+    click(cx, "dashboard.title");
+    click(cx, "tools.title");
+    let (list, _) = tool_request();
+    client.test_answer(
+        list,
+        Reply::Tools((vec![tool], false, Some("fixture".into()))),
+    );
+    cx.run_until_parked();
+    assert_eq!(visible(cx), Section::Today);
+    let (panel, ToolRequest::Panel { id, .. }) = tool_request() else {
+        panic!("expected the saved plugin panel")
+    };
+    assert_eq!(id, "fixture");
+    client.test_answer(panel, Reply::Panel(vec![]));
+    cx.run_until_parked();
+    assert_eq!(visible(cx), Section::Tools);
+    click(cx, "dashboard.title");
+    click(cx, "tools.title");
+    let (list, _) = tool_request();
+    client.test_reject(list, patina_desktop_protocol::RequestError::Disconnected);
+    cx.run_until_parked();
+    assert!(visible(cx) == Section::Tools);
 }
 
 fn preferences() -> AppPreferences {
@@ -91,6 +185,7 @@ fn preferences() -> AppPreferences {
         titles: false,
         locale: patina_i18n::Locale::EnUs,
         theme: Theme::System,
+        window_scale: 100,
         schemes: Default::default(),
     }
 }
@@ -474,6 +569,7 @@ fn about_shows_the_actual_update_actions_on_first_frame_and_reentry(cx: &mut Tes
     cx.update(gpui_kit::init);
     let (client, requests) = crate::client::Client::test_connection();
     let (handle, _) = cx.update(|cx| MainWindow::open(cx, client.clone()).unwrap());
+    crate::features::today::tests::answer_empty_today(cx, &client, &requests);
     let click = |cx: &mut TestAppContext, id: &'static str| {
         cx.update_window(handle, |_, win, cx| {
             win.render_frame(cx);

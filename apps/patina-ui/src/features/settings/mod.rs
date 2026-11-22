@@ -1,3 +1,4 @@
+use crate::windows::main::scale;
 use crate::{
     client::Client,
     features::page_controls::{label, save_status},
@@ -44,6 +45,9 @@ pub(crate) struct Settings {
     write: Option<Task<()>>,
     draft: Option<AppPreferences>,
     sliders: [Entity<SliderState>; 2],
+    scale_slider: Entity<SliderState>,
+    scale_focus: FocusHandle,
+    scale_pointer: bool,
     theme_focus: [FocusHandle; 3],
     scheme_triggers: [FocusHandle; 2],
     picker: Option<schemes::Picker>,
@@ -51,6 +55,128 @@ pub(crate) struct Settings {
     services: ServiceFields,
 }
 impl Settings {
+    fn set_slider_draft(&mut self, state: &Entity<SliderState>, value: f32) {
+        if let Some(p) = &mut self.draft {
+            if state == &self.scale_slider {
+                p.window_scale = value as u16;
+            } else if state == &self.sliders[0] {
+                p.timeline_merge_gap_secs = value as i64 * 60;
+            } else {
+                p.idle_timeout_secs = value as i64 * 60;
+            }
+        }
+    }
+    fn slider_row(
+        &self,
+        key: &'static str,
+        state: &Entity<SliderState>,
+        formatted: String,
+        enabled: bool,
+        win: &Window,
+        cx: &Context<Self>,
+    ) -> Stateful<Div> {
+        let c = self.client.palette(win);
+        let name = text(self.client.locale.get(), key);
+        let value = state.read(cx).value().end();
+        let is_scale = state == &self.scale_slider;
+        let step = |direction: i32| {
+            let state = state.clone();
+            let (symbol, icon, at_limit) = if direction < 0 {
+                ("−", Icon::Minus, value <= state.read(cx).min_value())
+            } else {
+                ("+", Icon::Plus, value >= state.read(cx).max_value())
+            };
+            IconControl::new(
+                SharedString::from(format!("{key}-{direction}")),
+                format!("{symbol} {name}"),
+                icon,
+            )
+            .disabled(!enabled || at_limit)
+            .action(
+                c,
+                cx.listener(move |settings, _, win, cx| {
+                    let next = state.update(cx, |s, cx| {
+                        let next = (s.value().end() + direction as f32)
+                            .clamp(s.min_value(), s.max_value());
+                        s.set_value(next, win, cx);
+                        next
+                    });
+                    settings.set_slider_draft(&state, next);
+                    if is_scale {
+                        scale::preview(win, next as u16);
+                    }
+                    cx.notify();
+                }),
+            )
+        };
+        let slider = quietpro::value_slider(state, name.clone(), enabled, c, cx)
+            .when(is_scale && enabled, |s| {
+                s.track_focus(&self.scale_focus.clone().tab_stop(true))
+            });
+        let track = div()
+            .id("slider-input")
+            .relative()
+            .flex_none()
+            .when(is_scale && enabled, |d| {
+                d.capture_any_mouse_down(cx.listener(|s, event: &MouseDownEvent, win, cx| {
+                    // The thumb consumes the bubbling press before the track sees it.
+                    if event.button == MouseButton::Left {
+                        s.scale_pointer = true;
+                        win.focus(&s.scale_focus, cx);
+                    }
+                }))
+                .on_mouse_up(
+                    MouseButton::Left,
+                    cx.listener(|s, _, _, _| s.scale_pointer = false),
+                )
+                .on_mouse_up_out(
+                    MouseButton::Left,
+                    cx.listener(|s, _, _, _| s.scale_pointer = false),
+                )
+                .on_key_down(cx.listener(|s, event: &KeyDownEvent, win, cx| {
+                    let delta = match event.keystroke.key.as_str() {
+                        "left" | "down" => -1.,
+                        "right" | "up" => 1.,
+                        "home" => -100.,
+                        "end" => 100.,
+                        _ => return,
+                    };
+                    s.scale_pointer = false;
+                    s.scale_slider
+                        .update(cx, |state, cx| state.step_thumb(false, delta, win, cx));
+                    cx.stop_propagation();
+                }))
+            })
+            .child(slider)
+            .when(
+                is_scale
+                    && enabled
+                    && self.scale_focus.is_focused(win)
+                    && win.last_input_was_keyboard(),
+                |d| {
+                    d.child(
+                        div()
+                            .absolute()
+                            .inset_0()
+                            .rounded(px(4.))
+                            .border_1()
+                            .border_color(c.secondary),
+                    )
+                },
+            );
+        settings_row()
+            .id(key)
+            .gap(px(8.))
+            .child(
+                settings_row_label(name.clone())
+                    .font_weight(FontWeight::BOLD)
+                    .flex_1(),
+            )
+            .child(step(-1))
+            .child(track)
+            .child(label(formatted).w(px(48.)).text_right())
+            .child(step(1))
+    }
     pub(crate) fn new(
         client: Rc<Client>,
         read: PreferencesRead,
@@ -66,28 +192,52 @@ impl Settings {
                     .step(1.)
                     .default_value(val)
             });
-            cx.subscribe(
-                &state,
-                move |this: &mut Self, _, event: &SliderEvent, cx| {
-                    if let SliderEvent::Change(SliderValue::Single(v)) = event
-                        && let Some(p) = this.draft.as_mut()
-                    {
-                        let n = v.round() as i64 * 60;
-                        if i == 0 {
-                            p.timeline_merge_gap_secs = n;
-                        } else {
-                            p.idle_timeout_secs = n;
-                        }
-                        cx.notify();
-                    }
-                },
-            )
+            cx.subscribe(&state, |this: &mut Self, state, event: &SliderEvent, cx| {
+                if let SliderEvent::Change(SliderValue::Single(v)) = event {
+                    this.set_slider_draft(&state, *v);
+                    cx.notify();
+                }
+            })
             .detach();
             state
         });
+        let scale_slider =
+            cx.new(|_| Self::scale_state(scale::limit(win), client.window_scale.get()));
+        cx.subscribe_in(
+            &scale_slider,
+            win,
+            |s: &mut Self, _, event: &SliderEvent, win, cx| {
+                let (SliderEvent::Change(SliderValue::Single(value))
+                | SliderEvent::Release(SliderValue::Single(value))) = event
+                else {
+                    return;
+                };
+                if let Some(p) = &mut s.draft {
+                    p.window_scale = *value as u16;
+                    if matches!(event, SliderEvent::Release(_))
+                        || (!s.scale_pointer && !win.last_input_was_touch())
+                    {
+                        s.scale_pointer = false;
+                        scale::preview(win, p.window_scale);
+                    }
+                    cx.notify();
+                }
+            },
+        )
+        .detach();
         let services = ServiceFields::new(win, cx);
-        cx.on_release(|s, cx| {
+        let handle = win.window_handle();
+        cx.on_release(move |s, cx| {
             if let Some(saved) = &s.saved {
+                if s.draft
+                    .as_ref()
+                    .is_some_and(|p| p.window_scale != saved.window_scale)
+                {
+                    let percent = saved.window_scale;
+                    cx.defer(move |cx| {
+                        let _ = handle.update(cx, |_, win, _| scale::preview(win, percent));
+                    });
+                }
                 s.client.locale.set(saved.locale);
                 s.client.theme.set(saved.theme);
                 cx.refresh_windows();
@@ -113,6 +263,9 @@ impl Settings {
             write: None,
             draft: None,
             sliders,
+            scale_slider,
+            scale_focus: cx.focus_handle(),
+            scale_pointer: false,
             theme_focus: std::array::from_fn(|_| cx.focus_handle()),
             scheme_triggers: std::array::from_fn(|_| cx.focus_handle()),
             picker: None,
@@ -123,6 +276,35 @@ impl Settings {
     }
     pub(crate) fn ready_to_present(&self) -> bool {
         self.draft.is_some() || self.failure == Some(Failure::Load)
+    }
+    fn scale_state(limit: u16, percent: u16) -> SliderState {
+        SliderState::new()
+            .min(f32::from(AppPreferences::MIN_SCALE.min(limit)))
+            .max(f32::from(limit))
+            .step(1.)
+            .default_value(f32::from(percent.min(limit)))
+    }
+    pub(crate) fn window_resized(
+        &mut self,
+        percent: u16,
+        win: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.busy() {
+            scale::preview(
+                win,
+                self.draft
+                    .as_ref()
+                    .map_or(self.client.window_scale.get(), |p| p.window_scale),
+            );
+            return;
+        }
+        if let Some(p) = &mut self.draft {
+            p.window_scale = percent;
+            self.scale_slider
+                .update(cx, |s, cx| s.set_value(f32::from(percent), win, cx));
+            cx.notify();
+        }
     }
     fn load_preferences(
         &mut self,
@@ -165,6 +347,12 @@ impl Settings {
         self.failure = None;
         self.draft = self.saved.clone();
         if let Some(p) = &self.saved {
+            self.client.window_scale.set(p.window_scale);
+            let limit = scale::limit(win);
+            self.scale_slider.update(cx, |s, cx| {
+                s.set_value(f32::from(p.window_scale.min(limit)), win, cx)
+            });
+            scale::preview(win, p.window_scale);
             self.client.locale.set(p.locale);
             self.client.theme.set(p.theme);
             cx.refresh_windows();
@@ -219,6 +407,7 @@ impl Settings {
                     client.locale.set(p.locale);
                     t.services.set_locale(p.locale, cx);
                     client.theme.set(p.theme);
+                    client.window_scale.set(p.window_scale);
                     cx.refresh_windows();
                     cx.emit(crate::windows::main::Saved { show_toast: true });
                 }
@@ -297,59 +486,15 @@ impl Render for Settings {
         };
         let divider = divider_color(c);
         let mut time_group = settings_rows_card(c);
-        for (i, k, value, min, max) in [
+        for (i, k, value) in [
             (
                 0,
                 "settings.timelineMergeGapLabel",
                 p.timeline_merge_gap_secs / 60,
-                1,
-                5,
             ),
-            (
-                1,
-                "settings.idleTimeoutLabel",
-                p.idle_timeout_secs / 60,
-                5,
-                30,
-            ),
+            (1, "settings.idleTimeoutLabel", p.idle_timeout_secs / 60),
         ] {
-            let name = tr(k);
-            let mut row = settings_row().id(k).gap(px(8.)).child(
-                settings_row_label(name.clone())
-                    .font_weight(FontWeight::BOLD)
-                    .flex_1(),
-            );
-            for (dir, symbol) in [(-1, "−"), (1, "+")] {
-                if dir == 1 {
-                    let s = &self.sliders[i];
-                    row = row
-                        .child(quietpro::value_slider(s, name.clone(), !busy, c, cx))
-                        .child(label(format!("{value} min")).w(px(48.)).text_right());
-                }
-                row = row.child(
-                    IconControl::new(
-                        SharedString::from(format!("{k}-{dir}")),
-                        format!("{symbol} {name}"),
-                        if dir == 1 { Icon::Plus } else { Icon::Minus },
-                    )
-                    .disabled(busy || !(min..=max).contains(&(value + dir)))
-                    .action(
-                        c,
-                        cx.listener(move |t, _, win, cx| {
-                            let next = (value + dir).clamp(min, max);
-                            if let Some(p) = &mut t.draft {
-                                if i == 0 {
-                                    p.timeline_merge_gap_secs = next * 60;
-                                } else {
-                                    p.idle_timeout_secs = next * 60;
-                                }
-                            }
-                            t.sliders[i].update(cx, |s, cx| s.set_value(next as f32, win, cx));
-                            cx.notify();
-                        }),
-                    ),
-                );
-            }
+            let row = self.slider_row(k, &self.sliders[i], format!("{value} min"), !busy, win, cx);
             time_group =
                 time_group.child(row.when(i == 0, |r| r.border_b_1().border_color(divider)));
         }
@@ -454,16 +599,11 @@ impl Render for Settings {
             ],
         );
         let choice_row = |name| {
-            settings_rows_card(c)
-                .flex_row()
-                .h(px(SETTINGS_ROW_HEIGHT))
-                .gap(px(8.))
-                .items_center()
-                .child(
-                    settings_row_label(name)
-                        .font_weight(FontWeight::BOLD)
-                        .flex_1(),
-                )
+            settings_row().gap(px(8.)).items_center().child(
+                settings_row_label(name)
+                    .font_weight(FontWeight::BOLD)
+                    .flex_1(),
+            )
         };
         let theme_options = [
             (Theme::Light, "settings.themeModeOptions.light"),
@@ -531,11 +671,32 @@ impl Render for Settings {
             .fit_trigger_to_value()
             .disabled(busy),
         );
+        let limit = scale::limit(win);
+        if self.scale_slider.read(cx).max_value() != f32::from(limit) {
+            self.scale_slider
+                .update(cx, |s, _| *s = Self::scale_state(limit, p.window_scale));
+        }
+        let percent = self.scale_slider.read(cx).value().end() as u16;
+        let enabled = !busy
+            && !win.is_maximized()
+            && !win.is_fullscreen()
+            && limit > AppPreferences::MIN_SCALE;
+        let scale_row = self.slider_row(
+            "settings.windowScale",
+            &self.scale_slider,
+            format!("{percent}%"),
+            enabled,
+            win,
+            cx,
+        );
+        let interface = settings_rows_card(c)
+            .child(langs.border_b_1().border_color(divider))
+            .child(scale_row);
         let appearance = section(
             settings_title(c, Icon::Palette, tr("settings.appearanceTitle")),
             [
                 settings_group("settings.themeGroupTitle", themes),
-                settings_group("settings.interfaceGroupTitle", langs),
+                settings_group("settings.interfaceGroupTitle", interface),
             ],
         );
         let resident = section(
