@@ -42,6 +42,7 @@ patina-desktop-protocol = { path = "../../crates/desktop-protocol" }
 async-executor = "1"
 blocking = "1"
 patina-plugin-host = { path = "../../crates/plugin-host" }
+patina-i18n = { path = "../../crates/i18n" }
 patina-activity = { path = "../../crates/activity" }
 patina-updater = { path = "../../crates/updater" }
 async-channel = "2"
@@ -56,6 +57,7 @@ windows = { version = "0.62.2", features = [
 chrono = "0.4"
 
 [dev-dependencies]
+ring = "0.17"
 patina-test-support = { path = "../../crates/test-support" }
 tungstenite = "0.28"
 windows = { version = "0.62.2", features = [
