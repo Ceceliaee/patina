@@ -41,7 +41,7 @@ pub async fn save(pool: &Pool<Sqlite>, patch: PreferencesPatch) -> Result<Prefer
         .unwrap_or_default();
     preferences.apply(patch);
     let value = serde_json::to_string(&preferences).map_err(|e| e.to_string())?;
-    sqlx::query("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+    sqlx::query("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE settings.value <> excluded.value")
         .bind(KEY).bind(value).execute(&mut *tx).await.map_err(|e| e.to_string())?;
     tx.commit().await.map_err(|e| e.to_string())?;
     Ok(preferences)
@@ -120,6 +120,18 @@ mod tests {
         tx.commit().await.unwrap();
         assert_eq!(load(&pool).await.unwrap(), saved);
         sqlx::query("CREATE TRIGGER reject_preferences BEFORE UPDATE ON settings BEGIN SELECT RAISE(ABORT, 'injected'); END").execute(&pool).await.unwrap();
+        assert_eq!(
+            save(
+                &pool,
+                PreferencesPatch {
+                    delivery: None,
+                    sound: Some(saved.sound)
+                }
+            )
+            .await
+            .unwrap(),
+            saved
+        );
         assert!(save(
             &pool,
             PreferencesPatch {

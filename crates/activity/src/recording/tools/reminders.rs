@@ -1,6 +1,6 @@
-use super::{date, db, labels, NativeToolData, UsageEvaluation};
-use crate::domain::{localization::Locale, reminder_schedule::ReminderRecurrence};
-use chrono::{Local, NaiveDateTime, TimeZone};
+use super::{date, db, NativeToolData, UsageEvaluation};
+use crate::domain::reminder_schedule::ReminderRecurrence;
+use chrono::{Datelike, Local, NaiveDateTime, TimeZone};
 use serde::Deserialize;
 use serde_json::{json, Value};
 #[derive(Deserialize)]
@@ -10,7 +10,7 @@ enum ReminderCommand {
         label: String,
         at: i64,
         local_at: Option<String>,
-        recurrence: Option<ReminderRecurrence>,
+        recurrence: Option<Value>,
     },
     Edit {
         id: i64,
@@ -18,7 +18,7 @@ enum ReminderCommand {
         at: i64,
         local_at: Option<String>,
         enabled: bool,
-        recurrence: Option<ReminderRecurrence>,
+        recurrence: Option<Value>,
     },
     Cancel {
         id: i64,
@@ -31,6 +31,7 @@ enum ReminderCommand {
     Usage {
         target: String,
         value: String,
+        display_name: Option<String>,
         minutes: i64,
         label: String,
     },
@@ -41,6 +42,9 @@ enum ReminderCommand {
     UsageLimit {
         id: i64,
         minutes: i64,
+    },
+    UsageRemove {
+        id: i64,
     },
     Extend {
         id: i64,
@@ -136,21 +140,28 @@ impl ReminderTasks {
     pub fn has_scheduled_work(&self) -> Result<bool, String> {
         self.0.runtime.block_on(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM tool_reminders WHERE status IN ('scheduled','pending_confirmation'))").fetch_one(&self.0.pool)).map_err(|e|e.to_string())
     }
-    pub fn read(&self, language: &str, _now: i64, _view: &Value) -> Result<Value, String> {
+    pub fn read(&self, _language: &str, now: i64, _view: &Value) -> Result<Value, String> {
         self.0.runtime.block_on(async {
-            let reminders=db::fetch_visible_reminders(&self.0.pool).await?;
-            let rules=db::fetch_active_activity_reminder_rules(&self.0.pool).await?;
-            let mut data=json!({"reminders":reminders.iter().map(|r|{
-                    let mut v=json!(r);v["local_at"]=json!(Local.timestamp_millis_opt(r.scheduled_at).single().map(|t|t.format("%Y-%m-%d %H:%M").to_string()));v
-                }).collect::<Vec<_>>(), "rules":rules});
-            labels(&mut data,Locale::from_tag(Some(language)), &["tools.remindersTitle", "tools.newReminder", "tools.pause", "tools.start", "tools.reminderSnooze",
-                    "tools.reminderConfirmComplete", "tools.reminderEmpty", "tools.reminderLabel", "tools.reminderMinutesUnit",
-                    "tools.reminderTimeLabel","tools.reminderRepeatLabel","tools.reminderRepeatNone","tools.reminderRepeatDaily",
-                    "tools.reminderRepeatWeekly","tools.reminderRepeatMonthly","tools.reminderRepeatYearly","tools.reminderRepeatInterval",
-                    "tools.activityReminderEdit","tools.activityReminderDelete","tools.reminderEditTitle","common.save","common.cancel",
-                    "tools.reminderModeUsage","tools.reminderModeApp","tools.reminderModeCategory","tools.reminderModeWeb",
-                    "tools.activityReminderTargetLabel","tools.activityReminderDurationLabel","tools.activityReminderDisable"]);
-            Ok(data)
+            let reminders = db::fetch_visible_reminders(&self.0.pool).await?;
+            let rules = db::fetch_active_activity_reminder_rules(&self.0.pool).await?;
+            let local_at = |at| {
+                Local
+                    .timestamp_millis_opt(at)
+                    .single()
+                    .map(|local| local.format("%Y-%m-%d %H:%M").to_string())
+            };
+            let reminders: Vec<_> = reminders
+                .iter()
+                .map(|reminder| {
+                    let mut row = json!(reminder);
+                    row["local_at"] = json!(local_at(reminder.scheduled_at));
+                    row
+                })
+                .collect();
+            Ok(json!({
+                "reminders": reminders, "rules": rules,
+                "default_local_at": local_at(now.saturating_add(5 * 60_000)),
+            }))
         })
     }
     pub fn apply(&self, command: Value, now: i64) -> Result<(), String> {
@@ -163,7 +174,7 @@ impl ReminderTasks {
                     local_at,
                     recurrence,
                 } => {
-                    let at = local_time(local_at, at)?;
+                    let (at, recurrence) = resolve_schedule(local_at, at, recurrence)?;
                     if at <= now || label.trim().is_empty() {
                         return Err("A reminder needs a label and a future time".into());
                     }
@@ -178,7 +189,7 @@ impl ReminderTasks {
                     enabled,
                     recurrence,
                 } => {
-                    let at = local_time(local_at, at)?;
+                    let (at, recurrence) = resolve_schedule(local_at, at, recurrence)?;
                     db::timed_reminders::update_reminder(
                         &self.0.pool,
                         id,
@@ -193,13 +204,18 @@ impl ReminderTasks {
                 ReminderCommand::Usage {
                     target,
                     value,
+                    display_name,
                     minutes,
                     label,
                 } => {
                     use crate::domain::tools::ActivityReminderTarget as Target;
+                    let display_name = display_name
+                        .as_deref()
+                        .filter(|name| !name.trim().is_empty())
+                        .unwrap_or(&value);
                     let target = match target.as_str() {
                         "app" => Target::App {
-                            app_name: value.clone(),
+                            app_name: display_name.to_owned(),
                             exe_name: Some(value.clone()),
                         },
                         "category" => Target::Category {
@@ -213,7 +229,7 @@ impl ReminderTasks {
                     db::create_activity_reminder_rule(
                         &self.0.pool,
                         &target,
-                        &value,
+                        display_name,
                         minutes.saturating_mul(60_000),
                         &label,
                         now,
@@ -222,6 +238,9 @@ impl ReminderTasks {
                 }
                 ReminderCommand::UsageEnabled { id, enabled } => {
                     db::set_activity_reminder_enabled(&self.0.pool, id, enabled, now).await?
+                }
+                ReminderCommand::UsageRemove { id } => {
+                    db::disable_activity_reminder_rule(&self.0.pool, id, now).await?
                 }
                 ReminderCommand::UsageLimit { id, minutes } => {
                     db::update_activity_reminder_limit(
@@ -281,6 +300,12 @@ impl ReminderTasks {
             tx.commit().await.map_err(|e|e.to_string())
         })
     }
+    pub fn delete_data(&self) -> Result<(), String> {
+        self.0
+            .runtime
+            .block_on(db::delete_reminder_data(&self.0.pool))
+            .map_err(|e| e.to_string())
+    }
     pub fn uninstall_impact(
         &self,
         locale: &str,
@@ -308,6 +333,30 @@ impl ReminderTasks {
         Ok(labels)
     }
 }
+fn resolve_schedule(
+    local_at: Option<String>,
+    fallback: i64,
+    recurrence: Option<Value>,
+) -> Result<(i64, Option<ReminderRecurrence>), String> {
+    let at = local_time(local_at, fallback)?;
+    let rule = match recurrence {
+        Some(value) if value == "weekly" => {
+            let local = Local
+                .timestamp_millis_opt(at)
+                .single()
+                .ok_or("Invalid reminder time")?;
+            Some(ReminderRecurrence::Weekly {
+                weekdays: vec![local.weekday().number_from_monday()],
+            })
+        }
+        Some(rule) => {
+            Some(serde_json::from_value(rule).map_err(|e| format!("Reminder recurrence: {e}"))?)
+        }
+        None => None,
+    };
+    Ok((at, rule))
+}
+
 fn local_time(input: Option<String>, fallback: i64) -> Result<i64, String> {
     let Some(input) = input.filter(|s| !s.trim().is_empty()) else {
         return Ok(fallback);

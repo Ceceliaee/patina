@@ -1,13 +1,15 @@
+mod scopes;
 mod shortcuts;
 use crate::data::repositories::tools as db;
-use crate::domain::localization::{text, Locale};
+use crate::domain::localization::Locale;
 use chrono::{Local, TimeZone};
-use serde_json::{json, Value};
+pub use scopes::TaskKind;
 use sqlx::SqlitePool;
 
 #[derive(Clone)]
 pub struct NativeToolData {
     pool: SqlitePool,
+    scopes: std::sync::Arc<std::sync::Mutex<scopes::Scopes>>,
     runtime: tokio::runtime::Handle,
 }
 
@@ -44,6 +46,16 @@ impl NativeToolData {
         ).map(|_| ()).map_err(|e| e.to_string())
     }
 
+    pub fn clear_section(&self) -> Result<(), String> {
+        self.runtime
+            .block_on(
+                sqlx::query("DELETE FROM settings WHERE key='tools_selected_section'")
+                    .execute(&self.pool),
+            )
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+
     pub fn preferences(&self) -> Result<crate::NoticePreferences, String> {
         self.runtime
             .block_on(db::notification_preferences::load(&self.pool))
@@ -57,7 +69,7 @@ impl NativeToolData {
             .runtime
             .block_on(db::notification_preferences::save(&self.pool, patch))?;
         if let Some(sound) = sound {
-            Self::play(sound);
+            crate::platform::windows::notification_sound::preview(sound);
         }
         Ok(saved)
     }
@@ -87,7 +99,11 @@ impl NativeToolData {
         ))
     }
     pub fn new(pool: SqlitePool, runtime: tokio::runtime::Handle) -> Self {
-        Self { pool, runtime }
+        Self {
+            pool,
+            runtime,
+            scopes: Default::default(),
+        }
     }
 
     pub fn focus(&self) -> FocusTasks {
@@ -98,14 +114,6 @@ impl NativeToolData {
     }
 }
 
-fn labels(data: &mut Value, locale: Locale, keys: &[&str]) {
-    data["labels"] = json!(keys
-        .iter()
-        .copied()
-        .chain(["miniWindow.previousPage", "miniWindow.nextPage"])
-        .map(|key| (key, text(locale, key)))
-        .collect::<std::collections::BTreeMap<_, _>>());
-}
 fn date(now: i64) -> Result<String, String> {
     Local
         .timestamp_millis_opt(now)

@@ -35,6 +35,27 @@ pub use backup_restore::{
 
 use read::{fetch_latest_pomodoro, fetch_pomodoro_by_id};
 
+pub(crate) async fn delete_focus_data(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    sqlx::raw_sql(
+        "DELETE FROM tool_pomodoro_runs;
+         DELETE FROM tool_free_focus;
+         DELETE FROM focus_history_groups;
+         DELETE FROM tool_daily_stats;",
+    )
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await
+}
+
+pub(crate) async fn delete_reminder_data(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    sqlx::raw_sql("DELETE FROM tool_reminders; DELETE FROM tool_activity_reminder_rules;")
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await
+}
+
 pub async fn load_tool_runtime_settings(
     _pool: &Pool<Sqlite>,
 ) -> Result<ToolRuntimeSettings, sqlx::Error> {

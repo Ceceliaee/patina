@@ -1,10 +1,11 @@
-pub use patina_plugin_sdk::{Capability, Control, Manifest};
+pub use patina_plugin_sdk::{Capability, Control, Manifest, RowClock, layout};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-pub const BUNDLED_IDS: [&str; 2] = ["patina.focus", "patina.reminders"];
-
 pub use patina_plugin_sdk::installation::{Installed, Preview};
+pub use patina_plugin_sdk::notification::{
+    NoticeChoices, NoticeContent, NoticeContext, NoticeTarget,
+};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Notice {
@@ -12,6 +13,8 @@ pub struct Notice {
     pub generation: String,
     pub at_ms: i64,
     pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content: Option<NoticeContent>,
     #[serde(default)]
     pub source: Option<i64>,
     #[serde(default)]
@@ -25,6 +28,7 @@ pub use patina_plugin_sdk::installation::now_ms;
 #[derive(Serialize, Deserialize)]
 pub enum ToolRequest {
     List,
+    OpenHome,
     DisplayFailed,
     RetryDisplay,
     Shortcuts,
@@ -43,6 +47,11 @@ pub enum ToolRequest {
     SavePreferences(patina_activity_model::NoticePreferencesPatch),
     Inspect(PathBuf),
     Install(PathBuf, Preview),
+    SelectTab {
+        id: String,
+        generation: String,
+        tab: String,
+    },
     Panel {
         id: String,
         generation: String,
@@ -75,6 +84,9 @@ pub mod call {
     use super::*;
     pub fn list() -> ToolCall<crate::ToolList> {
         ToolCall::new(ToolRequest::List)
+    }
+    pub fn open_home() -> ToolCall<crate::ToolList> {
+        ToolCall::new(ToolRequest::OpenHome)
     }
     pub fn display_failed() -> ToolCall<()> {
         ToolCall::new(ToolRequest::DisplayFailed)
@@ -126,6 +138,13 @@ pub mod call {
     }
     pub fn install(path: PathBuf, preview: Preview) -> ToolCall<Installed> {
         ToolCall::new(ToolRequest::Install(path, preview))
+    }
+    pub fn select_tab(id: String, generation: String, tab: String) -> ToolCall<Vec<Control>> {
+        ToolCall::new(ToolRequest::SelectTab {
+            id,
+            generation,
+            tab,
+        })
     }
     pub fn panel(
         id: String,

@@ -1,6 +1,8 @@
 use chrono::{Datelike, Duration, LocalResult, Months, NaiveDate, TimeZone};
 use serde::{Deserialize, Serialize};
 
+pub const MAX_INTERVAL_MINUTES: u32 = 60 * 24 * 60;
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ReminderRecurrence {
@@ -14,7 +16,7 @@ pub enum ReminderRecurrence {
 impl ReminderRecurrence {
     pub fn validate(&self) -> Result<(), String> {
         match self {
-            Self::Interval { minutes } if !(1..=86_400).contains(minutes) => {
+            Self::Interval { minutes } if !(1..=MAX_INTERVAL_MINUTES).contains(minutes) => {
                 Err("reminder interval must be between 1 minute and 60 days".into())
             }
             Self::Weekly { weekdays }
