@@ -62,7 +62,7 @@ pub(crate) fn answer_empty_today(
 }
 
 #[gpui_kit::test]
-fn cold_and_cached_navigation_keep_the_same_cards_while_requests_are_pending(
+fn navigation_waits_for_today_content_and_presents_cached_cards_immediately(
     cx: &mut TestAppContext,
 ) {
     cx.update(gpui_kit::init);
@@ -127,6 +127,17 @@ fn cold_and_cached_navigation_keep_the_same_cards_while_requests_are_pending(
     cx.run_until_parked();
     let icons = request(|r| matches!(r, WindowRequest::Icons(keys) if keys == &["editor.exe"]));
     still_on_about(cx);
+    drop(client.edit_app(
+        "editor.exe".into(),
+        patina_activity_model::AppEdit::Name("Editor".into()),
+    ));
+    client.test_answer(icons, Reply::Icons(vec![]));
+    cx.run_until_parked();
+    still_on_about(cx);
+    let fresh = request(|r| matches!(r, WindowRequest::Today));
+    client.test_answer(fresh, Reply::Today(summary()));
+    cx.run_until_parked();
+    let icons = request(|r| matches!(r, WindowRequest::Icons(keys) if keys == &["editor.exe"]));
     let icon_png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNQCeoBAAGgAQNhYOe6AAAAAElFTkSuQmCC";
     client.test_answer(
         icons,

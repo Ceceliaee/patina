@@ -147,6 +147,10 @@ impl Today {
                         }
                     }
                 }
+                if revision != client.activity_revision.get() || locale != client.locale.get() {
+                    checked.clear();
+                    continue;
+                }
                 let delay = view.update(cx, |this, cx| match result {
                     Ok(data) => {
                         let until_midnight =
