@@ -10,7 +10,7 @@ static CONTOUR: LazyLock<[(f32, f32); 64]> = LazyLock::new(|| {
     })
 });
 
-pub(crate) fn superellipse_layer(outline: bool) -> impl IntoElement {
+pub fn superellipse_layer(outline: bool) -> impl IntoElement {
     canvas(
         |_, _, _| (),
         move |bounds, (), window, _| {

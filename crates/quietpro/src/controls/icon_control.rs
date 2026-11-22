@@ -1,7 +1,7 @@
 use crate::{Icon, Palette, glyph, superellipse::superellipse_layer};
 use gpui_kit::{
-    App, ClickEvent, ElementId, FocusHandle, SharedString, Window,
-    base::{Button, Toggle},
+    App, ClickEvent, ElementId, FocusHandle, Pixels, SharedString, Window,
+    base::{Button, TestSupportExt, Toggle},
     div,
     prelude::*,
     px, transparent_black,
@@ -16,19 +16,27 @@ pub(crate) fn control_surface<
     control: C,
     colors: Palette,
     disabled: bool,
+    highlighted: bool,
 ) -> C {
+    let hover_fill = colors
+        .secondary
+        .opacity(if highlighted { 0.12 } else { 0.08 });
+    let active_fill = if highlighted {
+        colors.secondary.opacity(0.20)
+    } else {
+        colors.track
+    };
     let fill = div()
         .id("surface")
         .absolute()
         .inset_0()
         .text_color(transparent_black())
+        .when(highlighted && !disabled, |s| s.text_color(hover_fill))
         .when(!disabled, |s| {
-            s.group_hover(CONTROL_GROUP, move |s| {
-                s.text_color(colors.secondary.opacity(0.08))
-            })
+            s.group_hover(CONTROL_GROUP, move |s| s.text_color(hover_fill))
         })
         .when(!disabled, |s| {
-            s.group_active(CONTROL_GROUP, move |s| s.text_color(colors.track))
+            s.group_active(CONTROL_GROUP, move |s| s.text_color(active_fill))
         })
         .child(superellipse_layer(false));
     control
@@ -52,18 +60,20 @@ fn control<C: Styled + StatefulInteractiveElement + ParentElement + FluentBuilde
     control: C,
     colors: Palette,
     icon: Icon,
+    icon_size: Pixels,
     disabled: bool,
-    icon_data: Option<&'static [u8]>,
+    highlighted: bool,
 ) -> C {
     let icon_color = if disabled {
         colors.disabled_text
     } else {
         colors.secondary
     };
-    control_surface(control, colors, disabled).child(
+    control_surface(control, colors, disabled, highlighted).child(
         glyph(icon, icon_color)
-            .when_some(icon_data, |icon, data| icon.data(data))
-            .size(px(16.)),
+            .size(icon_size)
+            .id("glyph")
+            .test_support(),
     )
 }
 
@@ -72,9 +82,10 @@ pub struct IconControl {
     id: ElementId,
     label: SharedString,
     icon: Icon,
+    icon_size: Pixels,
     disabled: bool,
     focus: Option<FocusHandle>,
-    selected_icon: Option<&'static [u8]>,
+    selected_background: bool,
     tooltip: bool,
 }
 
@@ -84,11 +95,17 @@ impl IconControl {
             id: id.into(),
             label: label.into(),
             icon,
+            icon_size: px(16.),
             disabled: false,
             focus: None,
-            selected_icon: None,
+            selected_background: false,
             tooltip: false,
         }
+    }
+
+    pub fn icon_size(mut self, size: Pixels) -> Self {
+        self.icon_size = size;
+        self
     }
 
     pub fn disabled(mut self, disabled: bool) -> Self {
@@ -106,9 +123,8 @@ impl IconControl {
         self
     }
 
-    /// A functional toggle can distinguish its enabled state with a different glyph.
-    pub fn selected_icon(mut self, svg: &'static [u8]) -> Self {
-        self.selected_icon = Some(svg);
+    pub fn with_selected_background(mut self) -> Self {
+        self.selected_background = true;
         self
     }
 
@@ -124,8 +140,9 @@ impl IconControl {
                 }),
             colors,
             self.icon,
+            self.icon_size,
             self.disabled,
-            None,
+            false,
         )
     }
 
@@ -157,8 +174,9 @@ impl IconControl {
                 }),
             colors,
             self.icon,
+            self.icon_size,
             self.disabled,
-            self.selected_icon.filter(|_| pressed),
+            self.selected_background && pressed,
         )
         .on_change(change)
     }
@@ -183,8 +201,9 @@ impl IconControl {
                 }),
             colors,
             self.icon,
+            self.icon_size,
             self.disabled,
-            None,
+            false,
         )
         .on_change(move |state, event, win, cx| {
             change(

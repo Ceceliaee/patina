@@ -19,6 +19,7 @@ pub fn color_swatch_button(
             .disabled(!enabled),
         c,
         !enabled,
+        false,
     )
     .child(
         div()

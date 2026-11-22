@@ -1,7 +1,10 @@
 use crate::{ControlSize, continuous_corner_layer, theme::Palette};
 use gpui_kit::{
-    ElementId, HighlightStyle, SharedString, StyledText, Svg, base::Button, div, prelude::*, px,
-    transparent_black,
+    ElementId, HighlightStyle, Pixels, SharedString, StyledText, Svg,
+    base::{Button, TestSupportExt},
+    div,
+    prelude::*,
+    px, transparent_black,
 };
 use std::ops::Range;
 
@@ -24,8 +27,18 @@ pub fn text_button(
     colors: Palette,
     enabled: bool,
 ) -> Button {
+    text_button_with_radius(id, label, colors, enabled, px(CORNER_RADIUS))
+}
+
+pub fn text_button_with_radius(
+    id: impl Into<ElementId>,
+    label: impl Into<SharedString>,
+    colors: Palette,
+    enabled: bool,
+    radius: Pixels,
+) -> Button {
     let label = label.into();
-    build_text_button(id, label.clone(), colors, enabled, None, label)
+    build_text_button(id, label.clone(), colors, enabled, radius, None, label)
 }
 
 pub fn text_button_with_icon(
@@ -41,7 +54,15 @@ pub fn text_button_with_icon(
     if enabled {
         caption = caption.with_highlights(highlights);
     }
-    build_text_button(id, label, colors, enabled, Some(icon), caption)
+    build_text_button(
+        id,
+        label,
+        colors,
+        enabled,
+        px(CORNER_RADIUS),
+        Some(icon),
+        caption,
+    )
 }
 
 fn build_text_button(
@@ -49,6 +70,7 @@ fn build_text_button(
     label: SharedString,
     colors: Palette,
     enabled: bool,
+    radius: Pixels,
     icon: Option<Svg>,
     content: impl IntoElement,
 ) -> Button {
@@ -60,7 +82,7 @@ fn build_text_button(
         .when(enabled, |s| {
             s.group_active(BUTTON_GROUP, move |s| s.text_color(colors.track))
         })
-        .child(continuous_corner_layer(px(CORNER_RADIUS), px(1.)));
+        .child(continuous_corner_layer(radius, px(1.)));
     let caption = div()
         .id("caption")
         .border_1()
@@ -81,7 +103,8 @@ fn build_text_button(
                     .when(!enabled, |s| s.text_color(colors.disabled_text)),
             )
         })
-        .child(content);
+        .child(content)
+        .test_support();
     Button::new(id)
         .accessibility_label(label)
         .disabled(!enabled)
@@ -100,7 +123,7 @@ fn build_text_button(
                 .hover(move |s| s.text_color(colors.border_strong))
                 .focus_visible(move |s| s.text_color(colors.secondary))
         })
-        .child(continuous_corner_layer(px(CORNER_RADIUS), px(0.)))
+        .child(continuous_corner_layer(radius, px(0.)))
         .child(face)
         .child(caption)
 }

@@ -1,6 +1,6 @@
 use crate::{ControlSize, Icon, Palette, continuous_corner_layer, glyph};
 use gpui_kit::{
-    App, Axis, ElementId, FocusHandle, FontWeight, KeyDownEvent, Window,
+    App, Axis, ElementId, FocusHandle, FontWeight, KeyDownEvent, Pixels, Window,
     base::{Radio, RadioGroup, TestSupportExt},
     div,
     prelude::*,
@@ -12,6 +12,24 @@ const TRACK_RADIUS: f32 = 16.;
 const OPTION_RADIUS: f32 = 12.;
 
 const OPTION_PADDING: f32 = 8.;
+const TRACK_PADDING: f32 = 4.;
+
+pub fn medium_segmented_width<'a>(
+    labels: impl IntoIterator<Item = &'a str>,
+    size: Pixels,
+    win: &Window,
+) -> Pixels {
+    labels
+        .into_iter()
+        .fold(px(2. * TRACK_PADDING), |width, label| {
+            let mut run = win.text_style().to_run(label.len());
+            run.font.weight = FontWeight::MEDIUM;
+            let line = win
+                .text_system()
+                .shape_line(label.to_owned().into(), size, &[run], None);
+            width + line.width.ceil() + px(2. * OPTION_PADDING)
+        })
+}
 
 pub struct SegmentSelection<T> {
     pub displayed: T,
@@ -168,7 +186,7 @@ fn choice_group<T: Copy + Eq + 'static>(
         .flex_none()
         .when(vertical, |this| this.flex_col().gap(px(4.)))
         .items_center()
-        .px(px(4.))
+        .px(px(TRACK_PADDING))
         .py(px(group_padding_y))
         .child(surface(TRACK_RADIUS, 0., colors.border))
         .child(surface(TRACK_RADIUS, 1., track_fill));

@@ -56,13 +56,15 @@ pub fn settings_title(c: crate::Palette, icon: Icon, title: String) -> Div {
         .gap(px(8.))
         .child(crate::glyph(icon, c.accent).size(px(16.)))
         .child(heading(title).aria_level(2).line_height(px(24.)).flex_1())
-        .child(
-            div()
-                .absolute()
-                .left_0()
-                .right_0()
-                .bottom(px(-4.))
-                .h(px(1.))
-                .bg(divider_color(c)),
-        )
+        .child(section_rule(c))
+}
+
+pub fn section_rule(c: crate::Palette) -> Div {
+    div()
+        .absolute()
+        .left_0()
+        .right_0()
+        .bottom(px(-4.))
+        .h(px(1.))
+        .bg(divider_color(c))
 }

@@ -19,6 +19,8 @@ pub struct TextInput {
     disabled: bool,
     invalid: bool,
     fixed_mask: bool,
+    placeholder_text_size: Option<Pixels>,
+    value_weight: FontWeight,
     actions: Vec<AnyElement>,
 }
 
@@ -31,6 +33,8 @@ impl TextInput {
             disabled: false,
             invalid: false,
             fixed_mask: false,
+            placeholder_text_size: None,
+            value_weight: FontWeight::NORMAL,
             actions: Vec::new(),
         }
     }
@@ -52,6 +56,16 @@ impl TextInput {
 
     pub fn suffix(mut self, action: impl IntoElement) -> Self {
         self.actions.push(action.into_any_element());
+        self
+    }
+
+    pub fn value_weight(mut self, weight: FontWeight) -> Self {
+        self.value_weight = weight;
+        self
+    }
+
+    pub fn placeholder_text_size(mut self, size: Pixels) -> Self {
+        self.placeholder_text_size = Some(size);
         self
     }
 
@@ -127,6 +141,11 @@ impl RenderOnce for TextInput {
         });
         let outside_focus = focus.clone();
         let has_actions = !self.actions.is_empty();
+        let empty = self.input.read(cx).text().len() == 0;
+        let text_size = self
+            .placeholder_text_size
+            .filter(|_| empty)
+            .unwrap_or(px(14.));
         let editor = self.editor(focused, cx);
         div()
             .id(self.id)
@@ -165,9 +184,13 @@ impl RenderOnce for TextInput {
                     .min_w_0()
                     .h(px(20.))
                     .text_color(foreground)
-                    .text_size(px(14.))
+                    .text_size(text_size)
                     .line_height(px(20.))
-                    .font_weight(FontWeight::NORMAL)
+                    .font_weight(if empty {
+                        FontWeight::NORMAL
+                    } else {
+                        self.value_weight
+                    })
                     .child(editor),
             )
             .when(has_actions, |s| {

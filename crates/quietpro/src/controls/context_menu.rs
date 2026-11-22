@@ -29,13 +29,30 @@ pub fn menu_item(
     selected: bool,
     colors: Palette,
 ) -> Stateful<Div> {
+    menu_item_frame(id, active, selected, colors)
+        .role(Role::MenuItem)
+        .aria_label(name.clone())
+        .child(
+            div()
+                .text_color(colors.text)
+                .text_size(px(12.))
+                .font_weight(FontWeight::MEDIUM)
+                .whitespace_nowrap()
+                .child(name),
+        )
+}
+
+pub fn menu_item_frame(
+    id: impl Into<ElementId>,
+    active: bool,
+    selected: bool,
+    colors: Palette,
+) -> Stateful<Div> {
     let hover_fill = colors.panel.blend(colors.secondary.opacity(0.03));
     let selected_fill = colors.panel.blend(colors.secondary.opacity(0.055));
 
     div()
         .id(id)
-        .role(Role::MenuItem)
-        .aria_label(name.clone())
         .when(active, |s| s.aria_active_descendant())
         .relative()
         .text_color(if selected {
@@ -54,14 +71,6 @@ pub fn menu_item(
         .cursor_pointer()
         .when(!selected, |s| s.hover(move |s| s.text_color(hover_fill)))
         .child(crate::continuous_corner_layer(px(ITEM_RADIUS), px(0.)))
-        .child(
-            div()
-                .text_color(colors.text)
-                .text_size(px(12.))
-                .font_weight(FontWeight::MEDIUM)
-                .whitespace_nowrap()
-                .child(name),
-        )
 }
 pub fn menu_surface(
     id: impl Into<ElementId>,

@@ -23,7 +23,7 @@ impl Render for Controls {
             .text_color(colors.text)
             .child(
                 IconControl::new("pin", "Pin", Icon::Pin)
-                    .selected_icon(quietpro::FILLED_PIN_ICON)
+                    .with_selected_background()
                     .toggle(colors, self.pinned, move |pressed, _, _, cx| {
                         let _ = view.update(cx, |this, cx| {
                             this.pinned = pressed;

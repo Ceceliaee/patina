@@ -339,18 +339,18 @@ impl Render for Controls {
             .flex()
             .items_start()
             .gap(px(8.))
-            .child(IconControl::new("enable", "Enable", Icon::Pin).toggle(
-                colors,
-                self.enabled,
-                move |enabled, _, _, cx| {
-                    view.update(cx, |this, cx| {
-                        this.enabled = enabled;
-                        this.changes += 1;
-                        cx.notify();
-                    })
-                    .unwrap();
-                },
-            ))
+            .child(
+                IconControl::new("enable", "Enable", Icon::Pin)
+                    .with_selected_background()
+                    .toggle(colors, self.enabled, move |enabled, _, _, cx| {
+                        view.update(cx, |this, cx| {
+                            this.enabled = enabled;
+                            this.changes += 1;
+                            cx.notify();
+                        })
+                        .unwrap();
+                    }),
+            )
             .child(
                 text_button("apply", "Apply", colors, self.enabled).on_click(cx.listener(
                     |this, _, _, cx| {
