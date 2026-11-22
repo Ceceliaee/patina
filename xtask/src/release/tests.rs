@@ -21,6 +21,12 @@ fn pe_bytes(t: Target) -> Vec<u8> {
 }
 #[test]
 fn signed_bundles_require_one_program_for_each_architecture() -> Result<()> {
+    // v1.10.0 verifies both installers against the public key embedded in its executable.
+    let bundled_key = String::from_utf8(STANDARD.decode(Config::bundled().public_key)?)?;
+    assert_eq!(
+        bundled_key.lines().nth(1),
+        Some("RWS8Vnk9uTaDSDCjB6PAuIIr4lCVvUE9uLAT+Dfz/qeYXGtwJzkEsBYZ")
+    );
     let fixture: Value = serde_json::from_str(include_str!(
         "../../../crates/updater/tests/fixtures/signed.json"
     ))?;
@@ -75,6 +81,10 @@ fn signed_bundles_require_one_program_for_each_architecture() -> Result<()> {
     assert!(prepare(&output, &ver, "notes", &config, &original).is_err());
     check()?;
     let manifest = read_manifest(&output.join(MANIFEST))?;
+    let published_bytes = fs::read(output.join(MANIFEST))?;
+    fs::write(output.join(TAURI_MANIFEST), b"{}")?;
+    assert!(check().is_err());
+    fs::write(output.join(TAURI_MANIFEST), &published_bytes)?;
     let mirrored = mirror(
         manifest.clone(),
         "example/patina",
@@ -85,7 +95,7 @@ fn signed_bundles_require_one_program_for_each_architecture() -> Result<()> {
             .url
             .ends_with("/patina/desktop/releases/v0.2.0/Patina_0.2.0_x64-setup.exe")
     );
-    for failure in [None, Some(1), Some(2), Some(3)] {
+    for failure in [None, Some(1), Some(2), Some(3), Some(4)] {
         let mut published = Vec::new();
         let result =
             delivery::publish_mirror_files(&output, &mirrored, &config, |path, key, root| {
@@ -95,16 +105,20 @@ fn signed_bundles_require_one_program_for_each_architecture() -> Result<()> {
                     return Err("simulated object readback failure".into());
                 }
                 if root {
-                    assert_eq!(key, MANIFEST);
+                    assert!(matches!(key, MANIFEST | TAURI_MANIFEST));
                     assert_eq!(read_manifest(path)?, mirrored);
                 }
                 Ok(())
             });
         assert_eq!(result.is_err(), failure.is_some());
-        assert_eq!(published.len(), failure.unwrap_or(3));
+        assert_eq!(published.len(), failure.unwrap_or(4));
         assert_eq!(
             published.contains(&MANIFEST.to_owned()),
-            failure.is_none_or(|n| n == 3)
+            failure.is_none_or(|n| n >= 3)
+        );
+        assert_eq!(
+            published.contains(&TAURI_MANIFEST.to_owned()),
+            failure.is_none_or(|n| n == 4)
         );
     }
     advance(&mirrored, &mirrored)?;
@@ -148,7 +162,7 @@ fn signed_bundles_require_one_program_for_each_architecture() -> Result<()> {
         fs::write(output.join(MANIFEST), serde_json::to_vec(&changed)?)?;
         assert!(check().is_err());
     }
-    fs::write(output.join(MANIFEST), serde_json::to_vec(&manifest)?)?;
+    fs::write(output.join(MANIFEST), &published_bytes)?;
     let sum = output.join("SHA256SUMS.txt");
     let valid = fs::read_to_string(&sum)?;
     for bad in [

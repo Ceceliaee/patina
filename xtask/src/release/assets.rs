@@ -1,6 +1,6 @@
 use super::{
-    EXECUTABLE, MANIFEST, Result, TARGETS, Target, Version, arch, asset_url, installer_name,
-    version,
+    EXECUTABLE, MANIFEST, Result, TARGETS, TAURI_MANIFEST, Target, Version, arch, asset_url,
+    installer_name, version,
 };
 use patina_updater::{Artifact, Config, MAX_INSTALLER, MAX_MANIFEST, Manifest, Release};
 use sha2::{Digest, Sha256};
@@ -206,7 +206,12 @@ pub fn prepare(
         &stage.path().join(MANIFEST),
         &combined(ver, notes, config, inputs),
     )?;
-    names.extend(["SHA256SUMS.txt", MANIFEST]);
+    // Tauri's static updater accepts the same version, platform URLs and Minisign signatures.
+    fs::copy(
+        stage.path().join(MANIFEST),
+        stage.path().join(TAURI_MANIFEST),
+    )?;
+    names.extend(["SHA256SUMS.txt", MANIFEST, TAURI_MANIFEST]);
     publish_files(stage.path(), output, names)
 }
 
@@ -243,10 +248,18 @@ pub fn verify_assets(
     if read_manifest(&output.join(MANIFEST))? != combined(ver, notes, config, inputs) {
         return Err("Published manifest differs from signed inputs and release notes".into());
     }
-    let mut allowed: BTreeSet<String> = [MANIFEST, "SHA256SUMS.txt", "release-notes.md"]
-        .into_iter()
-        .map(str::to_owned)
-        .collect();
+    if sha256_file(&output.join(TAURI_MANIFEST))? != sha256_file(&output.join(MANIFEST))? {
+        return Err("The two update manifests differ".into());
+    }
+    let mut allowed: BTreeSet<String> = [
+        MANIFEST,
+        TAURI_MANIFEST,
+        "SHA256SUMS.txt",
+        "release-notes.md",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect();
     let mut sums = String::new();
     for i in inputs {
         let dst = output.join(&i.name);
