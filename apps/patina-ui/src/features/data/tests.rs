@@ -107,6 +107,7 @@ fn data_presents_complete_frames_and_lays_out_the_year_on_entry(cx: &mut TestApp
     cx.update(gpui_kit::init);
     let (client, requests) = Client::test_connection();
     let (handle, _) = cx.update(|cx| MainWindow::open(cx, client.clone()).unwrap());
+    crate::features::today::tests::answer_empty_today(cx, &client, &requests);
     let click = |cx: &mut TestAppContext, id: &'static str| {
         cx.update_window(handle, |_, win, cx| {
             win.render_frame(cx);
@@ -133,7 +134,18 @@ fn data_presents_complete_frames_and_lays_out_the_year_on_entry(cx: &mut TestApp
     click(cx, "data.title");
     let pending = reads(&client, &requests);
     assert_eq!(pending.len(), 2);
-    client.test_answer(pending[0], trends("Editor"));
+    let Reply::Trends(mut data) = trends("Editor") else {
+        unreachable!()
+    };
+    data.series.push(Series {
+        key: "Browser".into(),
+        name: "用于查看长名称的浏览器 Browser With A Long Display Name".into(),
+        daily: [(0, 2_000)].into(),
+        color: 0xd48e21,
+        custom_color: None,
+        favicon: None,
+    });
+    client.test_answer(pending[0], Reply::Trends(data));
     cx.run_until_parked();
     assert!(has(cx, "today-ranking-panel"));
     assert!(!has(cx, "open-range"));
@@ -146,6 +158,35 @@ fn data_presents_complete_frames_and_lays_out_the_year_on_entry(cx: &mut TestApp
     assert!(reads(&client, &requests).is_empty());
     cx.run_until_parked();
     assert!(has(cx, "trend-open-Editor"));
+    cx.update_window(handle, |_, win, cx| {
+        win.click_with_modifiers("series-Browser", gpui_kit::Modifiers { control: true, ..Default::default() }, cx);
+        let date = Local::now().date_naive();
+        win.hover(SharedString::from(format!("selection-trend-{date}")), cx);
+        win.render_frame(cx);
+        let scale = win.scale_factor();
+        let tip = win.find("trend-tooltip").bounds().scale(scale);
+        assert_eq!(tip.size.width, px(144.).scale(scale));
+        let quads = win.painted_quads();
+        let dots = quads.iter().filter(|quad| {
+            quad.bounds.size.width == px(6.).scale(scale)
+                && quad.bounds.size.height == quad.bounds.size.width
+        });
+        let legend: Vec<_> = dots.clone().filter(|q| tip.contains(&q.bounds.center())).collect();
+        assert_eq!(legend.len(), 2);
+        assert_ne!(legend[0].background, legend[1].background);
+        for marker in legend {
+            assert!(dots.clone().any(|q| !tip.contains(&q.bounds.center()) && q.background == marker.background));
+        }
+        let rows = [0_usize, 1].map(|i| (
+            win.within("trend-tooltip").find(("series-name", i)).bounds(),
+            win.within("trend-tooltip").find(("series-time", i)).bounds(),
+        ));
+        assert_eq!(rows[0].0.left(), rows[1].0.left());
+        assert_eq!(rows[0].1.right(), rows[1].1.right());
+        assert!(rows.iter().all(|(name, time)| name.size.height == time.size.height));
+        assert!(rows.iter().all(|(name, value)| name.right() < value.left()));
+    })
+    .unwrap();
     for (width, height) in [(1080., 720.), (810., 540.), (1080., 720.)] {
         cx.simulate_window_resize(handle, gpui_kit::size(px(width), px(height)));
         cx.update_window(handle, |_, win, cx| {

@@ -1,7 +1,8 @@
 use crate::{
     Palette,
-    layout::{axis_label_width, chart_axis_labels},
+    layout::{CHART_TOOLTIP_WIDTH, axis_label_width, chart_axis_labels},
 };
+use gpui_kit::base::TestSupportExt;
 use gpui_kit::{prelude::*, *};
 use std::rc::Rc;
 
@@ -20,6 +21,30 @@ pub struct TrendSeries {
     pub color: Rgba,
 }
 
+pub struct TrendTooltip {
+    pub heading: String,
+    pub rows: Vec<TrendTooltipRow>,
+}
+
+pub struct TrendTooltipRow {
+    pub label: String,
+    pub value: String,
+    pub color: Rgba,
+}
+
+impl TrendTooltip {
+    fn description(&self) -> String {
+        let mut text = self.heading.clone();
+        for row in &self.rows {
+            text.push('\n');
+            text.push_str(&row.label);
+            text.push(' ');
+            text.push_str(&row.value);
+        }
+        text
+    }
+}
+
 type Activate = Rc<dyn Fn(usize, &mut Window, &mut App)>;
 
 /// Values are already aggregated and converted to the axis unit by the caller.
@@ -28,7 +53,7 @@ pub struct TrendChart {
     pub id: SharedString,
     pub label: SharedString,
     pub labels: Vec<String>,
-    pub descriptions: Vec<String>,
+    pub tooltips: Vec<TrendTooltip>,
     pub series: Vec<TrendSeries>,
     pub colors: Palette,
     pub unit: SharedString,
@@ -281,7 +306,7 @@ impl RenderOnce for TrendChart {
             );
         }
         grid = grid.child(plot);
-        for (i, description) in self.descriptions.iter().enumerate() {
+        for (i, tooltip) in self.tooltips.iter().enumerate() {
             let (left, width) = column(i, count);
             let hover_state = state.clone();
             let key_state = state.clone();
@@ -298,7 +323,8 @@ impl RenderOnce for TrendChart {
                         self.id, self.labels[i]
                     )))
                     .role(Role::Label)
-                    .aria_label(description.clone())
+                    .aria_label(tooltip.description())
+                    .test_support()
                     .absolute()
                     .top_0()
                     .bottom_0()
@@ -332,17 +358,20 @@ impl RenderOnce for TrendChart {
                     }),
             );
         }
-        if let Some(description) = active.and_then(|i| self.descriptions.get(i)) {
+        if let Some(i) = active
+            && let Some(tooltip) = self.tooltips.get(i)
+        {
             let x = if count <= 1 {
                 0.5
             } else {
-                active.unwrap_or(0) as f32 / (count - 1) as f32
+                i as f32 / (count - 1) as f32
             };
             grid = grid.child(
                 crate::tooltip_surface(c)
                     .id("trend-tooltip")
+                    .test_support()
                     .role(Role::Tooltip)
-                    .aria_label(description.clone())
+                    .aria_label(tooltip.description())
                     .absolute()
                     .top(px(8.))
                     .when_else(
@@ -351,9 +380,36 @@ impl RenderOnce for TrendChart {
                         |s| s.right(relative(1. - x)).mr(px(8.)),
                     )
                     .max_w(relative(0.45))
+                    .when(!tooltip.rows.is_empty(), |tip| tip.w(CHART_TOOLTIP_WIDTH))
                     .text_size(px(12.))
                     .text_color(c.text)
-                    .child(description.clone()),
+                    .child(tooltip.heading.clone())
+                    .children(tooltip.rows.iter().enumerate().map(|(index, row)| {
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(4.))
+                            .child(div().flex_none().size(px(6.)).rounded_full().bg(row.color))
+                            .child(
+                                div()
+                                    .id(("series-name", index))
+                                    .test_support()
+                                    .flex_auto()
+                                    .min_w_0()
+                                    .truncate()
+                                    .child(row.label.clone()),
+                            )
+                            .child(
+                                div()
+                                    .id(("series-time", index))
+                                    .test_support()
+                                    .flex_none()
+                                    .ml(px(4.))
+                                    .whitespace_nowrap()
+                                    .text_right()
+                                    .child(row.value.clone()),
+                            )
+                    })),
             );
         }
         let tick_count = count.min(4);

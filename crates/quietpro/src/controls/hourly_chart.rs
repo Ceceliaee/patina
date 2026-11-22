@@ -1,6 +1,7 @@
 use crate::{
     HOURLY_AXIS_GAP, HOURLY_BAR_TOP_RADIUS, HOURLY_BAR_WIDTH, Palette, dot_pattern,
-    layout::chart_axis_labels, tooltip_surface,
+    layout::{CHART_TOOLTIP_WIDTH, chart_axis_labels},
+    tooltip_surface,
 };
 use gpui_kit::{prelude::*, *};
 use std::{fmt::Write, time::Duration};
@@ -151,7 +152,7 @@ impl RenderOnce for HourlyChart {
                         .absolute()
                         .bottom(px(4.))
                         .when_else(hour < 12, |s| s.right_0(), |s| s.left_0())
-                        .w(px(220.))
+                        .w(CHART_TOOLTIP_WIDTH)
                         .max_w_full()
                         .max_h(px(180.))
                         .overflow_y_scroll()

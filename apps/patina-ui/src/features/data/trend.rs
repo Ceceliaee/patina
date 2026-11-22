@@ -38,16 +38,19 @@ impl DataPage {
                 (name, color, totals)
             })
             .collect();
-        let descriptions = dates
+        let tooltips = dates
             .iter()
             .enumerate()
-            .map(|(i, date)| {
-                let values = lines
+            .map(|(i, date)| quietpro::TrendTooltip {
+                heading: date.clone(),
+                rows: lines
                     .iter()
-                    .map(|(name, _, values)| format!("{name} {}", duration(values[i])))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                format!("{date}\n{values}")
+                    .map(|(name, color, values)| quietpro::TrendTooltipRow {
+                        label: name.clone(),
+                        value: duration(values[i]),
+                        color: *color,
+                    })
+                    .collect(),
             })
             .collect();
         let days = days.to_vec();
@@ -63,7 +66,7 @@ impl DataPage {
             id: "selection-trend".into(),
             label: text(self.client.locale.get(), "data.activityTrend").into(),
             labels: dates,
-            descriptions,
+            tooltips,
             series: lines
                 .into_iter()
                 .map(|(_, color, values)| quietpro::TrendSeries {

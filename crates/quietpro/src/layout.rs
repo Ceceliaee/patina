@@ -17,6 +17,7 @@ pub const HOURLY_BAR_WIDTH: f32 = 8.;
 pub const HOURLY_BAR_TOP_RADIUS: f32 = 4.;
 pub const HOURLY_AXIS_GAP: f32 = 8.;
 pub const HOURLY_AXIS_FONT_SIZE: f32 = 12.;
+pub(crate) const CHART_TOOLTIP_WIDTH: Pixels = px(144.);
 const AXIS_LABEL_WEIGHT: FontWeight = FontWeight::MEDIUM;
 
 pub(crate) fn chart_axis_labels(c: crate::Palette) -> Div {

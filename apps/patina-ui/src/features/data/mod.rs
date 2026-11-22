@@ -327,9 +327,12 @@ impl DataPage {
             }
             let entries: Vec<_> = points.into_iter().collect();
             let dates: Vec<_> = entries.iter().map(|(date, _)| date.clone()).collect();
-            let descriptions = entries
+            let tooltips = entries
                 .iter()
-                .map(|(date, value)| format!("{date} ･ {}", duration(*value)))
+                .map(|(date, value)| quietpro::TrendTooltip {
+                    heading: format!("{date} ･ {}", duration(*value)),
+                    rows: Vec::new(),
+                })
                 .collect();
             let days = data.days.clone();
             let view = cx.weak_entity();
@@ -351,7 +354,7 @@ impl DataPage {
                     id: id.into(),
                     label: tr("data.activityTrend").into(),
                     labels: dates,
-                    descriptions,
+                    tooltips,
                     series: vec![quietpro::TrendSeries {
                         values: entries
                             .iter()

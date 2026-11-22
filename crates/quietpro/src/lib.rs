@@ -26,26 +26,28 @@ pub use controls::heatmap::{HeatmapCell, heatmap_layout};
 pub use controls::hourly_chart::{HourlyBar, HourlyChart, HourlySegment};
 pub use controls::icon_control::{ICON_CONTROL_SIZE, IconControl};
 pub use controls::metric_group::MetricGroup;
-pub use controls::search_input::search_input;
+pub use controls::search_input::{search_input, search_input_frame};
 pub use controls::segmented::{
-    SegmentSelection, page_tabs, section_rail, segmented, segmented_with_medium_labels,
+    SegmentSelection, medium_segmented_width, page_tabs, section_rail, segmented,
+    segmented_with_medium_labels,
 };
 pub use controls::slide_switch::{slide_switch, switch_control};
 pub use controls::slider::value_slider;
-pub use controls::text_button::{ButtonSizeExt, text_button, text_button_with_icon};
+pub use controls::text_button::{
+    ButtonSizeExt, text_button, text_button_with_icon, text_button_with_radius,
+};
 pub use controls::text_input::TextInput;
 pub use controls::timeline::{TimelineOverview, TimelineSegment};
 pub use controls::toast::toast_surface;
 pub use controls::tooltip::{TextTooltip, tooltip_surface, with_text_tooltip};
-pub use controls::trend_chart::{TrendChart, TrendSeries};
+pub use controls::trend_chart::{TrendChart, TrendSeries, TrendTooltip, TrendTooltipRow};
+pub use superellipse::superellipse_layer;
 pub use theme::{Palette, ThemePreset};
 pub use typography::init_fonts;
 
 pub use gpui_kit::assets::IconName as Icon;
 
-pub const FILLED_PIN_ICON: &[u8] = include_bytes!("../assets/icons/pin-filled.svg");
-
-gpui_kit::assets::icon_assets!(pub QuietProAssets, [Globe, House, Bell, ToolCase, Tags, TagPlus, ZoomIn, Expand, Settings2, Info, AppWindow, Pencil, Palette, Type, EyeOff, ListX, ListPlus, Captions, CaptionsOff, Pipette, Search, Funnel, Check, Sparkles, ChartSpline, Clock, CalendarClock, Menu, Layers, Maximize2, Minimize2, Minus, Plus, TrendingUp, TrendingDown, Monitor, Pin, SquareArrowOutUpRight, X, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, MousePointerClick, Server, Database, Dices, Eye, RefreshCw, FolderOpen, FolderPen, Trash, RotateCcw, FileText, MessageSquare, Rose]);
+gpui_kit::assets::icon_assets!(pub QuietProAssets, [Globe, House, HousePlug, AlarmClock, Play, Pause, Square, Bell, BellRing, ToolCase, Store, ToggleLeft, ToggleRight, Tags, TagPlus, ZoomIn, Expand, Settings, Settings2, Info, AppWindow, Pencil, Palette, Type, EyeOff, ListX, ListPlus, Captions, CaptionsOff, Pipette, Search, Funnel, Check, Sparkles, ChartSpline, Clock, CalendarClock, Menu, Layers, Maximize2, Minimize2, Minus, Plus, TrendingUp, TrendingDown, Monitor, Pin, SquareArrowOutUpRight, X, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, MousePointerClick, Server, Database, Dices, Eye, RefreshCw, FolderDown, FolderOpen, FolderPen, Trash, RotateCcw, FileText, MessageSquare, Rose]);
 
 pub fn glyph(icon: Icon, color: Rgba) -> gpui_kit::Svg {
     gpui_kit::svg()
@@ -92,9 +94,11 @@ pub use controls::choice_card::{
 pub use controls::color_picker::{
     color_picker_surface, color_plane, color_swatch_button, hue_strip,
 };
-pub use controls::context_menu::{MENU_FRAME_INSET, menu_item, menu_surface, menu_width};
+pub use controls::context_menu::{
+    MENU_FRAME_INSET, menu_item, menu_item_frame, menu_surface, menu_width,
+};
 pub use controls::form::{
-    divider_color, line_above, settings_row, settings_row_label, settings_rows_card,
+    divider_color, line_above, section_rule, settings_row, settings_row_label, settings_rows_card,
     settings_title, vertical_divider,
 };
 pub use controls::navigation_item::navigation_item;
