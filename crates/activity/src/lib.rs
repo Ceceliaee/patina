@@ -37,6 +37,7 @@ pub use domain::tool_notifications::{
     PreferencesPatch as NoticePreferencesPatch, Sound as NoticeSound,
 };
 use patina_activity_model::color;
+pub use patina_storage::location::adopt_existing_database;
 pub use recent::Recent;
 pub use recording::services::{ensure_machine_id, ActivityBridges};
 pub use recording::storage::{prepare_database_for_startup, StorageOperations, StorageRequest};
@@ -44,7 +45,7 @@ pub use recording::{
     classification::Classification, error::ActivityError, maintenance::ActivityMaintenance,
     preferences::Preferences, queries::ActivityQueries,
 };
-pub use tools::{FocusTasks, NativeToolData, ReminderTasks, Shortcut, ToolTarget};
+pub use tools::{FocusTasks, NativeToolData, ReminderTasks, Shortcut, TaskKind, ToolTarget};
 
 pub use today::{AppEdit, AppUsage, CategoryUsage, DaySummary};
 

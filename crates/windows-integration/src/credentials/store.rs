@@ -17,14 +17,21 @@ pub trait CredentialStore {
 pub struct WebDavCredentialStore {
     directory: PathBuf,
     prefix: String,
+    previous_prefix: Option<String>,
     legacy_targets: Vec<String>,
 }
 
 impl WebDavCredentialStore {
-    pub fn scoped(directory: PathBuf, prefix: String, legacy_targets: Vec<String>) -> Self {
+    pub fn scoped(
+        directory: PathBuf,
+        prefix: String,
+        previous_prefix: Option<String>,
+        legacy_targets: Vec<String>,
+    ) -> Self {
         Self {
             directory,
             prefix,
+            previous_prefix,
             legacy_targets,
         }
     }
@@ -106,7 +113,13 @@ impl CredentialStore for WebDavCredentialStore {
         if recorded != identity {
             return Ok(None);
         }
-        windows_credentials::read_webdav_password(&self.target(id)?)
+        let password = windows_credentials::read_webdav_password(&self.target(id)?)?;
+        match (password, &self.previous_prefix) {
+            (None, Some(prefix)) => {
+                windows_credentials::read_webdav_password(&format!("{prefix}.{id}"))
+            }
+            (password, _) => Ok(password),
+        }
     }
 
     fn remove(&self, id: &str) -> Result<(), String> {
@@ -115,6 +128,9 @@ impl CredentialStore for WebDavCredentialStore {
             return Ok(());
         }
         windows_credentials::delete_webdav_password(&self.target(id)?)?;
+        if let Some(prefix) = &self.previous_prefix {
+            windows_credentials::delete_webdav_password(&format!("{prefix}.{id}"))?;
+        }
         fs::remove_file(path).map_err(|e| e.to_string())
     }
 
@@ -144,6 +160,7 @@ mod tests {
         let store = WebDavCredentialStore {
             directory: std::env::temp_dir().join(uuid::Uuid::new_v4().to_string()),
             prefix: "com.ceceliaee.patina.test.webdav".into(),
+            previous_prefix: None,
             legacy_targets: vec![],
         };
         assert!(store.record_path("../production").is_err());
@@ -158,6 +175,7 @@ mod tests {
             directory: std::env::temp_dir()
                 .join(format!("patina-credential-test-{}", uuid::Uuid::new_v4())),
             prefix: "com.ceceliaee.patina.test.webdav".into(),
+            previous_prefix: None,
             legacy_targets: vec![],
         };
         let id = store.prepare("config-identity").unwrap();
@@ -167,7 +185,8 @@ mod tests {
                 .unwrap();
             let reopened = WebDavCredentialStore {
                 directory: store.directory.clone(),
-                prefix: store.prefix.clone(),
+                prefix: "Patina.Test.WebDAV".into(),
+                previous_prefix: Some(store.prefix.clone()),
                 legacy_targets: vec![],
             };
             assert_eq!(
@@ -175,10 +194,23 @@ mod tests {
                 Some("isolated-test-secret")
             );
             assert_eq!(reopened.read(&id, "different-config").unwrap(), None);
+            reopened
+                .write(&id, "fixture-only", "replacement-password")
+                .unwrap();
+            assert_eq!(
+                reopened.read(&id, "config-identity").unwrap().as_deref(),
+                Some("replacement-password")
+            );
             assert_eq!(reopened.candidates().unwrap(), vec![id.clone()]);
             assert_eq!(
                 fs::read_to_string(store.record_path(&id).unwrap()).unwrap(),
                 "config-identity"
+            );
+            reopened.remove(&id).unwrap();
+            assert!(
+                windows_credentials::read_webdav_password(&format!("{}.{}", store.prefix, id))
+                    .unwrap()
+                    .is_none()
             );
         });
         store.remove(&id).unwrap();

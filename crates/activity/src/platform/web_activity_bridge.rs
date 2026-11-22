@@ -150,10 +150,7 @@ impl WebActivityBridgeRuntimeState {
         should_restart || should_start
     }
 
-    #[allow(
-        dead_code,
-        reason = "the GPUI recording host reconciles listener settings"
-    )]
+    #[allow(dead_code, reason = "the recording host reconciles listener settings")]
     pub fn current_settings(&self) -> WebActivityBridgeSettings {
         lock_inner(&self.inner).settings.clone()
     }

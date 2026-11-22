@@ -36,11 +36,24 @@ const TODAY: usize = 5;
 const OPEN: usize = 1;
 const EXIT: usize = 2;
 const TOGGLE: usize = 3;
-pub(super) fn reopen(profile_id: &str, actions: &async_channel::Receiver<Action>) -> Result<()> {
+pub(super) fn reopen(
+    profile_id: &str,
+    previous_ids: &[String],
+    actions: &async_channel::Receiver<Action>,
+) -> Result<()> {
     let class = windows::core::HSTRING::from(profile_id);
+    let previous_classes: Vec<_> = previous_ids
+        .iter()
+        .map(|id| windows::core::HSTRING::from(id.as_str()))
+        .collect();
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(4);
     let hwnd = loop {
-        match unsafe { FindWindowW(&class, w!("Patina GPUI")) } {
+        match unsafe { FindWindowW(&class, None) }.or_else(|error| {
+            previous_classes
+                .iter()
+                .find_map(|class| unsafe { FindWindowW(class, None) }.ok())
+                .ok_or(error)
+        }) {
             Ok(hwnd) => break hwnd,
             Err(_) if std::time::Instant::now() < deadline => {
                 std::thread::sleep(std::time::Duration::from_millis(40))
@@ -155,7 +168,7 @@ impl Tray {
             let hwnd = match CreateWindowExW(
                 WS_EX_TOOLWINDOW,
                 &name,
-                w!("Patina GPUI"),
+                w!("Patina Tray"),
                 WS_POPUP,
                 0,
                 0,

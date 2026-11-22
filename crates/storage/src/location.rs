@@ -8,7 +8,7 @@ use std::{
 mod migration;
 pub use migration::{directory_size_bytes, resolve_destination};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Location {
     active: PathBuf,
     pub pending: Option<PathBuf>,
@@ -20,13 +20,21 @@ pub struct Location {
     staged_backups: Option<PathBuf>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub move_error: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub upgraded_from_tauri: bool,
 }
 pub fn location_file_path(profile: &Path) -> PathBuf {
     profile.join("database-location.json")
 }
 pub fn load_location(profile: &Path) -> Result<Location, String> {
     match fs::read(location_file_path(profile)) {
-        Ok(b) => serde_json::from_slice(&b).map_err(|e| e.to_string()),
+        Ok(b) => {
+            let mut state: Location = serde_json::from_slice(&b).map_err(|e| e.to_string())?;
+            if state.active == Path::new(".") {
+                state.active = profile.to_owned();
+            }
+            Ok(state)
+        }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Location {
             active: profile.to_owned(),
             pending: None,
@@ -34,18 +42,99 @@ pub fn load_location(profile: &Path) -> Result<Location, String> {
             backups: None,
             staged_backups: None,
             move_error: None,
+            upgraded_from_tauri: false,
         }),
         Err(e) => Err(e.to_string()),
     }
 }
 fn save_location(profile: &Path, state: &Location) -> Result<(), String> {
+    // A roaming profile can have a different absolute path on the next computer.
+    let mut stored = state.clone();
+    if stored.active == profile {
+        stored.active = PathBuf::from(".");
+    }
+    if stored.backups.as_deref() == Some(&profile.join("backups")) {
+        stored.backups = None;
+    }
     let mut f = tempfile::NamedTempFile::new_in(profile).map_err(|e| e.to_string())?;
-    serde_json::to_writer(f.as_file_mut(), state).map_err(|e| e.to_string())?;
+    serde_json::to_writer(f.as_file_mut(), &stored).map_err(|e| e.to_string())?;
     f.flush()
         .and_then(|_| f.as_file().sync_all())
         .map_err(|e| e.to_string())?;
     f.persist(location_file_path(profile))
         .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Adopt the installed application's database while the caller holds the profile lock.
+pub async fn adopt_existing_database(
+    profile: &Path,
+    source: &Path,
+    login_enabled: bool,
+) -> Result<(), String> {
+    if !source.is_absolute() {
+        return Err("The existing data directory must be absolute".into());
+    }
+    let source = source.canonicalize().map_err(|e| e.to_string())?;
+    let database = source.join("patina.db");
+    let mut location = load_location(profile)?;
+    let current = location.active.join("patina.db");
+    let configured = location_file_path(profile)
+        .try_exists()
+        .map_err(|e| e.to_string())?;
+    if location.pending.is_some()
+        || ((configured || current.try_exists().map_err(|e| e.to_string())?)
+            && !same_file::is_same_file(&database, &current).map_err(|e| e.to_string())?)
+    {
+        return Err(
+            "The desktop profile already uses a different database or has a pending move".into(),
+        );
+    }
+    let options = sqlx::sqlite::SqliteConnectOptions::new()
+        .filename(&database)
+        .create_if_missing(false);
+    let mut db = sqlx::SqliteConnection::connect_with(&options)
+        .await
+        .map_err(|e| e.to_string())?;
+    let integrity: String = sqlx::query_scalar("PRAGMA quick_check(1)")
+        .fetch_one(&mut db)
+        .await
+        .map_err(|e| e.to_string())?;
+    let migrations: Vec<(i64, String, Vec<u8>, bool)> = sqlx::query_as(
+        "SELECT version, description, checksum, success FROM _sqlx_migrations ORDER BY version",
+    )
+    .fetch_all(&mut db)
+    .await
+    .map_err(|e| e.to_string())?;
+    let expected = crate::sqlite_pool::expected_migration_metadata();
+    if integrity != "ok"
+        || migrations.is_empty()
+        || migrations.len() > expected.len()
+        || migrations.iter().zip(expected).any(
+            |((v, d, c, ok), (version, description, checksum))| {
+                !ok || *v != version || d != description || *c != checksum
+            },
+        )
+    {
+        return Err("The existing Patina database failed upgrade validation".into());
+    }
+    // Earlier versions stored this preference only after the first settings change.
+    sqlx::query(
+        "INSERT INTO settings(key,value) VALUES('launch_at_login',?) ON CONFLICT(key) DO NOTHING",
+    )
+    .bind(if login_enabled { "1" } else { "0" })
+    .execute(&mut db)
+    .await
+    .map_err(|e| e.to_string())?;
+    db.close().await.map_err(|e| e.to_string())?;
+    if !configured {
+        location.backups = Some(source.join("backups"));
+        location.active = source;
+    }
+    if !location.upgraded_from_tauri {
+        location.upgraded_from_tauri = true;
+        save_location(profile, &location)?;
+    }
     Ok(())
 }
 fn check_destination(root: &Path) -> Result<(), String> {

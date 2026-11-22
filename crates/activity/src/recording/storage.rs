@@ -35,13 +35,27 @@ impl Storage {
         let root = profile.to_owned();
         let remote_pool = pool.clone();
         let snapshot_pool = pool.clone();
+        let location = load_location(profile).ok();
+        // An isolated profile must never acquire access to the production credential ledger.
+        let released_roaming = location
+            .as_ref()
+            .filter(|s| s.upgraded_from_tauri)
+            .and_then(|_| {
+                let roaming = PathBuf::from(std::env::var_os("APPDATA")?).join("Patina");
+                let is_profile =
+                    |path: &Path| same_file::is_same_file(path, profile).unwrap_or(false);
+                let production = is_profile(&roaming)
+                    || std::env::var_os("LOCALAPPDATA")
+                        .is_some_and(|p| is_profile(&PathBuf::from(p).join("Patina")));
+                production.then_some(roaming)
+            });
+        let dav = Dav::new(profile, released_roaming.as_deref());
         let jobs = crate::data::storage_jobs::StorageJobs {
             pool,
             profile: profile.into(),
-            legacy: profile.into(),
+            legacy: released_roaming.clone().unwrap_or_else(|| profile.into()),
             database: database.into(),
-            backups: load_location(profile)
-                .ok()
+            backups: location
                 .and_then(|s| s.backups)
                 .unwrap_or_else(|| profile.join("backups")),
             temp: database
@@ -49,7 +63,7 @@ impl Storage {
                 .unwrap_or(profile)
                 .join("remote-backup-temp"),
             target: Box::new(move || {
-                let dav = Dav::new(&root);
+                let dav = Dav::new(&root, released_roaming.as_deref());
                 let db = remote_pool.clone();
                 Box::pin(async move {
                     let (client, config) = dav.client(&db).await?;
@@ -72,7 +86,7 @@ impl Storage {
         Self {
             profile: profile.into(),
             database: database.into(),
-            dav: Dav::new(profile),
+            dav,
             jobs,
             operation: Default::default(),
             install_bytes: Default::default(),

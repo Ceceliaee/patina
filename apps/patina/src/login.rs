@@ -15,8 +15,8 @@ impl LoginEntry {
     pub(super) fn new(profile_id: &str, profile_parent: Option<&Path>) -> io::Result<Self> {
         let exe = env::current_exe()?;
         #[cfg(debug_assertions)]
-        let exe = if env::var_os("PATINA_GPUI_DEV_SESSION").is_some()
-            && let Some(built) = env::var_os("PATINA_GPUI_DEV_BINARY")
+        let exe = if env::var_os("PATINA_DEV_SESSION").is_some()
+            && let Some(built) = env::var_os("PATINA_DEV_BINARY")
         {
             built.into()
         } else {
@@ -27,8 +27,11 @@ impl LoginEntry {
         command.push("\" --autostart");
         if let Some(parent) = profile_parent {
             command.push(" --profile-parent \"");
-            // Appending "." also quotes drive roots without a trailing backslash.
-            command.push(parent.join("."));
+            command.push(parent);
+            // A trailing backslash would escape the closing quote for a drive root.
+            if parent.as_os_str().as_encoded_bytes().ends_with(b"\\") {
+                command.push(".");
+            }
             command.push("\"");
         }
         Ok(Self {
@@ -45,19 +48,23 @@ impl LoginEntry {
                 key.set_value(&self.name, &self.command)?;
             }
         } else {
-            let deleted = user
-                .open_subkey_with_flags(RUN, KEY_QUERY_VALUE)
-                .and_then(|key| {
-                    key.get_raw_value(&self.name)?;
-                    user.open_subkey_with_flags(RUN, KEY_SET_VALUE)?
-                        .delete_value(&self.name)
-                });
-            if let Err(error) = deleted
-                && error.kind() != io::ErrorKind::NotFound
-            {
-                return Err(error);
-            }
+            remove_entry(&self.name)?;
         }
         Ok(())
+    }
+}
+
+pub(super) fn remove_entry(name: &str) -> io::Result<()> {
+    let user = RegKey::predef(HKEY_CURRENT_USER);
+    let deleted = user
+        .open_subkey_with_flags(RUN, KEY_QUERY_VALUE)
+        .and_then(|key| {
+            key.get_raw_value(name)?;
+            user.open_subkey_with_flags(RUN, KEY_SET_VALUE)?
+                .delete_value(name)
+        });
+    match deleted {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        result => result,
     }
 }

@@ -13,6 +13,60 @@ macro_rules! response {
 }
 
 #[test]
+fn restore_tauri_1_10_snapshot_to_a_fresh_profile() -> Result<(), Error> {
+    let root = tempfile::tempdir()?;
+    let archive = root.path().join("backup.zip");
+    let snapshot = include_bytes!("../../../test-support/fixtures/patina-1.10.0.zip");
+    fs::write(&archive, snapshot)?;
+    let profile = root.path().join("Patina");
+    fs::create_dir(&profile)?;
+    let db = profile.join("patina.db");
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    rt.block_on(async {
+        let pool = patina_activity::open_database(&db).await?;
+        let storage = patina_activity::StorageOperations::new(
+            &profile,
+            &db,
+            pool.clone(),
+            patina_activity::RecordingSignals::new(|| {}),
+            rt.handle().clone(),
+        );
+        let preview = response!(
+            storage
+                .request(R::PreviewRestore(archive.to_string_lossy().into()))
+                .await?,
+            Restore
+        )
+        .preview;
+        assert_eq!(preview.app_version, "1.10.0");
+        assert!(preview.restore_supported);
+        assert_eq!(preview.session_count, 1);
+        storage
+            .request(R::Restore {
+                hash: preview.hash,
+                replace: true,
+            })
+            .await?;
+        let duration: i64 = sqlx::query_scalar(
+            "SELECT duration FROM sessions WHERE exe_name='fixture-released.exe'",
+        )
+        .fetch_one(&pool)
+        .await?;
+        let setting: String =
+            sqlx::query_scalar("SELECT value FROM settings WHERE key='test_published_handoff'")
+                .fetch_one(&pool)
+                .await?;
+        assert_eq!(duration, 60_000);
+        assert_eq!(setting, "v1.10.0");
+        assert_eq!(fs::read(archive)?, snapshot.as_slice());
+        pool.close().await;
+        Ok(())
+    })
+}
+
+#[test]
 fn storage_round_trip_and_migration() -> Result<(), Error> {
     let root = tempfile::tempdir()?;
     let profile = root.path().join("profile");
@@ -53,7 +107,7 @@ fn storage_round_trip_and_migration() -> Result<(), Error> {
     use patina_activity_model::views::preferences::{MainNavigation, MainSection};
     let navigation = patina_activity::Preferences::new(pool.clone(), patina_activity::Locale::EnUs);
     rt.block_on(
-        sqlx::query("INSERT INTO settings(key,value) VALUES('__gpui_history_modes','[2,1,1]')")
+        sqlx::query("INSERT INTO settings(key,value) VALUES('__ui_history_modes','[2,1,1]')")
             .execute(&pool),
     )?;
     assert_eq!(
@@ -64,7 +118,7 @@ fn storage_round_trip_and_migration() -> Result<(), Error> {
     rt.block_on(
         sqlx::raw_sql(
             "DELETE FROM settings WHERE key='hourly_activity_chart_mode';
-         UPDATE settings SET value='[1,2,1]' WHERE key='__gpui_history_modes';",
+         UPDATE settings SET value='[1,2,1]' WHERE key='__ui_history_modes';",
         )
         .execute(&pool),
     )?;
@@ -96,7 +150,7 @@ fn storage_round_trip_and_migration() -> Result<(), Error> {
     );
     assert!(response!(request(R::ResumeAfterUpdate(None))?, Text).is_none());
     rt.block_on(
-        sqlx::query("UPDATE settings SET value='obsolete' WHERE key IN ('__gpui_main_section','__gpui_data_kind','__gpui_sidebar_labels')")
+        sqlx::query("UPDATE settings SET value='obsolete' WHERE key IN ('__ui_main_section','__ui_data_kind','__ui_sidebar_labels')")
             .execute(&pool),
     )?;
     assert_eq!(
@@ -276,6 +330,19 @@ fn storage_round_trip_and_migration() -> Result<(), Error> {
         fs::read(profile.join("backups/sample.zip"))?,
         b"saved-backup"
     );
+    let roaming = root.path().join("another-user-path");
+    fs::rename(&profile, &roaming)?;
+    let roaming = roaming.canonicalize()?;
+    assert_eq!(
+        patina_activity::prepare_database_for_startup(&roaming)?,
+        roaming.join("patina.db")
+    );
+    patina_storage::location::schedule_storage_move(&roaming, Some(&next))?;
+    assert_eq!(
+        patina_activity::prepare_database_for_startup(&roaming)?,
+        occupied.canonicalize()?
+    );
+    assert_eq!(fs::read(next.join("backups/sample.zip"))?, b"saved-backup");
     Ok(())
 }
 

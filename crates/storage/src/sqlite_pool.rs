@@ -41,6 +41,20 @@ pub async fn prepare_pool_schema(pool: &Pool<Sqlite>, db_path: &Path) -> Result<
         ));
     }
 
+    // Apply to restored database copies as well as local profiles. A current value wins
+    // when both spellings are present, and the old row is renamed in the same statement.
+    sqlx::query(
+        "UPDATE OR REPLACE settings AS old
+         SET key = '__ui_' || substr(old.key, 8),
+             value = coalesce((SELECT current.value FROM settings AS current
+                               WHERE current.key = '__ui_' || substr(old.key, 8)), old.value)
+         WHERE old.key IN ('__gpui_main_section', '__gpui_data_detailed', '__gpui_data_kind',
+             '__gpui_sidebar_labels', '__gpui_history_modes', '__gpui_detail_zoom_hours',
+             '__gpui_history_zoom_hours', '__gpui_detail_min_secs')",
+    )
+    .execute(pool)
+    .await
+    .map_err(|error| format!("failed to migrate desktop preferences: {error}"))?;
     Ok(())
 }
 
@@ -710,6 +724,38 @@ async fn normalize_current_baseline_migration_history_for_pool(
 mod tests {
     use super::*;
     use sqlx::{Executor, SqlitePool};
+
+    #[tokio::test]
+    async fn desktop_preferences_keep_saved_values_on_reopen() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        let path = Path::new(":memory:");
+        prepare_pool_schema(&pool, path).await.unwrap();
+        pool.execute(
+            "INSERT INTO settings(key,value) VALUES
+            ('__gpui_history_modes','[2,1,1]'), ('__gpui_main_section','old'),
+            ('__ui_main_section','current'), ('__gpui_other','untouched')",
+        )
+        .await
+        .unwrap();
+        for _ in 0..2 {
+            prepare_pool_schema(&pool, path).await.unwrap();
+            let rows: Vec<(String, String)> = sqlx::query_as(
+                "SELECT key,value FROM settings
+                WHERE key GLOB '__ui_*' OR key GLOB '__gpui_*' ORDER BY key",
+            )
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+            assert_eq!(
+                rows,
+                vec![
+                    ("__gpui_other".into(), "untouched".into()),
+                    ("__ui_history_modes".into(), "[2,1,1]".into()),
+                    ("__ui_main_section".into(), "current".into())
+                ]
+            );
+        }
+    }
 
     async fn create_sqlx_migrations_table(pool: &SqlitePool) {
         pool.execute(

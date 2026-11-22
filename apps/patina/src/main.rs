@@ -4,6 +4,11 @@
 mod delay_load;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    unsafe {
+        windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID(
+            &windows::core::HSTRING::from(patina::APP_ID),
+        )?;
+    }
     if let Some(result) = patina::run_child_if_requested() {
         return result;
     }
@@ -12,6 +17,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut parent = None;
     let mut autostart = false;
     while let Some(arg) = args.next() {
+        if arg == "--upgrade-tauri-profile" {
+            let [profile_parent, roaming, key, login] = args
+                .collect::<Vec<_>>()
+                .try_into()
+                .map_err(|_| "Invalid profile upgrade arguments")?;
+            return patina::adopt_tauri_profile(
+                (!profile_parent.is_empty()).then(|| std::path::Path::new(&profile_parent)),
+                std::path::Path::new(&roaming),
+                &key,
+                login == "1",
+            );
+        }
         if arg == "--autostart" {
             autostart = true;
             continue;

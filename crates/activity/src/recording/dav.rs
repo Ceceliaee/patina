@@ -15,11 +15,26 @@ impl Dav {
         let _guard = config::CONFIG_LOCK.lock().await;
         config::password(&self.store, &repo::load_state(pool).await?)
     }
-    pub(crate) fn new(profile: &Path) -> Self {
+    pub(crate) fn new(profile: &Path, released_roaming: Option<&Path>) -> Self {
+        if let Some(roaming) = released_roaming {
+            let previous = "com.ceceliaee.patina.backup.webdav.production";
+            return Self {
+                store: WebDavCredentialStore::scoped(
+                    roaming.join("webdav-credentials"),
+                    "Patina.WebDAV".into(),
+                    Some(format!("{previous}.v2")),
+                    vec![
+                        previous.into(),
+                        "com.ceceliaee.patina.backup.webdav.default".into(),
+                    ],
+                ),
+            };
+        }
         Self {
             store: WebDavCredentialStore::scoped(
                 profile.join("webdav-credentials"),
-                "Patina.GPUI.WebDAV".into(),
+                "Patina.WebDAV".into(),
+                Some("Patina.GPUI.WebDAV".into()),
                 vec![],
             ),
         }
