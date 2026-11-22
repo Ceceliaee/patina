@@ -27,21 +27,7 @@ impl std::ops::Deref for DisplayDay {
 
 impl DisplayDay {
     pub(super) fn overview(&self, categories: bool) -> &[HistoryRecord] {
-        self.overview[usize::from(categories)].get_or_init(|| dominant_records(self, categories))
-    }
-}
-
-fn timeline_record(record: &HistoryRecord, start: i64, end: i64, duration: i64) -> HistoryRecord {
-    HistoryRecord {
-        key: record.key.clone(),
-        name: record.name.clone(),
-        category: record.category.clone(),
-        start,
-        end,
-        group_duration: duration,
-        group_id: record.group_id,
-        current: record.current,
-        titles: Vec::new(),
+        self.overview[usize::from(categories)].get_or_init(|| self.dominant_records(categories))
     }
 }
 
@@ -129,77 +115,10 @@ pub(super) fn merged_lane_records(
             previous.end = end;
             previous.group_duration += end - start;
         } else {
-            merged.push(timeline_record(record, start, end, end - start));
+            merged.push(record.timeline_segment(start, end, end - start));
         }
     }
     merged
-}
-
-pub(super) fn dominant_records(day: &HistoryDay, categories: bool) -> Vec<HistoryRecord> {
-    let mut buckets = BTreeMap::<i64, BTreeMap<&str, (i64, &HistoryRecord)>>::new();
-    let mut bounds = BTreeMap::<i64, (i64, i64)>::new();
-    for record in &day.records {
-        let mut minute = day.start + (record.start.max(day.start) - day.start) / 60_000 * 60_000;
-        while minute < record.end.min(day.end) {
-            let start = record.start.max(minute);
-            let end = record.end.min(minute + 60_000).min(day.end);
-            let active = bounds.entry(minute).or_insert((start, end));
-            active.0 = active.0.min(start);
-            active.1 = active.1.max(end);
-            let key = if categories {
-                &record.category
-            } else {
-                &record.key
-            };
-            let item = buckets
-                .entry(minute)
-                .or_default()
-                .entry(key.as_str())
-                .or_insert((0, record));
-            item.0 += (end - start).max(0);
-            if record.start < item.1.start {
-                item.1 = record;
-            }
-            minute += 60_000;
-        }
-    }
-    let mut result: Vec<HistoryRecord> = Vec::new();
-    for (minute, items) in buckets {
-        let Some((_, (duration, source))) = items.into_iter().min_by(|(ka, a), (kb, b)| {
-            b.0.cmp(&a.0)
-                .then(a.1.start.cmp(&b.1.start))
-                .then(ka.cmp(kb))
-        }) else {
-            continue;
-        };
-        let (start, end) = bounds[&minute];
-        let start = if start - minute <= 1000 {
-            minute
-        } else {
-            start
-        };
-        let boundary = (minute + 60_000).min(day.end);
-        let end = if boundary - end <= 1000 {
-            boundary
-        } else {
-            end
-        };
-        if let Some(previous) = result.last_mut()
-            && (if categories {
-                previous.category == source.category
-            } else {
-                previous.key == source.key
-            })
-            && (source.key != "activity:anonymous" || source.group_id == previous.group_id)
-            && start - previous.end <= day.timeline_merge_gap_ms.max(0)
-        {
-            previous.end = end;
-            previous.group_duration += duration;
-        } else {
-            result.push(timeline_record(source, start, end, duration));
-        }
-    }
-    result
 }
 
 fn clock_label(time: i64, day_end: i64) -> String {
@@ -836,7 +755,7 @@ impl History {
 
 #[cfg(test)]
 mod tests {
-    use super::{HOUR, dominant_records, initial_offset, lanes};
+    use super::{HOUR, initial_offset, lanes};
     use patina_activity_model::{HistoryDay, HistoryRecord};
     use std::collections::BTreeMap;
 
@@ -937,7 +856,7 @@ mod tests {
                 record("a", 60_000, 80_000),
             ],
         };
-        let result = dominant_records(&day, false);
+        let result = day.dominant_records(false);
         assert_eq!(result.len(), 1);
         assert_eq!(
             (&*result[0].key, result[0].start, result[0].end),
@@ -948,7 +867,7 @@ mod tests {
             record("a", 0, 30_000),
             record("c", 120_000, 150_000),
         ];
-        let result = dominant_records(&day, false);
+        let result = day.dominant_records(false);
         assert_eq!(
             result
                 .iter()
@@ -957,13 +876,13 @@ mod tests {
             vec![("a", 0, 60_000), ("c", 120_000, 150_000)]
         );
         day.timeline_merge_gap_ms = 180_000;
-        assert_eq!(dominant_records(&day, true).len(), 1);
+        assert_eq!(day.dominant_records(true).len(), 1);
         day.records = vec![
             record("activity:anonymous", 0, 60_000),
             record("activity:anonymous", 60_000, 120_000),
         ];
         day.records[1].group_id = 1;
-        assert_eq!(dominant_records(&day, false).len(), 2);
+        assert_eq!(day.dominant_records(false).len(), 2);
     }
 
     #[test]
@@ -1018,7 +937,7 @@ mod tests {
                 if cached {
                     std::hint::black_box(view.overview(step >= 30));
                 } else {
-                    std::hint::black_box(dominant_records(&view, step >= 30));
+                    std::hint::black_box(view.dominant_records(step >= 30));
                 }
                 samples.push(started.elapsed().as_nanos());
             }

@@ -10,5 +10,6 @@ pub(crate) mod queries;
 pub(crate) mod recent;
 pub(crate) mod services;
 pub(crate) mod storage;
+mod timeline;
 pub(crate) mod today;
 pub(crate) mod tools;

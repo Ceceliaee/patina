@@ -1,3 +1,4 @@
+use super::timeline::{merge_gap_ms, session_spans, TimelineApp};
 use crate::data::{
     activity_read_model::load_range_in_tx,
     repositories::{
@@ -5,10 +6,7 @@ use crate::data::{
         sessions::read::load_history_range_in_tx,
     },
 };
-use crate::domain::activity_read_model::{
-    resolve_activity_precedence, should_track_activity_fact, ActivityOrigin, OwnedActivityRange,
-    ANONYMOUS_ACTIVITY_KEY,
-};
+use crate::domain::activity_read_model::ANONYMOUS_ACTIVITY_KEY;
 use crate::platform::clock::{local_day_range_at, unix_timestamp_millis_i64};
 use std::collections::BTreeMap;
 #[path = "history/web.rs"]
@@ -35,7 +33,7 @@ pub(super) async fn load(
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
     let mapping = load_classification_snapshot_in_tx(&mut tx).await?;
     let minimum_key = if app.is_some() {
-        "__gpui_detail_min_secs"
+        "__ui_detail_min_secs"
     } else {
         "min_session_secs"
     };
@@ -47,16 +45,7 @@ pub(super) async fn load(
         .and_then(|s| s.parse::<i64>().ok())
         .unwrap_or(if app.is_some() { 60 } else { 300 })
         .clamp(0, 600);
-    let merge_gap = sqlx::query_scalar::<_, String>(
-        "SELECT value FROM settings WHERE key='timeline_merge_gap_secs'",
-    )
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(|e| e.to_string())?
-    .and_then(|s| s.parse::<i64>().ok())
-    .unwrap_or(180)
-    .clamp(60, 300)
-        * 1000;
+    let merge_gap = merge_gap_ms(&mut tx).await?;
     if web {
         let mut snapshot = crate::data::repositories::web_links::recent_snapshot_in_tx(
             &mut tx, start, cutoff, now,
@@ -99,30 +88,6 @@ pub(super) async fn load(
         .await
         .map_err(|e| e.to_string())?;
     tx.commit().await.map_err(|e| e.to_string())?;
-    let identity = |exe: &str, name: &str| {
-        if exe == ANONYMOUS_ACTIVITY_KEY {
-            return Some((
-                exe.to_owned(),
-                crate::text(locale, "common.anonymousActivity"),
-            ));
-        }
-        let canonical = crate::domain::tracking::resolve_app_override_executable(exe)?;
-        if !mapping.is_app_enabled(&canonical) {
-            return None;
-        }
-        let key = mapping.app_owner(exe);
-        let (custom, _) = mapping.app_appearance(&key);
-        let name = custom
-            .unwrap_or_else(|| {
-                if key.eq_ignore_ascii_case(exe) && !name.trim().is_empty() {
-                    name.trim()
-                } else {
-                    key.trim_end_matches(".exe")
-                }
-            })
-            .to_owned();
-        Some((key, name))
-    };
     let mut colors = BTreeMap::new();
     let mut custom_colors = BTreeMap::new();
     let mut totals = BTreeMap::new();
@@ -130,46 +95,32 @@ pub(super) async fn load(
     let mut categories = BTreeMap::new();
     let mut category_hours = BTreeMap::<String, [i64; 24]>::new();
     for r in aggregate.records {
-        if let Some((key, name)) = identity(
+        if let Some(app) = TimelineApp::resolve(
+            &mapping,
             if r.anonymous {
                 ANONYMOUS_ACTIVITY_KEY
             } else {
                 &r.exe_name
             },
             &r.app_name,
+            locale,
         ) {
             use chrono::{Local, TimeZone, Timelike};
             let mut a = r.start_time.max(start);
             let end = r.end_time.min(cutoff);
-            let category = if r.anonymous {
-                crate::text(locale, "common.anonymousActivity")
-            } else {
-                mapping.resolve_session_category(&r.exe_name).label
-            };
-            let resolved = if r.anonymous {
-                0x8f98a8
-            } else {
-                super::today::parse_color(&mapping.resolve_session_category(&r.exe_name).color)
-                    .unwrap_or(0x8f98a8)
-            };
-            let custom_color = mapping
-                .app_appearance(&key)
-                .1
-                .and_then(super::today::parse_color);
-            if !r.anonymous {
-                if let Some(color) = custom_color {
-                    custom_colors.insert(key.clone(), color);
-                }
+            let TimelineApp {
+                key,
+                name,
+                category,
+                category_color,
+                custom_color,
+                fallback_color,
+            } = app;
+            if let Some(color) = custom_color {
+                custom_colors.insert(key.clone(), color);
             }
-            let color = custom_color.unwrap_or_else(|| {
-                if !r.anonymous && mapping.resolve_session_category(&r.exe_name).id == "other" {
-                    crate::color::app_color(&key)
-                } else {
-                    resolved
-                }
-            });
-            colors.insert(key.clone(), color);
-            colors.insert(category.clone(), resolved);
+            colors.insert(key.clone(), custom_color.unwrap_or(fallback_color));
+            colors.insert(category.clone(), category_color);
             *categories.entry(category.clone()).or_insert(0) += (end - a).max(0);
             while a < end {
                 let t = Local
@@ -195,35 +146,19 @@ pub(super) async fn load(
     for t in rows.title_samples {
         samples.entry(t.session_id).or_default().push(t);
     }
-    let facts = rows
-        .sessions
-        .iter()
-        .enumerate()
-        .filter(|(_, r)| {
-            r.exe_name == ANONYMOUS_ACTIVITY_KEY
-                || should_track_activity_fact(&r.exe_name, &r.app_name, &r.window_title)
-        })
-        .map(|(i, r)| OwnedActivityRange {
-            origin: if r.origin == "native" {
-                ActivityOrigin::Native
-            } else {
-                ActivityOrigin::ImportExact
-            },
-            start_ms: r.start_time.max(start),
-            end_ms: r.end_time.unwrap_or(live).min(cutoff),
-            capacity_end_ms: None,
-            value: i,
-        })
-        .collect::<Vec<_>>();
     let mut records = Vec::new();
-    let mut spans = resolve_activity_precedence(&facts);
-    spans.sort_by_key(|s| s.start_ms);
     let mut groups = BTreeMap::<String, (usize, i64, i64)>::new();
     let mut durations = Vec::<i64>::new();
     let mut membership = Vec::new();
-    for span in spans {
+    for span in session_spans(&rows.sessions, start, cutoff, live) {
         let r = &rows.sessions[span.value];
-        let Some((key, name)) = identity(&r.exe_name, &r.app_name) else {
+        let Some(TimelineApp {
+            key,
+            name,
+            category,
+            ..
+        }) = TimelineApp::resolve(&mapping, &r.exe_name, &r.app_name, locale)
+        else {
             continue;
         };
         if app.as_ref().is_some_and(|wanted| *wanted != key) {
@@ -262,11 +197,6 @@ pub(super) async fn load(
         durations[id] += hi - lo;
         groups.insert(r.exe_name.clone(), (id, hi, continuity));
         membership.push(id);
-        let category = if key == ANONYMOUS_ACTIVITY_KEY {
-            crate::text(locale, "common.anonymousActivity")
-        } else {
-            mapping.resolve_session_category(&r.exe_name).label
-        };
         records.push(HistoryRecord {
             category,
             key,
