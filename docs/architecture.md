@@ -4,7 +4,7 @@ Patina 的活动事实由常驻宿主提交。窗口、操作系统探测和浏�
 
 ## 桌面进程
 
-Patina 是使用 Rust、GPUI 和 SQLite 的 Windows 桌面应用。所有桌面进程运行同一个 `patina.exe`。后台 Patina 持有每个 profile 的写锁、Recorder、托盘、工具与更新服务。主窗口 Patina UI、小窗 Patina Mini 和工具通知共享一个按需启动的 GPUI 进程，通过桌面协议读写状态。最后一个窗口关闭后，窗口进程退出，后台继续采样和调度到期任务。Patina Probe 工作进程负责有时限的原生观察。
+Patina 是使用 Rust、GPUI 和 SQLite 的 Windows 桌面应用。所有桌面进程运行同一个 `patina.exe`。后台 Patina 持有每个 profile 的写锁、Recorder、托盘、工具与更新服务。主窗口 Patina UI、小窗 Patina Mini 和工具通知共享一个按需启动的窗口进程，通过桌面协议读写状态。最后一个窗口关闭后，窗口进程退出，后台继续采样和调度到期任务。Patina Probe 工作进程负责有时限的原生观察。
 
 Windows 前台观察经过 tracking 决策，在同一事务中提交活动事实和派生状态的修订。窗口通过宿主读取数据并发出操作请求。浏览器扩展经本机协议提供网页观察，有效活动区间由 Recorder 决定。
 
@@ -20,17 +20,19 @@ Windows 前台观察经过 tracking 决策，在同一事务中提交活动事�
 
 #### Mini 生命周期
 
-[Mini](../apps/patina-ui/src/windows/mini/mod.rs)读取当前活动和工具状态，点击工具时由主窗口导航。Mini 的尺寸、物理坐标、贴边裁剪和交互时序由窗口模块维护。隐藏和重开由窗口生命周期管理，录制继续运行。旧资料中的停靠位置及固定状态由存储兼容测试验证。[窗口几何](../apps/patina-ui/src/windows/mini/geometry.rs) · [历史资料](../crates/storage/src/sqlite_pool/widget_retirement_tests/mini_preferences.rs)
+[Mini](../apps/patina-ui/src/windows/mini/mod.rs)读取当前活动和工具状态，点击工具时由主窗口导航。拖动标题栏或收起的把手可移动窗口。松开时按指针所在显示器的工作区和缩放判断顶部、左侧或右侧停靠，其余位置保持悬浮。窗口模块负责坐标和贴边裁剪，宿主在拖动结束或切换图钉时保存位置和固定状态。重开时读取同一份资料，包括旧版保存的位置。[窗口几何](../apps/patina-ui/src/windows/mini/geometry.rs) · [原生窗口测试](../apps/patina/tests/today/mini.rs)
 
 ### 运行身份与持久化隔离
 
-开发启动器提供独立的开发目录。桌面入口从规范化 profile 路径建立单实例身份并锁定目录，自动化测试使用临时 profile。正式发行前的安装身份与历史数据衔接由[发布规范](release.md#gpui-原生更新包)管理。
+新安装的用户资料位于 `%APPDATA%/Patina/`。数据库和备份默认随 Windows 漫游用户配置一起迁移。已设置的自定义数据库目录继续使用原路径。从 v1.10.0 升级时，安装器沿用旧数据库和备份，详见[Windows 安装与更新](release.md#windows-安装与更新)。
+
+启动时优先使用 Roaming 里的桌面配置。以前在 Local 建立的桌面配置可继续原地使用，其中依次查找 `Patina`、`Patina.Desktop` 和早期开发版目录。开发启动器默认使用 `%LOCALAPPDATA%/Patina.Dev/Patina/`，自动化测试使用临时目录。`--profile-parent` 或 `PATINA_PROFILE_PARENT` 可将查找范围限定在指定的绝对父目录。桌面入口按规范化后的资料路径建立单实例身份。
 
 Windows 任务管理器展开 Patina 组时，子进程使用公共文件描述 `Patina`。在「详细信息」页启用「命令行」列可识别角色。后台没有 `--role` 参数，窗口进程带 `--role "Patina UI"`，探测进程带 `--role "Patina Probe"` 和探测类型。主窗口和 Mini 同时打开时共用同一个 PID。
 
 ### Windows 探测
 
-[Windows 适配](../crates/windows-integration/src/lib.rs)提供前台观察、图标、系统凭据、Job 和平台时钟。窗口输入与焦点留在 GPUI 窗口进程，活动规则接收时钟和采样事实。
+[Windows 适配](../crates/windows-integration/src/lib.rs)提供前台观察、图标、系统凭据、Job 和平台时钟。窗口输入与焦点留在窗口进程，活动规则接收时钟和采样事实。
 
 #### 原生探测的隔离与回收
 
@@ -178,33 +180,35 @@ Rust 模块、函数与字段使用 snake_case，类型使用 PascalCase。数�
 
 ### 工具插件
 
-GPUI 主窗口在「分类」与「设置」之间提供「工具」入口。窗口负责绘制插件声明的面板、收集表单值和呈现安装确认。常驻宿主登记插件身份、运行 Wasm、调度到期任务并保存状态。关闭最后一个窗口后，已有计时继续推进。Mini 与主窗口读取同一份计时和提醒投影，点击状态时由主窗口完成导航和未保存编辑确认。[主窗口](../apps/patina-ui/src/windows/main/mod.rs) · [常驻工具服务](../apps/patina/src/tool_service.rs)
+主窗口在「分类」与「设置」之间提供「工具」入口。窗口负责绘制插件声明的面板、收集表单值和呈现安装确认。常驻宿主登记插件身份、运行 Wasm、调度到期任务并保存状态。关闭最后一个窗口后，已有计时继续推进。Mini 与主窗口读取同一份计时和提醒投影，点击状态时由主窗口完成导航和未保存编辑确认。[主窗口](../apps/patina-ui/src/windows/main/mod.rs) · [常驻工具服务](../apps/patina/src/tool_service.rs)
 
-插件运行时依赖 SDK 中的包、安装和 guest 契约。后台按已安装身份绑定专注和提醒的数据访问，窗口通过桌面协议请求已安装列表、面板或操作结果。[SDK 安装契约](../crates/plugin-sdk/src/installation.rs) · [后台绑定](../apps/patina/src/bundled_tools.rs)
+插件运行时依赖 SDK 中的包、安装和 guest 契约。API 3 插件用嵌套的行、列和网格声明页面与字段弹层，决定控件顺序、间距和对齐。API 4 插件可通过 `selected_tab` 指定当前标签，收到 `SelectTab` 事件后把标签 ID 存入自己的状态。API 5 提供活动目标选择器。具有提醒能力的插件可接收用户选定的目标类型、标识和显示名称，候选目录和搜索文字由窗口管理。API 6 支持用字段权重按比例分配行内剩余宽度。窗口按声明绘制 Quiet Pro 组件，兼容 API 2 的模板页面和 API 1 的顺序面板。插件在清单中声明任务能力。后台按插件身份绑定任务存储，通知和快捷入口携带所属安装实例。[SDK 页面契约](../crates/plugin-sdk/src/layout.rs) · [SDK 安装契约](../crates/plugin-sdk/src/installation.rs) · [后台绑定](../apps/patina/src/bundled_tools.rs)
 
-外部插件以单个签名包分发。宿主在预览和确认时校验内容摘要、API 版本和发布者。更新及重装须符合原 ID 的发布者绑定。新模块成功返回合规面板后，宿主才原子替换已有安装；实例代次用于拒绝旧动作。工具无法自行取得文件、网络或数据库访问。插件所需的通用能力在安装时展示，Rust 作者可用同一入口发布文本、表单、按钮和后台计时。[包校验与运行时](../crates/plugin-host/src/lib.rs) · [插件作者指南](../plugins/counter/README.md)
+插件以普通 ZIP 分发。每个目录包含清单、Wasm 和发布者签名，以及可选的语言资源。宿主校验资源范围、包摘要和 API 版本，并在安装前列出所需能力。每个 ID 只有一个安装目录。同一发布者更新该 ID 时继承任务和状态，完全相同的内容沿用原实例。每个插件都使用 Ed25519 签名，更新须通过原公钥校验。插件只能通过声明的能力访问自己的任务。[包校验与运行时](../crates/plugin-host/src/lib.rs) · [插件作者指南](../plugins/counter/README.md)
 
-专注和提醒随程序分发为两个独立 Wasm 包。两者各自拥有面板及任务动作，绑定的原生数据适配器复用已有 SQLite 任务、阶段转换、专注历史和日程事务。旧任务沿用原 ID、历史关系和备份身份。卸载专注会结算活动区间，卸载提醒会暂停日程与使用规则。宿主保留数据和卸载选择；重启会完成中断的撤销，主动重装后由用户重新启动任务。通知确认还校验当前事件及其来源任务。[随附插件](../plugins/official) · [原生数据适配器](../crates/activity/src/recording/tools.rs) · [通知与使用提醒](../apps/patina/src/tool_events.rs)
+首次启动默认安装提醒和专注。两者与后来安装的插件使用相同的 SDK、能力和卸载流程。用户从 ZIP 安装的版本在重启后继续使用。卸载只清理该插件的任务、历史、计时、通知和私有状态，并记住卸载选择。相同能力的多个插件可以同时工作，旧版提醒和专注沿用原有的数据库记录与备份身份。[预装插件](../plugins/bundled) · [任务存储](../crates/activity/src/recording/tools.rs) · [通知派发](../apps/patina/src/tool_events.rs)
 
-### GPUI 原生更新
+API 7 插件可声明通知的标题、正文、按钮和延时选项。Patina 负责投递、窗口布局和提示音。用户选择操作后，宿主校验通知所属实例和操作 ID，再交给插件更新任务。[SDK 通知契约](../crates/plugin-sdk/src/notification.rs)
+
+### 桌面更新
 
 [`crates/updater`](../crates/updater/src/lib.rs) 拥有更新清单、版本比较、HTTPS 下载、Minisign 验签和安装交接。常驻宿主持有更新服务，窗口只请求操作并读取状态；关闭窗口或切换导航不会取消下载。[关于页](../apps/patina-ui/src/features/about/mod.rs) 展示版本差异、更新说明、下载进度和失败后的重试与手动下载入口，在下载完成后提供独立安装确认。安装前保存返回页面，新窗口启动时一次性消费该记录。
 
-安装请求由[桌面用例](../apps/patina/src/requests.rs)串行处理，只能执行服务持有并再次验签的安装包。启动安装器后，宿主关闭窗口进程、等待在途请求、停止工具和后台作业、结算录制，再关闭数据库。宿主确认收尾成功后写入退出凭据。[NSIS 安装器](../packaging/windows/patina.nsi)等待宿主退出并检查该凭据，之后替换程序文件。安装器不清理用户数据；包格式、签名与分发规则见[发布规范](release.md#gpui-原生更新包)。
+安装请求由[桌面用例](../apps/patina/src/requests.rs)串行处理，只能执行服务持有并再次验签的安装包。启动安装器后，宿主关闭窗口进程、等待在途请求、停止工具和后台作业、结算录制，再关闭数据库。宿主确认收尾成功后写入退出凭据。[NSIS 安装器](../packaging/windows/patina.nsi)等待宿主退出并检查该凭据，之后替换程序文件。安装器不清理用户数据；包格式、签名与分发规则见[发布规范](release.md#windows-安装与更新)。
 
 ## 代码落点
 
 | 能力 | 实现位置 |
 | --- | --- |
 | 托盘、单实例、任务调度与退出 | `apps/patina` |
-| 主窗口、Mini、通知、页面状态与 GPUI 输入 | `apps/patina-ui` |
+| 主窗口、Mini、通知、页面状态与窗口输入 | `apps/patina-ui` |
 | 窗口传输、业务操作与协议 | `apps/patina/src/window_process.rs` 管连接和在途请求，`apps/patina/src/requests` 处理桌面设置，`requests.rs` 分派操作，`crates/desktop-protocol` 定义消息 |
 | 采样、活动查询、分类事务与存储操作 | `crates/activity/src/recording` 下按用途提供入口，活动查询与分类共用的领域类型归 `crates/activity-model` |
 | SQLite 连接、schema、WAL、数据库位置与迁移 | `crates/storage` |
 | 原生采样和故障隔离 | `crates/windows-integration/src/windows/native_probe` |
 | 调色板、布局和可复用控件 | `crates/quietpro` |
 | 翻译、运行时消息与工作簿 | `locales`、`crates/i18n`、`xtask/src/i18n` |
-| 工具包校验与执行、作者接口和官方工具 | `crates/plugin-host`、`crates/plugin-sdk`、`plugins/` |
+| 工具包校验与执行、作者接口和预装工具 | `crates/plugin-host`、`crates/plugin-sdk`、`plugins/` |
 | 更新清单、下载、签名、安装与分发 | `crates/updater`、`packaging/windows`、`xtask/src/release` |
 | 隔离桌面与跨 crate 测试辅助 | `crates/test-support` |
 
@@ -241,4 +245,4 @@ GPUI 主窗口在「分类」与「设置」之间提供「工具」入口。窗
 
 ### 本地化
 
-本地化的人工源、生成边界、GPUI 页面与 Rust 消息运行时的职责统一由 [`localization.md`](./localization.md) 定义。架构层只要求 locale 作为显示派生和缓存的显式输入，语言无关 read model 不携带本地化字符串，generated 文件不成为人工 owner。
+本地化的人工源、生成边界、桌面页面与 Rust 消息运行时的职责统一由 [`localization.md`](./localization.md) 定义。架构层只要求 locale 作为显示派生和缓存的显式输入，语言无关 read model 不携带本地化字符串，generated 文件不成为人工 owner。

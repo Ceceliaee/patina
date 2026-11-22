@@ -1,10 +1,10 @@
-# GPUI 桌面迁移执行方案：托盘、Mini 与 QuietPro
+# 桌面迁移计划：托盘、Mini 与 QuietPro
 
 首个可用版本应能完成一次真实操作：从托盘打开 Mini，看到当前活动，收起或关闭 Mini 后继续工作，再次打开时能看到这段时间的记录。先在这个范围内验证常驻内存、CPU 和记录正确性，再决定是否迁移主窗口。
 
 - [x] 在当前工作目录从本地 `main` 的 `b032de5f` 创建并切换到 `codex/gpui`。
 
-新增测试遵循[工程质量中的 GPUI 测试约定](../quality.md#测试分层)。
+新增测试遵循[桌面测试约定](../quality.md#测试分层)。
 
 ## 用什么判断这次迁移值得做
 
@@ -14,7 +14,7 @@
 | 全天挂托盘或贴边小窗，尽量少占资源 | 只挂托盘时仍需接收系统消息。Mini 收起时仍需处理唤出和状态变化，详细内容只在展开时读取。 | 分别测量各状态的整个进程树。用唤醒、读库、绘制次数解释 CPU 变化，用关窗后的私有提交判断资源回收。 |
 | 新界面操作起来仍像 Patina | 颜色、尺寸和输入反馈由 QuietPro 统一，活动的含义与用户操作的结果由 Patina 决定。 | 用同一份数据和同一 DPI 对照现版，实际操作贴边、悬停、关闭和重开。[Quiet Pro 规范](../ui.md) |
 
-## 1. 建立基线与实验身份
+## 1. 运行基线与资料隔离
 
 - [x] 在实现前保存一份可重复运行的 Tauri 对照构建，记下提交、构建配置、测试库和设置。见下方基线记录。测量口径沿用[资源测量与生命周期验证](../quality.md#性能与资源生命周期)和[历史托盘测量](../archive/2026-11-06-desktop-resource-optimization.md)。
 - [x] 沿用同一工作目录。实验开始时 GPUI 的 Cargo 输出位于 `desktop/target/`，磁盘可用约 436 GiB。对照构建和原始采样保留在忽略的 `artifacts/runtime-smoke/`。
@@ -44,9 +44,9 @@ Patina 自己维护 Windows 桌面入口。平台层通过现有的 `windows` cr
 
 [原生工作区](../../Cargo.toml)使用 `gpui-kit 0.9.1`、`gpui-base 0.9.1` 和 `gpui-pre 0.3.12`。QuietPro 启用 Kit 的 `assets` 功能，使用 `icon_assets!` 登记界面实际用到的 Lucide 图标。桌面入口和控件示例注册同一个资源源，控件按 `IconName` 使用图标。图标清单由 [QuietPro](../../crates/quietpro/src/lib.rs) 持有。
 
-[实验入口](../../apps/patina/src/lib.rs)在常驻进程中使用 GPUI 的 `WindowingRequest::Headless`，接收 Win32 托盘和电源消息，并持有唯一的记录引擎。打开第一个 Today 或 Mini 时启动[窗口进程](../../apps/patina/src/window_process.rs)。两个窗口共享图形设备。启用「关闭到后台」时，关闭主窗口后 Mini 可继续使用，最后一个窗口关闭后仅保留常驻进程，继续记录。关闭该选项后，关闭主窗口会一并退出 Mini 和记录进程。
+[桌面入口](../../apps/patina/src/lib.rs)在常驻进程中接收 Win32 托盘和电源消息，并持有唯一的记录引擎。打开第一个 Today 或 Mini 时启动[窗口进程](../../apps/patina/src/window_process.rs)。两个窗口共享图形设备。启用「关闭到后台」时，关闭主窗口后 Mini 可继续使用，最后一个窗口关闭后仅保留常驻进程，继续记录。关闭该选项后，关闭主窗口会一并退出 Mini 和记录进程。
 
-在 Windows 仓库根目录运行 `cargo run` 启动 GPUI 开发预览，默认打开主窗口。用 `cargo run -- --mini` 预览 Mini。启动器按原生工作区的工具链编译，监听 Rust 源码和内嵌资源。保存后编译成功会重启预览，主窗口回到上次浏览的页面。页面草稿和弹窗随重启关闭。编译报错时可以继续操作上一次成功的预览，修正并保存后会再次编译。按 Ctrl+C 或从预览托盘退出即可结束。开发预览使用 `%LOCALAPPDATA%/Patina.GPUI.Dev/Patina.GPUI.Experimental/`，也可通过 `PATINA_GPUI_PROFILE_PARENT` 指定已有的绝对目录。
+在 Windows 仓库根目录运行 `cargo run` 启动 Patina 开发预览，默认打开主窗口。用 `cargo run -- --mini` 预览 Mini。启动器按原生工作区的工具链编译，监听 Rust 源码和内嵌资源。保存后编译成功会重启预览，主窗口回到上次浏览的页面。页面草稿和弹窗随重启关闭。编译报错时可以继续操作上一次成功的预览，修正并保存后会再次编译。按 Ctrl+C 或从预览托盘退出即可结束。开发预览使用 `%LOCALAPPDATA%/Patina.Dev/Patina/`，也可通过 `PATINA_PROFILE_PARENT` 指定已有的绝对目录。
 
 需要单次打开 Mini 时，在仓库根目录运行下列命令。
 
@@ -54,9 +54,9 @@ Patina 自己维护 Windows 桌面入口。平台层通过现有的 `windows` cr
 cargo run --locked -p patina --bin patina -- --mini
 ```
 
-不带窗口参数时，首次启动按「静默启动」偏好决定是否打开主窗口，再次启动会打开同一配置的主窗口，隐藏托盘图标后也可通过此方式返回。`--mini` 打开 Mini，`--today` 打开主窗口。左键单击「Patina · GPUI」托盘图标打开主窗口。右键菜单可打开主窗口或 Mini、暂停或恢复记录，以及退出应用。
+不带窗口参数时，首次启动按「静默启动」偏好决定是否打开主窗口，再次启动会打开同一配置的主窗口，隐藏托盘图标后也可通过此方式返回。`--mini` 打开 Mini，`--today` 打开主窗口。左键单击「Patina」托盘图标打开主窗口。右键菜单可打开主窗口或 Mini、暂停或恢复记录，以及退出应用。
 
-在「设置 → 常驻」保存「开机自启动」后，Windows 会在当前用户登录时启动相应配置的 GPUI 程序。新实验配置默认关闭该选项，启用静默启动和关闭到后台。默认数据位于 `%LOCALAPPDATA%/Patina.GPUI.Experimental/`。需要另一个测试库时，把 `PATINA_GPUI_PROFILE_PARENT` 设为已存在的绝对目录，程序仍使用该目录中的 `Patina.GPUI.Experimental/` 子目录。正式旧库的迁移历史修复与升级演练在主线接替前完成。
+在「设置 → 常驻」保存「开机自启动」后，Windows 会在当前用户登录时使用相应配置启动 Patina。新配置默认关闭该选项，启用静默启动和关闭到后台。正式版默认数据位于 `%APPDATA%/Patina/`。需要另一个测试库时，把 `PATINA_PROFILE_PARENT` 设为已存在的绝对目录，程序仍使用该目录中的 `Patina/` 子目录。正式旧库的迁移历史修复与升级演练在主线接替前完成。
 
 构建上述桌面程序后，在[专用 Windows 测试会话](../quality.md#验证范围)运行 `cargo run --locked -p patina --example native-lifecycle`，验收实际窗口、采样循环与退出。示例使用固定前台探测样本和独立临时库，程序结束后释放临时库。
 
@@ -78,7 +78,7 @@ cargo run --locked -p patina --bin patina -- --mini
 - [x] [QuietPro 图标控件](../../crates/quietpro/src/lib.rs)共享 24 px 命中框、14 px 图标、焦点和禁用样式。关闭接一次动作；固定接当前选中值和变更回调，让辅助技术能读出开关状态。调用方提供稳定 ID 和本地化名称，并持有窗口与业务状态。
 - [x] 用 Windows UI Automation 在独立示例中读到固定开关和复位按钮的名称、开关值和禁用状态。切换一次只更新一次计数，复位后按钮禁用。从仓库根目录运行 `cargo test --locked -p quietpro --features native-tests --test controls accessible_controls -- --ignored --exact`。[控件验收测试](../../crates/quietpro/tests/controls.rs)
 - [ ] 在独立的[控件示例](../../crates/quietpro/examples/controls.rs)中切换系统明暗主题，以 Tab 聚焦固定按钮，按一次 Space 或 Enter 只增加一次计数。清零后复位按钮应不可再触发。运行命令：`cargo +1.100.0 run --locked --manifest-path Cargo.toml -p quietpro --example controls`。
-- [ ] 对照现版逐项检查默认浅色、深色及缩放下的 Mini。实验版目前跟随系统明暗外观；自定义预设随设置页迁移。用键盘验证焦点可见、按钮触发一次、禁用时无回调，再验证鼠标悬停不抢输入焦点。视觉差异和组件行为分别记录。
+- [ ] 对照现版逐项检查默认浅色、深色及缩放下的 Mini。首次验证时窗口跟随系统明暗外观；自定义预设随设置页迁移。用键盘验证焦点可见、按钮触发一次、禁用时无回调，再验证鼠标悬停不抢输入焦点。视觉差异和组件行为分别记录。
 
 - [ ] 从 Mini 实际需要的主题、文本和图标按钮开始。QuietPro 定义语义颜色、尺寸、交互反馈和组件接口，内部组合 gpui-base 的交互能力。用不连接 Patina 数据库的最小示例验证明暗主题、焦点和触发回调。
 - [ ] Patina 负责窗口位置、贴边、展开和内容，用已有[窗口几何](../../apps/patina-ui/src/windows/mini/geometry.rs)与[工具状态](../../crates/activity/src/recording/tools/shortcuts.rs)接入 GPUI。收起时只消费必要状态，展开时读取活动明细。用快速收起再展开、关闭时仍有读取在途等情形，验证旧结果不会更新新窗口。[Mini 生命周期](../architecture.md#mini-生命周期)
@@ -105,7 +105,7 @@ cargo run --locked -p patina --bin patina -- --mini
 
 每项取三轮中位数。收起态私有提交节省 155.14 MiB（64.4%），工作集总和减少 416.27 MiB（64.7%），单核 CPU 下降 0.35 个百分点（相对降低 27.0%）。三轮收起态私有提交分别为 85.61、91.39、85.52 MiB，单核 CPU 分别为 0.73%、0.97%、0.95%。纯托盘的 CPU 区间与 Tauri 重叠。GPUI 在收起时保留绘制面板的画布，收起比纯托盘多用约 60.56 MiB 私有提交。工作集跨进程相加包含共享页的重复计数。
 
-复测时先按第 2 节构建桌面程序，再从仓库根目录运行 `cargo build --locked -p patina --example windows-resource-sample` 构建 Windows 采样器。在专用 Windows 测试会话运行 `cargo test --locked -p patina --features native-tests --test resources tray_mini_baseline -- --ignored --exact --nocapture`。每轮在 `artifacts/runtime-smoke/gpui-baseline-*/` 保存原始 JSONL，`result.json` 记录二进制散列、窗口尺寸和记录进度。将测试名替换为 `sampler_smoke` 可验证三个状态各 15 秒的采样流程，结果写入单独的 `gpui-smoke-*/` 目录。[资源验收测试](../../apps/patina/tests/resources.rs)
+复测时先按第 2 节构建桌面程序，再从仓库根目录运行 `cargo build --locked -p patina --example windows-resource-sample` 构建 Windows 采样器。在专用 Windows 测试会话运行 `cargo test --locked -p patina --features native-tests --test resources tray_mini_baseline -- --ignored --exact --nocapture`。每轮在 `artifacts/runtime-smoke/desktop-baseline-*/` 保存原始 JSONL，`result.json` 记录二进制散列、窗口尺寸和记录进度。将测试名替换为 `sampler_smoke` 可验证三个状态各 15 秒的采样流程，结果写入单独的 `desktop-smoke-*/` 目录。[资源验收测试](../../apps/patina/tests/resources.rs)
 
 | 场景 | 核对结果 |
 | --- | --- |
@@ -282,7 +282,7 @@ cargo test --locked -p patina --features native-tests --test pages -- --include-
 
 各页的验收范围与差异见[第 6 节](#6-history数据分类设置与关于)。
 
-长期文档沿用现有位置。产品原则、Quiet Pro 的交互约定和数据恢复规则由两版共用。GPUI 原型的路径、测量结果和待验证行为记在本方案中。
+长期文档沿用现有位置。产品原则、Quiet Pro 的交互约定和数据恢复规则由两版共用。迁移期间的路径、测量结果和待验证行为记在本方案中。
 
 页面专用逻辑随页面维护。多个 GPUI 页面共用的展示逻辑放在 `apps/patina/src/` 下按用途命名的模块，例如两个页面都需要的时间轴布局可归入 `timeline`。通用控件归 QuietPro，活动时长的计算归记录与数据层。
 
@@ -295,7 +295,7 @@ cargo test --locked -p patina --features native-tests --test pages -- --include-
 - [x] 主窗口接入历史、数据、分类、设置与关于；Today、历史和数据页共用应用详情入口。
 - [ ] 按第 6 节差异表补齐各页，逐项复验原版布局、输入、焦点、数据读数和窗口重建。设置的备份恢复还需用包含专注历史与提醒数据的样本演练。
 - [ ] **工具页以外的页面迁完后统一修订 Quiet Pro。** 对照已迁移的主窗口、各页和 Mini，按实际使用情况确定字号、间距、布局密度与控件状态。把共同规则写回现有 Quiet Pro 规范，在仓内组件和各页面落实，并复验键盘操作、明暗主题及缩放显示。
-- [ ] **主线接替。** GPUI 接替主线后，在仓库根目录直接运行 `cargo run`，验证 Patina GPUI 应用能按默认方式启动。用已发布版本的数据副本演练升级，验证历史、设置与恢复，再进行桌面生命周期和发布验收。主线切换与发布分别决定。[版本与发布规范](../release.md)
+- [ ] **主线接替。** GPUI 接替主线后，在仓库根目录直接运行 `cargo run`，验证 Patina 能按默认方式启动。用已发布版本的数据副本演练升级，验证历史、设置与恢复，再进行桌面生命周期和发布验收。主线切换与发布分别决定。[版本与发布规范](../release.md)
 - [ ] **QuietPro 独立。** 当第二个应用要使用现有组件、示例和测试能够独立运行时，再将 crate、通用规范和示例迁到新项目。Patina 改用其版本化依赖，追踪、窗口动作和业务文案继续由应用持有。
 
-工具页已接入专注、提醒和可安装 Rust 面板。当前边界见[GPUI 实验版工具插件](../architecture.md#工具插件)，桌面验收与资源数据见[已归档的执行方案](../archive/2026-11-12-gpui-tools-plugins.md)。
+工具页已接入专注、提醒和可安装 Rust 面板。当前边界见[工具插件](../architecture.md#工具插件)，桌面验收与资源数据见[已归档的执行方案](../archive/2026-11-12-gpui-tools-plugins.md)。
