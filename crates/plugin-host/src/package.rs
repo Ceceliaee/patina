@@ -5,13 +5,16 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{fs::File, io::Read, path::Path};
 
-const MAX_PACKAGE: usize = 8 * 1024 * 1024;
+pub(super) const MAX_PACKAGE: usize = 8 * 1024 * 1024;
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Package {
     pub manifest: Manifest,
-    pub wasm: String,
+    #[serde(with = "encoded_wasm")]
+    pub wasm: Vec<u8>,
+    #[serde(default, skip_serializing_if = "crate::Catalogs::is_empty")]
+    pub locales: crate::Catalogs,
     #[serde(default)]
     pub publisher: String,
     #[serde(default)]
@@ -19,9 +22,33 @@ pub struct Package {
 }
 
 impl Package {
+    pub(super) fn names(&self) -> std::collections::BTreeMap<String, String> {
+        self.locales
+            .iter()
+            .filter_map(|(tag, c)| Some((tag.clone(), c.get("plugin.name")?.clone())))
+            .collect()
+    }
+
+    pub(super) fn display_manifest(&self) -> Manifest {
+        crate::localized_manifest(&self.manifest, &self.names())
+    }
+
     fn signed_content(&self) -> Result<Vec<u8>, String> {
-        serde_json::to_vec(&("Patina tool v1", &self.manifest, &self.wasm))
-            .map_err(|e| e.to_string())
+        if !self.locales.is_empty() {
+            return serde_json::to_vec(&(
+                "Patina tool v2",
+                &self.manifest,
+                STANDARD.encode(&self.wasm),
+                &self.locales,
+            ))
+            .map_err(|e| e.to_string());
+        }
+        serde_json::to_vec(&(
+            "Patina tool v1",
+            &self.manifest,
+            STANDARD.encode(&self.wasm),
+        ))
+        .map_err(|e| e.to_string())
     }
 
     pub(super) fn bundle_digest(&self) -> Result<[u8; 32], String> {
@@ -42,23 +69,44 @@ impl Package {
         if bytes.len() > MAX_PACKAGE {
             return Err("Package exceeds 8 MiB".into());
         }
-        let package: Self = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
-        let key = STANDARD
-            .decode(&package.publisher)
-            .map_err(|e| e.to_string())?;
-        let signature = STANDARD
-            .decode(&package.signature)
-            .map_err(|e| e.to_string())?;
-        UnparsedPublicKey::new(&ED25519, key)
-            .verify(&package.signed_content()?, &signature)
-            .map_err(|_| "Invalid tool publisher signature")?;
+        let package: Self = if bytes.starts_with(b"PK") {
+            crate::archive::read(&bytes)?
+        } else if path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("patina-tool"))
+        {
+            serde_json::from_slice(&bytes).map_err(|e| e.to_string())?
+        } else {
+            return Err("Expected a plugin ZIP".into());
+        };
+        package.verify_signature()?;
         package.validated_wasm()?;
         Ok((package, format!("{:x}", Sha256::digest(bytes))))
     }
 
-    pub fn validated_wasm(&self) -> Result<Vec<u8>, String> {
+    pub(super) fn verify_signature(&self) -> Result<(), String> {
+        let key = STANDARD
+            .decode(&self.publisher)
+            .map_err(|e| e.to_string())?;
+        let signature = STANDARD
+            .decode(&self.signature)
+            .map_err(|e| e.to_string())?;
+        UnparsedPublicKey::new(&ED25519, key)
+            .verify(&self.signed_content()?, &signature)
+            .map_err(|_| "Invalid tool publisher signature")?;
+        Ok(())
+    }
+
+    pub fn validated_wasm(&self) -> Result<&[u8], String> {
+        crate::locales::validate(&self.locales).map_err(|e| e.to_string())?;
         let m = &self.manifest;
-        if m.api != 1
+        if !matches!(m.api, 1..=8)
+            || m.presentation.as_ref().is_some_and(|p| {
+                p.names.len() > 64
+                    || p.names
+                        .iter()
+                        .any(|(tag, name)| !display_text(tag, 64) || !display_text(name, 100))
+            })
             || !identifier(&m.id)
             || !identifier(&m.entry)
             || !display_text(&m.name, 100)
@@ -71,8 +119,8 @@ impl Package {
         {
             return Err("Unsupported tool manifest or capabilities".into());
         }
-        let bytes = STANDARD.decode(&self.wasm).map_err(|e| e.to_string())?;
-        if !bytes.starts_with(b"\0asm\x01\0\0\0") {
+        let bytes = self.wasm.as_slice();
+        if bytes.len() > MAX_PACKAGE || !bytes.starts_with(b"\0asm\x01\0\0\0") {
             return Err("A WebAssembly module is required".into());
         }
         Ok(bytes)
@@ -90,4 +138,19 @@ pub(super) fn identifier(value: &str) -> bool {
 
 pub(super) fn display_text(value: &str, maximum: usize) -> bool {
     !value.trim().is_empty() && value.len() <= maximum && !value.chars().any(char::is_control)
+}
+
+mod encoded_wasm {
+    use super::*;
+    use serde::{Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(wasm: &[u8], serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&STANDARD.encode(wasm))
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<u8>, D::Error> {
+        STANDARD
+            .decode(String::deserialize(deserializer)?)
+            .map_err(serde::de::Error::custom)
+    }
 }

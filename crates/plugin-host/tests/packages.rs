@@ -18,6 +18,14 @@ fn install_update_restart_uninstall() -> Result<(), Box<dyn std::error::Error>> 
     ));
     let first = host.install(&original, &install, "en-US")?;
     let id = &first.manifest.id;
+    let directory = root.join("plugins").join(id);
+    assert_eq!(
+        fs::read(directory.join("plugin.wasm"))?,
+        Package::read_verified(&original)?.0.wasm
+    );
+    assert!(
+        directory.join("manifest.json").is_file() && directory.join("signature.json").is_file()
+    );
     assert!(host.bound_installation(id).is_none());
     let panel =
         host.dispatch_panel_event(id, &first.generation, Some("increment".into()), "en-US")?;
@@ -25,15 +33,15 @@ fn install_update_restart_uninstall() -> Result<(), Box<dyn std::error::Error>> 
         matches!(&panel[..], [Control::Text(n), Control::Button {label, ..}] if n == "1" && label == "Add one")
     );
 
-    let candidate = tmp.path().join("new.patina-tool");
-    let mut invalid: Package = serde_json::from_slice(&fs::read(&update)?)?;
+    let candidate = tmp.path().join("new.zip");
+    let mut invalid: Package = Package::read_verified(&update)?.0;
     let key = ring::signature::Ed25519KeyPair::from_pkcs8(&fs::read(std::env::var(
         "PATINA_COUNTER_SIGNING_KEY",
     )?)?)
     .map_err(|_| "invalid fixture key")?;
     invalid.manifest.entry = "missing".into();
     invalid.sign(&key)?;
-    fs::write(&candidate, serde_json::to_vec(&invalid)?)?;
+    invalid.write_zip(fs::File::create(&candidate)?)?;
     let preview = host.inspect(&candidate)?;
     assert!(host.install(&candidate, &preview, "en-US").is_err());
     fs::copy(&update, &candidate)?;
@@ -61,10 +69,10 @@ fn install_update_restart_uninstall() -> Result<(), Box<dyn std::error::Error>> 
     assert!(
         matches!(&panel[..], [Control::Text(n), Control::Button {label, ..}] if n == "1" && label == "Increment")
     );
-    let mut separate: Package = serde_json::from_slice(&fs::read(&original)?)?;
+    let mut separate: Package = Package::read_verified(&original)?.0;
     separate.manifest.id = "example.other".into();
     separate.sign(&key)?;
-    fs::write(&candidate, serde_json::to_vec(&separate)?)?;
+    separate.write_zip(fs::File::create(&candidate)?)?;
     let preview = host.inspect(&candidate)?;
     let other = host.install(&candidate, &preview, "en-US")?;
     assert!(
@@ -78,27 +86,28 @@ fn install_update_restart_uninstall() -> Result<(), Box<dyn std::error::Error>> 
     drop(host);
     let mut host = Host::open(root)?;
     assert_eq!(host.list().len(), 1);
+    assert!(!directory.exists());
     let preview = host.inspect(&original)?;
     let restored = host.install(&original, &preview, "en-US")?;
     assert!(
-        matches!(&host.dispatch_panel_event(id, &restored.generation, None, "en-US")?[0], Control::Text(n) if n == "1")
+        matches!(&host.dispatch_panel_event(id, &restored.generation, None, "en-US")?[0], Control::Text(n) if n == "0")
     );
     separate.manifest.capabilities.push(Capability::Reminders);
     separate.sign(&key)?;
-    fs::write(&candidate, serde_json::to_vec(&separate)?)?;
+    separate.write_zip(fs::File::create(&candidate)?)?;
     assert!(host.inspect(&candidate).is_err());
     separate.manifest.capabilities.pop();
-    separate.manifest.id = "patina.focus".into();
+    separate.manifest.id = "patina.example".into();
     separate.sign(&key)?;
-    fs::write(&candidate, serde_json::to_vec(&separate)?)?;
-    assert!(host.inspect(&candidate).is_err());
-    let mut impostor: Package = serde_json::from_slice(&fs::read(&original)?)?;
+    separate.write_zip(fs::File::create(&candidate)?)?;
+    assert!(host.inspect(&candidate).is_ok());
+    let mut impostor: Package = Package::read_verified(&original)?.0;
     let alt = ring::signature::Ed25519KeyPair::generate_pkcs8(&ring::rand::SystemRandom::new())
         .map_err(|_| "fixture key generation")?;
     let alt = ring::signature::Ed25519KeyPair::from_pkcs8(alt.as_ref())
         .map_err(|_| "invalid fixture key")?;
     impostor.sign(&alt)?;
-    fs::write(&candidate, serde_json::to_vec(&impostor)?)?;
+    impostor.write_zip(fs::File::create(&candidate)?)?;
     assert!(host.inspect(&candidate).is_err());
     host.uninstall(id, &restored.generation)?;
     assert!(host.inspect(&candidate).is_err());
@@ -123,6 +132,16 @@ fn previous_registry_reopens_with_its_generation_and_state()
         serde_json::to_vec(&historical)?,
     )?;
     let mut host = Host::open(root.path().into())?;
+    assert!(
+        root.path()
+            .join("plugins")
+            .join(&id)
+            .join("plugin.wasm")
+            .is_file()
+    );
+    let migrated: serde_json::Value =
+        serde_json::from_slice(&fs::read(root.path().join("tools.json"))?)?;
+    assert!(migrated[&id].get("package").is_none());
     assert!(host.bound_installation(&id).is_none());
     assert!(
         matches!(&host.dispatch_panel_event(&id,"previous-installation",None,"en-US")?[0],Control::Text(n) if n=="41")

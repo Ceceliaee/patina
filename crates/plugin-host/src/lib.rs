@@ -1,3 +1,9 @@
+mod archive;
+mod directories;
+mod layout;
+mod locales;
+pub use locales::Catalogs;
+mod notification;
 mod package;
 
 use extism::{Plugin, PluginBuilder, Wasm};
@@ -15,8 +21,8 @@ use std::{
 };
 
 mod bindings;
-pub use bindings::CapabilityData;
-use bindings::{Binding, bound_data, candidate_data, requires_binding};
+use bindings::requires_binding;
+pub use bindings::{CapabilityData, DataProvider};
 pub use patina_plugin_sdk::installation::{Installed, Preview, now_ms};
 
 #[derive(Debug, PartialEq, Eq)]
@@ -50,9 +56,54 @@ pub struct TimerNotice {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
+struct InstalledFiles {
+    manifest: Manifest,
+    digest: [u8; 32],
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    names: BTreeMap<String, String>,
+}
+
+fn localized_manifest(manifest: &Manifest, names: &BTreeMap<String, String>) -> Manifest {
+    let mut display = manifest.clone();
+    if !names.is_empty() {
+        let presentation =
+            display
+                .presentation
+                .get_or_insert_with(|| patina_plugin_sdk::Presentation {
+                    names: Default::default(),
+                    order: u16::MAX,
+                });
+        presentation.names.extend(names.clone());
+    }
+    display
+}
+
+impl InstalledFiles {
+    fn display_manifest(&self) -> Manifest {
+        localized_manifest(&self.manifest, &self.names)
+    }
+
+    fn new(package: &Package) -> Result<Self, String> {
+        Ok(Self {
+            manifest: package.manifest.clone(),
+            digest: package.bundle_digest()?,
+            names: package.names(),
+        })
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 struct InstallationRecord {
     #[serde(default)]
     requires_timer_restart: bool,
+    #[serde(default)]
+    installed_from_file: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    previous_capabilities: Vec<Capability>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    files: Option<InstalledFiles>,
+    // Present only while migrating a registry that embedded the complete package.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     package: Option<Package>,
     state: Value,
     generation: String,
@@ -62,6 +113,9 @@ struct InstallationRecord {
     notice: Option<TimerNotice>,
     #[serde(default)]
     retiring_at: Option<i64>,
+    // Older pending removals were confirmed under the keep-data policy.
+    #[serde(default)]
+    delete_data_on_removal: bool,
     #[serde(default)]
     publisher: String,
 }
@@ -69,14 +123,14 @@ struct InstallationRecord {
 pub struct Host {
     root: PathBuf,
     records: BTreeMap<String, InstallationRecord>,
-    loaded: BTreeMap<String, Plugin>,
+    loaded: BTreeMap<String, LoadedPlugin>,
     retry_at: BTreeMap<String, i64>,
-    bindings: BTreeMap<String, Binding>,
+    provider: Option<Box<DataProvider>>,
 }
 
 impl Host {
     pub fn open(root: PathBuf) -> Result<Self, String> {
-        fs::create_dir_all(&root).map_err(|e| e.to_string())?;
+        fs::create_dir_all(root.join("plugins")).map_err(|e| e.to_string())?;
         let records = match fs::read(root.join("tools.json")) {
             Ok(bytes) => serde_json::from_slice(&bytes).map_err(|e| format!("Read tools: {e}"))?,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => BTreeMap::new(),
@@ -87,20 +141,46 @@ impl Host {
             records,
             loaded: BTreeMap::new(),
             retry_at: BTreeMap::new(),
-            bindings: BTreeMap::new(),
+            provider: None,
         };
+        host.recover_change().map_err(|e| e.to_string())?;
+        let embedded: Vec<_> = host
+            .records
+            .iter()
+            .filter(|(_, r)| r.package.is_some())
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in embedded {
+            let mut record = host.records[&id].clone();
+            let package = record.package.take().unwrap();
+            if package.manifest.id != id || package.publisher != record.publisher {
+                return Err("Embedded plugin identity mismatch".into());
+            }
+            // Historical unsigned defaults are migrated on disk and replaced by signed seeds before execution.
+            if !package.publisher.is_empty() || !package.signature.is_empty() {
+                package.verify_signature()?;
+            }
+            package.validated_wasm()?;
+            host.save_installation(&id, record, Some(&package))?;
+        }
         let pending: Vec<_> = host
             .records
             .iter()
             .filter_map(|(id, record)| {
                 let at = record.retiring_at?;
-                (!requires_binding(&record.package.as_ref()?.manifest)).then(|| (id.clone(), at))
+                (!requires_binding(&record.files.as_ref()?.manifest)
+                    && record.previous_capabilities.is_empty())
+                .then(|| (id.clone(), at))
             })
             .collect();
         for (id, at) in pending {
             host.finish_removal(&id, at)?;
         }
         Ok(host)
+    }
+
+    pub fn task_data_directory(&self) -> PathBuf {
+        self.root.join("data")
     }
 
     pub fn list(&self) -> Vec<Installed> {
@@ -111,7 +191,7 @@ impl Host {
                     return None;
                 }
                 Some(Installed {
-                    manifest: r.package.as_ref()?.manifest.clone(),
+                    manifest: r.files.as_ref()?.display_manifest(),
                     generation: r.generation.clone(),
                 })
             })
@@ -120,54 +200,72 @@ impl Host {
 
     /// Install new bundled plugins and update existing ones. The removal
     /// record is retained across restarts, including upgrades of the application.
-    fn sync_bundled_plugin(&mut self, package: Package, locale: &str) -> Result<(), String> {
+    pub fn seed(&mut self, package: Package, locale: &str) -> Result<(), String> {
+        package.verify_signature()?;
+        package.validated_wasm()?;
         let id = package.manifest.id.clone();
-        if let Some(previous) = self.records.get(&id).and_then(|r| r.package.as_ref())
-            && (previous.wasm != package.wasm
-                || previous.manifest != package.manifest
-                || previous.publisher != package.publisher
-                || previous.signature != package.signature)
+        if let Some(record) = self.records.get(&id) {
+            if record.publisher.is_empty() && record.files.is_none() {
+                // A verified bundled copy supplies the first key for legacy removals from either source.
+                return self.save(
+                    &id,
+                    InstallationRecord {
+                        publisher: package.publisher.clone(),
+                        ..record.clone()
+                    },
+                );
+            }
+            if !record.publisher.is_empty() || record.installed_from_file {
+                self.check_publisher(&package)?;
+            }
+        }
+        if let Some(record) = self.records.get(&id)
+            && !record.installed_from_file
+            && let Some(previous) = &record.files
+            && (record.publisher != package.publisher
+                || previous.digest != package.bundle_digest()?
+                || self.read_installed(&id).is_err())
         {
-            self.activate(package, locale)?;
+            self.activate(package, locale, false)?;
             return Ok(());
         }
         if !self.records.contains_key(&id) {
-            package.validated_wasm()?;
-            self.save(
+            self.save_installation(
                 &id,
                 InstallationRecord {
-                    package: Some(package),
+                    package: None,
+                    files: None,
                     requires_timer_restart: false,
+                    installed_from_file: false,
+                    previous_capabilities: Vec::new(),
                     state: Value::Null,
                     generation: uuid::Uuid::new_v4().to_string(),
                     timer: None,
                     notice: None,
                     retiring_at: None,
-                    publisher: String::new(),
+                    delete_data_on_removal: false,
+                    publisher: package.publisher.clone(),
                 },
+                Some(&package),
             )?;
         }
         Ok(())
     }
 
-    pub fn restore_bundled(&mut self, package: Package, locale: &str) -> Result<Installed, String> {
-        if candidate_data(&self.bindings, &package)?.is_none() {
-            return Err("Unknown bundled plugin".into());
-        }
+    pub fn restore_default(&mut self, package: Package, locale: &str) -> Result<Installed, String> {
+        package.verify_signature()?;
         if self
             .records
             .get(&package.manifest.id)
-            .is_some_and(|r| r.package.is_some())
+            .is_some_and(|r| r.files.is_some())
         {
             return Err("Tool already installed".into());
         }
-        self.activate(package, locale)
+        self.check_publisher(&package)?;
+        self.activate(package, locale, false)
     }
 
-    fn check_external(&self, package: &Package) -> Result<(), String> {
-        if package.manifest.id.starts_with("patina.") || requires_binding(&package.manifest) {
-            return Err("The patina namespace is reserved for bundled tools".into());
-        }
+    fn check_publisher(&self, package: &Package) -> Result<(), String> {
         if self
             .records
             .get(&package.manifest.id)
@@ -180,13 +278,16 @@ impl Host {
 
     pub fn inspect(&self, path: &Path) -> Result<Preview, String> {
         let (p, digest) = Package::read_verified(path)?;
-        self.check_external(&p)?;
+        self.check_publisher(&p)?;
+        if requires_binding(&p.manifest) && self.provider.is_none() {
+            return Err("Task capability unavailable".into());
+        }
         let replaces = self
             .records
             .get(&p.manifest.id)
             .map(|r| r.generation.clone());
         Ok(Preview {
-            manifest: p.manifest,
+            manifest: p.display_manifest(),
             digest,
             replaces,
             publisher: p.publisher,
@@ -200,31 +301,72 @@ impl Host {
         locale: &str,
     ) -> Result<Installed, InstallError> {
         let (p, digest) = Package::read_verified(path)?;
-        self.check_external(&p)?;
+        self.check_publisher(&p)?;
+        if requires_binding(&p.manifest) && self.provider.is_none() {
+            return Err("Task capability unavailable".to_owned().into());
+        }
         let id = p.manifest.id.clone();
         let previous = self.records.get(&id);
         if digest != preview.digest
-            || p.manifest != preview.manifest
+            || p.display_manifest() != preview.manifest
             || p.publisher != preview.publisher
             || previous.map(|r| &r.generation) != preview.replaces.as_ref()
         {
             return Err(InstallError::StalePreview);
         }
-        Ok(self.activate(p, locale)?)
+        if let Some(record) = previous
+            && record.retiring_at.is_none()
+            && let Some(files) = &record.files
+            && files.digest == p.bundle_digest()?
+            && self.read_installed(&id).is_ok()
+        {
+            return Ok(Installed {
+                manifest: files.display_manifest(),
+                generation: record.generation.clone(),
+            });
+        }
+        Ok(self.activate(p, locale, true)?)
     }
 
-    fn activate(&mut self, p: Package, locale: &str) -> Result<Installed, String> {
+    fn activate(
+        &mut self,
+        p: Package,
+        locale: &str,
+        installed_from_file: bool,
+    ) -> Result<Installed, String> {
         let id = p.manifest.id.clone();
+        if self
+            .records
+            .get(&id)
+            .is_some_and(|r| r.retiring_at.is_some())
+        {
+            return Err("Tool removal is still pending".into());
+        }
         let requires_timer_restart = self
             .records
             .get(&id)
-            .is_some_and(|r| r.package.is_none() || r.requires_timer_restart);
+            .is_some_and(|r| r.files.is_none() || r.requires_timer_restart);
         let state = self
             .records
             .get(&id)
             .map(|r| r.state.clone())
             .unwrap_or_default();
-        let mut plugin = compile(&p)?;
+        let mut previous_capabilities = Vec::new();
+        let mut notice = None;
+        if let Some(record) = self.records.get(&id)
+            && let Some(files) = &record.files
+        {
+            previous_capabilities = record.previous_capabilities.clone();
+            for cap in &files.manifest.capabilities {
+                if matches!(cap, Capability::Focus | Capability::Reminders)
+                    && !previous_capabilities.contains(cap)
+                {
+                    previous_capabilities.push(*cap);
+                }
+            }
+            notice = record.notice.clone();
+        }
+        let mut plugin = LoadedPlugin::new(&p)?;
         let mut response = invoke(
             &mut plugin,
             &p.manifest,
@@ -232,33 +374,38 @@ impl Host {
             Event::Open,
             locale,
             now_ms(),
-            candidate_data(&self.bindings, &p)?,
+            self.data_for(&p.manifest)?.as_deref(),
         )?;
         let installed = Installed {
-            manifest: p.manifest.clone(),
+            manifest: p.display_manifest(),
             generation: uuid::Uuid::new_v4().to_string(),
         };
+        if let Some(n) = &mut notice {
+            n.generation.clone_from(&installed.generation);
+        }
         let publisher = p.publisher.clone();
         if requires_timer_restart {
             response.timer = None;
         }
-        self.save(
+        self.save_installation(
             &id,
             InstallationRecord {
-                package: Some(p),
+                files: None,
+                package: None,
                 requires_timer_restart,
+                installed_from_file,
+                previous_capabilities,
                 state: response.state,
                 generation: installed.generation.clone(),
                 timer: response.timer,
-                notice: None,
+                notice,
                 retiring_at: None,
+                delete_data_on_removal: false,
                 publisher,
             },
+            Some(&p),
         )?;
         self.retry_at.remove(&id);
-        if let Some(binding) = self.bindings.get_mut(&id) {
-            binding.generation = Some(installed.generation.clone());
-        }
         self.loaded.insert(id, plugin);
         Ok(installed)
     }
@@ -269,9 +416,7 @@ impl Host {
             .filter(|r| {
                 r.generation == generation
                     && r.retiring_at.is_none()
-                    && r.package
-                        .as_ref()
-                        .is_some_and(|p| p.manifest.id == id && p.publisher == r.publisher)
+                    && r.files.as_ref().is_some_and(|p| p.manifest.id == id)
             })
             .ok_or_else(|| "Tool installation has changed".into())
     }
@@ -290,6 +435,21 @@ impl Host {
             locale,
             now_ms(),
         )
+    }
+
+    pub fn select_tab(
+        &mut self,
+        id: &str,
+        generation: &str,
+        tab: String,
+        locale: &str,
+    ) -> Result<Vec<Control>, String> {
+        let record = self.current(id, generation)?;
+        if !package::identifier(&tab) || !record.files.as_ref().is_some_and(|p| p.manifest.api >= 4)
+        {
+            return Err("Unsupported plugin tab selection".into());
+        }
+        self.dispatch(id, generation, Event::SelectTab(tab), locale, now_ms())
     }
 
     pub fn submit(
@@ -326,7 +486,7 @@ impl Host {
     ) -> Result<Vec<Control>, String> {
         self.current(id, generation)?;
         let r = &self.records[id];
-        let p = r.package.as_ref().unwrap();
+        let p = r.files.as_ref().unwrap();
         let due_notice = if matches!(event, Event::Due) {
             r.timer.as_ref().map(|timer| TimerNotice {
                 id: id.into(),
@@ -342,13 +502,27 @@ impl Host {
             None
         };
         let manifest = p.manifest.clone();
-        let data = bound_data(&self.bindings, &p.manifest, generation)?;
+        let data = self.data_for(&p.manifest)?;
         let state = r.state.clone();
         if !self.loaded.contains_key(id) {
-            let plugin = compile(p)?;
+            let plugin = LoadedPlugin::new(&self.read_installed(id)?)?;
             self.loaded.insert(id.to_owned(), plugin);
         }
-        let explicit_action = matches!(event, Event::Action(_) | Event::Submit { .. });
+        let explicit_action = matches!(
+            event,
+            Event::Action(_)
+                | Event::Submit { .. }
+                | Event::Notification {
+                    action: Some(_),
+                    ..
+                }
+        );
+        let handled_timer = matches!(
+            &event,
+            Event::Notification { notice, action: Some(_) }
+                if matches!(notice.target, patina_plugin_sdk::notification::NoticeTarget::Timer | patina_plugin_sdk::notification::NoticeTarget::Focus { .. })
+                    && r.notice.as_ref().is_some_and(|pending| pending.at_ms == notice.at_ms)
+        );
         let result = invoke(
             self.loaded.get_mut(id).unwrap(),
             &manifest,
@@ -356,7 +530,7 @@ impl Host {
             event,
             locale,
             now,
-            data,
+            data.as_deref(),
         );
         let mut response = match result {
             Ok(response) => response,
@@ -378,12 +552,17 @@ impl Host {
             || response.state != current.state
             || response.timer != current.timer
             || due_notice.is_some()
+            || handled_timer
         {
             let updated = InstallationRecord {
                 requires_timer_restart,
                 state: response.state,
                 timer: response.timer,
-                notice: due_notice.or_else(|| current.notice.clone()),
+                notice: if handled_timer {
+                    None
+                } else {
+                    due_notice.or_else(|| current.notice.clone())
+                },
                 ..current.clone()
             };
             if let Err(e) = self.save(id, updated) {
@@ -409,6 +588,7 @@ impl Host {
             id,
             InstallationRecord {
                 retiring_at: Some(now),
+                delete_data_on_removal: true,
                 timer: None,
                 notice: None,
                 ..record.clone()
@@ -420,56 +600,67 @@ impl Host {
     fn finish_removal(&mut self, id: &str, now: i64) -> Result<(), String> {
         let record = &self.records[id];
         let mut state = record.state.clone();
-        let Some(package) = record.package.as_ref() else {
-            return Err("Missing retiring installation".into());
-        };
-        if package.manifest.id != id {
+        let files = record
+            .files
+            .as_ref()
+            .ok_or("Missing retiring installation")?;
+        if files.manifest.id != id {
             return Err("Retiring plugin identity mismatch".into());
         }
-        let binding = self.bindings.get(id);
-        if requires_binding(&package.manifest) {
-            let binding = binding.ok_or("Plugin capability unavailable")?;
-            binding.verify_owner(package, &record.publisher)?;
-            binding.data.suspend(now)?;
-        }
-        if let Some(p) = record
-            .package
-            .as_ref()
-            .filter(|p| p.manifest.capabilities.contains(&Capability::Timer))
-        {
-            // Let cooperative timers settle elapsed time. A broken guest must still be removable.
-            if let Ok(data) = candidate_data(&self.bindings, p)
-                && let Ok(mut guest) = compile(p)
-                && let Ok(response) = invoke(
-                    &mut guest,
-                    &p.manifest,
-                    state.clone(),
-                    Event::Uninstall,
-                    "en-US",
-                    now,
-                    data,
-                )
-            {
-                state = response.state;
+        let mut owned = files.manifest.clone();
+        for cap in &record.previous_capabilities {
+            if !owned.capabilities.contains(cap) {
+                owned.capabilities.push(*cap);
             }
         }
-        self.save(
+        let data = self.data_for(&files.manifest)?;
+        if !record.delete_data_on_removal
+            && let Some(data) = &data
+        {
+            data.suspend(now)?;
+        }
+        // A broken timer must still be removable.
+        if files.manifest.capabilities.contains(&Capability::Timer)
+            && let Ok(p) = self.read_installed(id)
+            && let Ok(mut guest) = LoadedPlugin::new(&p)
+            && let Ok(response) = invoke(
+                &mut guest,
+                &p.manifest,
+                state.clone(),
+                Event::Uninstall,
+                "en-US",
+                now,
+                data.as_deref(),
+            )
+        {
+            state = response.state;
+        }
+        if record.delete_data_on_removal {
+            if let Some(data) = self.data_for(&owned)? {
+                data.delete_data()?;
+            }
+            state = Value::Null;
+        }
+        self.save_installation(
             id,
             InstallationRecord {
+                files: None,
                 package: None,
                 requires_timer_restart: true,
+                installed_from_file: record.installed_from_file,
+                previous_capabilities: Vec::new(),
                 generation: uuid::Uuid::new_v4().to_string(),
                 state,
                 timer: None,
                 notice: None,
                 retiring_at: None,
+                delete_data_on_removal: false,
                 publisher: record.publisher.clone(),
             },
+            None,
         )?;
-        if let Some(binding) = self.bindings.get_mut(id) {
-            binding.generation = None;
-        }
         self.loaded.remove(id);
+        self.retry_at.remove(id);
         Ok(())
     }
 
@@ -510,8 +701,8 @@ impl Host {
         if let Some(notice) = &r.notice {
             labels.push(notice.label.clone());
         }
-        let manifest = &r.package.as_ref().unwrap().manifest;
-        if let Some(data) = bound_data(&self.bindings, manifest, generation)? {
+        let manifest = &r.files.as_ref().unwrap().manifest;
+        if let Some(data) = self.data_for(manifest)? {
             labels.extend(data.uninstall_impact(locale, now_ms(), &manifest.name)?);
         }
         labels.sort();
@@ -582,10 +773,13 @@ impl Host {
 }
 
 fn compile(package: &Package) -> Result<Plugin, String> {
+    let mut config = wasmtime::Config::new();
+    config.cranelift_opt_level(wasmtime::OptLevel::None);
     let manifest = extism::Manifest::new([Wasm::data(package.validated_wasm()?)])
         .with_memory_max(256)
         .with_timeout(Duration::from_millis(250));
     PluginBuilder::new(manifest)
+        .with_wasmtime_config(config)
         .with_cache_disabled()
         .with_wasi(false)
         .with_fuel_limit(5_000_000)
@@ -593,8 +787,22 @@ fn compile(package: &Package) -> Result<Plugin, String> {
         .map_err(|e| e.to_string())
 }
 
+struct LoadedPlugin {
+    wasm: Plugin,
+    locales: Catalogs,
+}
+
+impl LoadedPlugin {
+    fn new(package: &Package) -> Result<Self, String> {
+        Ok(Self {
+            wasm: compile(package)?,
+            locales: package.locales.clone(),
+        })
+    }
+}
+
 fn invoke(
-    plugin: &mut Plugin,
+    plugin: &mut LoadedPlugin,
     manifest: &Manifest,
     state: Value,
     event: Event,
@@ -602,8 +810,18 @@ fn invoke(
     now_ms: i64,
     data: Option<&dyn CapabilityData>,
 ) -> Result<Response, String> {
-    let can_mutate = matches!(event, Event::Action(_) | Event::Submit { .. } | Event::Due);
+    let can_mutate = matches!(
+        event,
+        Event::Action(_)
+            | Event::Submit { .. }
+            | Event::Due
+            | Event::Notification {
+                action: Some(_),
+                ..
+            }
+    );
     let request = Request {
+        messages: locales::select(&plugin.locales, locale),
         data: match data {
             Some(store) => store.read(locale, now_ms, &state)?,
             None => Value::Null,
@@ -615,6 +833,7 @@ fn invoke(
     };
     let input = serde_json::to_vec(&request).map_err(|e| e.to_string())?;
     let bytes = plugin
+        .wasm
         .call::<_, &[u8]>(&manifest.entry, input)
         .map_err(|e| e.to_string())?;
     if bytes.len() > 256 * 1024 {
@@ -629,9 +848,38 @@ fn invoke(
         return Err("Invalid tool timer or missing timer capability".into());
     }
     let mut ids = HashSet::new();
+    let mut has_page = false;
     if response.panel.len() > 256
         || !response.panel.iter().all(|c| match c {
+            Control::Page(page) => {
+                manifest.api >= 2
+                    && !std::mem::replace(&mut has_page, true)
+                    && layout::valid(
+                        page,
+                        &response.panel,
+                        manifest.api,
+                        manifest.capabilities.contains(&Capability::Reminders),
+                    )
+            }
             Control::Text(s) => s.len() <= 8192,
+            Control::ListRow {
+                id,
+                title,
+                detail,
+                actions,
+                ..
+            } => {
+                package::identifier(id)
+                    && ids.insert(id)
+                    && title.len() <= 4096
+                    && detail.len() <= 4096
+                    && actions.len() <= 8
+                    && actions.iter().all(|(id, label)| {
+                        package::identifier(id)
+                            && ids.insert(id)
+                            && package::display_text(label, 256)
+                    })
+            }
             Control::Clock { label, .. } => package::display_text(label, 256),
             Control::Select {
                 id,

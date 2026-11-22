@@ -1,4 +1,3 @@
-use base64::{Engine, engine::general_purpose::STANDARD};
 use patina_plugin_host::{Manifest, Package};
 use ring::{rand::SystemRandom, signature::Ed25519KeyPair};
 use std::{
@@ -33,29 +32,42 @@ fn signing_key(path: &Path) -> io::Result<Ed25519KeyPair> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let [manifest, wasm, output, key]: [PathBuf; 4] = env::args_os()
-        .skip(1)
-        .map(PathBuf::from)
-        .collect::<Vec<_>>()
-        .try_into()
-        .map_err(|_| "Usage: pack-tool MANIFEST WASM OUTPUT PUBLISHER_KEY")?;
-    let manifest: Manifest = serde_json::from_slice(&fs::read(manifest)?)?;
-    let mut package = Package {
-        manifest,
-        wasm: STANDARD.encode(fs::read(wasm)?),
-        publisher: String::new(),
-        signature: String::new(),
+    let args: Vec<PathBuf> = env::args_os().skip(1).map(PathBuf::from).collect();
+    let (package, output) = match args.as_slice() {
+        [directory, output] => (Package::read_directory(directory)?, output),
+        [directory, output, key] if directory.is_dir() => (
+            Package::sign_directory(directory, &signing_key(key)?)?,
+            output,
+        ),
+        [manifest, wasm, output, key] => {
+            let locales =
+                Package::read_locales(manifest.parent().unwrap_or_else(|| Path::new(".")))?;
+            let manifest: Manifest = serde_json::from_slice(&fs::read(manifest)?)?;
+            let mut package = Package {
+                manifest,
+                locales,
+                wasm: fs::read(wasm)?,
+                publisher: String::new(),
+                signature: String::new(),
+            };
+            package.validated_wasm().map_err(io::Error::other)?;
+            package.sign(&signing_key(key)?)?;
+            (package, output)
+        }
+        _ => {
+            return Err(concat!(
+                "Usage: pack-tool PLUGIN_FOLDER OUTPUT.zip [PUBLISHER_KEY]",
+                " (or MANIFEST WASM OUTPUT.zip PUBLISHER_KEY)"
+            )
+            .into());
+        }
     };
-    package.validated_wasm().map_err(io::Error::other)?;
-    package
-        .sign(&signing_key(&key)?)
-        .map_err(io::Error::other)?;
     let dir = output
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or_else(|| std::path::Path::new("."));
     let mut file = tempfile::NamedTempFile::new_in(dir)?;
-    serde_json::to_writer(file.as_file_mut(), &package)?;
+    package.write_zip(file.as_file_mut())?;
     Package::read_verified(file.path()).map_err(io::Error::other)?;
     file.persist(output)?;
     Ok(())

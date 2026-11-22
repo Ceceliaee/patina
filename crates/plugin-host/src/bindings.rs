@@ -1,11 +1,12 @@
-use super::{Capability, Host, Installed, Manifest, Package};
+use super::{Capability, Host, Installed, Manifest};
 use serde_json::Value;
-use std::collections::BTreeMap;
+use std::sync::Arc;
 
-pub trait CapabilityData: Send {
+pub trait CapabilityData: Send + Sync {
     fn read(&self, locale: &str, now: i64, state: &Value) -> Result<Value, String>;
     fn apply(&self, command: Value, now: i64) -> Result<(), String>;
     fn suspend(&self, now: i64) -> Result<(), String>;
+    fn delete_data(&self) -> Result<(), String>;
     fn uninstall_impact(
         &self,
         locale: &str,
@@ -14,129 +15,55 @@ pub trait CapabilityData: Send {
     ) -> Result<Vec<String>, String>;
 }
 
-pub(super) struct Binding {
-    trusted_digest: [u8; 32],
-    pub(super) generation: Option<String>,
-    capability: Capability,
-    pub(super) data: Box<dyn CapabilityData>,
-}
+pub type DataProvider = dyn Fn(&Manifest) -> Result<Arc<dyn CapabilityData>, String> + Send + Sync;
 
-fn data_capabilities(manifest: &Manifest) -> impl Iterator<Item = Capability> + '_ {
+pub(super) fn requires_binding(manifest: &Manifest) -> bool {
     manifest
         .capabilities
         .iter()
-        .copied()
-        .filter(|c| !matches!(c, Capability::Panel | Capability::Timer))
+        .any(|c| matches!(c, Capability::Focus | Capability::Reminders))
 }
 
-pub(super) fn requires_binding(manifest: &Manifest) -> bool {
-    data_capabilities(manifest).next().is_some()
-}
-
-impl Binding {
-    pub(super) fn verify_owner(&self, package: &Package, publisher: &str) -> Result<(), String> {
-        if !publisher.is_empty()
-            || !package.publisher.is_empty()
-            || !package.signature.is_empty()
-            || !data_capabilities(&package.manifest).eq([self.capability])
-        {
-            return Err("Plugin capability owner mismatch".into());
+impl Host {
+    pub fn set_data_provider(&mut self, provider: Box<DataProvider>) -> Result<(), String> {
+        self.provider = Some(provider);
+        let retiring: Vec<_> = self
+            .records
+            .iter()
+            .filter_map(|(id, r)| Some((id.clone(), r.retiring_at?)))
+            .collect();
+        for (id, at) in retiring {
+            self.finish_removal(&id, at)?;
         }
         Ok(())
     }
-}
 
-pub(super) fn candidate_data<'a>(
-    bindings: &'a BTreeMap<String, Binding>,
-    package: &Package,
-) -> Result<Option<&'a dyn CapabilityData>, String> {
-    if !requires_binding(&package.manifest) {
-        return Ok(None);
+    pub(super) fn data_for(
+        &self,
+        manifest: &Manifest,
+    ) -> Result<Option<Arc<dyn CapabilityData>>, String> {
+        if !requires_binding(manifest) {
+            return Ok(None);
+        }
+        let provider = self
+            .provider
+            .as_ref()
+            .ok_or("Task capability unavailable")?;
+        provider(manifest).map(Some)
     }
-    let binding = bindings
-        .get(&package.manifest.id)
-        .ok_or("Plugin capability unavailable")?;
-    binding.verify_owner(package, &package.publisher)?;
-    if binding.trusted_digest != package.bundle_digest()? {
-        return Err("Plugin differs from the trusted bundle".into());
-    }
-    Ok(Some(binding.data.as_ref()))
-}
 
-pub(super) fn bound_data<'a>(
-    bindings: &'a BTreeMap<String, Binding>,
-    manifest: &Manifest,
-    generation: &str,
-) -> Result<Option<&'a dyn CapabilityData>, String> {
-    if !requires_binding(manifest) {
-        return Ok(None);
+    pub fn providers(&self, capability: Capability) -> impl Iterator<Item = Installed> + '_ {
+        self.records.keys().filter_map(move |id| {
+            self.bound_installation(id)
+                .filter(|p| p.manifest.capabilities.contains(&capability))
+        })
     }
-    let binding = bindings
-        .get(&manifest.id)
-        .filter(|b| b.generation.as_deref() == Some(generation))
-        .ok_or("Plugin capability unavailable for this installation")?;
-    Ok(Some(binding.data.as_ref()))
-}
-impl Host {
-    pub fn bind_bundled(
-        &mut self,
-        package: Package,
-        capability: Capability,
-        data: Box<dyn CapabilityData>,
-        locale: &str,
-    ) -> Result<(), String> {
-        if !package.manifest.id.starts_with("patina.")
-            || !package.publisher.is_empty()
-            || !package.signature.is_empty()
-            || !data_capabilities(&package.manifest).eq([capability])
-        {
-            return Err("Invalid bundled capability".into());
-        }
-        let id = package.manifest.id.clone();
-        let previous = self.bindings.insert(
-            id.clone(),
-            Binding {
-                trusted_digest: package.bundle_digest()?,
-                generation: None,
-                capability,
-                data,
-            },
-        );
-        let result = (|| {
-            if let Some(now) = self.records.get(&id).and_then(|r| r.retiring_at) {
-                self.finish_removal(&id, now)?;
-            }
-            self.sync_bundled_plugin(package, locale)?;
-            if let Some(record) = self.records.get(&id)
-                && record.package.is_some()
-                && record.publisher.is_empty()
-            {
-                self.bindings.get_mut(&id).unwrap().generation = Some(record.generation.clone());
-            }
-            Ok::<_, String>(())
-        })();
-        if result.is_err() {
-            match previous {
-                Some(binding) => {
-                    self.bindings.insert(id, binding);
-                }
-                None => {
-                    self.bindings.remove(&id);
-                }
-            }
-        }
-        result
-    }
+
     pub fn bound_installation(&self, id: &str) -> Option<Installed> {
         let record = self.records.get(id)?;
-        let package = self
-            .current(id, &record.generation)
-            .ok()?
-            .package
-            .as_ref()?;
-        bound_data(&self.bindings, &package.manifest, &record.generation).ok()??;
-        Some(Installed {
-            manifest: package.manifest.clone(),
+        let files = self.current(id, &record.generation).ok()?.files.as_ref()?;
+        (self.provider.is_some() && requires_binding(&files.manifest)).then(|| Installed {
+            manifest: files.display_manifest(),
             generation: record.generation.clone(),
         })
     }
