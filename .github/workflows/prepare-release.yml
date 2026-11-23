@@ -234,7 +234,6 @@ jobs:
             dist-release/Patina_${{ needs.resolve.outputs.version }}_x64-setup.exe
             dist-release/Patina_${{ needs.resolve.outputs.version }}_arm64-setup.exe
             dist-release/SHA256SUMS.txt
-            dist-release/desktop-latest.json
             dist-release/latest.json
           if-no-files-found: error
           retention-days: 7
@@ -252,7 +251,6 @@ jobs:
             dist-release/Patina_${{ needs.resolve.outputs.version }}_x64-setup.exe
             dist-release/Patina_${{ needs.resolve.outputs.version }}_arm64-setup.exe
             dist-release/SHA256SUMS.txt
-            dist-release/desktop-latest.json
             dist-release/latest.json
 
       - name: Verify published bytes

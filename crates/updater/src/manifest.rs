@@ -76,6 +76,41 @@ pub struct Artifact {
     pub size: u64,
 }
 
+// The last Tauri release can establish that the installed version is current.
+// Only a desktop manifest can supply an installable release.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TauriManifest {
+    version: String,
+    #[serde(rename = "notes")]
+    _notes: String,
+    #[serde(rename = "pub_date")]
+    _pub_date: String,
+    platforms: BTreeMap<String, TauriArtifact>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TauriArtifact {
+    url: String,
+    signature: String,
+}
+
+impl TauriManifest {
+    fn is_published_baseline(&self, target: Target) -> bool {
+        let Some(artifact) = self.platforms.get(target.key()) else {
+            return false;
+        };
+        let installer = match target {
+            Target::X64 => "/v1.10.0/Patina_1.10.0_x64-setup.exe",
+            Target::Arm64 => "/v1.10.0/Patina_1.10.0_arm64-setup.exe",
+        };
+        self.version == "1.10.0"
+            && https_url(&artifact.url).is_ok_and(|url| url.path().ends_with(installer))
+            && decode_signature(&artifact.signature).is_ok()
+    }
+}
+
 pub fn https_url(value: &str) -> Result<url::Url> {
     let url = url::Url::parse(value).map_err(|e| e.to_string())?;
     if url.scheme() != "https"
@@ -98,11 +133,23 @@ pub fn parse(
     if bytes.len() as u64 > MAX_MANIFEST {
         return Err("Update manifest is too large".into());
     }
-    let manifest: Manifest = serde_json::from_slice(bytes).map_err(|e| e.to_string())?;
+    let installed = Version::parse(current).map_err(|e| e.to_string())?;
+    let manifest: Manifest = match serde_json::from_slice(bytes) {
+        Ok(manifest) => manifest,
+        Err(error) => {
+            if installed >= Version::new(1, 10, 0)
+                && config.application == "patina-desktop"
+                && serde_json::from_slice::<TauriManifest>(bytes)
+                    .is_ok_and(|manifest| manifest.is_published_baseline(target))
+            {
+                return Ok(None);
+            }
+            return Err(error.to_string());
+        }
+    };
     if manifest.schema != 1 || manifest.application != config.application {
         return Err("Update manifest belongs to a different application or schema".into());
     }
-    let installed = Version::parse(current).map_err(|e| e.to_string())?;
     let offered = Version::parse(&manifest.version).map_err(|e| e.to_string())?;
     if offered <= installed || (!offered.pre.is_empty() && installed.pre.is_empty()) {
         return Ok(None);
@@ -127,12 +174,14 @@ pub fn parse(
     Ok(Some(release))
 }
 
+fn decode_signature(encoded: &str) -> Result<Signature> {
+    let bytes = STANDARD.decode(encoded).map_err(|e| e.to_string())?;
+    Signature::decode(std::str::from_utf8(&bytes).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())
+}
+
 fn signature(release: &Release, config: &Config) -> Result<(PublicKey, Signature)> {
-    let bytes = STANDARD
-        .decode(&release.signature)
-        .map_err(|e| e.to_string())?;
-    let signature = Signature::decode(std::str::from_utf8(&bytes).map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())?;
+    let signature = decode_signature(&release.signature)?;
     let expected = format!(
         "{} {} {}",
         config.application,

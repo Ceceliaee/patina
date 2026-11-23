@@ -13,8 +13,7 @@ type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
 const EXECUTABLE: &str = "patina.exe";
 const TARGETS: [Target; 2] = [Target::X64, Target::Arm64];
-const MANIFEST: &str = "desktop-latest.json";
-const TAURI_MANIFEST: &str = "latest.json";
+const MANIFEST: &str = "latest.json";
 
 fn version(text: &str) -> Result<Version> {
     let value = Version::parse(text)?;

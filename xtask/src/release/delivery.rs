@@ -1,6 +1,5 @@
 use super::{
-    MANIFEST, Result, TARGETS, TAURI_MANIFEST, Version, assets, gate, installer_name, repository,
-    version,
+    MANIFEST, Result, TARGETS, Version, assets, gate, installer_name, repository, version,
 };
 use std::{env, fs::OpenOptions, io::Write, path::Path, process::Command};
 
@@ -103,11 +102,7 @@ pub fn resolve(root: &Path) -> Result<()> {
 pub fn readback(dir: &Path, ver: &Version, repo: &str) -> Result<()> {
     repository(repo)?;
     let temp = tempfile::tempdir()?;
-    let mut files = vec![
-        MANIFEST.to_owned(),
-        TAURI_MANIFEST.to_owned(),
-        "SHA256SUMS.txt".to_owned(),
-    ];
+    let mut files = vec![MANIFEST.to_owned(), "SHA256SUMS.txt".to_owned()];
     files.extend(TARGETS.map(|t| installer_name(ver, t)));
     let mut command = Command::new("gh");
     command
@@ -217,28 +212,18 @@ pub fn sync_mirror(dir: &Path, repo: &str) -> Result<()> {
     let ver = version(&next.version)?;
     let temp = tempfile::tempdir()?;
     let downloaded = temp.path().join("readback");
-    for key in [MANIFEST, TAURI_MANIFEST] {
-        if !bucket.list(key, false)?.iter().any(|listed| listed == key) {
-            continue;
-        }
+    if bucket
+        .list(MANIFEST, false)?
+        .iter()
+        .any(|key| key == MANIFEST)
+    {
         checked(
             bucket
                 .aws()
-                .args(["s3", "cp", &bucket.object(key)])
+                .args(["s3", "cp", &bucket.object(MANIFEST)])
                 .arg(&downloaded),
         )?;
-        if key == TAURI_MANIFEST {
-            #[derive(serde::Deserialize)]
-            struct PublishedVersion {
-                version: String,
-            }
-            let current: PublishedVersion =
-                serde_json::from_reader(std::fs::File::open(&downloaded)?)?;
-            if version(&current.version)? < ver {
-                continue;
-            }
-        }
-        assets::advance(&next, &assets::read_manifest(&downloaded)?)?;
+        assets::advance_from_file(&next, &downloaded)?;
     }
     publish_mirror_files(
         dir,
@@ -287,6 +272,5 @@ pub(super) fn publish_mirror_files(
     let stage = tempfile::tempdir()?;
     let file = stage.path().join(MANIFEST);
     assets::write_manifest(&file, next)?;
-    publish(&file, MANIFEST, true)?;
-    publish(&file, TAURI_MANIFEST, true)
+    publish(&file, MANIFEST, true)
 }

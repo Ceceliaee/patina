@@ -1,0 +1,15 @@
+{
+  "version": "1.10.0",
+  "notes": "zh-CN: 新增独立迷你窗、循环提醒和自由专注，统一活动图表的主题配色，并改进后台运行和备份恢复。\nen-US: Patina adds a standalone mini window, recurring reminders, and free focus sessions, unifies theme-aware colors across activity charts, and improves background operation and backup recovery.",
+  "pub_date": "2026-11-07T09:55:31.067Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTOFZuazl1VGFEU0pIOGhseGpMak1VMUFBYjJsS051VHdFS1ZuRzA0SlN5cFc0bUg3WVZSWTVJRzBuUWtaRDBlV2dZNTNleVRsb3FoMlZoRkUwLzBXaEgwRmxvS0RVT3dnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0MDQ1Mjk2CWZpbGU6UGF0aW5hXzEuMTAuMF94NjQtc2V0dXAuZXhlCXZlcnNpb246MS4xMC4wClZZeDJaRncvZkxwSGFGNG94Q09LbzFqSkZjOWZscWxhZnBOTVpYdDN2NVY2Tm9uT3FMdjl5ZFM3ejdBL1FaSzJUUC84UVppMDgyZWFkT3FyR1NLQ0R3PT0K",
+      "url": "https://github.com/Ceceliaee/patina/releases/download/v1.10.0/Patina_1.10.0_x64-setup.exe"
+    },
+    "windows-aarch64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTOFZuazl1VGFEU0pVS3lPVXVWTUl4aE1KS3dSUmZNMFlzcTlLbnZpOW05OURJSW5uVXY1bEVGVEVSNDRHVjVucGEwYnRMS1o5NjhVREFlendIclhERlhkMTUvY09aWHc0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0MDQ1MDYzCWZpbGU6UGF0aW5hXzEuMTAuMF9hcm02NC1zZXR1cC5leGUJdmVyc2lvbjoxLjEwLjAKZEdxSmpBWG1VWVFWNGJFTXAycG5neGc3cmJiZmhObzVCWW9OcmdYa2ZKck1xUHgrRnVFQUE2TWZLTEtQbnVEMnhmc1BVa1R1K21XdG1XbG5lRmEvRHc9PQo=",
+      "url": "https://github.com/Ceceliaee/patina/releases/download/v1.10.0/Patina_1.10.0_arm64-setup.exe"
+    }
+  }
+}

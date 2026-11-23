@@ -82,9 +82,9 @@ fn signed_bundles_require_one_program_for_each_architecture() -> Result<()> {
     check()?;
     let manifest = read_manifest(&output.join(MANIFEST))?;
     let published_bytes = fs::read(output.join(MANIFEST))?;
-    fs::write(output.join(TAURI_MANIFEST), b"{}")?;
+    fs::write(output.join(MANIFEST), b"{}")?;
     assert!(check().is_err());
-    fs::write(output.join(TAURI_MANIFEST), &published_bytes)?;
+    fs::write(output.join(MANIFEST), &published_bytes)?;
     let mirrored = mirror(
         manifest.clone(),
         "example/patina",
@@ -95,7 +95,7 @@ fn signed_bundles_require_one_program_for_each_architecture() -> Result<()> {
             .url
             .ends_with("/patina/desktop/releases/v0.2.0/Patina_0.2.0_x64-setup.exe")
     );
-    for failure in [None, Some(1), Some(2), Some(3), Some(4)] {
+    for failure in [None, Some(1), Some(2), Some(3)] {
         let mut published = Vec::new();
         let result =
             delivery::publish_mirror_files(&output, &mirrored, &config, |path, key, root| {
@@ -105,23 +105,29 @@ fn signed_bundles_require_one_program_for_each_architecture() -> Result<()> {
                     return Err("simulated object readback failure".into());
                 }
                 if root {
-                    assert!(matches!(key, MANIFEST | TAURI_MANIFEST));
+                    assert_eq!(key, MANIFEST);
                     assert_eq!(read_manifest(path)?, mirrored);
                 }
                 Ok(())
             });
         assert_eq!(result.is_err(), failure.is_some());
-        assert_eq!(published.len(), failure.unwrap_or(4));
+        assert_eq!(published.len(), failure.unwrap_or(3));
         assert_eq!(
             published.contains(&MANIFEST.to_owned()),
             failure.is_none_or(|n| n >= 3)
         );
-        assert_eq!(
-            published.contains(&TAURI_MANIFEST.to_owned()),
-            failure.is_none_or(|n| n == 4)
-        );
     }
     advance(&mirrored, &mirrored)?;
+    let current_path = root.path().join(MANIFEST);
+    fs::write(
+        &current_path,
+        include_bytes!("../../../crates/updater/tests/fixtures/tauri-1.10.0.json"),
+    )?;
+    for (version, allowed) in [("1.9.0", false), ("1.10.0", false), ("1.11.0", true)] {
+        let mut next = mirrored.clone();
+        next.version = version.into();
+        assert_eq!(advance_from_file(&next, &current_path).is_ok(), allowed);
+    }
     let mut newer = mirrored.clone();
     newer.version = "0.10.0".into();
     assert!(advance(&mirrored, &newer).is_err());

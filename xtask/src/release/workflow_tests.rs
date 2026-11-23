@@ -95,7 +95,6 @@ fn release_jobs_publish_only_verified_immutable_assets() {
             "dist-release/Patina_\x24{{ needs.resolve.outputs.version }}_x64-setup.exe",
             "dist-release/Patina_\x24{{ needs.resolve.outputs.version }}_arm64-setup.exe",
             "dist-release/SHA256SUMS.txt",
-            "dist-release/desktop-latest.json",
             "dist-release/latest.json"
         ]
     );

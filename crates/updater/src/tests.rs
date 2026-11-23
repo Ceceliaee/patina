@@ -133,7 +133,7 @@ impl Transport for FixtureTransport {
         if url.ends_with("unavailable") {
             return Err("fixture unavailable".into());
         }
-        let data = if url.ends_with("manifest") {
+        let data = if url.ends_with("manifest") || url.ends_with("/latest.json") {
             &self.manifest
         } else {
             &self.payload
@@ -162,6 +162,74 @@ fn settled(service: &Service) -> Snapshot {
         std::thread::sleep(Duration::from_millis(5));
     }
 }
+
+#[test]
+fn checking_the_published_tauri_manifest_reports_current_without_a_download() {
+    let root = tempfile::tempdir().unwrap();
+    let config = Config::bundled();
+    assert_eq!(
+        config.endpoints,
+        [
+            "https://github.com/Ceceliaee/patina/releases/latest/download/latest.json",
+            "https://pub-bbc052ece7724df99c13ef8520244c5c.r2.dev/latest.json"
+        ]
+    );
+    let published = include_bytes!("../tests/fixtures/tauri-1.10.0.json");
+    for target in [Target::X64, Target::Arm64] {
+        let transport = Arc::new(FixtureTransport {
+            manifest: published.to_vec(),
+            payload: vec![],
+            calls: AtomicUsize::new(0),
+        });
+        let service = Service::new(
+            "1.10.0",
+            target,
+            config.clone(),
+            root.path().into(),
+            transport.clone(),
+        )
+        .unwrap();
+        service.request(Request::Check).unwrap();
+        let snapshot = settled(&service);
+        assert_eq!(snapshot.phase, Phase::Current, "{:?}", snapshot.error);
+        assert!(snapshot.release.is_none());
+        assert!(service.request(Request::Download).is_err());
+        assert_eq!(transport.calls.load(Ordering::SeqCst), 1);
+    }
+}
+
+#[test]
+fn tauri_check_never_offers_an_installer_or_accepts_a_broken_desktop_manifest() {
+    let published: Value =
+        serde_json::from_slice(include_bytes!("../tests/fixtures/tauri-1.10.0.json")).unwrap();
+    let config = Config::bundled();
+    let target = Target::X64;
+    assert!(parse(&published, &config, "1.9.11", target).is_err());
+    assert!(
+        parse(&published, &config, "1.11.0", target)
+            .unwrap()
+            .is_none()
+    );
+    for (field, wrong) in [
+        ("version", json!("1.11.0")),
+        ("schema", json!(1)),
+        ("application", json!("other")),
+    ] {
+        let mut manifest = published.clone();
+        manifest[field] = wrong;
+        assert!(parse(&manifest, &config, "1.10.0", target).is_err());
+    }
+    for (field, wrong) in [
+        ("url", json!("https://example.com/other.exe")),
+        ("signature", json!("broken")),
+        ("size", json!(42)),
+    ] {
+        let mut manifest = published.clone();
+        manifest["platforms"][target.key()][field] = wrong;
+        assert!(parse(&manifest, &config, "1.10.0", target).is_err());
+    }
+}
+
 #[test]
 fn fallback_deduplicates_and_preserves_verified_download() {
     let root = tempfile::tempdir().unwrap();

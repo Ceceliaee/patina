@@ -40,7 +40,7 @@
 - 根 `Cargo.lock` 中所有继承产品版本的本地包条目
 - Git tag
 - GitHub Release 标题
-- 桌面更新清单 `desktop-latest.json` 和供已发布客户端读取的同内容清单 `latest.json`
+- 桌面更新清单 `latest.json`
 
 长期政策不保存当前版本副本。发布 validator 负责比较版本文件、tag、Release 与 updater manifest，避免靠人工同步 prose。
 
@@ -354,11 +354,11 @@ GitHub Release 中的 Windows 安装包附件统一使用无空格文件名，�
 
 Patina Web Sync 浏览器扩展由独立公开仓库 [`patina-web-sync`](https://github.com/Ceceliaee/patina-web-sync) 发布，不再作为 Patina Release 的必备附件。
 
-Patina Release 发布 x64 与 ARM64 两个主应用安装包、`SHA256SUMS.txt` 和两份更新清单。浏览器扩展的安装来源、版本号、商店素材、三店提交、AMO 公开 listed XPI 与扩展 release asset 由 `patina-web-sync` 仓库负责。
+Patina Release 发布 x64 与 ARM64 两个主应用安装包、`SHA256SUMS.txt` 和更新清单 `latest.json`。浏览器扩展的安装来源、版本号、商店素材、三店提交、AMO 公开 listed XPI 与扩展 release asset 由 `patina-web-sync` 仓库负责。
 
 浏览器扩展的用户配置说明由 Patina README 与 Patina 设置页承载。Patina 设置页应指向 `patina-web-sync` 的发布页或商店入口，并继续说明本机端口与 token 配置步骤。
 
-双架构使用同一版本和源码引用，分别构建 `x86_64-pc-windows-msvc` 与 `aarch64-pc-windows-msvc`。一份 `desktop-latest.json` 同时包含 `windows-x86_64` 与 `windows-aarch64`，任一路构建、验证或证明失败均阻断公开发布。应用自动更新按已安装应用架构选包；ARM 设备上的 x64 应用继续取得 x64 更新，不自动迁移架构。
+双架构使用同一版本和源码引用，分别构建 `x86_64-pc-windows-msvc` 与 `aarch64-pc-windows-msvc`。一份 `latest.json` 同时包含 `windows-x86_64` 与 `windows-aarch64`，任一路构建、验证或证明失败均阻断公开发布。应用自动更新按已安装应用架构选包；ARM 设备上的 x64 应用继续取得 x64 更新，不自动迁移架构。
 
 发布说明通过 Windows 下载表提供两个安装包的直链与架构标签，不重复展示校验步骤；`SHA256SUMS.txt` 和 GitHub Artifact Attestation 仍由发布资产与工作流承载。ARM64 以原生 CI、自动化测试和资产验证为发布门槛，不以实体设备人工验收作为发布前置，也不将自动化覆盖之外的真实桌面行为描述为已验证。
 
@@ -380,12 +380,12 @@ Patina Release 发布 x64 与 ARM64 两个主应用安装包、`SHA256SUMS.txt` 
 
 GitHub Release 继续作为正式发布源、主下载入口和主更新清单来源。
 
-原生更新器默认优先读取 GitHub Release asset 上的 `desktop-latest.json`。如果配置了 Cloudflare R2 备用镜像，R2 只承担更新兜底职责：
+原生更新器与 Tauri v1.10.0 都先读取 GitHub Release 的 `latest.json`。原生更新器识别 v1.10.0 旧格式清单时，仅在已安装同版或更高版本时报告已是最新。提供安装必须使用含应用标识、架构、包大小和签名的原生清单。如果配置了 Cloudflare R2 备用镜像，R2 只承担更新兜底职责：
 
 - R2 endpoint 排在 GitHub endpoint 之后
-- R2 版 `desktop-latest.json` 中的安装包 URL 指向 `desktop/releases/v<version>/` 下的镜像对象
+- R2 版 `latest.json` 中的安装包 URL 指向 `desktop/releases/v<version>/` 下的镜像对象
 - R2 只接收稳定版；同步串行执行，拒绝用较低版本覆盖当前清单，也拒绝替换同版本的不同资产。
-- 两个安装包上传并回读成功后，将同一份镜像清单写入根路径的 `desktop-latest.json` 和 `latest.json`。两者都回读成功后，才清理 `desktop/releases/` 下旧版本的安装包。历史 `releases/` 对象继续保留。
+- 两个安装包上传并回读成功后，将镜像清单写入根路径的 `latest.json`。清单回读成功后，才清理 `desktop/releases/` 下旧版本的安装包。历史 `releases/` 对象继续保留。
 - R2 不同步浏览器扩展包；浏览器扩展由 `patina-web-sync` 独立发布
 - GitHub Releases 继续保留完整历史版本
 - R2 未配置、同步失败或被停用时，不改变 GitHub Release 的主发布事实
@@ -396,7 +396,7 @@ GitHub Release 继续作为正式发布源、主下载入口和主更新清单�
 
 ### Windows 安装与更新
 
-Windows 应用 ID 为 `Ceceliaee.Patina`。开始菜单和已安装的应用均显示为 Patina。[`prepare-release.yml`](../.github/workflows/prepare-release.yml) 发布 NSIS 安装包和原生更新清单 `desktop-latest.json`，沿用 `vX.Y.Z` 标签和 `Patina vX.Y.Z` 发布标题。
+Windows 应用 ID 为 `Ceceliaee.Patina`。开始菜单和已安装的应用均显示为 Patina。[`prepare-release.yml`](../.github/workflows/prepare-release.yml) 发布 NSIS 安装包和原生更新清单 `latest.json`，沿用 `vX.Y.Z` 标签和 `Patina vX.Y.Z` 发布标题。
 
 Tauri v1.10.0 通过 `latest.json` 取得同一架构的签名安装包。首个升级版本须高于 1.10.0，并使用旧客户端信任的签名密钥。安装器按旧版的 `/UPDATE` 参数读取 Windows 安装登记，在原位置替换程序。旧数据库和备份目录继续使用自定义位置或旧默认位置 `%APPDATA%/Patina/`。资料位置冲突、数据库不可用或旧版仍有待完成的数据搬移时，安装停止并保留旧程序。新安装的默认位置见[桌面资料目录](architecture.md#运行身份与持久化隔离)。
 
@@ -433,7 +433,7 @@ GitHub Actions 生成正式发布资产后、发布 GitHub Release 前，还必�
 
 - `cargo xtask release verify <version> <bundle-dir> <output-dir> <repository> v<version>`
 
-独立校验命令重新读取磁盘产物。`<bundle-dir>` 下的 `x64/` 和 `arm64/` 各含三个文件，即 `patina.exe`、签名安装包和该架构的 `desktop-latest.json`。校验器核对桌面程序的 PE 架构、输入与最终安装包的 SHA-256、完整 `SHA256SUMS.txt`、清单版本、平台、字节数和下载 URL，并使用应用公钥验证安装包签名及版本、架构注释。发布后从 GitHub 下载五个公开附件，逐一比对本地产物摘要。回读失败时停止镜像同步，保留已发布资产。
+独立校验命令重新读取磁盘产物。`<bundle-dir>` 下的 `x64/` 和 `arm64/` 各含三个文件，即 `patina.exe`、签名安装包和该架构的 `latest.json`。校验器核对桌面程序的 PE 架构、输入与最终安装包的 SHA-256、完整 `SHA256SUMS.txt`、清单版本、平台、字节数和下载 URL，并使用应用公钥验证安装包签名及版本、架构注释。发布后从 GitHub 下载四个公开附件，逐一比对本地产物摘要。回读失败时停止镜像同步，保留已发布资产。
 
 默认不在本地手工生成 `dist-release`、安装包或更新清单。
 `cargo xtask release` 的 `write-release-notes`、`package` 和 `prepare` 子命令

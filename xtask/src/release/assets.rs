@@ -1,6 +1,6 @@
 use super::{
-    EXECUTABLE, MANIFEST, Result, TARGETS, TAURI_MANIFEST, Target, Version, arch, asset_url,
-    installer_name, version,
+    EXECUTABLE, MANIFEST, Result, TARGETS, Target, Version, arch, asset_url, installer_name,
+    version,
 };
 use patina_updater::{Artifact, Config, MAX_INSTALLER, MAX_MANIFEST, Manifest, Release};
 use sha2::{Digest, Sha256};
@@ -26,7 +26,7 @@ pub fn plain_https(base: &str) -> Result<String> {
     Ok(url.as_str().trim_end_matches('/').to_owned())
 }
 
-pub fn read_manifest(path: &Path) -> Result<Manifest> {
+fn read_manifest_json(path: &Path) -> Result<serde_json::Value> {
     let mut bytes = Vec::new();
     File::open(path)?
         .take(MAX_MANIFEST + 1)
@@ -34,7 +34,14 @@ pub fn read_manifest(path: &Path) -> Result<Manifest> {
     if bytes.len() as u64 > MAX_MANIFEST {
         return Err("Manifest exceeds 1 MiB".into());
     }
-    let raw: serde_json::Value = serde_json::from_slice(&bytes)?;
+    Ok(serde_json::from_slice(&bytes)?)
+}
+
+pub fn read_manifest(path: &Path) -> Result<Manifest> {
+    parse_manifest(read_manifest_json(path)?)
+}
+
+fn parse_manifest(raw: serde_json::Value) -> Result<Manifest> {
     let manifest: Manifest = serde_json::from_value(raw.clone())?;
     if serde_json::to_value(&manifest)? != raw {
         return Err("Unexpected or missing manifest fields".into());
@@ -206,12 +213,7 @@ pub fn prepare(
         &stage.path().join(MANIFEST),
         &combined(ver, notes, config, inputs),
     )?;
-    // Tauri's static updater accepts the same version, platform URLs and Minisign signatures.
-    fs::copy(
-        stage.path().join(MANIFEST),
-        stage.path().join(TAURI_MANIFEST),
-    )?;
-    names.extend(["SHA256SUMS.txt", MANIFEST, TAURI_MANIFEST]);
+    names.extend(["SHA256SUMS.txt", MANIFEST]);
     publish_files(stage.path(), output, names)
 }
 
@@ -248,18 +250,10 @@ pub fn verify_assets(
     if read_manifest(&output.join(MANIFEST))? != combined(ver, notes, config, inputs) {
         return Err("Published manifest differs from signed inputs and release notes".into());
     }
-    if sha256_file(&output.join(TAURI_MANIFEST))? != sha256_file(&output.join(MANIFEST))? {
-        return Err("The two update manifests differ".into());
-    }
-    let mut allowed: BTreeSet<String> = [
-        MANIFEST,
-        TAURI_MANIFEST,
-        "SHA256SUMS.txt",
-        "release-notes.md",
-    ]
-    .into_iter()
-    .map(str::to_owned)
-    .collect();
+    let mut allowed: BTreeSet<String> = [MANIFEST, "SHA256SUMS.txt", "release-notes.md"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
     let mut sums = String::new();
     for i in inputs {
         let dst = output.join(&i.name);
@@ -331,4 +325,21 @@ pub fn advance(next: &Manifest, current: &Manifest) -> Result<()> {
         return Err("Mirror cannot go backwards or replace immutable version content".into());
     }
     Ok(())
+}
+
+pub fn advance_from_file(next: &Manifest, path: &Path) -> Result<()> {
+    let raw = read_manifest_json(path)?;
+    // Pre-migration mirrors store Tauri's static manifest under the same object key.
+    if raw.get("schema").is_none()
+        && raw.get("application").is_none()
+        && raw["platforms"].is_object()
+        && let Some(published) = raw["version"].as_str()
+    {
+        let previous = version(published)?;
+        if previous <= Version::new(1, 10, 0) && previous < mirror_version(next)? {
+            return Ok(());
+        }
+        return Err("Mirror must advance past the published Tauri version".into());
+    }
+    advance(next, &parse_manifest(raw)?)
 }
