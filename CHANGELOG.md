@@ -20,15 +20,31 @@ App note en: TBD.
 
 ### Changed
 
-- Windows 版可从 v1.10.0 的「检查更新」原地升级，沿用原来的数据库和备份目录。
-
 ### Fixed
-
-- 修复 Windows 版在数据目录路径含空格时无法完成应用内更新的问题。更新后会从原数据目录重新启动。
 
 ### Removed
 
 ### Internal
+
+## [2.0.0] - 2026-11-23
+
+Release: Patina 2.0 用 Rust 和 GPUI 重写了 Windows 桌面界面，将提醒与专注纳入插件市场，从 v1.10.0 升级可保留活动记录和备份。
+App note: Patina 2.0 用 Rust 和 GPUI 重写了 Windows 桌面界面，将提醒与专注纳入插件市场，从 v1.10.0 升级可保留活动记录和备份。
+App note en: Patina 2.0 introduces a native Windows interface built with Rust and GPUI, brings Reminder and Focus to a new plugin store, and preserves your activity history and backups when you upgrade from v1.10.0.
+
+### Added
+
+- 新增「工具 → 插件市场」，预装「提醒」和「专注」两款免费插件，沿用已有任务和记录。可从本地 ZIP 安装插件，安装前可查看插件请求的权限。
+- 新增主窗口缩放设置。在「设置 → 外观 → 界面」调整比例，或拖动非最大化窗口的边缘，文字、图表和控件会一起缩放。
+
+### Changed
+
+- 主窗口、迷你窗和提醒通知均改用 GPUI 原生绘制，桌面端不再依赖 WebView2。
+- 从 v1.10.0 的「关于 → 检查更新」可原地升级到新版。升级后继续使用原来的数据库和备份目录，支持含空格的自定义路径。
+
+### Internal
+
+- 内置 SQLite 从 3.46.0 升级至 3.54.1，包含 WAL 模式下的页缓存修复。
 
 ## [1.10.0] - 2026-11-07
 
