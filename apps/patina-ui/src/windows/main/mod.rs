@@ -309,7 +309,7 @@ impl MainWindow {
             Section::About => {
                 self.cancel_opening_page(cx);
                 let view =
-                    cx.new(|cx| About::new(self.client.clone(), self.about_status.take(), cx));
+                    cx.new(|cx| About::new(self.client.clone(), self.about_status.take(), win, cx));
                 self.open_when_ready(view, About::ready_to_present, Page::About, win, cx);
             }
             Section::Settings => {

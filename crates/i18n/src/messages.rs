@@ -700,7 +700,6 @@ pub fn update_later(locale: Locale) -> String { super::format_text(locale, "upda
 pub fn update_manual_download(locale: Locale) -> String { super::format_text(locale, "update.manualDownload", &[]) }
 pub fn update_not_checked(locale: Locale) -> String { super::format_text(locale, "update.notChecked", &[]) }
 pub fn update_progress_pending(locale: Locale) -> String { super::format_text(locale, "update.progressPending", &[]) }
-pub fn update_redownload_installer(locale: Locale) -> String { super::format_text(locale, "update.redownloadInstaller", &[]) }
 pub fn update_release_notes(locale: Locale) -> String { super::format_text(locale, "update.releaseNotes", &[]) }
 pub fn update_restart_install(locale: Locale) -> String { super::format_text(locale, "update.restartInstall", &[]) }
 pub fn update_support(locale: Locale) -> String { super::format_text(locale, "update.support", &[]) }

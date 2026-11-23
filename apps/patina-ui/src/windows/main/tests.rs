@@ -19,6 +19,20 @@ fn about_status_request(requests: &std::sync::mpsc::Receiver<FromWindow>) -> u64
         .expect("expected local updater status request")
 }
 
+fn about_check_request(requests: &std::sync::mpsc::Receiver<FromWindow>) -> u64 {
+    requests
+        .try_iter()
+        .find_map(|message| match message {
+            FromWindow::Request(id, query)
+                if matches!(*query, WindowRequest::Update(UpdateRequest::Check)) =>
+            {
+                Some(id)
+            }
+            _ => None,
+        })
+        .expect("expected update check request")
+}
+
 #[gpui_kit::test]
 fn cold_resume_builds_only_the_saved_page_and_normal_reopen_keeps_it(cx: &mut TestAppContext) {
     use patina_desktop_protocol::{MainNavigation, MainTarget};
@@ -621,12 +635,124 @@ fn about_shows_the_actual_update_actions_on_first_frame_and_reentry(cx: &mut Tes
     cx.run_until_parked();
     assert!(has(cx, "downloads"));
     assert!(!has(cx, "update-progress"));
+    click(cx, "downloads");
+    assert!(requests.try_iter().any(|message| matches!(message, FromWindow::Request(_, request)
+        if matches!(*request, WindowRequest::OpenExternal(ref url) if url == "https://github.com/Ceceliaee/patina/releases/latest"))));
+    assert!(!has(cx, "later-update"));
+}
+
+#[gpui_kit::test]
+fn update_check_and_current_status_stay_in_the_card(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+    let (client, requests) = crate::client::Client::test_connection();
+    let (handle, _) = cx.update(|cx| MainWindow::open(cx, client.clone()).unwrap());
+    cx.update_window(handle, |_, win, cx| win.click("about.title", cx))
+        .unwrap();
+    let mut status = Snapshot::idle("1.10.0");
+    client.test_answer(
+        about_status_request(&requests),
+        Reply::Update(status.clone()),
+    );
+    cx.run_until_parked();
+    cx.update_window(handle, |_, win, cx| {
+        win.render_frame(cx);
+        win.click("check-updates", cx);
+        win.render_frame(cx);
+        assert_eq!(win.find("check-updates").disabled(), Some(true));
+        assert!(win.try_find("later-update").is_none());
+        assert!(win.try_find("release-link").is_none());
+        assert!(win.try_find("update-progress").is_none());
+    })
+    .unwrap();
+    cx.run_until_parked();
+    client.test_reject(
+        about_check_request(&requests),
+        patina_desktop_protocol::RequestError::Disconnected,
+    );
+    cx.run_until_parked();
+    cx.update_window(handle, |_, win, cx| {
+        win.render_frame(cx);
+        win.click("retry-update", cx);
+        win.render_frame(cx);
+        assert_eq!(win.find("check-updates").disabled(), Some(true));
+        assert!(win.try_find("later-update").is_none());
+        assert!(win.try_find("update-progress").is_none());
+    })
+    .unwrap();
+    cx.run_until_parked();
+    status.phase = patina_updater::Phase::Current;
+    client.test_answer(about_check_request(&requests), Reply::Update(status));
+    cx.run_until_parked();
+    cx.update_window(handle, |_, win, cx| {
+        win.render_frame(cx);
+        assert_ne!(win.find("check-updates").disabled(), Some(true));
+        win.find("releases");
+        assert!(win.try_find("release-link").is_none());
+        assert!(win.try_find("later-update").is_none());
+        assert!(win.try_find("update-progress").is_none());
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn update_notes_size_to_content_and_scroll_above_the_actions(cx: &mut TestAppContext) {
+    use gpui_kit::{ScrollDelta, point, px};
+
+    cx.update(gpui_kit::init);
+    let (client, requests) = crate::client::Client::test_connection();
+    let (handle, _) = cx.update(|cx| MainWindow::open(cx, client.clone()).unwrap());
+    cx.update_window(handle, |_, win, cx| win.click("about.title", cx))
+        .unwrap();
+    client.test_answer(
+        about_status_request(&requests),
+        Reply::Update(Snapshot::idle("1.0.0")),
+    );
+    cx.run_until_parked();
+    let open_notes = |cx: &mut TestAppContext, notes: String| {
+        cx.update_window(handle, |_, win, cx| win.click("check-updates", cx))
+            .unwrap();
+        cx.run_until_parked();
+        let mut status = available_update();
+        status.release.as_mut().unwrap().notes = notes;
+        client.test_answer(about_check_request(&requests), Reply::Update(status));
+        cx.run_until_parked();
+    };
+    open_notes(cx, "Release notes".into());
+    let short = cx
+        .update_window(handle, |_, win, cx| {
+            win.render_frame(cx);
+            let body = win.find("update-dialog-body").bounds();
+            let notes = win.find("update-release-notes").bounds();
+            assert!((body.bottom() - notes.bottom()).abs() <= px(1.));
+            win.click("later-update", cx);
+            body
+        })
+        .unwrap();
+    open_notes(cx, "Release notes\n".repeat(100));
+    cx.update_window(handle, |_, win, cx| {
+        win.render_frame(cx);
+        let body = win.find("update-dialog-body").bounds();
+        let footer = win.find("download-detail").bounds();
+        let notes = win.find("update-release-notes").bounds();
+        let expected_width = px(500. - 2. * quietpro::DIALOG_FRAME_INSET);
+        assert!((body.size.width - expected_width).abs() <= px(1.));
+        assert_eq!(body.size.width, short.size.width);
+        assert!(body.size.height > short.size.height && notes.bottom() > body.bottom());
+        assert!(body.bottom() <= footer.top() && footer.bottom() < win.viewport_size().height);
+        win.scroll(
+            "update-dialog-body",
+            ScrollDelta::Pixels(point(px(0.), px(-10000.))),
+            cx,
+        );
+        let end = win.find("update-release-notes").bounds();
+        assert!((body.bottom() - end.bottom()).abs() <= px(1.));
+        assert_eq!(win.find("download-detail").bounds(), footer);
+    })
+    .unwrap();
 }
 
 #[gpui_kit::test]
 fn update_progress_moves_to_the_card_after_later(cx: &mut TestAppContext) {
-    use patina_updater::Request;
-
     cx.update(gpui_kit::init);
     let (client, requests) = crate::client::Client::test_connection();
     let (handle, _) = cx.update(|cx| MainWindow::open(cx, client.clone()).unwrap());
@@ -636,6 +762,7 @@ fn update_progress_moves_to_the_card_after_later(cx: &mut TestAppContext) {
                 win.click("later-update", cx);
             }
             win.render_frame(cx);
+            assert!(win.try_find("installer-link").is_none());
             assert_eq!(win.find_all("update-progress").len(), 1);
             let card = win.within("about-update-card");
             assert_eq!(card.try_find("update-progress").is_some(), in_card);
@@ -651,25 +778,22 @@ fn update_progress_moves_to_the_card_after_later(cx: &mut TestAppContext) {
     cx.update_window(handle, |_, win, cx| {
         win.render_frame(cx);
         win.click("check-updates", cx);
-        dismiss_and_check_progress(win, cx);
+        win.render_frame(cx);
+        assert!(win.try_find("later-update").is_none());
     })
     .unwrap();
     cx.run_until_parked();
-    let check = requests
-        .try_iter()
-        .find_map(|message| match message {
-            FromWindow::Request(id, request)
-                if matches!(*request, WindowRequest::Update(Request::Check)) =>
-            {
-                Some(id)
-            }
-            _ => None,
-        })
-        .expect("update check request");
-    client.test_answer(check, Reply::Update(available_update()));
+    client.test_answer(
+        about_check_request(&requests),
+        Reply::Update(available_update()),
+    );
     cx.run_until_parked();
     cx.update_window(handle, |_, win, cx| {
-        win.click("download-update", cx);
+        win.render_frame(cx);
+        let later = win.find("later-update").bounds();
+        let notes = win.find("release-link").bounds();
+        let download = win.find("download-detail").bounds();
+        assert!(later.right() <= notes.left() && notes.right() <= download.left());
         win.click("download-detail", cx);
         dismiss_and_check_progress(win, cx);
     })

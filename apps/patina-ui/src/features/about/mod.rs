@@ -15,6 +15,19 @@ const FEEDBACK: &str = "https://github.com/Ceceliaee/patina/issues/new/choose";
 const SUPPORT: &str = "https://ko-fi.com/ceceliaee";
 mod dialogs;
 
+fn update_button(
+    id: &'static str,
+    caption: String,
+    c: quietpro::Palette,
+    enabled: bool,
+) -> gpui_kit::base::Button {
+    text_button(id, caption, c, enabled).font_weight(FontWeight::MEDIUM)
+}
+
+fn update_dialog_surface(c: quietpro::Palette, win: &Window) -> Div {
+    quietpro::dialog_surface(c, win.viewport_size()).w(px(500.))
+}
+
 #[derive(Clone, Copy)]
 enum DialogKind {
     Feedback,
@@ -42,6 +55,7 @@ impl About {
     pub(crate) fn new(
         client: Rc<Client>,
         status: Option<Snapshot>,
+        win: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
         let mut view = Self {
@@ -59,7 +73,7 @@ impl About {
             link_error: None,
             badge: None,
         };
-        view.update_request(Request::Status, cx);
+        view.update_request(Request::Status, win, cx);
         view
     }
     pub(crate) fn ready_to_present(&self) -> bool {
@@ -138,9 +152,12 @@ impl About {
         }
         cx.notify();
     }
-    fn update_request(&mut self, request: Request, cx: &mut Context<Self>) {
+    fn update_request(&mut self, request: Request, win: &mut Window, cx: &mut Context<Self>) {
         let client = self.client.clone();
         self.install_error = false;
+        if matches!(request, Request::Check) && matches!(self.dialog, Some(DialogKind::Update)) {
+            self.dismiss(win, cx);
+        }
         if let Some(status) = &mut self.status {
             match request {
                 Request::Check => {
@@ -153,14 +170,14 @@ impl About {
             }
         }
         let read = client.update(request);
-        self.update_task = Some(cx.spawn(async move |view, cx| {
+        self.update_task = Some(cx.spawn_in(win, async move |view, cx| {
             let mut result = read.await;
             loop {
                 let busy = result
                     .as_ref()
                     .is_ok_and(|s| matches!(s.phase, Phase::Checking | Phase::Downloading));
                 if view
-                    .update(cx, |t, cx| {
+                    .update_in(cx, |t, win, cx| {
                         match result {
                             Ok(snapshot) => t.status = Some(snapshot),
                             Err(_)
@@ -176,6 +193,14 @@ impl About {
                                 status.phase = Phase::Failed;
                                 status.error = Some(error.to_string());
                             }
+                        }
+                        if matches!(request, Request::Check)
+                            && t.dialog.is_none()
+                            && t.status.as_ref().is_some_and(|s| {
+                                matches!(s.phase, Phase::Available | Phase::Failed)
+                            })
+                        {
+                            t.show(DialogKind::Update, win, cx);
                         }
                         cx.notify();
                     })
@@ -406,24 +431,22 @@ impl Render for About {
                                     .child(label(status).min_w_0().truncate()),
                             )
                             .when(
-                                matches!(snapshot.phase, Phase::Checking | Phase::Downloading)
+                                snapshot.phase == Phase::Downloading
                                     && !matches!(self.dialog, Some(DialogKind::Update)),
                                 |d| d.child(self.progress(snapshot, c)),
                             ),
                     )
                     .child(
-                        text_button("check-updates", tr("update.checkUpdates"), c, !busy)
-                            .font_weight(FontWeight::MEDIUM)
+                        update_button("check-updates", tr("update.checkUpdates"), c, !busy)
                             .on_click(cx.listener(|t, _, w, cx| {
-                                t.show(DialogKind::Update, w, cx);
-                                t.update_request(Request::Check, cx);
+                                t.update_request(Request::Check, w, cx);
                             })),
                     )
                     .when(
                         !busy && snapshot.release.is_some() && snapshot.phase != Phase::Ready,
                         |s| {
                             s.child(
-                                text_button("download-update", tr("update.downloadNow"), c, true)
+                                update_button("download-update", tr("update.downloadNow"), c, true)
                                     .on_click(
                                         cx.listener(|t, _, w, cx| {
                                             t.show(DialogKind::Update, w, cx)
@@ -434,16 +457,39 @@ impl Render for About {
                     )
                     .when(snapshot.phase == Phase::Ready, |s| {
                         s.child(
-                            text_button("install-update", tr("update.restartInstall"), c, true)
-                                .on_click(cx.listener(|t, _, w, cx| t.ask_install(w, cx))),
+                            update_button("install-update", tr("update.restartInstall"), c, true)
+                                .on_click(cx.listener(|t, _, w, cx| {
+                                    if t.install_error {
+                                        t.show(DialogKind::Update, w, cx);
+                                    } else {
+                                        t.ask_install(w, cx);
+                                    }
+                                })),
                         )
                     })
                     .when(snapshot.phase == Phase::Failed || self.install_error, |s| {
+                        let url = snapshot.release.as_ref().map_or_else(
+                            || format!("{RELEASES}/latest"),
+                            |release| release.url.clone(),
+                        );
                         s.child(
-                            text_button("downloads", tr("update.manualDownload"), c, true)
-                                .on_click(
-                                    cx.listener(|s, _, w, cx| s.show(DialogKind::Update, w, cx)),
-                                ),
+                            update_button(
+                                "downloads",
+                                tr("update.manualDownload"),
+                                c,
+                                !self.opening,
+                            )
+                            .on_click(cx.listener(
+                                move |s, _, w, cx| {
+                                    s.external(
+                                        url.clone(),
+                                        "update.genericErrorDetail",
+                                        false,
+                                        w,
+                                        cx,
+                                    )
+                                },
+                            )),
                         )
                     })
                     .test_support(),
@@ -457,7 +503,7 @@ impl Render for About {
             );
         if self.confirm_install {
             let view = cx.weak_entity();
-            let content = quietpro::dialog_surface(c, win.viewport_size())
+            let content = update_dialog_surface(c, win)
                 .track_focus(&self.content_focus)
                 .on_key_down(cx.listener(|s, event: &KeyDownEvent, w, cx| {
                     if event.keystroke.key == "escape" {
@@ -465,16 +511,22 @@ impl Render for About {
                         cx.stop_propagation();
                     }
                 }))
-                .child(heading(tr("update.dialogDownloaded")))
-                .child(label(tr("update.dialogDownloadedDetail")))
+                .child(heading(tr("update.dialogDownloaded")).flex_none())
+                .child(
+                    div()
+                        .id("install-confirmation-body")
+                        .min_h_0()
+                        .overflow_y_scroll()
+                        .child(label(tr("update.dialogDownloadedDetail"))),
+                )
                 .child(
                     quietpro::dialog_actions()
                         .child(
-                            text_button("cancel-install", tr("common.cancel"), c, true)
+                            update_button("cancel-install", tr("common.cancel"), c, true)
                                 .on_click(cx.listener(|t, _, w, cx| t.cancel_install(w, cx))),
                         )
                         .child(
-                            text_button("confirm-install", tr("update.restartInstall"), c, true)
+                            update_button("confirm-install", tr("update.restartInstall"), c, true)
                                 .on_click(cx.listener(|t, _, w, cx| t.install(w, cx))),
                         ),
                 );

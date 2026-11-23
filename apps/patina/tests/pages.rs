@@ -1756,10 +1756,12 @@ fn about_navigation() -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
-    // The offline fixture has no manifest, so Check updates exposes Manual download.
+    let mut config: serde_json::Value =
+        serde_json::from_slice(include_bytes!("../../../crates/updater/config.json"))?;
+    config["endpoints"] = serde_json::json!(["https://fixture.invalid/manifest"]);
     fs::write(
         root.path().join("config.json"),
-        include_bytes!("../../../crates/updater/config.json"),
+        serde_json::to_vec(&config)?,
     )?;
     let dir = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&dir)?;
@@ -1858,6 +1860,17 @@ fn about_navigation() -> Result<(), Error> {
         let control = wait(name, || button(hwnd, name))?;
         assert_control_height(hwnd, &control, height)?;
     }
+    fs::write(
+        root.path().join("manifest.json"),
+        serde_json::to_vec(&serde_json::json!({
+            "schema": 1, "application": "patina-desktop", "version": "0.1.0", "platforms": {}
+        }))?,
+    )?;
+    click(hwnd, "Check updates")?;
+    wait("current version on update card", || {
+        named(hwnd, "You are up to date")
+    })?;
+    assert!(button(hwnd, "Later").is_none() && button(hwnd, "Confirm").is_none());
     command(window(pid, w!("Patina Tray")).unwrap(), 2)?;
     assert!(wait("exit", || host.0.try_wait().ok().flatten())?.success());
     Ok(())

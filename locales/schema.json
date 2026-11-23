@@ -961,7 +961,6 @@
   "update.preparingPackage": {"kind":"string","params":[],"surface":"frontend"},
   "update.processing": {"kind":"string","params":[],"surface":"frontend"},
   "update.progressPending": {"alsoNative":true,"kind":"string","params":[],"surface":"frontend"},
-  "update.redownloadInstaller": {"alsoNative":true,"kind":"string","params":[],"surface":"frontend"},
   "update.releaseNotes": {"alsoNative":true,"kind":"string","params":[],"surface":"frontend"},
   "update.restartInstall": {"alsoNative":true,"kind":"string","params":[],"surface":"frontend"},
   "update.sidebarEntry": {"kind":"string","params":[],"surface":"frontend"},

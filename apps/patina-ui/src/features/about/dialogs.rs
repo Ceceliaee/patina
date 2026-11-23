@@ -123,95 +123,116 @@ impl About {
                 Phase::Failed => "update.checkFailedDialog",
                 Phase::Ready => "update.dialogDownloaded",
                 Phase::Downloading => "update.dialogDownloading",
-                Phase::Checking => "update.checkingUpdates",
-                Phase::Current => "update.upToDate",
                 _ => "update.dialogAvailable",
             },
         });
         let support = matches!(kind, DialogKind::Support);
-        let mut content = quietpro::dialog_surface(c, win.viewport_size())
-            .w(px(match (kind, &status.phase) {
-                (DialogKind::Feedback | DialogKind::Support, _) => 400.,
-                (DialogKind::Update, Phase::Checking) => 400.,
-                (DialogKind::Update, Phase::Failed) if status.release.is_none() => 400.,
-                _ => 760.,
-            }))
-            .child(
-                if matches!(kind, DialogKind::Support | DialogKind::Feedback) {
-                    div()
-                        .flex()
-                        .flex_none()
-                        .items_start()
-                        .gap(px(8.))
-                        .child(heading(title.clone()).min_w_0().flex_1())
-                        .child(
-                            quietpro::IconControl::new("close-about", tr("common.close"), Icon::X)
-                                .disabled(self.opening)
-                                .action(c, cx.listener(|s, _, w, cx| s.dismiss(w, cx))),
-                        )
-                        .into_any_element()
-                } else {
-                    heading(title.clone()).into_any_element()
-                },
-            )
-            .track_focus(&self.content_focus)
-            .on_key_down(cx.listener(|s, event: &KeyDownEvent, w, cx| {
-                if event.keystroke.key == "escape" {
-                    s.dismiss(w, cx);
-                    cx.stop_propagation();
-                }
-            }));
+        let mut content = match kind {
+            DialogKind::Update => update_dialog_surface(c, win),
+            DialogKind::Feedback | DialogKind::Support => {
+                quietpro::dialog_surface(c, win.viewport_size()).w(px(400.))
+            }
+        }
+        .child(
+            if matches!(kind, DialogKind::Support | DialogKind::Feedback) {
+                div()
+                    .flex()
+                    .flex_none()
+                    .items_start()
+                    .gap(px(8.))
+                    .child(heading(title.clone()).min_w_0().flex_1())
+                    .child(
+                        quietpro::IconControl::new("close-about", tr("common.close"), Icon::X)
+                            .disabled(self.opening)
+                            .action(c, cx.listener(|s, _, w, cx| s.dismiss(w, cx))),
+                    )
+                    .into_any_element()
+            } else {
+                heading(title.clone()).flex_none().into_any_element()
+            },
+        )
+        .track_focus(&self.content_focus)
+        .on_key_down(cx.listener(|s, event: &KeyDownEvent, w, cx| {
+            if event.keystroke.key == "escape" {
+                s.dismiss(w, cx);
+                cx.stop_propagation();
+            }
+        }));
         if matches!(kind, DialogKind::Update) {
+            let mut body = div().flex().flex_col().gap(px(quietpro::CARD_TITLE_GAP));
             if let Some(release) = &status.release {
-                content = content.child(label(format!(
+                body = body.child(label(format!(
                     "v{} → v{}",
                     status.installed_version, release.version
                 )));
             }
             let detail = match status.phase {
-                _ if self.install_error => Some("update.installErrorDetail"),
-                Phase::Ready => Some("update.dialogDownloadedDetail"),
-                Phase::Downloading => Some("update.dialogDownloadingDetail"),
-                Phase::Failed if status.release.is_some() => Some("update.downloadErrorDetail"),
-                Phase::Failed => Some("update.checkErrorDetail"),
-                Phase::Current | Phase::Checking => None,
-                _ => Some("update.dialogAvailableDetail"),
+                _ if self.install_error => "update.installErrorDetail",
+                Phase::Ready => "update.dialogDownloadedDetail",
+                Phase::Downloading => "update.dialogDownloadingDetail",
+                Phase::Failed if status.release.is_some() => "update.downloadErrorDetail",
+                Phase::Failed => "update.checkErrorDetail",
+                _ => "update.dialogAvailableDetail",
             };
-            if let Some(detail) = detail {
-                content = content.child(label(tr(detail)));
-            }
-            if matches!(status.phase, Phase::Checking | Phase::Downloading) {
-                content = content.child(self.progress(status, c));
+            body = body.child(label(tr(detail)));
+            if status.phase == Phase::Downloading {
+                body = body.child(self.progress(status, c));
             }
             if let Some(release) = &status.release
                 && !release.notes.is_empty()
             {
-                content = content.child(
+                body = body.child(
                     div()
-                        .id("release-notes")
-                        .min_h_0()
-                        .max_h(px(260.))
-                        .overflow_y_scroll()
+                        .id("update-release-notes")
                         .child(heading(tr("update.releaseNotes")))
-                        .child(label(release.notes.clone())),
+                        .child(label(release.notes.clone()))
+                        .test_support(),
                 );
             }
+            if let Some(error) = self.link_error {
+                body = body.child(label(tr(error)).text_color(c.danger));
+            }
+            content = content.child(
+                div()
+                    .id("update-dialog-body")
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .child(body)
+                    .test_support(),
+            );
             let busy = matches!(
                 status.phase,
                 Phase::Checking | Phase::Downloading | Phase::Installing
             );
-            let mut actions = quietpro::dialog_actions().child(
-                text_button(
-                    "later-update",
-                    tr("update.later"),
-                    c,
-                    status.phase != Phase::Installing,
-                )
-                .on_click(cx.listener(|s, _, w, cx| s.dismiss(w, cx))),
+            let release_url = status.release.as_ref().map_or_else(
+                || RELEASES.into(),
+                |r| format!("{RELEASES}/tag/v{}", r.version),
             );
+            let mut actions = quietpro::dialog_actions()
+                .child(
+                    update_button(
+                        "later-update",
+                        tr("update.later"),
+                        c,
+                        status.phase != Phase::Installing,
+                    )
+                    .on_click(cx.listener(|s, _, w, cx| s.dismiss(w, cx))),
+                )
+                .child(
+                    update_button("release-link", tr("update.releaseNotes"), c, !self.opening)
+                        .on_click(cx.listener(move |s, _, w, cx| {
+                            s.external(
+                                release_url.clone(),
+                                "toast.releaseNotesOpenFailed",
+                                false,
+                                w,
+                                cx,
+                            )
+                        })),
+                );
             if status.phase == Phase::Ready {
                 actions = actions.child(
-                    text_button(
+                    update_button(
                         "install-detail",
                         tr(if self.install_error {
                             "update.installAgain"
@@ -228,57 +249,16 @@ impl About {
                 );
             } else if status.release.is_some() && !busy {
                 actions = actions.child(
-                    text_button("download-detail", tr("update.downloadNow"), c, true).on_click(
-                        cx.listener(|s, _, _, cx| s.update_request(Request::Download, cx)),
+                    update_button("download-detail", tr("update.downloadNow"), c, true).on_click(
+                        cx.listener(|s, _, w, cx| s.update_request(Request::Download, w, cx)),
                     ),
                 );
             }
-            if self.install_error {
-                actions = actions.child(
-                    text_button(
-                        "redownload-update",
-                        tr("update.redownloadInstaller"),
-                        c,
-                        true,
-                    )
-                    .on_click(cx.listener(|s, _, _, cx| s.update_request(Request::Download, cx))),
-                );
-            }
-            let release_url = status.release.as_ref().map_or_else(
-                || RELEASES.into(),
-                |r| format!("{RELEASES}/tag/v{}", r.version),
-            );
-            actions = actions.child(
-                text_button("release-link", tr("update.releaseNotes"), c, !self.opening).on_click(
-                    cx.listener(move |s, _, w, cx| {
-                        s.external(
-                            release_url.clone(),
-                            "toast.releaseNotesOpenFailed",
-                            false,
-                            w,
-                            cx,
-                        )
-                    }),
-                ),
-            );
             if matches!(status.phase, Phase::Failed | Phase::Downloading) || self.install_error {
-                if let Some(r) = &status.release {
-                    let url = r.url.clone();
-                    actions = actions.child(
-                        text_button(
-                            "installer-link",
-                            tr("update.downloadInstaller"),
-                            c,
-                            !self.opening,
-                        )
-                        .on_click(cx.listener(move |s, _, w, cx| {
-                            s.external(url.clone(), "toast.releaseNotesOpenFailed", false, w, cx)
-                        })),
-                    );
-                }
                 actions = actions.child(
-                    text_button("retry-update", tr("update.checkAgain"), c, !busy)
-                        .on_click(cx.listener(|s, _, _, cx| s.update_request(Request::Check, cx))),
+                    update_button("retry-update", tr("update.checkAgain"), c, !busy).on_click(
+                        cx.listener(|s, _, w, cx| s.update_request(Request::Check, w, cx)),
+                    ),
                 );
             }
             content = content.child(actions);
@@ -383,9 +363,9 @@ impl About {
                             .child(link_card),
                     ),
             );
-        }
-        if let Some(error) = self.link_error {
-            content = content.child(label(tr(error)).text_color(c.danger));
+            if let Some(error) = self.link_error {
+                content = content.child(label(tr(error)).text_color(c.danger));
+            }
         }
         let weak = cx.weak_entity();
         quietpro::modal_dialog(
