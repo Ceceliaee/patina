@@ -7,6 +7,7 @@
 [English](README.md) · 简体中文
 
 ![Platform](https://img.shields.io/badge/platform-Windows-4f6f8f)
+![GPUI 桌面框架](https://img.shields.io/badge/framework-GPUI-526889)
 ![Local first](https://img.shields.io/badge/data-local--first-5f7f68)
 [![License](https://img.shields.io/badge/license-MIT-6f647a)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/Ceceliaee/patina?style=social)](https://github.com/Ceceliaee/patina/stargazers)
@@ -16,13 +17,13 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/assets/readme.zh-CN/hero-dark.png">
-    <img src=".github/assets/readme.zh-CN/hero-light.png" alt="Patina 今日概览">
+    <img src=".github/assets/readme.zh-CN/hero-light.png" alt="Patina 今天页，显示各分类的使用时长、每小时活动和应用排行">
   </picture>
 </p>
 
 ## 下载
 
-桌面端适用于 Windows 10 和 Windows 11。
+Patina 支持 Windows 10/11。首次安装时，Intel 或 AMD 64 位处理器请选择 **x64** 安装包，ARM 处理器请选择 **ARM64** 安装包。
 
 <p align="center">
   <a href="https://github.com/Ceceliaee/patina/releases/latest">
@@ -32,6 +33,8 @@
     </picture>
   </a>
 </p>
+
+### 浏览器扩展
 
 如需按网站查看浏览时间，可安装浏览器扩展 [Patina Web Sync](https://github.com/Ceceliaee/patina-web-sync) 并连接桌面端。
 
@@ -45,7 +48,7 @@
 
 - 自动追踪前台应用，记录各应用的使用时长。
 - 回顾每日应用使用情况，了解时间分布及长期变化。
-- 活动记录默认保存在本机，无需账号即可使用。
+- 活动记录默认保存在本机，无需账号即可离线追踪和回看。
 
 ## 核心能力
 
@@ -53,6 +56,8 @@
 
 - 识别前台应用，按使用时段记录活动。
 - 播放视频或参加会议时，可根据音频等持续活动信号继续计时。
+- 关闭主窗口后可在托盘继续记录。
+- 迷你窗显示当前活动、近一小时的记录和工具计时。
 
 ### 回看与分析
 
@@ -64,14 +69,17 @@
 
 - 自定义应用和网站的显示名称、分类与颜色。
 - 合并统计关联程序的使用时长，网站按主域名自动分组。
-- 将数据备份到本机或 WebDAV，支持定时备份和从备份恢复。
+- 将数据备份到本机或指定的 WebDAV 服务器，支持定时备份和从备份恢复。
 - 导入或导出活动记录。
 
-### 轻量工具
+### 插件市场
 
-- 设置定时提醒，可提醒一次或按周期重复。
-- 为应用、分类或网站设置每日使用上限，达到上限时发出提醒。
-- 使用番茄计时或自由专注，按任务回顾专注与休息记录。
+插件市场只提供两款免费插件，均已预装。
+
+- **提醒**支持一次性或周期性提醒，也可在应用、分类或网站达到每日使用上限时提醒。
+- **专注**支持番茄计时和自由专注，可按任务查看专注与休息记录。
+
+打开「工具」→「插件市场」可管理插件，也可从本地 ZIP 文件安装插件。
 
 ## 界面预览
 
@@ -84,13 +92,13 @@
     <td width="50%">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset=".github/assets/readme.zh-CN/history-dark.png">
-        <img src=".github/assets/readme.zh-CN/history-light.png" alt="历史页面">
+        <img src=".github/assets/readme.zh-CN/history-light.png" alt="历史页的活动时间线、当日摘要和应用排行">
       </picture>
     </td>
     <td width="50%">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset=".github/assets/readme.zh-CN/data-dark.png">
-        <img src=".github/assets/readme.zh-CN/data-light.png" alt="数据页面">
+        <img src=".github/assets/readme.zh-CN/data-light.png" alt="数据页的活动趋势折线图和年度活动热力图">
       </picture>
     </td>
   </tr>
@@ -102,13 +110,13 @@
     <td width="50%">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset=".github/assets/readme.zh-CN/classification-dark.png">
-        <img src=".github/assets/readme.zh-CN/classification-light.png" alt="分类页面">
+        <img src=".github/assets/readme.zh-CN/classification-light.png" alt="分类页中的应用卡片与分类选择器">
       </picture>
     </td>
     <td width="50%">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset=".github/assets/readme.zh-CN/tools-dark.png">
-        <img src=".github/assets/readme.zh-CN/tools-light.png" alt="工具页面">
+        <img src=".github/assets/readme.zh-CN/tools-light.png" alt="工具页中的提醒插件和定时提醒列表">
       </picture>
     </td>
   </tr>
@@ -120,13 +128,13 @@
     <td width="50%">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset=".github/assets/readme.zh-CN/settings-dark.png">
-        <img src=".github/assets/readme.zh-CN/settings-light.png" alt="设置页面">
+        <img src=".github/assets/readme.zh-CN/settings-light.png" alt="设置页中的空闲识别、暂停追踪和外观选项">
       </picture>
     </td>
     <td width="50%">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset=".github/assets/readme.zh-CN/about-dark.png">
-        <img src=".github/assets/readme.zh-CN/about-light.png" alt="关于页面">
+        <img src=".github/assets/readme.zh-CN/about-light.png" alt="关于页中的 Patina 版本号、更新说明和检查更新入口">
       </picture>
     </td>
   </tr>
@@ -134,11 +142,11 @@
 
 ## 可靠性与隐私
 
-- **空闲识别**：识别长时间无操作、锁屏和睡眠状态，区分活动与空闲时段。
-- **有效时长统计**：按有效活动时间计算应用排行、分类占比和总时长。
-- **标题记录与匿名统计**：可按应用或网站选择是否保存标题，或为其启用[匿名统计](docs/product.md#身份隐私与历史)。
-- **网页记录隐私**：网页记录默认在本机保存完整网址，启用匿名统计后仅记录浏览时长。
-- **历史记录清理**：可按保留期限清理历史活动记录。
+- **有效时长**　统计时排除空闲、锁屏和睡眠时段。
+- **标题记录**　可按应用或网站关闭标题记录。
+- **网址记录**　Web Sync 默认保存完整网址，包括路径和查询参数。
+- **[匿名统计](docs/product.md#身份隐私与历史)**　为应用或网站启用后，新记录仅保留活动时段和时长。
+- **历史清理**　可在设置中按截止日期删除活动记录。
 
 ## 反馈
 
@@ -160,8 +168,6 @@
 
 ## 开发与贡献
 
-桌面端在 `main` 分支开发。`tauri-maintenance` 分支维护[当前稳定版](https://github.com/Ceceliaee/patina/releases/latest)。
-
 ### 从源码运行
 
 <a id="环境要求"></a>
@@ -169,11 +175,15 @@
 <a id="开发运行"></a>
 <a id="构建安装包"></a>
 
-按[首次运行指南](CONTRIBUTING.md#34-安装依赖)配置开发环境、安装依赖，再运行 `cargo xtask dev` 启动开发版。开发版可与正式版同时运行，两者使用独立的数据目录。构建正式安装包请参阅[发布规范](docs/release.md#发布前的最低验证门槛)。
+按[首次运行指南](CONTRIBUTING.md#34-安装依赖)配置开发环境、安装依赖，再运行 `cargo xtask dev` 启动开发版。开发版可与正式版同时运行，两者使用独立的数据目录。构建正式安装包请参阅[发布规范](docs/release.md#windows-安装与更新)。
 
 ### 技术栈
 
-Patina 使用 Rust 开发，通过 Windows API 接入系统，使用 SQLite 保存本地数据。录制进程和桌面窗口的职责见[系统架构](docs/architecture.md)。
+- 桌面框架：GPUI
+- 开发语言：Rust
+- 系统集成：Windows API
+- 界面组件：Quiet Pro
+- 本地存储：SQLite
 
 ### 贡献
 
