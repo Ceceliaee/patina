@@ -174,6 +174,7 @@ fn window_scale_matches_settings_controls_and_restores_saved_geometry() -> Resul
         let released = slider_value.CurrentValue()? as u16;
         PostMessageW(Some(hwnd), WM_LBUTTONUP, WPARAM(0), pos(84.))?;
         geometry(hwnd, released)?;
+        assert_control_height(hwnd, &wait("scaled Save", || button(hwnd, "Save"))?, 32)?;
     }
     click(hwnd, "Cancel")?;
     geometry(hwnd, initial)?;

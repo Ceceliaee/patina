@@ -90,11 +90,18 @@ fn assert_control_height(
     expected: i32,
 ) -> Result<(), Error> {
     let bounds = unsafe { el.CurrentBoundingRectangle()? };
-    let scale = unsafe { GetDpiForWindow(hwnd) } as f64 / 96.;
-    let height = f64::from(bounds.bottom - bounds.top) / scale;
+    let scale = if unsafe { IsZoomed(hwnd).as_bool() } {
+        f64::from(unsafe { GetDpiForWindow(hwnd) }) / 96.
+    } else {
+        let mut client = RECT::default();
+        unsafe { GetClientRect(hwnd, &mut client)? };
+        f64::from(client.right - client.left) / 1080.
+    };
+    let height = bounds.bottom - bounds.top;
+    let expected_height = f64::from(expected) * scale;
     assert!(
-        (height - f64::from(expected)).abs() <= 1.,
-        "{}: expected {expected} px, got {height} px",
+        (f64::from(height) - expected_height).abs() <= 1.,
+        "{}: expected {expected} logical px at scale {scale}, got {height} physical px",
         unsafe { el.CurrentName()? },
     );
     Ok(())
