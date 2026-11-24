@@ -9,6 +9,7 @@ use std::{
 use windows::Win32::System::{
     Com::{CLSCTX_INPROC_SERVER, CoCreateInstance},
     Variant::VARIANT,
+    WindowsProgramming::{QueryInterruptTimePrecise, QueryUnbiasedInterruptTimePrecise},
 };
 #[path = "foreground_churn.rs"]
 mod churn;
@@ -16,6 +17,15 @@ mod churn;
 mod dense;
 #[path = "foreground_frames.rs"]
 mod frames;
+#[path = "foreground_mini.rs"]
+mod mini;
+
+fn system_sleep_ms() -> u64 {
+    // Only the biased interrupt clock advances while Windows is asleep.
+    unsafe {
+        QueryInterruptTimePrecise().saturating_sub(QueryUnbiasedInterruptTimePrecise()) / 10_000
+    }
+}
 
 // All runs copy the same closed database. Only the recorder in each temporary profile writes to it.
 fn prepare(path: &Path) -> Result<(), Error> {
@@ -126,7 +136,10 @@ impl Driver {
         id: bool,
         page: Option<&str>,
     ) -> Result<(), Error> {
-        let el = self.ready(UIA_NamePropertyId, label)?;
+        let el = wait(label, || {
+            self.find(UIA_NamePropertyId, label)
+                .filter(|el| unsafe { el.CurrentIsEnabled().is_ok_and(|v| v.as_bool()) })
+        })?;
         let started = Instant::now();
         activate_control(self.hwnd, &el, false)?;
         if let Some(title) = page {
@@ -187,6 +200,18 @@ impl Driver {
     }
 
     fn route(&mut self, round: usize, cold: bool, mode: &str) -> Result<(), Error> {
+        if mode == "tools" {
+            self.visit(round, "Tools", "Reminder", false, Some("Tools"))?;
+            self.ready(UIA_NamePropertyId, "Focus")?;
+            self.visit(round, "Reminder", "Create", false, None)?;
+            self.visit(round, "Plugin home", "Focus", false, None)?;
+            self.visit(round, "Focus", "New focus session", false, None)?;
+            self.visit(round, "Today", "today-ranking-count", true, Some("Today"))?;
+            self.visit(round, "Tools", "New focus session", false, Some("Tools"))?;
+            self.visit(round, "Plugin home", "Reminder", false, None)?;
+            self.visit(round, "Today", "today-ranking-count", true, Some("Today"))?;
+            return self.event("round", json!(round));
+        }
         if mode == "churn" {
             return churn::visit_catalog(self);
         }
@@ -270,27 +295,40 @@ fn foreground_pages() -> Result<(), Error> {
     fs::create_dir_all(out.parent().unwrap())?;
     fs::create_dir(&out)?;
     prepare(&seed_path)?;
-    let root = tempfile::tempdir()?;
-    let dir = root.path().join(patina::PROFILE_DIRECTORY);
+    let mode = env::var("PATINA_MEASURE_MODE").unwrap_or_default();
+    let temporary = tempfile::tempdir()?;
+    let root = if mode.starts_with("soak-") {
+        let path = out.join("profile");
+        fs::create_dir(&path)?;
+        path
+    } else {
+        temporary.path().to_owned()
+    };
+    let dir = root.join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&dir)?;
     let db = dir.join("patina.db");
     fs::copy(seed_path, &db)?;
     let exe = r"C:\fixture\fixture.exe";
     fs::write(
-        root.path().join("native-probe-fixture.json"),
+        root.join("native-probe-fixture.json"),
         serde_json::to_vec(
             &json!({"foreground":{"hwnd":"0x42","root_owner_hwnd":"0x42","process_id":42,"window_class":"Fixture","title":"Fixture","exe_name":"fixture.exe","process_path":exe,"is_afk":false,"idle_time_ms":0},"names":{(exe):"Fixture"}}),
         )?,
     )?;
     let binary =
         env::var_os("PATINA_MEASURE_BINARY").unwrap_or_else(|| env!("CARGO_BIN_EXE_patina").into());
-    let sampler = Path::new(env!("CARGO_BIN_EXE_patina"))
-        .with_file_name("examples")
-        .join("windows-resource-sample.exe");
-    let mode = env::var("PATINA_MEASURE_MODE").unwrap_or_default();
+    let sampler = env::var_os("PATINA_MEASURE_SAMPLER").map_or_else(
+        || {
+            Path::new(env!("CARGO_BIN_EXE_patina"))
+                .with_file_name("examples")
+                .join("windows-resource-sample.exe")
+        },
+        PathBuf::from,
+    );
     if !matches!(
         mode.as_str(),
         "" | "smoke"
+            | "tools"
             | "data"
             | "data-catalog"
             | "cancel"
@@ -300,6 +338,8 @@ fn foreground_pages() -> Result<(), Error> {
             | "dense-frames"
             | "churn"
             | "soak-window"
+            | "soak-window-tray"
+            | "soak-window-mini-tray"
             | "detail"
             | "soak-tray"
     ) {
@@ -311,6 +351,7 @@ fn foreground_pages() -> Result<(), Error> {
     let quick = matches!(
         mode.as_str(),
         "smoke"
+            | "tools"
             | "data"
             | "data-catalog"
             | "cancel"
@@ -330,7 +371,28 @@ fn foreground_pages() -> Result<(), Error> {
     } else {
         0
     };
-    let secs = if soak {
+    let mini_phases = if mode == "soak-window-mini-tray" {
+        let durations = env::var("PATINA_MEASURE_PHASE_SECONDS")?
+            .split(',')
+            .map(str::parse::<u64>)
+            .collect::<Result<Vec<_>, _>>()?;
+        let phases: [u64; 4] = durations
+            .try_into()
+            .map_err(|_| "expected four phase lengths")?;
+        if phases.contains(&0)
+            || phases.iter().try_fold(0_u64, |sum, &n| sum.checked_add(n)) != Some(hold)
+        {
+            return Err("phase lengths must be positive and sum to the residence duration".into());
+        }
+        Some(phases)
+    } else {
+        None
+    };
+    let combined = mode == "soak-window-tray" || mini_phases.is_some();
+    let short_hold = combined && hold < 300;
+    let secs = if combined {
+        hold + 120
+    } else if soak {
         hold + 480
     } else if mode == "churn" {
         450
@@ -345,10 +407,10 @@ fn foreground_pages() -> Result<(), Error> {
     let started_at_ms = Utc::now().timestamp_millis();
     let mut app = TestChild(
         Command::new(binary)
-            .env("PATINA_PROFILE_PARENT", root.path())
+            .env("PATINA_PROFILE_PARENT", &root)
             .env_remove("PATINA_DEV_SESSION")
             .env("PATINA_E2E", "1")
-            .env("PATINA_E2E_DATA_ROOT", root.path())
+            .env("PATINA_E2E_DATA_ROOT", &root)
             .env("PATINA_E2E_NATIVE_FIXTURE", "1")
             .stderr(fs::File::create(out.join("app.log"))?)
             .arg("--today")
@@ -361,7 +423,7 @@ fn foreground_pages() -> Result<(), Error> {
             .arg(out.join("tree.jsonl"))
             .arg(secs.to_string())
             .args([
-                if soak { "30" } else { "2" },
+                if soak && !short_hold { "30" } else { "2" },
                 if soak { &mode } else { "foreground-pages" },
             ])
             .spawn()?,
@@ -371,9 +433,11 @@ fn foreground_pages() -> Result<(), Error> {
     let hwnd = wait("main", main_window)?;
     let mut renderer = 0;
     let mut rect = RECT::default();
+    let mut client = RECT::default();
     unsafe {
         GetWindowThreadProcessId(hwnd, Some(&mut renderer));
         GetWindowRect(hwnd, &mut rect)?;
+        GetClientRect(hwnd, &mut client)?;
     }
     let mut d = Driver {
         ui: unsafe { CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER)? },
@@ -382,8 +446,15 @@ fn foreground_pages() -> Result<(), Error> {
         start,
         capture_icons: mode == "frames",
     };
-    d.ready(UIA_NamePropertyId, "View details for Studio")?;
-    d.event("cold",json!({"host":pid,"ui":renderer,"driver":std::process::id(),"sampler":sample.0.id(),"dpi":unsafe{GetDpiForWindow(hwnd)},"width":rect.right-rect.left,"height":rect.bottom-rect.top}))?;
+    d.ready(
+        UIA_NamePropertyId,
+        if combined {
+            "Focus share"
+        } else {
+            "View details for Studio"
+        },
+    )?;
+    d.event("cold",json!({"host":pid,"ui":renderer,"driver":std::process::id(),"sampler":sample.0.id(),"dpi":unsafe{GetDpiForWindow(hwnd)},"width":rect.right-rect.left,"height":rect.bottom-rect.top,"clientWidth":client.right,"clientHeight":client.bottom}))?;
     let until = |s| thread::sleep(Duration::from_secs(s).saturating_sub(start.elapsed()));
     let navigating = mode != "idle";
     let capture = if matches!(mode.as_str(), "frames" | "dense-frames") {
@@ -417,14 +488,18 @@ fn foreground_pages() -> Result<(), Error> {
     } else {
         None
     };
-    until(if quick { 3 } else { 60 });
-    if navigating {
+    if !combined {
+        until(if quick { 3 } else { 60 });
+    }
+    if navigating && !combined {
         d.route(0, !quick, &mode)?;
     }
-    until(if quick { 10 } else { 120 });
+    if !combined {
+        until(if quick { 10 } else { 120 });
+    }
     let count = if soak || matches!(mode.as_str(), "dense" | "dense-frames" | "detail" | "churn") {
         0
-    } else if quick && mode != "data-catalog" {
+    } else if quick && !matches!(mode.as_str(), "data" | "data-catalog" | "tools") {
         2
     } else {
         8
@@ -452,28 +527,76 @@ fn foreground_pages() -> Result<(), Error> {
     let recording = |conn: &mut SqliteConnection| {
         rt.block_on(sqlx::query_as::<_,(i64,i64)>("SELECT s.id,CAST(t.value AS INTEGER) FROM sessions s JOIN settings t ON t.key='__tracker_last_successful_sample_ms' WHERE s.exe_name='fixture.exe' AND s.end_time IS NULL").fetch_one(conn))
     };
-    let hold_until =
-        |end: u64, driver: &mut Driver, conn: &mut SqliteConnection| -> Result<(), Error> {
-            while start.elapsed() < Duration::from_secs(end) {
-                let (id, heartbeat) = recording(conn)?;
-                let age = Utc::now().timestamp_millis() - heartbeat;
+    let mut suspensions = Vec::new();
+    let mut hold_until = |end: u64,
+                          shown: bool,
+                          mini_state: mini::MiniState,
+                          driver: &mut Driver,
+                          conn: &mut SqliteConnection|
+     -> Result<(), Error> {
+        let mut last_check = Utc::now().timestamp_millis();
+        let mut previous_sleep = system_sleep_ms();
+        loop {
+            let now = Utc::now().timestamp_millis();
+            let gap = now - last_check;
+            let total_sleep = system_sleep_ms();
+            let slept = total_sleep.saturating_sub(previous_sleep);
+            if slept >= 1000 {
                 driver.event(
-                    "recording-check",
-                    json!({"session":id,"heartbeat":heartbeat,"ageMs":age}),
+                    "system-sleep",
+                    json!({"fromMs":last_check,"toMs":now,"sleepMs":slept}),
                 )?;
-                assert!(age < 30_000, "fixture recorder heartbeat is {age} ms old");
-                thread::sleep(
-                    Duration::from_secs(60)
-                        .min(Duration::from_secs(end).saturating_sub(start.elapsed())),
-                );
+                suspensions.push((last_check, now, slept));
             }
-            Ok(())
-        };
-    if mode == "soak-window" {
+            last_check = now;
+            previous_sleep = total_sleep;
+            let (id, heartbeat) = if gap > 90_000 || slept >= 1000 {
+                driver.event("sampling-interruption", json!({"gapMs":gap}))?;
+                wait("recorder after sampling interruption", || {
+                    recording(conn)
+                        .ok()
+                        .filter(|(_, t)| Utc::now().timestamp_millis() - t < 30_000)
+                })?
+            } else {
+                recording(conn)?
+            };
+            let age = Utc::now().timestamp_millis() - heartbeat;
+            let visible = main_window().is_some_and(|w| unsafe { IsWindowVisible(w).as_bool() });
+            let mini_size = if mini_phases.is_some() {
+                mini_state.verify(pid, renderer, driver)?
+            } else {
+                None
+            };
+            driver.event(
+                "recording-check",
+                json!({"session":id,"heartbeat":heartbeat,"ageMs":age,"windowVisible":visible,"miniSizeDip":mini_size}),
+            )?;
+            assert_eq!(visible, shown, "window visibility changed during the hold");
+            assert!(age < 30_000, "fixture recorder heartbeat is {age} ms old");
+            if start.elapsed() >= Duration::from_secs(end) {
+                break;
+            }
+            thread::sleep(
+                Duration::from_secs(if short_hold { 3 } else { 60 })
+                    .min(Duration::from_secs(end).saturating_sub(start.elapsed())),
+            );
+        }
+        Ok(())
+    };
+    if mode == "soak-window" || combined {
         d.visit(0, "Classification", "Apps", false, Some("Classification"))?;
         d.visit(0, "Apps", "Edit app name", false, None)?;
+        if combined {
+            wait("initial fixture recording", || recording(&mut conn).ok())?;
+        }
         d.event("foreground-hold", json!({}))?;
-        hold_until(hold + 180, &mut d, &mut conn)?;
+        let end = if combined {
+            start.elapsed().as_secs_f64().ceil() as u64 + mini_phases.map_or(hold / 2, |p| p[0])
+        } else {
+            hold + 180
+        };
+        hold_until(end, true, mini::MiniState::Closed, &mut d, &mut conn)?;
+        d.event("foreground-end", json!({}))?;
         let top = d.ready(UIA_NamePropertyId, "Edit app name")?;
         let at = unsafe { top.CurrentBoundingRectangle()? };
         let x = (at.left + at.right) / 2;
@@ -493,9 +616,16 @@ fn foreground_pages() -> Result<(), Error> {
             next.is_none_or(|bounds| bounds.top != at.top).then_some(())
         })?;
         d.event("foreground-scroll", json!({}))?;
-        d.route(1, false, &mode)?;
+        if combined {
+            d.visit(1, "History", "Day Timeline", false, Some("History"))?;
+            d.visit(1, "Today", "Focus share", false, Some("Today"))?;
+        } else {
+            d.route(1, false, &mode)?;
+        }
     }
-    until(if soak {
+    until(if combined {
+        0
+    } else if soak {
         180
     } else if mode == "churn" {
         catalog_close
@@ -507,15 +637,64 @@ fn foreground_pages() -> Result<(), Error> {
         480
     });
     let before = recording(&mut conn)?;
+    let mini_hwnd = if mini_phases.is_some() {
+        command(tray, 1)?;
+        Some(wait("resident Mini", || mini::find(pid))?)
+    } else {
+        None
+    };
     unsafe {
         PostMessageW(Some(hwnd), WM_CLOSE, WPARAM(0), LPARAM(0))?;
+    }
+    if let (Some(mini_hwnd), Some(phases)) = (mini_hwnd, mini_phases) {
+        wait("main closed with Mini remaining", || {
+            main_window().is_none().then_some(())
+        })?;
+        key(mini_hwnd, 27)?;
+        wait("folded Mini region", || {
+            (mini::dimensions(mini_hwnd) == Some([112, 24])).then_some(())
+        })?;
+        d.event("mini-folded", json!({"ui":renderer}))?;
+        let end = start.elapsed().as_secs_f64().ceil() as u64 + phases[1];
+        hold_until(
+            end,
+            false,
+            mini::MiniState::Folded(mini_hwnd),
+            &mut d,
+            &mut conn,
+        )?;
+        d.event("mini-folded-end", json!({}))?;
+        mini::expand_and_pin(mini_hwnd)?;
+        d.event("mini-pinned", json!({"ui":renderer}))?;
+        let end = start.elapsed().as_secs_f64().ceil() as u64 + phases[2];
+        hold_until(
+            end,
+            false,
+            mini::MiniState::Pinned(mini_hwnd),
+            &mut d,
+            &mut conn,
+        )?;
+        d.event("mini-pinned-end", json!({}))?;
+        unsafe {
+            PostMessageW(Some(mini_hwnd), WM_CLOSE, WPARAM(0), LPARAM(0))?;
+        }
+        wait("resident Mini closed", || {
+            mini::find(pid).is_none().then_some(())
+        })?;
     }
     wait("renderer exited", || {
         (!children::children(pid).ok()?.contains(&renderer)).then_some(())
     })?;
     d.event("tray", json!(before))?;
     if soak {
-        hold_until(hold + 240, &mut d, &mut conn)?;
+        let end = if combined {
+            start.elapsed().as_secs_f64().ceil() as u64
+                + mini_phases.map_or(hold - hold / 2, |p| p[3])
+        } else {
+            hold + 240
+        };
+        hold_until(end, false, mini::MiniState::Closed, &mut d, &mut conn)?;
+        d.event("tray-end", json!({}))?;
     } else {
         until(if mode == "churn" {
             catalog_close + 36
@@ -532,6 +711,7 @@ fn foreground_pages() -> Result<(), Error> {
         (soak || before.0 == after.0) && before.1 < after.1,
         "recording interrupted"
     );
+    let reopen_start = Instant::now();
     unsafe {
         PostMessageW(
             Some(tray),
@@ -541,16 +721,46 @@ fn foreground_pages() -> Result<(), Error> {
         )?;
     }
     d.hwnd = wait("reopened main", main_window)?;
+    d.event(
+        "reopen-visible",
+        json!({"elapsedMs":reopen_start.elapsed().as_secs_f64()*1000.}),
+    )?;
     if soak {
-        d.ready(UIA_NamePropertyId, "View details for Fixture")?;
-        d.route(2, false, &mode)?;
-        let gaps: i64 = rt.block_on(sqlx::query_scalar(
+        if combined {
+            d.ready(UIA_NamePropertyId, "Focus share")?;
+            d.event(
+                "reopen-ready",
+                json!({"elapsedMs":reopen_start.elapsed().as_secs_f64()*1000.}),
+            )?;
+            d.visit(2, "History", "Day Timeline", false, Some("History"))?;
+            d.visit(2, "Today", "Focus share", false, Some("Today"))?;
+        } else {
+            d.ready(UIA_NamePropertyId, "View details for Fixture")?;
+            d.route(2, false, &mode)?;
+        }
+        let gaps: Vec<(i64,i64)> = rt.block_on(sqlx::query_as(
             "WITH ordered AS (SELECT start_time, LAG(end_time) OVER (ORDER BY start_time, id) AS previous_end
              FROM sessions WHERE exe_name='fixture.exe' AND (end_time IS NULL OR end_time >= ?))
-             SELECT COUNT(*) FROM ordered WHERE start_time - previous_end > 30000",
-        ).bind(started_at_ms).fetch_one(&mut conn))?;
-        d.event("recording-gaps", json!({"over30s":gaps}))?;
-        assert_eq!(gaps, 0, "isolated fixture recording has a gap");
+             SELECT previous_end, start_time FROM ordered WHERE start_time - previous_end > 30000",
+        ).bind(started_at_ms).fetch_all(&mut conn))?;
+        let unexplained = gaps
+            .iter()
+            .filter(|&&(end, resumed)| {
+                !suspensions.iter().any(|&(low, high, slept)| {
+                    end >= low - 30_000
+                        && resumed <= high + 30_000
+                        && (resumed - end).abs_diff(slept as i64) <= 30_000
+                })
+            })
+            .count();
+        d.event(
+            "recording-gaps",
+            json!({"over30s":gaps.len(),"intervals":gaps,"unexplained":unexplained}),
+        )?;
+        assert_eq!(
+            unexplained, 0,
+            "isolated fixture recording has an unexplained gap"
+        );
     } else {
         d.ready(UIA_NamePropertyId, "View details for Studio")?;
     }

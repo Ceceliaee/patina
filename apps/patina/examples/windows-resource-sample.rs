@@ -263,55 +263,73 @@ fn main() -> Result<()> {
     let mut previous = HashMap::new();
     let mut sample_count = 0_u64;
     let mut unavailable_samples = 0_u64;
-    let reason = loop {
+    let mut retried_samples = 0_u64;
+    let reason = 'measurement: loop {
         let start = clock.elapsed();
-        let rows = match processes() {
-            Ok(rows) => rows,
-            Err(error) => {
-                eprintln!("process enumeration failed: {error}");
-                break "enumeration-failed";
-            }
-        };
-        let Some(root_row) = rows.iter().find(|r| r.pid == root) else {
-            break "root-exited";
-        };
-        match root_row.created {
-            Some(time) if time == created => (),
-            Some(_) => break "root-identity-changed",
-            None => break "root-identity-unavailable",
-        }
-        known = owned_processes(&rows, root, created, &known);
-        let mut next = HashMap::new();
-        let mut samples = Vec::new();
-        for row in &rows {
-            let Some(identity) = known.get(&row.pid) else {
-                continue;
-            };
-            let Some(time) = identity.current else {
-                samples.push(
-                    json!({"pid":row.pid, "parentPid":row.parent, "name":row.name,
-                    "unavailable":true, "error":"possible descendant identity unavailable"}),
-                );
-                continue;
-            };
-            let elapsed = clock.elapsed().as_secs_f64();
-            match sample(row, time, elapsed, &previous) {
-                Ok((value, cpu)) => {
-                    samples.push(value);
-                    next.insert((row.pid, time), (elapsed, cpu));
+        let mut retried = false;
+        let (samples, next) = loop {
+            let rows = match processes() {
+                Ok(rows) => rows,
+                Err(error) => {
+                    eprintln!("process enumeration failed: {error}");
+                    break 'measurement "enumeration-failed";
                 }
-                Err(error) => samples
-                    .push(json!({"pid":row.pid,"unavailable":true,"error":error.to_string()})),
+            };
+            let Some(root_row) = rows.iter().find(|r| r.pid == root) else {
+                break 'measurement "root-exited";
+            };
+            match root_row.created {
+                Some(time) if time == created => (),
+                Some(_) => break 'measurement "root-identity-changed",
+                None => break 'measurement "root-identity-unavailable",
             }
-        }
+            known = owned_processes(&rows, root, created, &known);
+            let mut next = HashMap::new();
+            let mut samples = Vec::new();
+            for row in &rows {
+                let Some(identity) = known.get(&row.pid) else {
+                    continue;
+                };
+                let Some(time) = identity.current else {
+                    samples.push(
+                        json!({"pid":row.pid, "parentPid":row.parent, "name":row.name,
+                    "unavailable":true, "error":"possible descendant identity unavailable"}),
+                    );
+                    continue;
+                };
+                let elapsed = clock.elapsed().as_secs_f64();
+                match sample(row, time, elapsed, &previous) {
+                    Ok((value, cpu)) => {
+                        samples.push(value);
+                        next.insert((row.pid, time), (elapsed, cpu));
+                    }
+                    Err(error) => samples
+                        .push(json!({"pid":row.pid,"unavailable":true,"error":error.to_string()})),
+                }
+            }
+            let missing: Vec<_> = samples
+                .iter()
+                .filter(|s| s["unavailable"] == true)
+                .collect();
+            if missing.is_empty() {
+                break (samples, next);
+            }
+            if retried {
+                unavailable_samples += 1;
+                break (samples, next);
+            }
+            // A process can exit between the Toolhelp snapshot and OpenProcess.
+            // Resample the entire tree at one new instant, retaining the failed attempt.
+            let retry = json!({"kind":"retry","utc":Utc::now().to_rfc3339(),"unavailableProcesses":missing});
+            if let Err(error) = writeln!(output, "{retry}") {
+                eprintln!("resource retry output failed: {error}");
+                break 'measurement "output-write-failed";
+            }
+            retried = true;
+            retried_samples += 1;
+        };
         previous = next;
         sample_count += 1;
-        if samples
-            .iter()
-            .any(|sample| sample.get("unavailable") == Some(&Value::Bool(true)))
-        {
-            unavailable_samples += 1;
-        }
         if let Err(error) = writeln!(
             output,
             "{}",
@@ -328,7 +346,7 @@ fn main() -> Result<()> {
         std::thread::sleep(interval.min(duration.saturating_sub(clock.elapsed())));
     };
     let summary = json!({"kind":"completed", "stopReason":reason,"elapsedSeconds":clock.elapsed().as_secs_f64(),
-            "sampleCount":sample_count, "unavailableSamples":unavailable_samples,
+            "sampleCount":sample_count, "unavailableSamples":unavailable_samples, "retriedSamples":retried_samples,
             "complete":reason == "duration" && unavailable_samples == 0});
     write_summary(&mut output, &summary)?;
     if reason != "duration" || unavailable_samples > 0 {

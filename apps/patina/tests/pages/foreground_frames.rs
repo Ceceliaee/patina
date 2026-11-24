@@ -100,6 +100,10 @@ impl Capture {
                         let mut chromatic = 0;
                         let mut count = 0;
                         let mut hash = 2166136261u32;
+                        let mut legend_ink = 0;
+                        let mut ranking_ink = 0;
+                        let mut legend_hash = 2166136261u32;
+                        let mut ranking_hash = 2166136261u32;
                         for y in (height / 5..height * 93 / 100).step_by(4) {
                             for x in (width * 16 / 100..width * 95 / 100).step_by(4) {
                                 let word = pixels[(y * width + x) as usize] & 0xffffff;
@@ -115,6 +119,20 @@ impl Capture {
                                 }
                                 let min = *channels.iter().min().unwrap();
                                 let max = *channels.iter().max().unwrap();
+                                // Keep the legend strip and the body of the first ranking rows
+                                // separate from the surrounding white cards and page header.
+                                if (width / 3..width * 86 / 100).contains(&x)
+                                    && (height * 23 / 100..height * 27 / 100).contains(&y)
+                                {
+                                    legend_ink += i32::from(min < 175);
+                                    legend_hash = (legend_hash ^ word).wrapping_mul(16777619);
+                                }
+                                if x > width * 57 / 100
+                                    && (height / 3..height * 64 / 100).contains(&y)
+                                {
+                                    ranking_ink += i32::from(min < 175);
+                                    ranking_hash = (ranking_hash ^ word).wrapping_mul(16777619);
+                                }
                                 dark += i32::from(max < 175);
                                 light += i32::from(min > 235);
                                 chromatic += i32::from(max - min > 25);
@@ -143,7 +161,7 @@ impl Capture {
                         writeln!(
                             file,
                             "{}",
-                            json!({"startMs":began,"endMs":start.elapsed().as_millis(),"ok":ok,"dark":dark,"light":light,"color":chromatic,"count":count,"hash":hash,"sidebar":sidebar,"tileColumns":tile_columns,"iconTiles":marked})
+                            json!({"startMs":began,"endMs":start.elapsed().as_millis(),"ok":ok,"dark":dark,"light":light,"color":chromatic,"count":count,"hash":hash,"legendInk":legend_ink,"legendHash":legend_hash,"rankingInk":ranking_ink,"rankingHash":ranking_hash,"sidebar":sidebar,"tileColumns":tile_columns,"iconTiles":marked})
                         )?;
                         thread::sleep(Duration::from_millis(8));
                     }

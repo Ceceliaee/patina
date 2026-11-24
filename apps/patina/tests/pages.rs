@@ -210,6 +210,14 @@ fn reveal_control(hwnd: HWND, el: &IUIAutomationElement, bottom_inset: i32) -> R
     }
     Ok(())
 }
+
+fn reveal_language_selector(hwnd: HWND, language: &IUIAutomationElement) -> Result<(), Error> {
+    reveal_control(
+        hwnd,
+        language,
+        64 * unsafe { GetDpiForWindow(hwnd) } as i32 / 96,
+    )
+}
 #[test]
 #[ignore = "isolated Win32 desktop"]
 fn sidebar_opens_empty_history() -> Result<(), Error> {
@@ -358,6 +366,7 @@ fn navigate_in_locale(tag: &str) -> Result<(), Error> {
         let language = wait("language selector", || {
             controls(hwnd).ok()?.into_iter().find(|el| unsafe {
                 el.CurrentControlType().ok() == Some(UIA_ComboBoxControlTypeId)
+                    && el.CurrentIsEnabled().is_ok_and(|enabled| enabled.as_bool())
                     && el.CurrentName().is_ok_and(|n| n == language_name.as_str())
             })
         })
@@ -367,6 +376,7 @@ fn navigate_in_locale(tag: &str) -> Result<(), Error> {
                 names(hwnd)
             )
         })?;
+        reveal_language_selector(hwnd, &language)?;
         activate_control(hwnd, &language, false)?;
         let (next_tag, next_name) = match tag {
             "es" => ("ru-RU", "Русский"),
@@ -379,6 +389,13 @@ fn navigate_in_locale(tag: &str) -> Result<(), Error> {
                 el.CurrentControlType().ok() == Some(UIA_ListItemControlTypeId)
                     && el.CurrentName().is_ok_and(|n| n == next_name)
             })
+        })
+        .map_err(|e| {
+            let bounds = unsafe { language.CurrentBoundingRectangle() };
+            format!(
+                "{e}; language control {bounds:?}; Settings nodes {:?}",
+                names(hwnd)
+            )
         })?;
         activate_control(hwnd, &option, false)?;
         let next_locale = patina_activity::Locale::from_tag(Some(next_tag));
@@ -1623,11 +1640,7 @@ fn settings_navigation() -> Result<(), Error> {
                 && el.CurrentName().is_ok_and(|s| s == name)
         })
     };
-    reveal_control(
-        hwnd,
-        &language,
-        64 * unsafe { GetDpiForWindow(hwnd) } as i32 / 96,
-    )?;
+    reveal_language_selector(hwnd, &language)?;
     let initial = unsafe { language.CurrentBoundingRectangle()? };
     assert_control_height(hwnd, &language, 28)?;
     activate_control(hwnd, &language, false)?;
