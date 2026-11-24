@@ -54,8 +54,6 @@ fn key(hwnd: HWND, code: usize) -> Result<(), Error> {
     }
     Ok(())
 }
-use base64::{Engine, engine::general_purpose::STANDARD};
-use serde_json::{Value, json};
 
 #[test]
 #[ignore = "isolated Win32 desktop"]
@@ -71,28 +69,11 @@ fn native_update_download_confirmation_and_navigation() -> Result<(), Error> {
     seed(&dir.join("patina.db"))?;
     let fixture = root.path().join("updater-fixture");
     fs::create_dir(&fixture)?;
-    let signed: Value = serde_json::from_str(include_str!(
-        "../../../crates/updater/tests/fixtures/signed.json"
-    ))?;
-    let payload = STANDARD.decode(signed["payload"].as_str().unwrap())?;
-    fs::write(fixture.join("payload.bin"), &payload)?;
-    fs::write(
-        fixture.join("config.json"),
-        serde_json::to_vec(
-            &json!({"application":"patina-desktop","endpoints":["https://fixture.invalid/manifest"],"public_key":signed["public_key"]}),
-        )?,
-    )?;
-    let (platform, signature) = if cfg!(target_arch = "aarch64") {
-        ("windows-aarch64", &signed["signature_arm64"])
-    } else {
-        ("windows-x86_64", &signed["signature"])
-    };
-    fs::write(
-        fixture.join("manifest.json"),
-        serde_json::to_vec(
-            &json!({"schema":1,"application":"patina-desktop","version":"0.2.0","notes":"Migration fixture release notes","platforms":{platform:{"url":"https://fixture.invalid/setup.exe","size":payload.len(),"signature":signature}}}),
-        )?,
-    )?;
+    let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../crates/updater/tests/fixtures/feed");
+    for file in ["config.json", "manifest.json", "payload.bin"] {
+        fs::copy(source.join(file), fixture.join(file))?;
+    }
     let mut child = TestChild(
         Command::new(env!("CARGO_BIN_EXE_patina"))
             .arg("--today")

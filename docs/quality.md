@@ -6,6 +6,10 @@
 
 局部改动以覆盖实际行为、消费者和失败路径的相关验证作为本地完成条件；不因任务收尾、提交或推送而升级为全量测试。全量验证用于 CI、正式发布和跨模块改动。定向入口见[测试分层](#测试分层)。
 
+本机遇到火绒拦截时，保留检测名、文件路径和未完成的检查。同一目标即使重编译后文件名中的哈希改变，也停止本机重试，包括会构建或执行它的聚合命令。更新窗口按[本机 UI Automation 验收](#本机更新窗口验收)检查。
+
+截至 2026-11-24，开发机已有 `Trojan/ShellLoader.gx` 隔离记录，涉及 `xtask.exe`、桌面窗口测试和 `patina-updater` 库测试。在这台机器上，`cargo xtask …`、已被拦截的具名测试和包含它们的 `cargo test-headless` 留给 CI。
+
 | 实际改动 | 本地验收范围 |
 | --- | --- |
 | 纯文档 | `cargo xtask docs check`，核对事实、UTF-8、链接和义务；治理或验证政策变化追加 `cargo test -p xtask docs::` 及受影响规则的正反场景 |
@@ -72,6 +76,25 @@ cargo test --locked -p quietpro --features native-tests --test controls accessib
 编辑时运行命中 owner 的最小有效检查；完成时确认相关检查覆盖实际消费者及故障路径，局部改动即可结束本地验证。跨模块改动和正式发布按[验证范围](#验证范围)运行全量入口。修复失败后只重验失效范围；共享状态、执行顺序或聚合编排改变时重验对应组合。数据安全、权限和跨进程风险应在实现过程中验证。
 
 本地按实际影响范围验收；CI 负责可信候选的完整集合、双架构与独立 runtime，发布另按[发布政策](release.md)验收。局部任务完成不以本地全量或等待 CI 为前提；合并仍需同一候选的必需 CI 检查成功。报告已验证的范围，不能把局部通过表述为全量或 CI 通过。
+
+### 本机更新窗口验收
+
+在独立 Windows 测试会话中使用调试版 Patina 和 Windows UI Automation 客户端（例如 Windows SDK 的 Inspect）。从仓库根目录执行下列命令，或在已有调试版本上设置相同的进程环境。`PATINA_PROFILE_PARENT` 指向新建的临时资料目录，`PATINA_UPDATE_FIXTURE` 指向本机与 CI 共用的[离线更新样本](../crates/updater/tests/fixtures/feed/manifest.json)。
+
+```powershell
+# PowerShell 7.4+
+cargo build --locked -p patina --bin patina
+if ($LASTEXITCODE -ne 0) { throw "Patina build failed" }
+$testProfile = New-Item -ItemType Directory -Path (Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString()))
+Start-Process .\target\debug\patina.exe -ArgumentList '--today' -Environment @{
+    PATINA_PROFILE_PARENT = $testProfile.FullName
+    PATINA_UPDATE_FIXTURE = (Resolve-Path 'crates/updater/tests/fixtures/feed').Path
+}
+```
+
+在 UI Automation 树中选择该实例的「关于 → 检查更新」，核对测试版本 `0.1.0 → 0.2.0` 和说明 `Migration fixture release notes`。调用下载按钮，等安装按钮可用，再打开安装确认并取消。确认框应关闭，已下载的更新仍可安装，宿主仍在运行。验收后从托盘退出测试实例，再清理此次创建的临时资料目录。
+
+完整的[更新交互用例](../apps/patina/tests/updater.rs)由 [Windows x64 和 ARM64 CI](../.github/workflows/verify.yml) 运行，覆盖跨页导航、Esc 取消和无效安装包等失败路径。
 
 <a id="风险追加与桌面验收"></a>
 

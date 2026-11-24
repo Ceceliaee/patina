@@ -6,6 +6,7 @@ publish = false
 
 [features]
 native-tests = []
+ci-update-acceptance = ["native-tests"]
 
 [build-dependencies]
 embed-resource.workspace = true
@@ -28,7 +29,7 @@ required-features = ["native-tests"]
 
 [[test]]
 name = "updater"
-required-features = ["native-tests"]
+required-features = ["ci-update-acceptance"]
 
 [dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "time"] }

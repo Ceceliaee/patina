@@ -11,17 +11,10 @@ use std::{
 };
 
 pub(super) fn fixture() -> (Config, Value, Vec<u8>) {
-    let fixture: Value =
-        serde_json::from_str(include_str!("../tests/fixtures/signed.json")).unwrap();
-    let payload = STANDARD
-        .decode(fixture["payload"].as_str().unwrap())
-        .unwrap();
-    let config = Config {
-        application: "patina-desktop".into(),
-        endpoints: vec!["https://updates.invalid/manifest".into()],
-        public_key: fixture["public_key"].as_str().unwrap().into(),
-    };
-    let manifest = json!({"schema":1,"application":"patina-desktop","version":"0.2.0","notes":"Test release","platforms":{"windows-x86_64":{"url":"https://updates.invalid/setup.exe","signature":fixture["signature"],"size":payload.len()}}});
+    let config = serde_json::from_str(include_str!("../tests/fixtures/feed/config.json")).unwrap();
+    let manifest =
+        serde_json::from_str(include_str!("../tests/fixtures/feed/manifest.json")).unwrap();
+    let payload = include_bytes!("../tests/fixtures/feed/payload.bin").to_vec();
     (config, manifest, payload)
 }
 fn parse(value: &Value, config: &Config, current: &str, target: Target) -> Result<Option<Release>> {
@@ -82,7 +75,12 @@ fn manifest_rejects_wrong_product_architecture_and_unsafe_sources() {
             .unwrap()
             .is_none()
     );
-    assert!(parse(&value, &config, "0.1.0", Target::Arm64).is_err());
+    let mut x64_only = value.clone();
+    x64_only["platforms"]
+        .as_object_mut()
+        .unwrap()
+        .remove(Target::Arm64.key());
+    assert!(parse(&x64_only, &config, "0.1.0", Target::Arm64).is_err());
     for (key, wrong) in [
         ("schema", json!(2)),
         ("application", json!("unrelated-application")),
@@ -161,6 +159,21 @@ fn settled(service: &Service) -> Snapshot {
         );
         std::thread::sleep(Duration::from_millis(5));
     }
+}
+
+#[cfg(debug_assertions)]
+#[test]
+fn local_window_fixture_downloads_offline() {
+    let root = tempfile::tempdir().unwrap();
+    let feed = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/feed");
+    let service = crate::fixture::service(root.path().into(), &feed).unwrap();
+    service.request(Request::Check).unwrap();
+    let available = settled(&service);
+    assert_eq!(available.phase, Phase::Available, "{:?}", available.error);
+    assert_eq!(available.release.unwrap().version, "0.2.0");
+    service.request(Request::Download).unwrap();
+    let ready = settled(&service);
+    assert_eq!(ready.phase, Phase::Ready, "{:?}", ready.error);
 }
 
 #[test]

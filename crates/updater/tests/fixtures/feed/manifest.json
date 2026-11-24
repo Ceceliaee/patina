@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "application": "patina-desktop",
+  "version": "0.2.0",
+  "notes": "Migration fixture release notes",
+  "platforms": {
+    "windows-x86_64": {
+      "url": "https://fixture.invalid/setup.exe",
+      "size": 34,
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IFRlc3Qgb25seQpSVVN1Mmwvc0VGV09VSW1ibmpQZXRUei9uWlJ5ci80NDFzelhGUmNxTXhzMSs0a0RNS1hySnB0bWNrWGtla2ZoVkc3blp4NFBaOXIvRkoyU2NBeXE5L3F2TjJVZW0waGltUXc9CnRydXN0ZWQgY29tbWVudDogcGF0aW5hLWRlc2t0b3AgMC4yLjAgd2luZG93cy14ODZfNjQKTHJQQ09ocS9nODZFemN4WUNGdCs1blMzUHdSNjNHQWFRL1k5VjBad3diRlp1V3kvTVFBT3NqQzVoRG5hM2VUQW5RbjdRb3J0VHRvamQ5eXRQV1JLREE9PQo="
+    },
+    "windows-aarch64": {
+      "url": "https://fixture.invalid/setup.exe",
+      "size": 34,
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IFRlc3Qgb25seQpSVVN1Mmwvc0VGV09VSW1ibmpQZXRUei9uWlJ5ci80NDFzelhGUmNxTXhzMSs0a0RNS1hySnB0bWNrWGtla2ZoVkc3blp4NFBaOXIvRkoyU2NBeXE5L3F2TjJVZW0waGltUXc9CnRydXN0ZWQgY29tbWVudDogcGF0aW5hLWRlc2t0b3AgMC4yLjAgd2luZG93cy1hYXJjaDY0CjR4empUSVEwMUw5Z3ljdXZvYkFVNU1ZYmhJZ2ZxYWVVTXRrWXBkeE8xK25SeEpOaGN4ZlhUK2FrSVlvdyttS0ZjWjJaTHZIWDZjNlVzR0c4OWRCaEJBPT0K"
+    }
+  }
+}

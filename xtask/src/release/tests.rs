@@ -27,33 +27,26 @@ fn signed_bundles_require_one_program_for_each_architecture() -> Result<()> {
         bundled_key.lines().nth(1),
         Some("RWS8Vnk9uTaDSDCjB6PAuIIr4lCVvUE9uLAT+Dfz/qeYXGtwJzkEsBYZ")
     );
-    let fixture: Value = serde_json::from_str(include_str!(
-        "../../../crates/updater/tests/fixtures/signed.json"
+    let fixture: Manifest = serde_json::from_str(include_str!(
+        "../../../crates/updater/tests/fixtures/feed/manifest.json"
     ))?;
     let ver = version("0.2.0")?;
     let root = tempfile::tempdir()?;
     let input = root.path().join("input");
     let output = root.path().join("dist");
-    let config = Config {
-        public_key: fixture["public_key"].as_str().unwrap().into(),
-        ..Config::bundled()
-    };
-    let payload = STANDARD.decode(fixture["payload"].as_str().unwrap())?;
+    let config: Config = serde_json::from_str(include_str!(
+        "../../../crates/updater/tests/fixtures/feed/config.json"
+    ))?;
+    let payload = include_bytes!("../../../crates/updater/tests/fixtures/feed/payload.bin");
     for t in TARGETS {
         let dir = input.join(arch(t));
         fs::create_dir_all(&dir)?;
-        fs::write(dir.join(installer_name(&ver, t)), &payload)?;
+        fs::write(dir.join(installer_name(&ver, t)), payload)?;
         fs::write(dir.join(EXECUTABLE), pe_bytes(t))?;
         let entry = Artifact {
             url: asset_url(&ver, "example/patina", t)?,
             size: payload.len() as u64,
-            signature: fixture[match t {
-                Target::X64 => "signature",
-                Target::Arm64 => "signature_arm64",
-            }]
-            .as_str()
-            .unwrap()
-            .into(),
+            signature: fixture.platforms[t.key()].signature.clone(),
         };
         write_manifest(
             &dir.join(MANIFEST),
@@ -158,7 +151,7 @@ fn signed_bundles_require_one_program_for_each_architecture() -> Result<()> {
                     .platforms
                     .get_mut("windows-x86_64")
                     .unwrap()
-                    .signature = fixture["signature_arm64"].to_string()
+                    .signature = fixture.platforms[Target::Arm64.key()].signature.clone()
             }
             _ => {
                 changed.platforms.get_mut("windows-x86_64").unwrap().url =
@@ -186,7 +179,7 @@ fn signed_bundles_require_one_program_for_each_architecture() -> Result<()> {
     assert!(check().is_err());
     fs::remove_file(output.join("unintended.txt"))?;
     let installer = output.join(installer_name(&ver, Target::X64));
-    let mut bytes = payload.clone();
+    let mut bytes = payload.to_vec();
     bytes[0] ^= 1;
     fs::write(&installer, bytes)?;
     assert!(check().is_err());

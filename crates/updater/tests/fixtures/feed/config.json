@@ -1,0 +1,7 @@
+{
+  "application": "patina-desktop",
+  "endpoints": [
+    "https://fixture.invalid/manifest"
+  ],
+  "public_key": "dW50cnVzdGVkIGNvbW1lbnQ6IFRlc3Qgb25seQpSV1N1Mmwvc0VGV09VTE9UdXVEL1ZkVGMxcTJSQUV3Tk15aTJvUTh6WjdUM3VSeTJTMmFjSmtsWgo="
+}

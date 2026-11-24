@@ -202,7 +202,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Native Mini placement failed" }
           cargo test --locked -p patina --features native-tests --test lifecycle -- --ignored --test-threads=1
           if ($LASTEXITCODE -ne 0) { throw "Desktop process recovery failed" }
-          cargo test --locked -p patina --features native-tests --test updater native_update_download_confirmation_and_navigation -- --ignored --exact --test-threads=1
+          cargo test --locked -p patina --features ci-update-acceptance --test updater native_update_download_confirmation_and_navigation -- --ignored --exact --test-threads=1
           if ($LASTEXITCODE -ne 0) { throw "Native update interaction test failed" }
           cargo test --locked -p patina-updater --features native-tests --test installer native_install_upgrade_shutdown_and_uninstall -- --ignored --exact --test-threads=1
           if ($LASTEXITCODE -ne 0) { throw "Installer lifecycle test failed" }
