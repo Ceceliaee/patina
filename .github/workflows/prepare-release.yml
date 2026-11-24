@@ -132,11 +132,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Rust installation failed" }
           if ((rustc -vV) -notcontains "host: ${{ matrix.target }}") { throw "Rust host architecture mismatch" }
 
-      - name: Install packaging tools
+      - name: Install NSIS
+        shell: pwsh
+        run: ./.github/scripts/setup-nsis.ps1
+
+      - name: Install Minisign
         shell: pwsh
         run: |
-          choco install nsis --version=3.11.0 -y --no-progress
-          if ($LASTEXITCODE -ne 0) { throw "NSIS installation failed" }
           $archive = Join-Path $env:RUNNER_TEMP 'minisign-0.12-win64.zip'
           Invoke-WebRequest -Uri 'https://github.com/jedisct1/minisign/releases/download/0.12/minisign-0.12-win64.zip' -OutFile $archive
           if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne '37b600344e20c19314b2e82813db2bfdcc408b77b876f7727889dbd46d539479') { throw "Minisign archive hash mismatch" }

@@ -184,9 +184,7 @@ jobs:
 
       - name: Install NSIS for lifecycle tests
         shell: pwsh
-        run: |
-          choco install nsis --version=3.11.0 -y --no-progress
-          if ($LASTEXITCODE -ne 0) { throw "NSIS installation failed" }
+        run: ./.github/scripts/setup-nsis.ps1
 
       - name: Verify update interactions and installer lifecycle
         shell: pwsh
