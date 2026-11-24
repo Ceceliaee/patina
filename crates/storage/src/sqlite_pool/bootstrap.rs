@@ -66,6 +66,29 @@ pub fn expected_migration_metadata() -> Vec<(i64, &'static str, Vec<u8>)> {
         .collect()
 }
 
+pub fn is_known_migration_prefix(rows: &[(i64, String, Vec<u8>, bool)]) -> bool {
+    // Windows checkouts of v1.10.0 could embed focus_history.sql with CRLF.
+    const FOCUS_HISTORY_CRLF: [u8; 48] = [
+        0x20, 0xc7, 0x2c, 0xb9, 0xaa, 0xbd, 0x8d, 0xe9, 0x22, 0x93, 0x13, 0xfa, 0xe9, 0xdb, 0x60,
+        0x18, 0xaf, 0x2b, 0x19, 0x93, 0x46, 0xa3, 0xd9, 0x7b, 0x15, 0xc6, 0xe8, 0x92, 0xa8, 0x1b,
+        0x4a, 0x7c, 0xc7, 0xf7, 0x82, 0xed, 0x92, 0xd7, 0xe6, 0x2c, 0xe3, 0xd1, 0xcc, 0x4a, 0x03,
+        0x6e, 0x31, 0x10,
+    ];
+    let expected = expected_migration_metadata();
+    !rows.is_empty()
+        && rows.len() <= expected.len()
+        && rows.iter().zip(expected).all(
+            |((version, description, checksum, success), (v, d, canonical))| {
+                *success
+                    && *version == v
+                    && description == d
+                    && (*checksum == canonical
+                        || (v == schema::FOCUS_HISTORY_VERSION
+                            && checksum.as_slice() == FOCUS_HISTORY_CRLF))
+            },
+        )
+}
+
 pub async fn run_current_migrations(pool: &Pool<Sqlite>) -> Result<(), String> {
     let migrator = Migrator::new(InlineMigrationList(schema::tracker_migrations()))
         .await

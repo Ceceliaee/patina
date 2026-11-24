@@ -1,5 +1,5 @@
 use crate::data::schema;
-use crate::data::sqlite_pool::expected_migration_metadata;
+use crate::data::sqlite_pool::bootstrap::is_known_migration_prefix;
 use crate::domain::backup::{BackupPreview, CURRENT_BACKUP_VERSION};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -213,8 +213,14 @@ pub(super) async fn validate_sqlite(pool: &Pool<Sqlite>, full: bool) -> Result<(
     Ok(())
 }
 
-async fn migration_metadata(pool: &Pool<Sqlite>) -> Result<(i64, String), String> {
-    let rows = sqlx::query(
+struct MigrationHistory {
+    head: i64,
+    fingerprint: String,
+    supported: bool,
+}
+
+async fn migration_metadata(pool: &Pool<Sqlite>) -> Result<MigrationHistory, String> {
+    let rows = sqlx::query_as::<_, (i64, String, Vec<u8>, bool)>(
         "SELECT version, description, checksum, success
          FROM _sqlx_migrations
          ORDER BY version ASC",
@@ -227,11 +233,8 @@ async fn migration_metadata(pool: &Pool<Sqlite>) -> Result<(i64, String), String
     }
     let mut hasher = Sha256::new();
     let mut head = 0_i64;
-    for row in rows {
-        let version: i64 = row.get("version");
-        let description: String = row.get("description");
-        let checksum: Vec<u8> = row.get("checksum");
-        let success: bool = row.get("success");
+    let supported = is_known_migration_prefix(&rows);
+    for (version, description, checksum, success) in rows {
         if !success || version <= head {
             return Err("backup sqlite migration history is invalid".to_string());
         }
@@ -242,7 +245,11 @@ async fn migration_metadata(pool: &Pool<Sqlite>) -> Result<(i64, String), String
         hasher.update((checksum.len() as u64).to_le_bytes());
         hasher.update(&checksum);
     }
-    Ok((head, format!("{:x}", hasher.finalize())))
+    Ok(MigrationHistory {
+        head,
+        fingerprint: format!("{:x}", hasher.finalize()),
+        supported,
+    })
 }
 
 fn current_migration_head() -> i64 {
@@ -251,25 +258,6 @@ fn current_migration_head() -> i64 {
         .map(|migration| migration.version)
         .max()
         .unwrap_or_default()
-}
-
-fn expected_migration_fingerprint(head: i64) -> Option<String> {
-    let rows = expected_migration_metadata()
-        .into_iter()
-        .take_while(|(version, _, _)| *version <= head)
-        .collect::<Vec<_>>();
-    if rows.last().map(|(version, _, _)| *version) != Some(head) {
-        return None;
-    }
-    let mut hasher = Sha256::new();
-    for (version, description, checksum) in rows {
-        hasher.update(version.to_le_bytes());
-        hasher.update((description.len() as u64).to_le_bytes());
-        hasher.update(description.as_bytes());
-        hasher.update((checksum.len() as u64).to_le_bytes());
-        hasher.update(checksum);
-    }
-    Some(format!("{:x}", hasher.finalize()))
 }
 
 async fn count_table(pool: &Pool<Sqlite>, table: &str) -> Result<usize, String> {
@@ -348,9 +336,9 @@ async fn read_counts(pool: &Pool<Sqlite>) -> Result<SnapshotCounts, String> {
 }
 
 pub(super) async fn validate_current_schema(pool: &Pool<Sqlite>) -> Result<(), String> {
-    let (head, fingerprint) = migration_metadata(pool).await?;
-    if head != current_migration_head()
-        || expected_migration_fingerprint(head).as_deref() != Some(fingerprint.as_str())
+    let history = migration_metadata(pool).await?;
+    if history.head != current_migration_head()
+        || !history.supported
         || !crate::data::schema_contracts::has_web_activity_session_schema(pool).await?
         || !crate::data::schema_contracts::has_activity_reminder_enabled_schema(pool).await?
         || !crate::data::schema_contracts::has_reminder_identity_schema(pool).await?
@@ -416,7 +404,7 @@ fn preview_from_manifest(manifest: &SnapshotManifest, supported: bool) -> Backup
     }
 }
 
-async fn inspect_database_identity(path: &Path, full: bool) -> Result<(i64, String), String> {
+async fn inspect_database_identity(path: &Path, full: bool) -> Result<MigrationHistory, String> {
     let pool = open_snapshot_pool(path, true).await?;
     let result = async {
         validate_sqlite(&pool, full).await?;
@@ -434,9 +422,9 @@ async fn inspect_current_database(
     let pool = open_snapshot_pool(path, true).await?;
     let result = async {
         validate_sqlite(&pool, full).await?;
-        let (head, fingerprint) = migration_metadata(&pool).await?;
+        let history = migration_metadata(&pool).await?;
         let counts = read_counts(&pool).await?;
-        Ok((head, fingerprint, counts))
+        Ok((history.head, history.fingerprint, counts))
     }
     .await;
     pool.close().await;
@@ -448,16 +436,14 @@ async fn verify_extracted_database(
     manifest: &SnapshotManifest,
     full: bool,
 ) -> Result<bool, String> {
-    let (head, fingerprint) = inspect_database_identity(path, full).await?;
-    if head != manifest.database.migration_head
-        || fingerprint != manifest.database.migration_fingerprint
+    let history = inspect_database_identity(path, full).await?;
+    if history.head != manifest.database.migration_head
+        || history.fingerprint != manifest.database.migration_fingerprint
     {
         return Err("snapshot database metadata does not match its manifest".to_string());
     }
 
-    let supported = head <= current_migration_head()
-        && expected_migration_fingerprint(head).as_deref() == Some(fingerprint.as_str());
-    if head == current_migration_head() {
+    if history.head == current_migration_head() {
         let pool = open_snapshot_pool(path, true).await?;
         let counts_result = read_counts(&pool).await;
         pool.close().await;
@@ -465,7 +451,7 @@ async fn verify_extracted_database(
             return Err("snapshot database metadata does not match its manifest".to_string());
         }
     }
-    Ok(supported)
+    Ok(history.supported)
 }
 
 #[cfg(target_os = "windows")]
@@ -958,6 +944,64 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn windows_1_10_migration_checksum_survives_handoff_and_restore() {
+        let root = tempfile::tempdir().unwrap();
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../test-support/fixtures/patina-1.10.0.zip");
+        let source = root.path().join("source.zip");
+        fs::copy(fixture, &source).unwrap();
+        let extracted = extract_snapshot_archive(&source, true).await.unwrap();
+        let pool = open_snapshot_pool(&extracted.db_path, false).await.unwrap();
+        let migration = schema::tracker_migrations()
+            .into_iter()
+            .find(|row| row.version == schema::FOCUS_HISTORY_VERSION)
+            .unwrap();
+        let crlf = sha2::Sha384::digest(migration.sql.replace('\n', "\r\n").as_bytes());
+        sqlx::query("UPDATE _sqlx_migrations SET checksum=? WHERE version=?")
+            .bind(crlf.as_slice())
+            .bind(migration.version)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let directory = extracted.db_path.parent().unwrap();
+        crate::adopt_existing_database(directory, directory, false)
+            .await
+            .unwrap();
+        let archive = root.path().join("windows.zip");
+        assert!(
+            write_snapshot_archive(&pool, &archive, "1.10.0")
+                .await
+                .unwrap()
+                .restore_supported
+        );
+        let restored =
+            prepare_snapshot_backup(&archive, crate::data::backup::RestoreStrategy::Replace)
+                .await
+                .unwrap();
+        let restored_pool = open_snapshot_pool(&restored.db_path, true).await.unwrap();
+        let duration: i64 = sqlx::query_scalar(
+            "SELECT duration FROM sessions WHERE exe_name='fixture-released.exe'",
+        )
+        .fetch_one(&restored_pool)
+        .await
+        .unwrap();
+        assert_eq!(duration, 60_000);
+        restored_pool.close().await;
+
+        sqlx::query("UPDATE _sqlx_migrations SET checksum=? WHERE version=1")
+            .bind(crlf.as_slice())
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert!(!migration_metadata(&pool).await.unwrap().supported);
+        assert!(crate::adopt_existing_database(directory, directory, false)
+            .await
+            .is_err());
+        pool.close().await;
+    }
+
+    #[tokio::test]
     async fn snapshot_archive_round_trips_a_consistent_database() {
         let work_dir = SnapshotTestDirectory::new("patina-snapshot-test");
         let db_path = work_dir.0.join("source.db");
@@ -1107,13 +1151,9 @@ mod tests {
                     .expect("apply supported old migration");
             }
             drop(connection);
-            assert_eq!(
-                migration_metadata(&pool).await.expect("read old prefix"),
-                (
-                    old_head,
-                    expected_migration_fingerprint(old_head).expect("known old prefix")
-                )
-            );
+            let history = migration_metadata(&pool).await.expect("read old prefix");
+            assert_eq!(history.head, old_head);
+            assert!(history.supported);
             assert!(
                 !crate::data::schema_contracts::has_web_activity_session_schema(&pool)
                     .await
@@ -1144,8 +1184,7 @@ mod tests {
                     size_bytes: 1,
                     sha256: "0".repeat(64),
                     migration_head: old_head,
-                    migration_fingerprint: expected_migration_fingerprint(old_head)
-                        .expect("known migration prefix"),
+                    migration_fingerprint: history.fingerprint,
                 },
                 restore: SnapshotRestoreManifest {
                     strategies: vec!["replace".to_string(), "merge".to_string()],

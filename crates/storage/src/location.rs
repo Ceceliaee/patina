@@ -106,16 +106,7 @@ pub async fn adopt_existing_database(
     .fetch_all(&mut db)
     .await
     .map_err(|e| e.to_string())?;
-    let expected = crate::sqlite_pool::expected_migration_metadata();
-    if integrity != "ok"
-        || migrations.is_empty()
-        || migrations.len() > expected.len()
-        || migrations.iter().zip(expected).any(
-            |((v, d, c, ok), (version, description, checksum))| {
-                !ok || *v != version || d != description || *c != checksum
-            },
-        )
-    {
+    if integrity != "ok" || !crate::sqlite_pool::bootstrap::is_known_migration_prefix(&migrations) {
         return Err("The existing Patina database failed upgrade validation".into());
     }
     // Earlier versions stored this preference only after the first settings change.

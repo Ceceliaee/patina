@@ -4,3 +4,6 @@ crates/i18n/src/messages.rs text eol=lf
 
 # Release policy tests inspect workflow source contracts byte-for-byte.
 .github/workflows/*.yml text eol=lf
+
+# SQLx hashes the embedded migration bytes when creating a database.
+crates/storage/src/focus_history.sql text eol=lf
