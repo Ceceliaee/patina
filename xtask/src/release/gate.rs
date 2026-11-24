@@ -3,12 +3,12 @@ use serde_json::Value;
 use std::{env, fs::OpenOptions, io::Write, process::Command};
 
 pub(super) const JOBS: [&str; 6] = [
-    "Resolve and verify immutable candidate",
-    "Repository tooling checks",
-    "Native desktop checks (x64)",
-    "Native desktop checks (arm64)",
-    "Native Windows acceptance (x64)",
-    "Native Windows acceptance (arm64)",
+    "Verify commit",
+    "Repo checks",
+    "Headless checks (x64)",
+    "Headless checks (arm64)",
+    "Windows E2E (x64)",
+    "Windows E2E (arm64)",
 ];
 
 fn query(path: &str) -> Result<Value> {

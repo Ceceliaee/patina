@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   candidate:
-    name: Resolve and verify immutable candidate
+    name: Verify commit
     if: >-
       github.event_name == 'push' ||
       (github.event_name == 'workflow_run' &&
@@ -55,7 +55,7 @@ jobs:
         run: cargo xtask ci candidate
 
   tooling:
-    name: Repository tooling checks
+    name: Repo checks
     needs: candidate
     runs-on: ubuntu-latest
 
@@ -91,7 +91,7 @@ jobs:
           cargo xtask audit
 
   native-desktop:
-    name: Native desktop checks (${{ matrix.arch }})
+    name: Headless checks (${{ matrix.arch }})
     needs: candidate
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -140,8 +140,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Native workspace checks failed" }
 
   native-acceptance:
-    name: Native Windows acceptance (${{ matrix.arch }})
-    needs: [candidate, native-desktop]
+    name: Windows E2E (${{ matrix.arch }})
+    needs: candidate
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false

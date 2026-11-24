@@ -427,7 +427,7 @@ cargo xtask release package --target arm64 --output target/bundles/arm64 --maken
 
 通用质量门槛见[工程质量](./quality.md#验证范围)。正式发布前，目标提交必须在本仓库 `main` 的 push 事件上通过 `Verify`。发布工作流按 tag 的完整提交 SHA 查验最近一次对应运行及其全部作业；记录缺失、运行未结束、作业未全绿或查询失败时停止。通过后，版本、changelog 和安装包均取自该提交。
 
-`Verify` 的双架构 `Native desktop checks` 运行 workspace 单元、契约和无头控件交互测试，以及 Clippy、格式与依赖审计；独立的 `Native Windows acceptance` 显式启用原生测试，运行隔离桌面中的更新交互和安装、升级、卸载验收。发布门禁要求同一候选的两组任务均成功，无头通过不能替代 Windows 原生验收。版本准备使用 `cargo xtask release sync-version <version>` 同步工作区与锁文件中的产品版本。
+`Verify commit` 核验候选提交。`Repo checks` 检查仓库工具并审计依赖。`Headless checks` 在 x64 和 arm64 上检查格式、运行 workspace 单元、契约和无头控件交互测试，并运行 Clippy。`Windows E2E` 在两种架构上运行原生窗口交互和安装、升级、卸载验收。发布门禁要求同一候选提交的六个任务全部成功。版本准备使用 `cargo xtask release sync-version <version>` 同步工作区与锁文件中的产品版本。
 
 GitHub Actions 生成正式发布资产后、发布 GitHub Release 前，还必须执行：
 

@@ -249,12 +249,12 @@ fn verification_binds_exact_repo_revision_attempt_and_jobs() -> Result<()> {
     );
     let run = json!({"id":7,"run_attempt":2,"path":".github/workflows/verify.yml","event":"push","head_branch":"main","head_sha":sha,"repository":{"full_name":repo},"head_repository":{"full_name":repo},"status":"completed","conclusion":"success"});
     let names = [
-        "Resolve and verify immutable candidate",
-        "Repository tooling checks",
-        "Native desktop checks (x64)",
-        "Native desktop checks (arm64)",
-        "Native Windows acceptance (x64)",
-        "Native Windows acceptance (arm64)",
+        "Verify commit",
+        "Repo checks",
+        "Headless checks (x64)",
+        "Headless checks (arm64)",
+        "Windows E2E (x64)",
+        "Windows E2E (arm64)",
     ];
     let jobs=names.map(|name|json!({"name":name,"run_id":7,"head_sha":sha,"status":"completed","conclusion":"success"}));
     let inspect = |run: Value, jobs: Value, count: usize| {
