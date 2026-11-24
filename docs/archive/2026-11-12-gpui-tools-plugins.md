@@ -45,7 +45,7 @@
 - [x] 共用通知方式与提示音由宿主保存，两个插件提交内容与动作。验证默认独立通知不抢焦点、窗口内呈现偏好、同一事件只响一次，通知失败可重试；过期按钮不能操作已推进或已卸载的任务。[通知生命周期](../architecture.md#工具插件)
 - [x] 按现有筛选、排序和数量规则向主窗口及 Mini 提供状态。点击状态直达对应插件面板。验证主窗已回收、从有未保存编辑的页面跳转、目标已卸载、两个插件均未安装四种情况。[Mini 生命周期](../architecture.md#mini-生命周期)
 - [x] 由 Windows UI Automation 从实际侧栏进入，验证折叠及带文字导航、键盘次序、安装取消、卸载确认后的焦点、空列表、插件错误与重试。使用中英文、明暗主题及不同 DPI 检查截断和可读性。宿主及官方插件文案遵循[本地化契约](../localization.md#原生资源与回退)。
-- [x] 在独立测试库运行 Rust 插件契约、数据迁移和桌面集成测试。沿用[GPUI 验收方法](../working/2026-11-11-desktop-tray-mini.md)比较无插件、工具空闲、关窗计时和反复装卸后的整棵进程树，记录内存、CPU、句柄及记录连续性。将本次命令、样本、结果与剩余差异记入本方案；实际交付的插件 API 和安装步骤分别归入架构与作者文档。[工程质量](../quality.md#测试分层)
+- [x] 在独立测试库运行 Rust 插件契约、数据迁移和桌面集成测试。沿用[GPUI 验收方法](2026-11-11-desktop-tray-mini.md)比较无插件、工具空闲、关窗计时和反复装卸后的整棵进程树，记录内存、CPU、句柄及记录连续性。将本次命令、样本、结果与剩余差异记入本方案；实际交付的插件 API 和安装步骤分别归入架构与作者文档。[工程质量](../quality.md#测试分层)
 
 ## 验收记录
 
@@ -76,7 +76,7 @@ Windows 交互桌面运行 `tools::tool_tray_resources`，输出为 `artifacts/r
 
 仓库全量门禁 `pnpm run check:full` 通过，包括 232 个浏览器 UI 用例、Rust 回归、Clippy 和依赖审计。GPUI 的八个 Windows 工具用例另行在真实窗口运行，覆盖纯托盘番茄、独立与窗口内通知、Mini、装卸、键盘及资源采样。插件宿主另验燃料耗尽、无数据库导入、签名与更新回滚；原生服务另验三类使用阈值、中断恢复、跨期推进与通知重试。
 
-在仓库根目录运行。桌面 UI 用例使用独立临时配置和 SQLite 数据库。按[计数插件指南](../../desktop/plugins/counter/README.md)生成两个签名包，第一份保留英文按钮 `Add one`，第二份只把该按钮改为 `Increment`。将两份包的绝对路径分别放入 `PATINA_COUNTER_PACKAGE` 和 `PATINA_COUNTER_UPDATE`，签名测试密钥路径放入 `PATINA_COUNTER_SIGNING_KEY`。将 `PATINA_TOOL_SAMPLES` 指向本次专用的空输出目录；资源测量使用[桌面迁移基线](../working/2026-11-11-desktop-tray-mini.md)的 Windows 采样器。
+在仓库根目录运行。桌面 UI 用例使用独立临时配置和 SQLite 数据库。按[计数插件指南](../../desktop/plugins/counter/README.md)生成两个签名包，第一份保留英文按钮 `Add one`，第二份只把该按钮改为 `Increment`。将两份包的绝对路径分别放入 `PATINA_COUNTER_PACKAGE` 和 `PATINA_COUNTER_UPDATE`，签名测试密钥路径放入 `PATINA_COUNTER_SIGNING_KEY`。将 `PATINA_TOOL_SAMPLES` 指向本次专用的空输出目录；资源测量使用[桌面迁移基线](2026-11-11-desktop-tray-mini.md)的 Windows 采样器。
 
 ```powershell
 cargo +1.99.1 test --locked --manifest-path desktop/Cargo.toml -p patina-tool-host -- --include-ignored
