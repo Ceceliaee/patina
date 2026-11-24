@@ -28,9 +28,9 @@ App note en: TBD.
 
 ## [2.0.0] - 2026-11-23
 
-Release: Patina 2.0 用 Rust 和 GPUI 重写了 Windows 桌面界面，将提醒与专注纳入插件市场，从 v1.10.0 升级可保留活动记录和备份。
-App note: Patina 2.0 用 Rust 和 GPUI 重写了 Windows 桌面界面，将提醒与专注纳入插件市场，从 v1.10.0 升级可保留活动记录和备份。
-App note en: Patina 2.0 introduces a native Windows interface built with Rust and GPUI, brings Reminder and Focus to a new plugin store, and preserves your activity history and backups when you upgrade from v1.10.0.
+Release: Patina 2.0 用 Rust 和 GPUI 重写了原先基于 Tauri 和 React 的桌面界面，延续 Quiet Pro 风格，统一了各页的排版与控件，并新增主窗口整体缩放和插件市场。
+App note: Patina 2.0 用 Rust 和 GPUI 重写了原先基于 Tauri 和 React 的桌面界面，延续 Quiet Pro 风格，统一了各页的排版与控件，并新增主窗口整体缩放和插件市场。
+App note en: Patina 2.0 replaces its Tauri and React interface with a native desktop UI built in Rust with GPUI, brings more consistent Quiet Pro typography and controls to every page, and adds main window scaling and a plugin store.
 
 ### Added
 
@@ -40,6 +40,7 @@ App note en: Patina 2.0 introduces a native Windows interface built with Rust an
 ### Changed
 
 - 主窗口、迷你窗和提醒通知均改用 GPUI 原生绘制，桌面端不再依赖 WebView2。
+- 各页的标题、正文和按钮采用统一的字号和间距。弹窗中的按钮和输入框沿用页面上的样式，小时活动图和趋势图的悬停提示也用相同的方式排列名称与时长。
 - 从 v1.10.0 的「关于 → 检查更新」可原地升级到新版。升级后继续使用原来的数据库和备份目录，支持含空格的自定义路径。
 
 ### Internal

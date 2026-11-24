@@ -2,7 +2,7 @@
 
 # Patina
 
-Quiet, reliable time tracking that keeps your data local.
+A local-first, quiet, and trustworthy time tracker
 
 English · [简体中文](README.zh-CN.md)
 
