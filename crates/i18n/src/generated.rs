@@ -77,7 +77,7 @@ pub(super) const RUSSIAN_CARDINAL_MESSAGE: NativeExpr = NativeExpr::Plural { arg
 #[rustfmt::skip]
 pub(super) fn lookup(locale: Locale, key: &str) -> Option<NativeExpr> {
     match (locale, key) {
-        (Locale::ZhCn, "about.description") => Some(NativeExpr::Literal("愿时光，留痕成章。")),
+        (Locale::ZhCn, "about.description") => Some(NativeExpr::Literal("愿时光，留痕成章")),
         (Locale::ZhCn, "about.feedbackDialog.githubAction") => Some(NativeExpr::Literal("GitHub Issues")),
         (Locale::ZhCn, "about.feedbackDialog.githubOpening") => Some(NativeExpr::Literal("正在打开…")),
         (Locale::ZhCn, "about.feedbackDialog.githubTitle") => Some(NativeExpr::Literal("GitHub Issues")),
@@ -763,7 +763,7 @@ pub(super) fn lookup(locale: Locale, key: &str) -> Option<NativeExpr> {
         (Locale::ZhCn, "update.restartInstall") => Some(NativeExpr::Literal("重启安装")),
         (Locale::ZhCn, "update.support") => Some(NativeExpr::Literal("赞助项目")),
         (Locale::ZhCn, "update.upToDate") => Some(NativeExpr::Literal("已是最新版本")),
-        (Locale::EnUs, "about.description") => Some(NativeExpr::Literal("May time turn traces into stories.")),
+        (Locale::EnUs, "about.description") => Some(NativeExpr::Literal("May time turn traces into stories")),
         (Locale::EnUs, "about.feedbackDialog.githubAction") => Some(NativeExpr::Literal("GitHub Issues")),
         (Locale::EnUs, "about.feedbackDialog.githubOpening") => Some(NativeExpr::Literal("Opening…")),
         (Locale::EnUs, "about.feedbackDialog.githubTitle") => Some(NativeExpr::Literal("GitHub Issues")),
@@ -1449,7 +1449,7 @@ pub(super) fn lookup(locale: Locale, key: &str) -> Option<NativeExpr> {
         (Locale::EnUs, "update.restartInstall") => Some(NativeExpr::Literal("Restart to install")),
         (Locale::EnUs, "update.support") => Some(NativeExpr::Literal("Sponsor")),
         (Locale::EnUs, "update.upToDate") => Some(NativeExpr::Literal("You are up to date")),
-        (Locale::RuRu, "about.description") => Some(NativeExpr::Literal("Пусть следы времени сложатся в истории.")),
+        (Locale::RuRu, "about.description") => Some(NativeExpr::Literal("Пусть следы времени сложатся в истории")),
         (Locale::RuRu, "about.feedbackDialog.githubAction") => Some(NativeExpr::Literal("GitHub Issues")),
         (Locale::RuRu, "about.feedbackDialog.githubOpening") => Some(NativeExpr::Literal("Открытие…")),
         (Locale::RuRu, "about.feedbackDialog.githubTitle") => Some(NativeExpr::Literal("GitHub Issues")),
@@ -2135,7 +2135,7 @@ pub(super) fn lookup(locale: Locale, key: &str) -> Option<NativeExpr> {
         (Locale::RuRu, "update.restartInstall") => Some(NativeExpr::Literal("Перезапустить для установки")),
         (Locale::RuRu, "update.support") => Some(NativeExpr::Literal("Поддержать")),
         (Locale::RuRu, "update.upToDate") => Some(NativeExpr::Literal("Установлена актуальная версия")),
-        (Locale::Es, "about.description") => Some(NativeExpr::Literal("Que el tiempo convierta sus huellas en historias.")),
+        (Locale::Es, "about.description") => Some(NativeExpr::Literal("Que el tiempo convierta sus huellas en historias")),
         (Locale::Es, "about.feedbackDialog.githubAction") => Some(NativeExpr::Literal("GitHub Issues")),
         (Locale::Es, "about.feedbackDialog.githubOpening") => Some(NativeExpr::Literal("Abriendo…")),
         (Locale::Es, "about.feedbackDialog.githubTitle") => Some(NativeExpr::Literal("GitHub Issues")),
