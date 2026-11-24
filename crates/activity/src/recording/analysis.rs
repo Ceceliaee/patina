@@ -75,12 +75,28 @@ pub(super) async fn load(
                 .cmp(&snapshot.totals.get(*a))
                 .then(a.cmp(b))
         });
-        for r in snapshot.segments.iter().flatten() {
-            if !mapping.is_web_domain_enabled(&r.normalized_domain) {
+        let mut owner_icons = BTreeMap::new();
+        for (domain, icon) in icons {
+            owner_icons
+                .entry(crate::domain::web_links::resolve_owner(
+                    domain,
+                    &snapshot.rules,
+                ))
+                .or_insert(icon);
+        }
+        let mut seen_domains = std::collections::HashSet::new();
+        // The last enabled segment supplies a linked site's display metadata.
+        for r in snapshot.segments.iter().flatten().rev() {
+            if !seen_domains.insert(r.normalized_domain.as_str())
+                || !mapping.is_web_domain_enabled(&r.normalized_domain)
+            {
                 continue;
             }
             let key =
                 crate::domain::web_links::resolve_owner(&r.normalized_domain, &snapshot.rules);
+            if names.contains_key(&key) {
+                continue;
+            }
             let root = crate::domain::web_links::group_domain(&key);
             let rule = root.as_ref().and_then(|root| snapshot.rules.get(root));
             let raw = snapshot.overrides.get(&r.normalized_domain);
@@ -105,12 +121,7 @@ pub(super) async fn load(
             } else {
                 super::today::parse_color(&category.color).unwrap_or(0x8f98a8)
             };
-            let favicon = icons
-                .iter()
-                .find(|(domain, _)| {
-                    crate::domain::web_links::resolve_owner(domain, &snapshot.rules) == key
-                })
-                .map(|(_, icon)| (*icon).clone());
+            let favicon = owner_icons.remove(&key).cloned();
             appearance.insert(key.clone(), (fallback, custom, favicon));
             names.insert(key, name);
         }
@@ -170,11 +181,8 @@ pub(super) async fn load(
                 (cat.id, cat.label)
             } else {
                 let key = mapping.app_owner(&r.exe_name);
-                let (custom, _) = mapping.app_appearance(&key);
-                let custom_color = mapping
-                    .app_appearance(&key)
-                    .1
-                    .and_then(super::today::parse_color);
+                let (custom, color) = mapping.app_appearance(&key);
+                let custom_color = color.and_then(super::today::parse_color);
                 let fallback = if cat.id == "other" {
                     crate::color::app_color(&key)
                 } else {
@@ -203,7 +211,7 @@ pub(super) async fn load(
             series.favicon = favicon;
         }
     }
-    series.sort_by_key(|s| std::cmp::Reverse(s.daily.values().sum::<i64>()));
+    series.sort_by_cached_key(|s| std::cmp::Reverse(s.daily.values().sum::<i64>()));
     Ok(Trends {
         earliest,
         days,

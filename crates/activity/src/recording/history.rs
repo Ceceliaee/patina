@@ -149,24 +149,21 @@ pub(super) async fn load(
     let mut records = Vec::new();
     let mut groups = BTreeMap::<String, (usize, i64, i64)>::new();
     let mut durations = Vec::<i64>::new();
-    let mut membership = Vec::new();
+    let mut sources = std::collections::HashMap::new();
     for span in session_spans(&rows.sessions, start, cutoff, live) {
         let r = &rows.sessions[span.value];
-        let Some(TimelineApp {
-            key,
-            name,
-            category,
-            ..
-        }) = TimelineApp::resolve(&mapping, &r.exe_name, &r.app_name, locale)
-        else {
+        let source = sources
+            .entry((r.exe_name.as_str(), r.app_name.as_str()))
+            .or_insert_with(|| TimelineApp::resolve(&mapping, &r.exe_name, &r.app_name, locale));
+        let Some(source) = source.as_ref() else {
             continue;
         };
-        if app.as_ref().is_some_and(|wanted| *wanted != key) {
+        if app.as_ref().is_some_and(|wanted| *wanted != source.key) {
             continue;
         }
         let (lo, hi) = (span.start_ms, span.end_ms);
         let mut detail = Vec::new();
-        if titles && key != ANONYMOUS_ACTIVITY_KEY {
+        if titles && source.key != ANONYMOUS_ACTIVITY_KEY {
             if r.origin == "native" {
                 if let Some(items) = samples.get(&r.id) {
                     for t in items {
@@ -184,7 +181,7 @@ pub(super) async fn load(
         }
         let continuity = r.continuity_group_start_time.unwrap_or(r.start_time);
         let previous = groups.get(&r.exe_name).filter(|(_, end, group)| {
-            if key == ANONYMOUS_ACTIVITY_KEY {
+            if source.key == ANONYMOUS_ACTIVITY_KEY {
                 lo == *end
             } else {
                 continuity == *group || lo - *end <= merge_gap
@@ -196,11 +193,10 @@ pub(super) async fn load(
         });
         durations[id] += hi - lo;
         groups.insert(r.exe_name.clone(), (id, hi, continuity));
-        membership.push(id);
         records.push(HistoryRecord {
-            category,
-            key,
-            name,
+            category: source.category.clone(),
+            key: source.key.clone(),
+            name: source.name.clone(),
             start: lo,
             end: hi,
             group_duration: 0,
@@ -209,8 +205,8 @@ pub(super) async fn load(
             titles: detail,
         });
     }
-    for (r, id) in records.iter_mut().zip(membership) {
-        r.group_duration = durations[id];
+    for record in &mut records {
+        record.group_duration = durations[record.group_id];
     }
     Ok(HistoryDay {
         start,
