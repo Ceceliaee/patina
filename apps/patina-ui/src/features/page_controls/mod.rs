@@ -25,14 +25,35 @@ pub(crate) fn save_status(status: String, colors: quietpro::Palette) -> Stateful
         .aria_label(status)
         .whitespace_nowrap()
 }
-pub(crate) fn logo() -> Img {
-    static IMAGE: std::sync::LazyLock<std::sync::Arc<Image>> = std::sync::LazyLock::new(|| {
-        std::sync::Arc::new(Image::from_bytes(
-            ImageFormat::Png,
-            include_bytes!("../../../assets/icons/128x128.png").to_vec(),
-        ))
+pub(crate) fn logo(side: Pixels, surface: Rgba, window: &mut Window, cx: &mut App) -> AnyElement {
+    const BRAND_MARK: &[u8] =
+        include_bytes!("../../../../patina/assets/icons/source/app-icon-brand.svg");
+    let scale = window.scale_factor();
+    let extent = size(side, side).to_device_pixels(scale);
+    // Match the layout to the raster so fractional DPI does not resample its edges.
+    let side = extent.to_pixels(scale).width;
+    if Hsla::from(surface).l < 0.5 {
+        return svg()
+            .data(BRAND_MARK)
+            .size(side)
+            .text_color(rgb(0x8fa0b8))
+            .into_any_element();
+    }
+    let image = window.use_keyed_state(("patina-logo", extent.width.0 as u32), cx, |_, cx| {
+        let renderer = cx.svg_renderer();
+        let mark = renderer
+            .parse_svg(BRAND_MARK)
+            .expect("invalid bundled Patina logo");
+        let image = renderer
+            .render_parsed(&mark, SvgSize::Size(extent))
+            .expect("invalid Patina logo size");
+        cx.on_release(|image: &mut std::sync::Arc<RenderImage>, cx| {
+            cx.drop_image(image.clone(), None);
+        })
+        .detach();
+        image
     });
-    img(IMAGE.clone())
+    img(image.read(cx).clone()).size(side).into_any_element()
 }
 actions!(patina_lists, [NextControl, PreviousControl]);
 

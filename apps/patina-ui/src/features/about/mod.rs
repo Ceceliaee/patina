@@ -386,7 +386,7 @@ impl Render for About {
                     .flex_col()
                     .items_center()
                     .gap(px(8.))
-                    .child(logo().size(px(58.)))
+                    .child(logo(px(48.), c.panel, win, cx))
                     .child(
                         div()
                             .flex()

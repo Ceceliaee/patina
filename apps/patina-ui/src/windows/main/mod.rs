@@ -3,6 +3,7 @@ use crate::features::{
     classification::{Classification, ClassificationCache},
     data::{DataCache, DataPage, OpenHistoryDay},
     history::{History, HistoryCache},
+    page_controls::logo,
     settings::{PreferencesRead, Settings},
     today::{Today, TodaySnapshot},
     tools::Tools,
@@ -482,7 +483,7 @@ impl Render for MainWindow {
                     .window_control_area(WindowControlArea::Drag)
                     .gap(px(8.))
                     .font_weight(FontWeight::BOLD)
-                    .child(crate::features::page_controls::logo().size(px(18.)))
+                    .child(logo(px(18.), colors.chrome, window, cx))
                     .child("Patina"),
             )
             .child(
@@ -554,7 +555,7 @@ impl Render for MainWindow {
                     .items_start()
                     .justify_center()
                     .pt(px(8.))
-                    .child(crate::features::page_controls::logo().size(px(28.))),
+                    .child(logo(px(28.), colors.canvas, window, cx)),
             )
             .children(
                 [
