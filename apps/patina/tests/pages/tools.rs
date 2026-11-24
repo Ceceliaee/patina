@@ -1167,9 +1167,17 @@ fn verify_notice_hover(hwnd: HWND, footer: &str) -> Result<RECT, Error> {
     let bounds = wait("notification fitted around visible actions", || {
         let outer = rect()?;
         let action = unsafe { control.CurrentBoundingRectangle().ok()? };
+        let mut client = RECT::default();
+        let mut origin = windows::Win32::Foundation::POINT::default();
+        unsafe {
+            GetClientRect(hwnd, &mut client).ok()?;
+            windows::Win32::Graphics::Gdi::ClientToScreen(hwnd, &mut origin)
+                .ok()
+                .ok()?;
+        }
         let scale = unsafe { GetDpiForWindow(hwnd) } as f32 / 96.;
-        let inset = (outer.bottom - action.bottom) as f32 / scale;
-        ((12.0..=24.0).contains(&inset) && action.top > outer.top).then_some(outer)
+        let inset = (origin.y + client.bottom - action.bottom) as f32 / scale;
+        ((12.0..=24.0).contains(&inset) && action.top > origin.y).then_some(outer)
     })
     .map_err(|e| {
         format!("{e}; notification {:?}, footer {:?}", rect(), unsafe {
@@ -1193,6 +1201,7 @@ fn verify_notice_hover(hwnd: HWND, footer: &str) -> Result<RECT, Error> {
 
 fn verify_reminder_delivery(dialog: bool) -> Result<(), Error> {
     let _com = ComApartment::init()?;
+    unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     let root = tempfile::tempdir()?;
     let profile = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&profile)?;
