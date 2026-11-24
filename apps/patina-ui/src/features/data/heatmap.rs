@@ -4,7 +4,7 @@ use quietpro::{HeatmapCell, Palette, heatmap_layout};
 
 pub(super) struct HeatmapView<'a> {
     pub id: &'static str,
-    pub days: &'a [i64],
+    pub day_indices: &'a HashMap<NaiveDate, usize>,
     pub totals: &'a [i64],
     pub year: Option<i32>,
     pub weekly: bool,
@@ -89,19 +89,10 @@ impl DataPage {
         let active = entry.active.clone();
         drop(cache);
         let locale = self.client.locale.get();
-        let values: HashMap<_, _> = view
-            .days
-            .iter()
-            .zip(view.totals)
-            .filter_map(|(&day, &value)| {
-                chrono::DateTime::from_timestamp_millis(day)
-                    .map(|date| (date.with_timezone(&Local).date_naive(), value))
-            })
-            .collect();
         let in_range = |date: NaiveDate| view.year.is_none_or(|year| date.year() == year);
         let value = |date: NaiveDate| {
             if date <= today && in_range(date) {
-                values.get(&date).copied().unwrap_or(0)
+                view.day_indices.get(&date).map_or(0, |&i| view.totals[i])
             } else {
                 0
             }
@@ -132,18 +123,29 @@ impl DataPage {
                     })
                     .unwrap_or_default(),
             );
-            let visible: Vec<_> = week
-                .iter()
-                .copied()
-                .filter(|&date| date <= today && in_range(date))
-                .collect();
+            let future_week = week.iter().all(|&date| date > today || !in_range(date));
+            let week_description = view.weekly.then(|| {
+                let mut span = week
+                    .iter()
+                    .filter(|&&date| in_range(date) && (future_week || date <= today));
+                let first = span
+                    .next()
+                    .expect("calendar week intersects the displayed range");
+                let last = span.next_back().unwrap_or(first);
+                let activity = if future_week {
+                    text(locale, "data.notStarted")
+                } else {
+                    duration(totals[i])
+                };
+                format!("{first} – {last} ･ {activity}")
+            });
             let rows = weekly_rows(totals[i], max_week);
             let mut column = Vec::new();
             for (row, &date) in week.iter().enumerate() {
                 if !in_range(date)
                     || (view.year.is_none()
                         && if view.weekly {
-                            visible.is_empty()
+                            future_week
                         } else {
                             date > today
                         })
@@ -151,25 +153,8 @@ impl DataPage {
                     column.push(None);
                     continue;
                 }
-                let description = if view.weekly {
-                    let span: Vec<_> = if visible.is_empty() {
-                        week.iter()
-                            .copied()
-                            .filter(|&date| in_range(date))
-                            .collect()
-                    } else {
-                        visible.clone()
-                    };
-                    format!(
-                        "{} – {} ･ {}",
-                        span[0],
-                        span[span.len() - 1],
-                        if visible.is_empty() {
-                            text(locale, "data.notStarted")
-                        } else {
-                            duration(totals[i])
-                        }
-                    )
+                let description = if let Some(week_description) = &week_description {
+                    week_description.clone()
                 } else if date > today {
                     format!("{date} ･ {}", text(locale, "data.notStarted"))
                 } else {
@@ -212,7 +197,7 @@ impl DataPage {
                         })
                     },
                     future: if view.weekly {
-                        visible.is_empty()
+                        future_week
                     } else {
                         date > today
                     },
@@ -237,7 +222,7 @@ impl DataPage {
                         daily_intensity(value(date), max_day)
                     },
                     enabled: if view.weekly {
-                        !visible.is_empty()
+                        !future_week
                     } else {
                         date <= today
                     },

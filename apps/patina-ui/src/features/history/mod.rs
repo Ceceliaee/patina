@@ -437,8 +437,10 @@ impl History {
                     let missing: Vec<_> = day
                         .apps
                         .iter()
-                        .filter(|app| {
-                            app.0 != "activity:anonymous" && checked.insert(app.0.clone())
+                        .filter(|(key, _, _)| {
+                            key != "activity:anonymous"
+                                && app.as_ref().is_none_or(|target| target == key)
+                                && checked.insert(key.clone())
                         })
                         .map(|app| app.0.clone())
                         .collect();

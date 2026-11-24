@@ -16,6 +16,11 @@ impl History {
         let missing: Vec<_> = day
             .favicons
             .iter()
+            .filter(|(key, _)| {
+                self.target
+                    .as_ref()
+                    .is_none_or(|(target, _)| target == *key)
+            })
             .filter(|(key, url)| self.icons.get(*key).and_then(|i| i.source.as_ref()) != Some(*url))
             .map(|(key, url)| (key.clone(), url.clone()))
             .collect();

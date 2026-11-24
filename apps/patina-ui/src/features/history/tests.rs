@@ -76,7 +76,18 @@ fn late_history_response_cannot_replace_the_selected_day(cx: &mut TestAppContext
     let old = wait_for_day(cx, &client, &requests, first);
     cx.update(|cx| view.update(cx, |history, cx| history.change_day(second, cx)));
     let current = wait_for_day(cx, &client, &requests, second);
-    client.test_answer(current, Reply::History(day(second)));
+    let mut detail_day = day(second);
+    detail_day.apps = vec![
+        ("example".into(), "Example".into(), 60_000),
+        ("another".into(), "Another".into(), 30_000),
+    ];
+    client.test_answer(current, Reply::History(detail_day));
+    cx.run_until_parked();
+    let FromWindow::Request(id, request) = requests.try_recv().unwrap() else {
+        panic!("expected the detail icon request");
+    };
+    assert!(matches!(*request, WindowRequest::Icons(keys) if keys == ["example"]));
+    client.test_answer(id, Reply::Icons(vec![]));
     cx.run_until_parked();
     client.test_answer(old, Reply::History(day(first)));
     cx.run_until_parked();

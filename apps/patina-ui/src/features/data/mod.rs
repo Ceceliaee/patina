@@ -472,7 +472,7 @@ impl DataPage {
         heat = heat.child(self.render_heatmap(
             heatmap::HeatmapView {
                 id: "overview-heatmap",
-                days: &frame.heat.days,
+                day_indices: &frame.heat_day_indices,
                 totals: &totals,
                 year: frame.request.year,
                 weekly: self.weekly,

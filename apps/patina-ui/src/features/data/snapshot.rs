@@ -26,6 +26,7 @@ pub(super) struct DataFrame {
     pub(super) request: PanelRequest,
     pub(super) trend: Rc<Trends>,
     pub(super) heat: Rc<Trends>,
+    pub(super) heat_day_indices: HashMap<NaiveDate, usize>,
     pub(super) series_totals: Vec<i64>,
     pub(super) total: i64,
     icons: HashMap<String, FrameIcon>,
@@ -299,12 +300,22 @@ impl DataPage {
         } else {
             Vec::new()
         };
+        let heat_day_indices = heat
+            .days
+            .iter()
+            .enumerate()
+            .filter_map(|(index, &millis)| {
+                let date = chrono::DateTime::from_timestamp_millis(millis)?;
+                Some((date.with_timezone(&Local).date_naive(), index))
+            })
+            .collect();
         self.frame = Some(DataFrame {
             total: series_totals.iter().sum(),
             series_totals,
             request,
             trend,
             heat,
+            heat_day_indices,
             icons,
             revision,
         });

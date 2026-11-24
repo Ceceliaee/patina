@@ -204,7 +204,7 @@ impl DataPage {
     }
     fn trend_heatmap(
         &self,
-        days: &[i64],
+        day_indices: &HashMap<NaiveDate, usize>,
         totals: &[i64],
         c: Palette,
         _win: &Window,
@@ -213,7 +213,7 @@ impl DataPage {
         self.render_heatmap(
             HeatmapView {
                 id: "trend-heatmap",
-                days,
+                day_indices,
                 totals,
                 year: self.frame.as_ref().unwrap().request.year,
                 weekly: self.trend_heat_weekly,
@@ -658,7 +658,7 @@ impl DataPage {
                     }
                 }
             }
-            self.trend_heatmap(&heat.days, &values, c, win, cx)
+            self.trend_heatmap(&frame.heat_day_indices, &values, c, win, cx)
         };
         let heat = div()
             .id("destination-heatmap")

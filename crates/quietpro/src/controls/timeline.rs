@@ -250,10 +250,23 @@ mod tests {
                 let colors = Palette::from(win.appearance());
                 div().w(px(self.0)).when(self.0 > 0., |row| {
                     row.child(TimelineOverview {
-                        title: "Timeline".into(),
-                        legends: (1..=11)
-                            .map(|i| (format!("App {i}"), rgb(0x123456)))
-                            .collect(),
+                        title: "时间轴".into(),
+                        legends: [
+                            "Editor",
+                            "Tracker",
+                            "短视频",
+                            "Screen Capture",
+                            "Notes",
+                            "Web Browser",
+                            "代码编辑器",
+                            "文档",
+                            "Music",
+                            "终端",
+                            "Player",
+                        ]
+                        .into_iter()
+                        .map(|name| (name.into(), rgb(0x123456)))
+                        .collect(),
                         segments: vec![],
                         actions: div().w(px(84.)).into_any_element(),
                         notice: None,
@@ -277,11 +290,15 @@ mod tests {
                     cx.notify();
                 });
                 win.render_frame(cx);
-                let count = win
-                    .painted_quads()
-                    .iter()
-                    .filter(|q| q.background == rgb(0x123456).into())
-                    .count();
+                let positions = |win: &Window| {
+                    win.painted_quads()
+                        .iter()
+                        .filter(|q| q.background == rgb(0x123456).into())
+                        .map(|q| q.bounds)
+                        .collect::<Vec<_>>()
+                };
+                let first = positions(win);
+                let count = first.len();
                 match width {
                     0. => assert_eq!(count, 0),
                     320. => assert!(
@@ -290,6 +307,8 @@ mod tests {
                     ),
                     _ => assert_eq!(count, 7),
                 }
+                win.render_frame(cx);
+                assert_eq!(first, positions(win), "legend moved after its first paint");
             }
         })
         .unwrap();
