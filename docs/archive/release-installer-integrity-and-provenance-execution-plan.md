@@ -146,7 +146,7 @@ release:verify-assets
 
 ### 4.1 当前链路
 
-当前 [`../../.github/workflows/prepare-release.yml`](../../.github/workflows/prepare-release.yml) 的相关顺序是：
+当前 [`../../.github/workflows/prepare-release.yml`](../../.github/workflows/release.yml) 的相关顺序是：
 
 ```text
 resolve tag

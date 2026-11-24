@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   resolve:
-    name: Verify release tag and CI
+    name: Verify tag and CI
     runs-on: windows-latest
     permissions:
       contents: read
@@ -46,8 +46,8 @@ jobs:
           REQUESTED_VERSION: ${{ inputs.version }}
         run: cargo xtask release resolve
 
-  version-files:
-    name: Check version files
+  prepare:
+    name: Prepare release
     runs-on: windows-latest
     needs: resolve
 
@@ -58,37 +58,8 @@ jobs:
           ref: ${{ needs.resolve.outputs.commit }}
           fetch-depth: 0
 
-      - name: Validate version files
-        shell: pwsh
-        run: |
-          cargo xtask release validate-version-files ${{ needs.resolve.outputs.version }}
-
-  changelog:
-    name: Check changelog
-    runs-on: windows-latest
-    needs: resolve
-
-    steps:
-      - name: Checkout release tag
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: ${{ needs.resolve.outputs.commit }}
-          fetch-depth: 0
-
-      - name: Validate changelog
-        run: cargo xtask release validate-changelog ${{ needs.resolve.outputs.version }}
-
-  release-notes:
-    name: Prepare release notes
-    runs-on: windows-latest
-    needs: resolve
-
-    steps:
-      - name: Checkout release tag
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: ${{ needs.resolve.outputs.commit }}
-          fetch-depth: 0
+      - name: Check version files and changelog
+        run: cargo xtask release validate-version-files ${{ needs.resolve.outputs.version }}
 
       - name: Write release notes
         run: cargo xtask release write-release-notes ${{ needs.resolve.outputs.version }} dist-release/release-notes.md
@@ -102,7 +73,7 @@ jobs:
           retention-days: 7
 
   windows-build:
-    name: Build Windows installer (${{ matrix.arch }})
+    name: Build installer (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -114,7 +85,7 @@ jobs:
           - arch: arm64
             runner: windows-11-arm
             target: aarch64-pc-windows-msvc
-    needs: [resolve, version-files, changelog, release-notes]
+    needs: [resolve, prepare]
 
     steps:
       - name: Checkout release tag
@@ -170,9 +141,9 @@ jobs:
           retention-days: 7
 
   publish:
-    name: Publish GitHub Release
+    name: Publish release
     runs-on: windows-latest
-    needs: [resolve, release-notes, windows-build]
+    needs: [resolve, prepare, windows-build]
     permissions:
       contents: write
       id-token: write
@@ -262,7 +233,7 @@ jobs:
         run: cargo xtask release readback '${{ needs.resolve.outputs.version }}' dist-release '${{ github.repository }}'
 
   r2:
-    name: Sync R2 updater mirror
+    name: Sync R2 mirror
     runs-on: windows-latest
     needs: [resolve, publish]
     if: ${{ !contains(needs.resolve.outputs.version, '-') }}

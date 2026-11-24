@@ -33,7 +33,7 @@ owner 指事实或行为的权威归属；消费者指依赖它的模块、页�
 | runtime 已有七组和独立准备 | [参数](../../tests/tauriRuntimeOptions.ts)定义 contracts、data-recovery、storage-restart、webview-recovery、window-lifecycle、mini-input、resources；普通入口六组，资源并集以 resources 替换 mini-input。现有 [runner](../../tests/tauriRuntimeRunner.ts)、[harness](../../tests/tauriRuntimeHarness.ts)、[fixture](../../tests/tauriRuntimeFixtures.ts)、[进程监督](../../tests/tauriRuntimeProcess.ts)与 [report](../../tests/tauriRuntimeReport.ts)可复用，不再拆一次相同分组 |
 | 部分功能与长采样仍绑定 | 调查时 [Mini runtime](../../tests/tauriMiniWindowRuntime.ts)有 100 次展开、20 次关闭重开及资源模式的 10 分钟静置；[主窗口资源](../../tests/tauriResourceLifecycle.ts)有 forced/natural GC 各 30 轮和静置。实施中维护者取消长静置并将循环次数减半，最终范围见第 3 节 |
 | 各层不能互相替代 | browser 默认 headless、IPC 为 stub；Rust 还有 [native probe 集成](../../src-tauri/tests/native_probe_lifecycle.rs)。全仓 coverage、native/runtime mutation 与 benchmark 各有专项用途 |
-| CI 与发布已有独立责任 | [Verify](../../.github/workflows/verify.yml)的可信 candidate、frontend、双架构 Rust/依赖、独立 runtime，以及[发布 workflow](../../.github/workflows/prepare-release.yml)的正式资产校验继续保留 |
+| CI 与发布已有独立责任 | [Verify](../../.github/workflows/verify.yml)的可信 candidate、frontend、双架构 Rust/依赖、独立 runtime，以及[发布 workflow](../../.github/workflows/release.yml)的正式资产校验继续保留 |
 | 耗时只能按可比场景解释 | [此前反馈整改记录](../archive/2026-10-25-test-feedback-and-desktop-isolation-plan.md)中一次最终 `check:full` 为 429.55 秒；原合并稿曾核对对应本地结果退出 0，未重新绑定全部输入。不能据此声称当前工作树通过，或推断每次小改都必须同样耗时 |
 | 内容不变也可能使证据失效 | [工程质量](../quality.md#验证范围)与 [pnpm 审计实现](../../scripts/pnpm-audit.ts)要求 JS 离线审计使用最近 24 小时的成功联网报告；新鲜度和执行场景也须满足原 owner |
 

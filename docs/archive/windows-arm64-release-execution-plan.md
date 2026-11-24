@@ -67,7 +67,7 @@
 
 | owner | 修改职责 | 边界 |
 | --- | --- | --- |
-| [发布工作流](../../.github/workflows/prepare-release.yml) | 双架构任务、artifact 汇总、发布顺序、R2 | 不在 YAML 复制另一套资产命名和清单业务实现 |
+| [发布工作流](../../.github/workflows/release.yml) | 双架构任务、artifact 汇总、发布顺序、R2 | 不在 YAML 复制另一套资产命名和清单业务实现 |
 | [发布脚本](../../scripts/release.ts) | 架构映射、文件发现、清单、校验和、独立验证、发布说明 | 保留一个规范实现，不建立新旧两套发布逻辑 |
 | [验证工作流](../../.github/workflows/verify.yml) | 两种架构的 Rust 和运行时验证 | 不削弱已有事件条件、PR 信任边界和权限 |
 | [依赖审计](../../scripts/audit-dependencies.ts) | 两种 target 下审计豁免的不可达性证据 | ARM 上可达的依赖不能继续作为锁文件例外忽略 |

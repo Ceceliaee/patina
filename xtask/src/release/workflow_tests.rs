@@ -17,7 +17,7 @@ fn workflows_pin_reviewed_actions() {
         "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4",
         "softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3",
     ];
-    for name in ["pr-intake", "verify", "prepare-release"] {
+    for name in ["pr-intake", "verify", "release"] {
         let source = workflow(name);
         let actions: Vec<_> = source
             .lines()
@@ -35,14 +35,14 @@ fn workflows_pin_reviewed_actions() {
 
 #[test]
 fn release_jobs_publish_only_verified_immutable_assets() {
-    let flow = workflow("prepare-release");
+    let flow = workflow("release");
     let (before, after) = flow.split_once("\n  publish:\n").unwrap();
     let (publish, mirror) = after.split_once("\n  r2:\n").unwrap();
     for phrase in [
         "ref: refs/heads/main",
         "persist-credentials: false",
         "cargo xtask release resolve",
-        "needs: [resolve, version-files, changelog, release-notes]",
+        "needs: [resolve, prepare]",
         "target: x86_64-pc-windows-msvc",
         "runner: windows-11-arm",
         "target: aarch64-pc-windows-msvc",
@@ -57,8 +57,22 @@ fn release_jobs_publish_only_verified_immutable_assets() {
         assert!(before.contains(phrase), "{phrase}");
     }
     assert!(!before.contains("contents: write") && !before.contains("id-token: write"));
+    let (_, prepare_and_build) = before.split_once("\n  prepare:\n").unwrap();
+    let (mut prepare, _) = prepare_and_build
+        .split_once("\n  windows-build:\n")
+        .unwrap();
+    for phase in [
+        "needs: resolve",
+        "ref: \x24{{ needs.resolve.outputs.commit }}",
+        "cargo xtask release validate-version-files",
+        "cargo xtask release write-release-notes",
+        "name: release-notes",
+        "path: dist-release/release-notes.md",
+    ] {
+        prepare = prepare.split_once(phase).unwrap().1;
+    }
     for phrase in [
-        "needs: [resolve, release-notes, windows-build]",
+        "needs: [resolve, prepare, windows-build]",
         "contents: write",
         "id-token: write",
         "attestations: write",

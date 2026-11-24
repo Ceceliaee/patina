@@ -47,7 +47,7 @@
 
 - Rust 测试资产：[`src-tauri/src/engine/tracking/runtime.rs`](../../src-tauri/src/engine/tracking/runtime.rs)、[`src-tauri/src/domain/tracking.rs`](../../src-tauri/src/domain/tracking.rs)
 - CI gate：[`../../.github/workflows/verify.yml`](../../.github/workflows/verify.yml)
-- Release gate：[`../../.github/workflows/prepare-release.yml`](../../.github/workflows/prepare-release.yml)
+- Release gate：[`../../.github/workflows/prepare-release.yml`](../../.github/workflows/release.yml)
 - settings owner 回流点：
   - [`../../src/features/settings/services/settingsRuntimeAdapterService.ts`](../../src/features/settings/services/settingsRuntimeAdapterService.ts)
   - [`../../src/app/services/appRuntimeBootstrapService.ts`](../../src/app/services/appRuntimeBootstrapService.ts)
@@ -132,7 +132,7 @@
 当前问题：
 
 - [`../../.github/workflows/verify.yml`](../../.github/workflows/verify.yml) 只跑 `cargo check`
-- [`../../.github/workflows/prepare-release.yml`](../../.github/workflows/prepare-release.yml) 也只跑 `cargo check`
+- [`../../.github/workflows/prepare-release.yml`](../../.github/workflows/release.yml) 也只跑 `cargo check`
 - 但 [`../../src-tauri/src/engine/tracking/runtime.rs`](../../src-tauri/src/engine/tracking/runtime.rs)、[`../../src-tauri/src/domain/tracking.rs`](../../src-tauri/src/domain/tracking.rs) 等文件里已经有大量 `#[test]`
 
 执行清单：
@@ -141,7 +141,7 @@
 - [x] 让 verify workflow 至少执行：
 - [x] `cargo check --manifest-path src-tauri/Cargo.toml --quiet`
 - [x] `cargo test --manifest-path src-tauri/Cargo.toml --quiet`
-- [x] 在 [`../../.github/workflows/prepare-release.yml`](../../.github/workflows/prepare-release.yml) 中增加 `cargo test`
+- [x] 在 [`../../.github/workflows/prepare-release.yml`](../../.github/workflows/release.yml) 中增加 `cargo test`
 - [x] 评估是否补一个统一的本地命令入口，例如 `npm run check:rust` 或 `npm run check:full`
 - [x] 如果新增脚本，确保 CI 与本地用同一入口，而不是两套不同命令
 - [x] 记录 Rust 测试已进入默认 gate 的事实，供后续文档回写

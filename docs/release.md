@@ -16,11 +16,11 @@
 2. 在本地同步所有版本文件并整理 changelog。长期政策文档不保存当前版本值。
 3. 运行版本一致性、changelog 和 `cargo xtask check`；正式资产由 workflow 生成，本地默认不创建 `dist-release`、安装包或 updater 产物。
 4. 获得当前任务的远程 push 授权后推送准备提交。等该提交在 `main` 的 `Verify` 全绿，再依单独的 tag 或发布授权为该提交创建并推送 `vX.Y.Z`。
-5. [`prepare-release.yml`](../.github/workflows/prepare-release.yml) 从 tag 对应 commit 校验版本与 changelog，拒绝已有 Release，生成并独立验证安装包、校验和与 updater manifest，完成 attestation 后以禁止覆盖的方式创建 GitHub Release。
+5. [`release.yml`](../.github/workflows/release.yml) 从 tag 对应 commit 校验版本与 changelog，拒绝已有 Release，生成并独立验证安装包、校验和与 updater manifest，完成 attestation 后以禁止覆盖的方式创建 GitHub Release。
 6. GitHub Release 成立后再同步 R2 镜像；镜像失败不能撤销、覆盖或改变 GitHub Release 主事实，updater 继续优先使用 GitHub endpoint。
 7. 发布模式的 `workflow_dispatch` 只补跑已有 tag 且尚无 Release 的流程。补跑使用原 tag 的工作流和源码，仍需满足该工作流的发布门槛。Release 已存在时必须按不可变规则准备新版本。
 
-补跑时使用目标 tag 对应的 workflow 版本，例如 `gh workflow run prepare-release.yml --ref v<version> -f version=<version>`。历史 tag 沿用该版本发布时的工作流和工具链。
+目标 tag 包含 `release.yml` 时，用 `gh workflow run release.yml --ref v<version> -f version=<version>` 补跑。对于仅含 `prepare-release.yml` 的历史 tag，若原发布运行仍可重试，用 `gh run rerun <run-id> --failed` 从原提交重试失败任务。[GitHub 运行重试说明](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs)
 
 默认协作在 tag 推送并确认发布 workflow 已触发后即可结束；只有用户要求或正在排查失败时才持续监看。浏览器扩展商店与扩展 Release 由 `patina-web-sync` 仓库负责，不进入 Patina 主应用发布流程。
 
@@ -28,7 +28,7 @@
 
 - 稳定发布线为 `1.x`
 - 仓库已进入公开稳定阶段，后续版本按标准 `SemVer` 管理
-- 默认通过推送 `vX.Y.Z` / `vX.Y.Z-prerelease` 版本 tag 自动触发 GitHub Actions 工作流 [prepare-release.yml](../.github/workflows/prepare-release.yml) 中的 `Publish Release` 流程；必要时也可手动触发已有 tag 的发布流程补跑
+- 默认通过推送 `vX.Y.Z` / `vX.Y.Z-prerelease` 版本 tag 自动触发 GitHub Actions 工作流 [release.yml](../.github/workflows/release.yml) 中的 `Publish Release` 流程；必要时也可手动触发已有 tag 的发布流程补跑
 
 ---
 
@@ -396,7 +396,7 @@ GitHub Release 继续作为正式发布源、主下载入口和主更新清单�
 
 ### Windows 安装与更新
 
-Windows 应用 ID 为 `Ceceliaee.Patina`。开始菜单和已安装的应用均显示为 Patina。[`prepare-release.yml`](../.github/workflows/prepare-release.yml) 发布 NSIS 安装包和原生更新清单 `latest.json`，沿用 `vX.Y.Z` 标签和 `Patina vX.Y.Z` 发布标题。
+Windows 应用 ID 为 `Ceceliaee.Patina`。开始菜单和已安装的应用均显示为 Patina。[`release.yml`](../.github/workflows/release.yml) 发布 NSIS 安装包和原生更新清单 `latest.json`，沿用 `vX.Y.Z` 标签和 `Patina vX.Y.Z` 发布标题。
 
 Tauri v1.10.0 通过 `latest.json` 取得同一架构的签名安装包。首个升级版本须高于 1.10.0，并使用旧客户端信任的签名密钥。安装器按旧版的 `/UPDATE` 参数读取 Windows 安装登记，在原位置替换程序。旧数据库和备份目录继续使用自定义位置或旧默认位置 `%APPDATA%/Patina/`。资料位置冲突、数据库不可用或旧版仍有待完成的数据搬移时，安装停止并保留旧程序。新安装的默认位置见[桌面资料目录](architecture.md#运行身份与持久化隔离)。
 
@@ -437,7 +437,7 @@ GitHub Actions 生成正式发布资产后、发布 GitHub Release 前，还必�
 
 默认不在本地手工生成 `dist-release`、安装包或更新清单。
 `cargo xtask release` 的 `write-release-notes`、`package` 和 `prepare` 子命令
-默认属于 GitHub Actions 工作流 [`prepare-release.yml`](../.github/workflows/prepare-release.yml)
+默认属于 GitHub Actions 工作流 [`release.yml`](../.github/workflows/release.yml)
 中的 `Publish Release` 流程，只有在明确需要排查发布流水线问题时才例外。
 浏览器商店提交、AMO 公开 listed XPI 获取与扩展 GitHub Release 不属于 Patina 主应用发布流程；它们由 `patina-web-sync` 仓库负责。
 
