@@ -45,11 +45,10 @@ impl Host {
         let package = Package::read_directory(&path).map_err(|e| e.to_string())?;
         if package.manifest != files.manifest
             || package.publisher != record.publisher
-            || package.bundle_digest()? != files.digest
+            || package.verified_digest()? != files.digest
         {
             return Err("Installed files differ from the confirmed plugin".into());
         }
-        package.verify_signature()?;
         package.validated_wasm()?;
         Ok(package)
     }

@@ -201,7 +201,7 @@ impl Host {
     /// Install new bundled plugins and update existing ones. The removal
     /// record is retained across restarts, including upgrades of the application.
     pub fn seed(&mut self, package: Package, locale: &str) -> Result<(), String> {
-        package.verify_signature()?;
+        let digest = package.verified_digest()?;
         package.validated_wasm()?;
         let id = package.manifest.id.clone();
         if let Some(record) = self.records.get(&id) {
@@ -223,7 +223,7 @@ impl Host {
             && !record.installed_from_file
             && let Some(previous) = &record.files
             && (record.publisher != package.publisher
-                || previous.digest != package.bundle_digest()?
+                || previous.digest != digest
                 || self.read_installed(&id).is_err())
         {
             self.activate(package, locale, false)?;

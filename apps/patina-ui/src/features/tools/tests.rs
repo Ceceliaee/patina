@@ -56,7 +56,7 @@ fn plugin_home_centers_the_empty_message_and_wraps_installed_cards(cx: &mut Test
             })
             .unwrap()
         });
-        let tools = (0..5)
+        let tools: Vec<_> = (0..5)
             .map(|i| Installed {
                 manifest: Manifest {
                     id: format!("test.plugin{i}"),
@@ -89,7 +89,7 @@ fn plugin_home_centers_the_empty_message_and_wraps_installed_cards(cx: &mut Test
         let (id, ToolRequest::OpenHome) = next_tool_request(&requests) else {
             panic!("expected refreshed installations")
         };
-        client.test_answer(id, Reply::Tools((tools, false, None)));
+        client.test_answer(id, Reply::Tools((tools.clone(), false, None)));
         cx.run_until_parked();
         cx.update_window(window, |_, win, cx| {
             win.render_frame(cx);
@@ -113,9 +113,46 @@ fn plugin_home_centers_the_empty_message_and_wraps_installed_cards(cx: &mut Test
             win.click("plugin-card-test.plugin4", cx);
         })
         .unwrap();
-        assert!(matches!(next_tool_request(&requests).1,
-            ToolRequest::Panel { id, generation, remember: true, .. }
-                if id == "test.plugin4" && generation == "first"));
+        let (request, panel) = next_tool_request(&requests);
+        assert!(
+            matches!(panel, ToolRequest::Panel { id, generation, remember: true, .. }
+            if id == "test.plugin4" && generation == "first")
+        );
+        cx.update_window(window, |_, win, cx| {
+            win.render_frame(cx);
+            assert!(win.try_find("plugin-card-test.plugin4").is_some());
+            win.click("plugin-card-test.plugin4", cx);
+            assert!(requests.try_recv().is_err());
+        })
+        .unwrap();
+        client.test_reject(request, patina_desktop_protocol::RequestError::Busy);
+        cx.run_until_parked();
+        cx.update_window(window, |_, win, cx| {
+            win.render_frame(cx);
+            win.click("retry-tools", cx);
+        })
+        .unwrap();
+        let (list, ToolRequest::List) = next_tool_request(&requests) else {
+            panic!("retry must recheck the current installation");
+        };
+        client.test_answer(list, Reply::Tools((tools, false, None)));
+        cx.run_until_parked();
+        let (request, panel) = next_tool_request(&requests);
+        assert!(matches!(panel, ToolRequest::Panel { id, .. } if id == "test.plugin4"));
+        client.test_answer(
+            request,
+            Reply::Panel(vec![Control::Button {
+                id: "start".into(),
+                label: "Start".into(),
+            }]),
+        );
+        cx.run_until_parked();
+        cx.update_window(window, |_, win, cx| {
+            win.render_frame(cx);
+            assert!(win.try_find("plugin-card-test.plugin4").is_none());
+            assert!(win.try_find("plugin-action-start").is_some());
+        })
+        .unwrap();
     }
 }
 

@@ -85,6 +85,16 @@ impl Package {
     }
 
     pub(super) fn verify_signature(&self) -> Result<(), String> {
+        self.verify_content(&self.signed_content()?)
+    }
+
+    pub(super) fn verified_digest(&self) -> Result<[u8; 32], String> {
+        let content = self.signed_content()?;
+        self.verify_content(&content)?;
+        Ok(Sha256::digest(content).into())
+    }
+
+    fn verify_content(&self, content: &[u8]) -> Result<(), String> {
         let key = STANDARD
             .decode(&self.publisher)
             .map_err(|e| e.to_string())?;
@@ -92,7 +102,7 @@ impl Package {
             .decode(&self.signature)
             .map_err(|e| e.to_string())?;
         UnparsedPublicKey::new(&ED25519, key)
-            .verify(&self.signed_content()?, &signature)
+            .verify(content, &signature)
             .map_err(|_| "Invalid tool publisher signature")?;
         Ok(())
     }

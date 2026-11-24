@@ -6,3 +6,6 @@ resolver = "3"
 patina-plugin-sdk = { path = "../../crates/plugin-sdk" }
 extism-pdk = "1"
 serde_json = "1"
+
+[profile.release]
+opt-level = "s"

@@ -63,21 +63,25 @@ fn cold_compilation_and_repeated_panel_calls() {
             signature: String::new(),
         };
         let mut expected = None;
-        for fast in [false, true, true, false] {
+        for single_pass in [false, true, true, false] {
             let started = Instant::now();
-            let wasm = if fast {
-                compile(&package).unwrap()
-            } else {
+            let wasm = if single_pass {
                 let manifest =
                     extism::Manifest::new([Wasm::data(package.validated_wasm().unwrap())])
                         .with_memory_max(256)
                         .with_timeout(Duration::from_millis(250));
+                let mut config = wasmtime::Config::new();
+                config.cranelift_opt_level(wasmtime::OptLevel::None);
+                config.cranelift_regalloc_algorithm(wasmtime::RegallocAlgorithm::SinglePass);
                 PluginBuilder::new(manifest)
+                    .with_wasmtime_config(config)
                     .with_cache_disabled()
                     .with_wasi(false)
                     .with_fuel_limit(5_000_000)
                     .build()
                     .unwrap()
+            } else {
+                compile(&package).unwrap()
             };
             let mut plugin = LoadedPlugin {
                 wasm,
@@ -103,7 +107,7 @@ fn cold_compilation_and_repeated_panel_calls() {
             }
             micros.sort_unstable();
             eprintln!(
-                "{guest} fast={fast} compile={compile_ms:.1}ms panel us med={} p95={} max={}",
+                "{guest} singlePass={single_pass} compile={compile_ms:.1}ms panel us med={} p95={} max={}",
                 micros[63], micros[121], micros[127]
             );
         }

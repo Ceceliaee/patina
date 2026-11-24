@@ -458,16 +458,18 @@ impl Render for Tools {
         let locale = self.client.locale.get();
         let tr = |key| text(locale, key);
         let controls_for_page = self.controls.clone();
+        let show_home = self.showing_home
+            || (self.busy && self.selected.is_some() && controls_for_page.is_none());
         let page_spec = controls_for_page
             .as_deref()
-            .filter(|_| !self.showing_home)
+            .filter(|_| !show_home)
             .and_then(panel::layout);
         let details = page_spec.and_then(|p| p.dialog.as_ref());
         let ready = !self.busy && !self.manager && self.settings.is_none() && details.is_none();
         if !self.manager && self.store_focus.take().is_some() {
             win.focus(&self.manager_focus, cx);
         }
-        let mut content = if self.showing_home && !self.tools.is_empty() {
+        let mut content = if show_home && !self.tools.is_empty() {
             div().flex().flex_col().min_w_0()
         } else {
             content_card(colors.border, colors.panel).when(
@@ -539,7 +541,7 @@ impl Render for Tools {
             if !self.busy && !self.manager {
                 content = content.child(label(tr("tools.empty")).test_support());
             }
-        } else if self.showing_home {
+        } else if show_home {
             content = content.child(self.home_grid(ready, colors, win, cx));
         } else if let (Some(spec), Some(controls)) = (page_spec, controls_for_page.as_deref()) {
             content = self.render_page(

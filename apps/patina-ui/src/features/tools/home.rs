@@ -19,7 +19,12 @@ impl Tools {
         for tool in &self.tools {
             let id = SharedString::from(format!("plugin-card-{}", tool.manifest.id));
             let name = tool_name(tool, locale);
-            let card = quietpro::choice_card(id, name.clone(), false, ready, colors)
+            let opening = self.busy
+                && self.selected.as_ref().is_some_and(|selected| {
+                    selected.manifest.id == tool.manifest.id
+                        && selected.generation == tool.generation
+                });
+            let card = quietpro::choice_card(id, name.clone(), opening, ready, colors)
                 .h(px(128.))
                 .justify_center()
                 .child(
