@@ -5201,7 +5201,7 @@ checksum = "35fb2e5f958ec131621fdd531e9fc186ed768cbe395337403ae56c17a74c68ec"
 
 [[package]]
 name = "patina"
-version = "1.10.0"
+version = "2.0.0"
 dependencies = [
  "async-channel",
  "async-executor",
@@ -5231,7 +5231,7 @@ dependencies = [
 
 [[package]]
 name = "patina-activity"
-version = "1.10.0"
+version = "2.0.0"
 dependencies = [
  "arrow",
  "base64 0.22.1",
@@ -5280,7 +5280,7 @@ dependencies = [
 
 [[package]]
 name = "patina-desktop-protocol"
-version = "1.10.0"
+version = "2.0.0"
 dependencies = [
  "patina-activity-model",
  "patina-plugin-sdk",
@@ -5350,7 +5350,7 @@ dependencies = [
 
 [[package]]
 name = "patina-ui"
-version = "1.10.0"
+version = "2.0.0"
 dependencies = [
  "async-channel",
  "async-lock",
@@ -5393,7 +5393,7 @@ dependencies = [
 
 [[package]]
 name = "patina-windows-integration"
-version = "1.10.0"
+version = "2.0.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
