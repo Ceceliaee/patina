@@ -1,5 +1,5 @@
 use super::{Confirm, Tools, tool_name};
-use gpui_kit::{base::Dialog, prelude::*, *};
+use gpui_kit::{prelude::*, *};
 use patina_desktop_protocol::tools::call;
 use patina_i18n::text;
 use quietpro::{ButtonSizeExt, ControlSize, Icon, IconControl};
@@ -38,7 +38,11 @@ impl Tools {
         cx.notify();
     }
 
-    pub(super) fn store_dialog(&mut self, win: &mut Window, cx: &mut Context<Self>) -> Dialog {
+    pub(super) fn store_dialog(
+        &mut self,
+        win: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> quietpro::ModalDialog {
         let colors = self.client.palette(win);
         let locale = self.client.locale.get();
         let tr = |key| text(locale, key);

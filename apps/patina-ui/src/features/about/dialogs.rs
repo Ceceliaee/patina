@@ -111,7 +111,7 @@ impl About {
         status: &Snapshot,
         win: &mut Window,
         cx: &mut Context<Self>,
-    ) -> gpui_kit::base::Dialog {
+    ) -> quietpro::ModalDialog {
         let c = self.client.palette(win);
         let tr = |key| text(self.client.locale.get(), key);
         let title = tr(match kind {

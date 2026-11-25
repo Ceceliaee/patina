@@ -1,5 +1,5 @@
 use super::Tools;
-use gpui_kit::{base::Dialog, prelude::*, *};
+use gpui_kit::{prelude::*, *};
 use patina_activity_model::{
     NoticeDelivery, NoticePreferences, NoticePreferencesPatch, NoticeSound,
 };
@@ -61,7 +61,7 @@ impl Tools {
         dialog: &SettingsDialog,
         win: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Dialog {
+    ) -> quietpro::ModalDialog {
         let colors = self.client.palette(win);
         let tr = |key| text(self.client.locale.get(), key);
         let title = tr("tools.settingsTitle");

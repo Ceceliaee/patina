@@ -15,8 +15,8 @@ pub use controls::app_icon::{
     UNFRAMED_APP_ICON_SIZE, app_icon_frame, unframed_app_icon, unframed_app_icon_button,
 };
 pub use controls::dialog::{
-    DIALOG_FRAME_INSET, DIALOG_WINDOW_MARGIN, dialog_actions, dialog_backdrop, dialog_surface,
-    modal_dialog,
+    DIALOG_FRAME_INSET, DIALOG_WINDOW_MARGIN, ModalDialog, dialog_actions, dialog_backdrop,
+    dialog_surface, modal_dialog,
 };
 pub use controls::distribution::{DistributionValue, distribution_row, duration_share};
 pub use controls::donut::{DONUT_COMPACT_SIZE, DONUT_SIZE, DonutChart, DonutSlice};
@@ -47,7 +47,7 @@ pub use typography::init_fonts;
 
 pub use gpui_kit::assets::IconName as Icon;
 
-gpui_kit::assets::icon_assets!(pub QuietProAssets, [Globe, House, HousePlug, AlarmClock, Play, Pause, Square, Bell, BellRing, ToolCase, Store, ToggleLeft, ToggleRight, Tags, TagPlus, ZoomIn, Expand, Settings, Settings2, Info, AppWindow, Pencil, Palette, Type, EyeOff, ListX, ListPlus, Captions, CaptionsOff, Pipette, Search, Funnel, Check, Sparkles, ChartSpline, Clock, CalendarClock, Menu, Layers, Maximize2, Minimize2, Minus, Plus, TrendingUp, TrendingDown, Monitor, Pin, SquareArrowOutUpRight, X, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, MousePointerClick, Server, Database, Dices, Eye, RefreshCw, FolderDown, FolderOpen, FolderPen, Trash, RotateCcw, FileText, MessageSquare, Rose]);
+gpui_kit::assets::icon_assets!(pub QuietProAssets, [Globe, House, HousePlug, AlarmClock, Play, Pause, Square, Bell, BellRing, ToolCase, Store, ToggleLeft, ToggleRight, Tags, TagPlus, ZoomIn, Expand, Settings, Settings2, Info, AppWindow, PencilLine, Palette, Type, EyeOff, ListX, ListPlus, Captions, CaptionsOff, Pipette, Search, Funnel, Check, Sparkles, ChartSpline, Clock, CalendarClock, Menu, Layers, Maximize2, Minimize2, Minus, Plus, TrendingUp, TrendingDown, Monitor, Pin, SquareArrowOutUpRight, X, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, MousePointerClick, Server, Database, Dices, Eye, RefreshCw, FolderDown, FolderOpen, FolderPen, Trash, RotateCcw, FileText, MessageSquare, Rose]);
 
 pub fn glyph(icon: Icon, color: Rgba) -> gpui_kit::Svg {
     gpui_kit::svg()

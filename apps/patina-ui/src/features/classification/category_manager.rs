@@ -1,5 +1,5 @@
 use super::*;
-use gpui_kit::base::{Dialog, Popover};
+use gpui_kit::base::Popover;
 use std::cmp::Ordering;
 use windows::{
     Win32::Globalization::{
@@ -279,7 +279,7 @@ impl Classification {
         c: quietpro::Palette,
         win: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Dialog {
+    ) -> quietpro::ModalDialog {
         let locale = self.client.locale.get();
         let tr = |key| text(locale, key);
         let message = |key, name: String| patina_i18n::format_text(locale, key, &[("label", name)]);
@@ -359,6 +359,7 @@ impl Classification {
                                     tr("mapping.createCategoryAction"),
                                     Icon::TagPlus,
                                 )
+                                .with_tooltip()
                                 .track_focus(&create_focus)
                                 .disabled(
                                     self.category_editing || self.category_confirmation.is_some(),
@@ -519,8 +520,9 @@ impl Classification {
                                 quietpro::IconControl::new(
                                     "rename",
                                     message("mapping.renameCategory", name.clone()),
-                                    Icon::Pencil,
+                                    Icon::PencilLine,
                                 )
+                                .with_tooltip_text(tr("mapping.renameCategoryTitle"))
                                 .track_focus(&self.category_focus[&format!("rename-{id}")])
                                 .action(c, move |_, win, cx| {
                                     let _ = view.update(cx, |t, cx| {
@@ -573,7 +575,7 @@ impl Classification {
         c: quietpro::Palette,
         win: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Dialog {
+    ) -> quietpro::ModalDialog {
         let locale = self.client.locale.get();
         let tr = |key| text(locale, key);
         let merging = target != "other";
@@ -649,7 +651,7 @@ impl Classification {
         c: quietpro::Palette,
         win: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Dialog {
+    ) -> quietpro::ModalDialog {
         let tr = |key| text(self.client.locale.get(), key);
         let title = tr(if self.category_id.is_some() {
             "mapping.renameCategoryTitle"

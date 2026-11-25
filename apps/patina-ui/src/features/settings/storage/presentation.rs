@@ -71,7 +71,11 @@ impl StorageCard {
             }),
         });
     }
-    pub(super) fn confirmation_dialog(&self, win: &mut Window, cx: &mut Context<Self>) -> Dialog {
+    pub(super) fn confirmation_dialog(
+        &self,
+        win: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> quietpro::ModalDialog {
         let c = self.client.palette(win);
         let confirm = self.confirmation.as_ref().unwrap();
         let title = confirm.title.clone();

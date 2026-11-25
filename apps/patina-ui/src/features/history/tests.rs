@@ -115,6 +115,38 @@ fn late_history_response_cannot_replace_the_selected_day(cx: &mut TestAppContext
 }
 
 #[gpui_kit::test]
+fn open_timeline_blocks_its_background_tooltip(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+    let (client, requests) = Client::test_connection();
+    let date = 86_400_000;
+    let (window, _) = cx.update(|cx| {
+        gpui_kit::open_window(WindowOptions::default(), cx, |win, cx| {
+            cx.new(|cx| History::new(client.clone(), date, None, win, cx))
+        })
+        .unwrap()
+    });
+    let id = wait_for_day(cx, &client, &requests, date);
+    client.test_answer(id, Reply::History(day(date)));
+    cx.run_until_parked();
+    let tips = crate::test_support::observe_tooltips(cx);
+    let hover = |cx: &mut TestAppContext| {
+        cx.update_window(window, |_, win, cx| win.hover("records", cx))
+            .unwrap()
+    };
+    let name = patina_i18n::text(client.locale.get(), "history.openTimeline");
+    hover(cx);
+    crate::test_support::assert_tooltip(cx, &tips, Some(&name));
+    cx.update_window(window, |_, win, cx| win.click("records", cx))
+        .unwrap();
+    hover(cx);
+    crate::test_support::assert_tooltip(cx, &tips, None);
+    cx.update_window(window, |_, win, cx| win.click("close-records", cx))
+        .unwrap();
+    hover(cx);
+    crate::test_support::assert_tooltip(cx, &tips, Some(&name));
+}
+
+#[gpui_kit::test]
 fn overview_keeps_its_layout_and_only_restores_the_selected_day(cx: &mut TestAppContext) {
     cx.update(gpui_kit::init);
     let (client, requests) = Client::test_connection();

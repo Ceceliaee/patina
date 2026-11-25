@@ -1067,8 +1067,9 @@ impl Classification {
                             } else {
                                 "mapping.editAppName"
                             }),
-                            Icon::Pencil,
+                            Icon::PencilLine,
                         )
+                        .with_tooltip()
                         .disabled(self.busy)
                         .track_focus(&self.rename_focus[&a.key])
                         .action(

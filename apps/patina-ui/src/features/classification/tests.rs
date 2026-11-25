@@ -60,6 +60,55 @@ fn icons() -> Reply {
 }
 
 #[gpui_kit::test]
+fn edit_controls_show_their_action_on_hover(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+    let (client, requests) = Client::test_connection();
+    client.locale.set(patina_activity_model::Locale::ZhCn);
+    let (window, _) = cx.update(|cx| MainWindow::open(cx, client.clone()).unwrap());
+    cx.update_window(window, |_, win, cx| win.click("mapping.title", cx))
+        .unwrap();
+    cx.run_until_parked();
+    let Reply::Rules(mut data) = rules(false) else {
+        unreachable!()
+    };
+    data.categories.push(("office".into(), "Office".into()));
+    client.test_answer(
+        request(&requests, |r| matches!(r, WindowRequest::Rules)),
+        Reply::Rules(data),
+    );
+    cx.run_until_parked();
+    client.test_answer(
+        request(&requests, |r| matches!(r, WindowRequest::Icons(_))),
+        icons(),
+    );
+    cx.run_until_parked();
+
+    let tips = crate::test_support::observe_tooltips(cx);
+    for (scope, button, key) in [
+        ("app:Editor.EXE", "rename", "mapping.editAppName"),
+        (
+            "category-manager-heading",
+            "new-category",
+            "mapping.createCategoryAction",
+        ),
+        ("office", "rename", "mapping.renameCategoryTitle"),
+    ] {
+        cx.update_window(window, |_, win, cx| {
+            if button == "new-category" {
+                win.click("manage-categories", cx);
+            }
+            win.within(scope).hover(button, cx);
+        })
+        .unwrap();
+        crate::test_support::assert_tooltip(
+            cx,
+            &tips,
+            Some(&patina_i18n::text(client.locale.get(), key)),
+        );
+    }
+}
+
+#[gpui_kit::test]
 fn app_and_website_cards_fill_two_aligned_columns(cx: &mut TestAppContext) {
     cx.update(gpui_kit::init);
     let (client, requests) = Client::test_connection();

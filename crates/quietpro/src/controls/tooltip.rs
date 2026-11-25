@@ -1,4 +1,5 @@
 use crate::{Palette, continuous_frame};
+use gpui_kit::base::TestSupportExt;
 use gpui_kit::{prelude::*, *};
 
 pub fn tooltip_surface(colors: Palette) -> Div {
@@ -46,6 +47,7 @@ impl Render for TextTooltip {
             .child(
                 tooltip_surface(self.1)
                     .id("quietpro-text-tooltip")
+                    .test_support()
                     .role(Role::Tooltip)
                     .aria_label(self.0.clone())
                     .child(self.0.clone()),

@@ -1111,7 +1111,7 @@ impl History {
         colors: Palette,
         win: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Option<gpui_kit::base::Dialog> {
+    ) -> Option<quietpro::ModalDialog> {
         let view = cx.weak_entity();
         let (kind, focus, _) = self.overlay.as_ref()?;
         let (title, content) = match kind {

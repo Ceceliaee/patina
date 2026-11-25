@@ -2,7 +2,7 @@ mod form;
 use super::*;
 use chrono::{Datelike, Duration, Local, NaiveDate, TimeZone};
 use gpui_kit::base::{
-    Button, Dialog,
+    Button,
     input::{InputAccessibility, InputEvent, InputState},
 };
 use patina_activity_model::views::storage::{ExportPreferences, StorageInfo, StorageReply};
@@ -979,10 +979,19 @@ impl StorageCard {
                     Icon::CalendarClock,
                 ),
             };
+            let control =
+                IconControl::new("storage-header-action", self.tr(key), icon).disabled(self.busy);
+            let button = if view == Import {
+                control.button(quietpro::Palette {
+                    secondary: c.danger,
+                    ..c
+                })
+            } else {
+                control.with_tooltip().button(c)
+            };
             header_icons.push(
-                IconControl::new("storage-header-action", self.tr(key), icon)
-                    .disabled(self.busy)
-                    .action(c, cx.listener(move |s, _, w, cx| s.open_view(next, w, cx)))
+                button
+                    .on_click(cx.listener(move |s, _, w, cx| s.open_view(next, w, cx)))
                     .into_any_element(),
             );
         }
@@ -1210,24 +1219,16 @@ impl StorageCard {
                         ));
                     }
                     dir = dir.child(div().flex_1());
-                    let mut actions = quietpro::icon_actions().child(
-                        IconControl::new(
-                            id,
-                            format!(
-                                "{} ･ {}",
-                                self.tr("settings.storage.openDirectoryAction"),
-                                name
-                            ),
-                            Icon::FolderOpen,
-                        )
-                        .with_tooltip()
+                    let open = self.tr("settings.storage.openDirectoryAction");
+                    let button = IconControl::new(id, format!("{open} ･ {name}"), Icon::FolderOpen)
+                        .with_tooltip_text(open)
                         .disabled(self.busy || path.is_none())
                         .action(c, move |_, _, cx| {
                             if let Some(path) = &path {
                                 cx.open_with_system(path)
                             }
-                        }),
-                    );
+                        });
+                    let mut actions = quietpro::icon_actions().child(button);
                     if id == "data" {
                         actions = actions.child(
                             IconControl::new(
@@ -1245,7 +1246,6 @@ impl StorageCard {
                                 self.tr("settings.cleanupTitle"),
                                 Icon::Trash,
                             )
-                            .with_tooltip()
                             .disabled(self.busy)
                             .action(
                                 quietpro::Palette {
@@ -1648,6 +1648,7 @@ impl StorageCard {
                                                 Icon::Eye
                                             },
                                         )
+                                        .with_tooltip()
                                         .disabled(self.busy)
                                         .action(
                                             c,
@@ -2040,6 +2041,91 @@ mod feedback_tests {
     use super::{Client, Rc, Request, StorageCard, StorageInfo, StorageReply, View};
     use gpui_kit::{AppContext, TestAppContext, WindowOptions};
     use patina_desktop_protocol::{FromWindow, Reply, RequestError, WindowRequest};
+
+    #[gpui_kit::test]
+    fn storage_icon_tooltips_follow_the_action(cx: &mut TestAppContext) {
+        use gpui_kit::test::TestWindowExt;
+        cx.update(gpui_kit::init);
+        let (client, requests) = Client::test_connection();
+        let (window, view) = cx.update(|cx| {
+            gpui_kit::open_window(WindowOptions::default(), cx, |win, cx| {
+                cx.new(|cx| StorageCard::new(client.clone(), win, cx))
+            })
+            .unwrap()
+        });
+        cx.run_until_parked();
+        let id = requests
+            .try_iter()
+            .find_map(|msg| match msg {
+                FromWindow::Request(id, r)
+                    if matches!(*r, WindowRequest::Storage(Request::Info)) =>
+                {
+                    Some(id)
+                }
+                _ => None,
+            })
+            .unwrap();
+        client.test_answer(
+            id,
+            Reply::Storage(StorageReply::Info(StorageInfo {
+                install: "fixture/install".into(),
+                install_bytes: 0,
+                data: Some("fixture/data".into()),
+                default: "fixture/data".into(),
+                bytes: 0,
+                pending: None,
+                move_error: None,
+                dav: None,
+            })),
+        );
+        cx.run_until_parked();
+        let tips = crate::test_support::observe_tooltips(cx);
+        for (page, button, key) in [
+            (
+                View::Home,
+                "install",
+                Some("settings.storage.openDirectoryAction"),
+            ),
+            (
+                View::Home,
+                "data",
+                Some("settings.storage.openDirectoryAction"),
+            ),
+            (View::Home, "data-cleanup", None),
+            (
+                View::Export,
+                "storage-header-action",
+                Some("export.scheduledTitle"),
+            ),
+            (View::Import, "storage-header-action", None),
+            (
+                View::Backup,
+                "storage-header-action",
+                Some("settings.storageScheduledBackup"),
+            ),
+            (View::Dav, "reveal-password", Some("common.showPassword")),
+            (View::Dav, "reveal-password", Some("common.hidePassword")),
+        ] {
+            cx.update_window(window, |_, win, cx| {
+                view.update(cx, |card, cx| {
+                    card.set_view(page, win, cx);
+                    cx.notify();
+                });
+                if key == Some("common.hidePassword") {
+                    win.click(button, cx);
+                    win.hover("common.cancel", cx);
+                }
+                win.hover(button, cx);
+            })
+            .unwrap();
+            crate::test_support::assert_tooltip(
+                cx,
+                &tips,
+                key.map(|key| patina_i18n::text(client.locale.get(), key))
+                    .as_deref(),
+            );
+        }
+    }
     #[gpui_kit::test]
     fn backup_result_uses_only_one_toast(cx: &mut TestAppContext) {
         cx.update(gpui_kit::init);

@@ -5,6 +5,35 @@ use patina_activity_model::{AppPreferences, Theme};
 use patina_desktop_protocol::{FromWindow, Reply, WindowRequest};
 use patina_updater::{Request as UpdateRequest, Snapshot};
 
+#[gpui_kit::test]
+fn sidebar_toggle_tooltip_describes_its_next_state(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+    let (client, _requests) = crate::client::Client::test_connection();
+    let (window, _) = cx.update(|cx| MainWindow::open(cx, client.clone()).unwrap());
+    let tips = crate::test_support::observe_tooltips(cx);
+    for _ in 0..2 {
+        let visible = client.navigation.get().sidebar_labels;
+        cx.update_window(window, |_, win, cx| win.hover("nav-labels", cx))
+            .unwrap();
+        let key = if visible {
+            "accessibility.sidebar.hideNavigationLabels"
+        } else {
+            "accessibility.sidebar.showNavigationLabels"
+        };
+        crate::test_support::assert_tooltip(
+            cx,
+            &tips,
+            Some(&patina_i18n::text(client.locale.get(), key)),
+        );
+        cx.update_window(window, |_, win, cx| {
+            win.click("nav-labels", cx);
+            win.hover("about.title", cx);
+        })
+        .unwrap();
+        assert_ne!(client.navigation.get().sidebar_labels, visible);
+    }
+}
+
 fn about_status_request(requests: &std::sync::mpsc::Receiver<FromWindow>) -> u64 {
     requests
         .try_iter()

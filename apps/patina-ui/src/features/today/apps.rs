@@ -156,6 +156,7 @@ impl Today {
         } else {
             Button::new(SharedString::from(format!("app-{key}")))
                 .track_focus(&trigger)
+                .cursor_pointer()
                 .relative()
                 .accessibility_label(format_text(
                     self.client.locale.get(),

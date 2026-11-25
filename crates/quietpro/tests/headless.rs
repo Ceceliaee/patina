@@ -418,6 +418,134 @@ fn keyboard_activation_uses_the_focused_control(cx: &mut TestAppContext) {
 struct TooltipControls {
     selected: bool,
 }
+
+struct ModalHints {
+    depth: usize,
+    focus: [gpui_kit::FocusHandle; 2],
+}
+
+impl Render for ModalHints {
+    fn render(&mut self, win: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let colors = Palette::from(win.appearance());
+        let button = |id| {
+            IconControl::new(id, id, Icon::Plus)
+                .with_tooltip()
+                .button(colors)
+        };
+        let mut root = div()
+            .size_full()
+            .child(button("background").on_click(cx.listener(|view, _, _, cx| {
+                view.depth = 1;
+                cx.notify();
+            })));
+        for layer in 0..self.depth {
+            let name = ["parent", "nested"][layer];
+            let width = [360., 140.][layer];
+            let content = quietpro::dialog_surface(colors, win.viewport_size())
+                .w(px(width))
+                .child(button(name));
+            let view = cx.weak_entity();
+            root = root.child(
+                quietpro::modal_dialog(
+                    name,
+                    self.focus[layer].clone(),
+                    content,
+                    move |_, cx| {
+                        let _ = view.update(cx, |view, cx| {
+                            view.depth = layer;
+                            cx.notify();
+                        });
+                    },
+                    cx,
+                )
+                .layer(layer, layer + 1 == self.depth),
+            );
+        }
+        root
+    }
+}
+
+#[gpui_kit::test]
+fn only_the_top_dialog_can_show_hover_tooltips(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+    let (window, view) = cx.update(|cx| {
+        gpui_kit::open_window(WindowOptions::default(), cx, |_, cx| {
+            cx.new(|cx| ModalHints {
+                depth: 0,
+                focus: [cx.focus_handle(), cx.focus_handle()],
+            })
+        })
+        .unwrap()
+    });
+    let hover = |cx: &mut TestAppContext, id: &'static str| {
+        cx.update_window(window, |_, win, cx| win.hover(id, cx))
+            .unwrap();
+        cx.run_until_parked();
+    };
+    let wait = |cx: &mut TestAppContext| {
+        cx.executor()
+            .advance_clock(std::time::Duration::from_secs(1));
+        cx.run_until_parked();
+    };
+    let visible = |cx: &mut TestAppContext| {
+        cx.update_window(window, |_, win, cx| {
+            win.render_frame(cx);
+            win.try_find("quietpro-text-tooltip").is_some()
+        })
+        .unwrap()
+    };
+    let depth = |cx: &mut TestAppContext, count| {
+        cx.update(|cx| {
+            view.update(cx, |view, cx| {
+                view.depth = count;
+                cx.notify();
+            })
+        })
+    };
+    hover(cx, "background");
+    wait(cx);
+    assert!(visible(cx));
+    depth(cx, 1);
+    assert!(
+        !visible(cx),
+        "an already visible page tooltip survives opening a dialog"
+    );
+    hover(cx, "parent");
+    wait(cx);
+    assert!(visible(cx), "dialog control tooltip missing");
+    hover(cx, "background");
+    wait(cx);
+    assert!(!visible(cx), "page tooltip shows through backdrop");
+    hover(cx, "parent");
+    depth(cx, 2);
+    wait(cx);
+    assert!(
+        !visible(cx),
+        "pending parent tooltip survives a nested dialog"
+    );
+    hover(cx, "parent");
+    wait(cx);
+    assert!(
+        !visible(cx),
+        "covered parent control still responds to hover"
+    );
+    hover(cx, "nested");
+    wait(cx);
+    assert!(visible(cx));
+    cx.update_window(window, |_, win, cx| win.click("background", cx))
+        .unwrap();
+    assert_eq!(
+        cx.update(|cx| view.read(cx).depth),
+        1,
+        "only the top backdrop dismisses"
+    );
+    cx.update_window(window, |_, win, cx| win.click("background", cx))
+        .unwrap();
+    assert_eq!(cx.update(|cx| view.read(cx).depth), 0);
+    hover(cx, "background");
+    wait(cx);
+    assert!(visible(cx), "page tooltip did not return after dismissal");
+}
 impl Render for TooltipControls {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let colors = Palette::from(window.appearance());

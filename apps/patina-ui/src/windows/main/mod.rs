@@ -608,6 +608,11 @@ impl Render for MainWindow {
                     label("accessibility.sidebar.navigationLabels"),
                     Icon::Menu,
                 )
+                .with_tooltip_text(label(if labels {
+                    "accessibility.sidebar.hideNavigationLabels"
+                } else {
+                    "accessibility.sidebar.showNavigationLabels"
+                }))
                 .toggle(colors, labels, {
                     let view = cx.weak_entity();
                     move |next, _, _, cx| {

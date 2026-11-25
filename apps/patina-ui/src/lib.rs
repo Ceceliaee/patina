@@ -1,5 +1,7 @@
 mod client;
 mod features;
+#[cfg(all(test, feature = "test-support"))]
+mod test_support;
 mod windows;
 
 use patina_desktop_protocol::APP_ID;

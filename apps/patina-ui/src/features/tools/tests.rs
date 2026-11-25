@@ -22,6 +22,115 @@ pub(super) fn next_tool_request(requests: &Receiver<FromWindow>) -> (u64, ToolRe
 }
 
 #[gpui_kit::test]
+fn reminder_and_focus_row_tooltips_use_short_actions(cx: &mut TestAppContext) {
+    use patina_desktop_protocol::tools::{
+        Capability,
+        layout::{Icon, Page, Row, Tab},
+    };
+    cx.update(gpui_kit::init);
+    let (client, requests) = Client::test_connection();
+    let (window, _) = cx.update(|cx| {
+        gpui_kit::open_window(WindowOptions::default(), cx, |_, cx| {
+            cx.new(|cx| Tools::new(client.clone(), None, cx))
+        })
+        .unwrap()
+    });
+    let tools = [
+        ("reminders", Capability::Reminders),
+        ("focus", Capability::Focus),
+    ]
+    .map(|(id, capability)| Installed {
+        manifest: Manifest {
+            id: id.into(),
+            name: id.into(),
+            version: "1".into(),
+            api: 3,
+            entry: "panel".into(),
+            capabilities: vec![capability],
+            presentation: None,
+        },
+        generation: "test".into(),
+    });
+    let (list, _) = next_tool_request(&requests);
+    client.test_answer(list, Reply::Tools((tools.to_vec(), false, None)));
+    cx.run_until_parked();
+    let tips = crate::test_support::observe_tooltips(cx);
+    for (tool, modes) in tools.iter().zip([["timed", "usage"], ["pomodoro", "free"]]) {
+        cx.update_window(window, |_, win, cx| {
+            win.click(format!("plugin-card-{}", tool.manifest.id), cx)
+        })
+        .unwrap();
+        let (id, _) = next_tool_request(&requests);
+        let mut controls = Vec::new();
+        let tabs = modes.map(|mode| {
+            let actions = [
+                ("start", Icon::Play, "Start"),
+                ("edit", Icon::Pencil, "Edit task"),
+                ("delete", Icon::Trash, "Delete"),
+            ];
+            let action_id = |action: &str| format!("{mode}-{action}");
+            controls.push(Control::ListRow {
+                id: mode.into(),
+                title: "Example task".into(),
+                detail: String::new(),
+                clock: None,
+                actions: actions
+                    .iter()
+                    .map(|(id, _, name)| (action_id(id), (*name).into()))
+                    .collect(),
+            });
+            Tab {
+                id: mode.into(),
+                label: mode.into(),
+                empty: String::new(),
+                layout: None,
+                navigation: vec![],
+                form: None,
+                rows: vec![Row {
+                    id: mode.into(),
+                    detail_action: None,
+                    icons: actions
+                        .into_iter()
+                        .map(|(id, icon, _)| (action_id(id), icon))
+                        .collect(),
+                }],
+            }
+        });
+        controls.push(Control::Page(Box::new(Page {
+            title: tool.manifest.name.clone(),
+            icon: Icon::ToolCase,
+            selected_tab: None,
+            tabs: tabs.into(),
+            dialog: None,
+        })));
+        client.test_answer(id, Reply::Panel(controls));
+        cx.run_until_parked();
+        for (index, mode) in modes.iter().enumerate() {
+            cx.update_window(window, |_, win, cx| win.click(("segment", index), cx))
+                .unwrap();
+            for (action, expected) in [
+                ("start", Some("Start")),
+                ("edit", Some("Edit")),
+                ("delete", None),
+            ] {
+                cx.update_window(window, |_, win, cx| {
+                    win.hover(format!("{mode}-{action}"), cx)
+                })
+                .unwrap();
+                crate::test_support::assert_tooltip(cx, &tips, expected);
+            }
+        }
+        if tool.manifest.id == "reminders" {
+            cx.update_window(window, |_, win, cx| win.click("plugin-home", cx))
+                .unwrap();
+            let (id, _) = next_tool_request(&requests);
+            client.test_answer(id, Reply::Tools((tools.to_vec(), false, None)));
+            cx.run_until_parked();
+        }
+    }
+}
+
+#[gpui_kit::test]
 fn plugin_home_centers_the_empty_message_and_wraps_installed_cards(cx: &mut TestAppContext) {
     use gpui_kit::{
         Bounds, Context, Entity, Window, WindowBounds, div, point, prelude::*, px, size,

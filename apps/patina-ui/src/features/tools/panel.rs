@@ -1,9 +1,5 @@
 use super::{Control, Tools, clock, label, schedule::Picker, task_list_frame};
-use gpui_kit::{
-    base::{Button, Dialog},
-    prelude::*,
-    *,
-};
+use gpui_kit::{base::Button, prelude::*, *};
 use patina_desktop_protocol::tools::layout::{self, Details, Page, Row, Tab};
 use quietpro::{ControlSize, Icon, IconControl, Palette};
 use std::{collections::BTreeMap, rc::Rc};
@@ -83,7 +79,7 @@ pub(super) fn icon(i: layout::Icon) -> Icon {
         I::Play => Icon::Play,
         I::Pause => Icon::Pause,
         I::Square => Icon::Square,
-        I::Pencil => Icon::Pencil,
+        I::Pencil => Icon::PencilLine,
         I::Trash => Icon::Trash,
         I::ToggleLeft => Icon::ToggleLeft,
         I::ToggleRight => Icon::ToggleRight,
@@ -313,21 +309,31 @@ impl Tools {
             );
         }
         let mut buttons = quietpro::icon_actions();
+        let task_form = self.is_task_form();
         for (key, i) in &spec.icons {
             if let Some((_, caption)) = actions.iter().find(|(a, _)| a == key) {
+                let control = IconControl::new(
+                    SharedString::from(key.clone()),
+                    format!("{caption} ･ {title}"),
+                    icon(*i),
+                )
+                .disabled(!ready);
+                let button = match (task_form, i) {
+                    (true, layout::Icon::Trash) => control.button(Palette {
+                        secondary: c.danger,
+                        ..c
+                    }),
+                    (true, layout::Icon::Pencil) => control
+                        .with_tooltip_text(patina_i18n::messages::common_edit(
+                            self.client.locale.get(),
+                        ))
+                        .button(c),
+                    (true, _) => control.with_tooltip_text(caption.clone()).button(c),
+                    (false, _) => control.with_tooltip().button(c),
+                };
                 let key = key.clone();
                 buttons = buttons.child(
-                    IconControl::new(
-                        SharedString::from(key.clone()),
-                        format!("{caption} ･ {title}"),
-                        icon(*i),
-                    )
-                    .with_tooltip()
-                    .disabled(!ready)
-                    .action(
-                        c,
-                        cx.listener(move |t, _, _, cx| t.load(Some(key.clone()), cx)),
-                    ),
+                    button.on_click(cx.listener(move |t, _, _, cx| t.load(Some(key.clone()), cx))),
                 );
             }
         }
@@ -362,7 +368,7 @@ impl Tools {
         controls: &[Control],
         win: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Dialog {
+    ) -> quietpro::ModalDialog {
         let c = self.client.palette(win);
         let key = details.close.clone();
         let close = move |t: &mut Self, win: &mut Window, cx: &mut Context<Self>| {

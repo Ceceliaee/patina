@@ -25,7 +25,7 @@ impl History {
         close: impl Fn(&mut Window, &mut App) + 'static,
         window: &Window,
         cx: &mut App,
-    ) -> gpui_kit::base::Dialog {
+    ) -> quietpro::ModalDialog {
         let title = content.read(cx).title();
         let close = std::rc::Rc::new(close);
         let button = close.clone();

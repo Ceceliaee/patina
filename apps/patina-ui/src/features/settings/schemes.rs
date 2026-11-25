@@ -1,5 +1,4 @@
 use super::*;
-use gpui_kit::base::Dialog;
 use quietpro::{Palette, ThemePreset};
 
 const COLUMNS: usize = 4;
@@ -146,7 +145,7 @@ impl Settings {
         c: Palette,
         win: &Window,
         cx: &mut Context<Self>,
-    ) -> Dialog {
+    ) -> quietpro::ModalDialog {
         let tr = |key| text(self.client.locale.get(), key);
         let dark = picker.dark;
         let title = tr(library_key(dark));
