@@ -4,18 +4,10 @@ use super::*;
 fn websites_preserve_sources_grouping_icons_and_privacy() -> Result<(), Error> {
     let root = tempfile::tempdir()?;
     let db = root.path().join("history.db");
-    seed(&db)?;
+    let start = seed_history_day(&db)?;
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
-    let start = Local::now()
-        .date_naive()
-        .and_hms_opt(0, 0, 0)
-        .unwrap()
-        .and_local_timezone(Local)
-        .earliest()
-        .unwrap()
-        .timestamp_millis();
     let icon = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGNQSDjwH4QZYAwASvQI/dnllI8AAAAASUVORK5CYII=";
     rt.block_on(async {
         let mut c = SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&db)).await?;

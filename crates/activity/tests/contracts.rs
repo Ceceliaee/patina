@@ -11,7 +11,7 @@ mod services;
 #[path = "contracts/storage.rs"]
 mod storage;
 
-use chrono::Local;
+use chrono::{Local, TimeZone};
 use fixture::{seed, Error};
 use sqlx::{sqlite::SqliteConnectOptions, Connection, SqliteConnection};
 use std::fs;
@@ -72,22 +72,23 @@ fn resident_recorder_rebuilds_hourly_activity_from_existing_sessions() -> Result
     Ok(())
 }
 
+fn seed_history_day(db: &std::path::Path) -> Result<i64, Error> {
+    let start = Local
+        .with_ymd_and_hms(2024, 1, 15, 0, 0, 0)
+        .single()
+        .unwrap();
+    fixture::seed_profile_on(db, false, start.date_naive())?;
+    Ok(start.timestamp_millis())
+}
+
 #[test]
 fn history_exact_and_bucket_data() -> Result<(), Error> {
     let root = tempfile::tempdir()?;
     let db = root.path().join("patina.db");
-    seed(&db)?;
+    let start = seed_history_day(&db)?;
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
-    let start = Local::now()
-        .date_naive()
-        .and_hms_opt(0, 0, 0)
-        .unwrap()
-        .and_local_timezone(Local)
-        .earliest()
-        .unwrap()
-        .timestamp_millis();
     rt.block_on(async{
         let mut c=SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&db)).await?;
         sqlx::query("INSERT INTO import_time_buckets(batch_id,fingerprint,exe_name,app_name,bucket_start_time,duration) VALUES('test','bucket','bucket.exe','Bucket',?,120000)").bind(start+2*3600000).execute(&mut c).await?;
