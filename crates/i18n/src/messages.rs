@@ -49,7 +49,9 @@ pub fn accessibility_settings_hide_remote_machine_id(locale: Locale) -> String {
 pub fn accessibility_settings_hide_service_token(locale: Locale) -> String { super::format_text(locale, "accessibility.settings.hideServiceToken", &[]) }
 pub fn accessibility_settings_show_remote_machine_id(locale: Locale) -> String { super::format_text(locale, "accessibility.settings.showRemoteMachineId", &[]) }
 pub fn accessibility_settings_show_service_token(locale: Locale) -> String { super::format_text(locale, "accessibility.settings.showServiceToken", &[]) }
+pub fn accessibility_sidebar_hide_navigation_labels(locale: Locale) -> String { super::format_text(locale, "accessibility.sidebar.hideNavigationLabels", &[]) }
 pub fn accessibility_sidebar_navigation_labels(locale: Locale) -> String { super::format_text(locale, "accessibility.sidebar.navigationLabels", &[]) }
+pub fn accessibility_sidebar_show_navigation_labels(locale: Locale) -> String { super::format_text(locale, "accessibility.sidebar.showNavigationLabels", &[]) }
 pub fn accessibility_title_bar_close(locale: Locale) -> String { super::format_text(locale, "accessibility.titleBar.close", &[]) }
 pub fn accessibility_title_bar_maximize(locale: Locale) -> String { super::format_text(locale, "accessibility.titleBar.maximize", &[]) }
 pub fn accessibility_title_bar_minimize(locale: Locale) -> String { super::format_text(locale, "accessibility.titleBar.minimize", &[]) }
@@ -80,6 +82,7 @@ pub fn common_cancel(locale: Locale) -> String { super::format_text(locale, "com
 pub fn common_close(locale: Locale) -> String { super::format_text(locale, "common.close", &[]) }
 pub fn common_confirm(locale: Locale) -> String { super::format_text(locale, "common.confirm", &[]) }
 pub fn common_default(locale: Locale) -> String { super::format_text(locale, "common.default", &[]) }
+pub fn common_edit(locale: Locale) -> String { super::format_text(locale, "common.edit", &[]) }
 pub fn common_hide_password(locale: Locale) -> String { super::format_text(locale, "common.hidePassword", &[]) }
 pub fn common_loading(locale: Locale) -> String { super::format_text(locale, "common.loading", &[]) }
 pub fn common_read_failed(locale: Locale) -> String { super::format_text(locale, "common.readFailed", &[]) }
