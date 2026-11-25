@@ -68,6 +68,9 @@ fn published_profile_copy_survives_install_upgrade_and_uninstall() -> Result<(),
     let local = root.path().join("Local");
     fs::create_dir(&parent)?;
     let profile = parent.join("Patina");
+    let previous_db = local.join("Patina.Desktop/patina.db");
+    fs::create_dir_all(previous_db.parent().unwrap())?;
+    fs::write(&previous_db, b"independent desktop history")?;
     let custom = root.path().join("custom data");
     fs::create_dir_all(custom.join("backups"))?;
     fs::write(custom.join("backups/retained.zip"), b"previous backup")?;
@@ -158,6 +161,7 @@ fn published_profile_copy_survives_install_upgrade_and_uninstall() -> Result<(),
     );
     assert!(hkcu.open_subkey(&old_registration).is_ok());
     assert!(!control.exists());
+    assert!(!profile.join("instance.lock").exists());
     fs::copy(&source, &database)?;
     let existing = profile.join("patina.db");
     fs::write(&existing, b"independent desktop data")?;
@@ -301,6 +305,7 @@ fn published_profile_copy_survives_install_upgrade_and_uninstall() -> Result<(),
     let moved_parent = root.path().join("another-account-path");
     fs::rename(&default_parent, &moved_parent)?;
     adopt_default(&moved_parent)?;
+    assert_eq!(fs::read(previous_db)?, b"independent desktop history");
     assert_eq!(
         sample(&moved_parent.join("Patina/patina.db"))?,
         (27, 60000, "v1.10.0".into())

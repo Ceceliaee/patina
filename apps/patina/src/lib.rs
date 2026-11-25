@@ -48,32 +48,47 @@ fn profile_parent_from_env() -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
-fn profile_root(parent: Option<&Path>) -> io::Result<PathBuf> {
+#[derive(Clone, Copy, PartialEq)]
+enum ProfileUse {
+    Launch,
+    TauriUpgrade,
+}
+
+fn profile_root(parent: Option<&Path>, usage: ProfileUse) -> io::Result<PathBuf> {
     if let Some(parent) = parent {
-        return select_profile(parent, None);
+        return select_profile(parent, None, usage);
     }
     let roaming = env::var_os("APPDATA").ok_or_else(|| io::Error::other("missing APPDATA"))?;
     let local = env::var_os("LOCALAPPDATA").map(PathBuf::from);
-    select_profile(Path::new(&roaming), local.as_deref())
+    select_profile(Path::new(&roaming), local.as_deref(), usage)
 }
 
-fn select_profile(parent: &Path, previous_parent: Option<&Path>) -> io::Result<PathBuf> {
+fn select_profile(
+    parent: &Path,
+    previous_parent: Option<&Path>,
+    usage: ProfileUse,
+) -> io::Result<PathBuf> {
     if !parent.is_absolute() || !parent.is_dir() {
         return Err(io::Error::other(
             "profile parent must be an existing absolute directory",
         ));
     }
     let root = parent.join(PROFILE_DIRECTORY);
-    if let Some(profile) = existing_profile(parent)? {
-        return Ok(profile);
-    }
-    if let Some(previous) = previous_parent.filter(|p| p.is_absolute() && *p != parent) {
-        if let Some(profile) = existing_profile(previous)? {
-            return Ok(profile);
+    let previous_parent = previous_parent.filter(|p| p.is_absolute() && *p != parent);
+    for base in [Some(parent), previous_parent].into_iter().flatten() {
+        if let Some(profile) = existing_profile(base)? {
+            // A Tauri installation has its own production database. Older desktop
+            // identities keep their data when the installer first adopts that database.
+            if usage == ProfileUse::TauriUpgrade && !profile.ends_with(PROFILE_DIRECTORY) {
+                break;
+            }
+            return profile.canonicalize();
         }
-        let local = previous.join(PROFILE_DIRECTORY);
-        if !root.join("patina.db").try_exists()? && local.join("patina.db").try_exists()? {
-            return local.canonicalize();
+        if base != parent && !root.join("patina.db").try_exists()? {
+            let local = base.join(PROFILE_DIRECTORY);
+            if local.join("patina.db").try_exists()? {
+                return local.canonicalize();
+            }
         }
     }
     fs::create_dir_all(&root)?;
@@ -87,7 +102,7 @@ fn existing_profile(parent: &Path) -> io::Result<Option<PathBuf>> {
         && (root.join("instance.lock").try_exists()?
             || root.join("database-location.json").try_exists()?)
     {
-        return root.canonicalize().map(Some);
+        return Ok(Some(root));
     }
     // Database locations and pending moves can contain absolute paths into the original profile.
     for name in [PREVIOUS_DESKTOP_ID, PREVIOUS_PROFILE] {
@@ -96,7 +111,7 @@ fn existing_profile(parent: &Path) -> io::Result<Option<PathBuf>> {
             if !previous.is_dir() {
                 return Err(io::Error::other("previous profile path is not a directory"));
             }
-            return previous.canonicalize().map(Some);
+            return Ok(Some(previous));
         }
     }
     Ok(None)
@@ -109,7 +124,7 @@ fn profile_selection_preserves_existing_locations() {
     let previous = parent.path().join(PREVIOUS_PROFILE);
     let desktop = parent.path().join("Patina.Desktop");
     let current = parent.path().join("Patina");
-    let select = || profile_root(Some(parent.path())).unwrap();
+    let select = || profile_root(Some(parent.path()), ProfileUse::Launch).unwrap();
     fs::create_dir(&previous).unwrap();
     fs::write(previous.join("database-location.json"), b"existing").unwrap();
     assert_eq!(select(), previous.canonicalize().unwrap());
@@ -136,7 +151,7 @@ fn profile_selection_preserves_existing_locations() {
     );
     let fresh = tempfile::tempdir().unwrap();
     assert_eq!(
-        profile_root(Some(fresh.path())).unwrap(),
+        profile_root(Some(fresh.path()), ProfileUse::Launch).unwrap(),
         fresh.path().canonicalize().unwrap().join("Patina")
     );
 }
@@ -152,7 +167,7 @@ fn default_profile_uses_roaming_and_recognizes_local_user_data() -> io::Result<(
     fs::create_dir(&roaming)?;
     fs::create_dir_all(old.join("EBWebView"))?;
     fs::write(old.join("Patina.exe"), b"installer")?;
-    let select = || select_profile(&roaming, Some(&local));
+    let select = || select_profile(&roaming, Some(&local), ProfileUse::Launch);
     assert_eq!(select()?, target.canonicalize()?);
     fs::write(old.join("patina.db"), b"existing")?;
     assert_eq!(select()?, old.canonicalize()?);
@@ -161,11 +176,17 @@ fn default_profile_uses_roaming_and_recognizes_local_user_data() -> io::Result<(
     let previous = local.join(PREVIOUS_PROFILE);
     fs::create_dir(&previous)?;
     assert_eq!(select()?, previous.canonicalize()?);
+    let upgrade = || select_profile(&roaming, Some(&local), ProfileUse::TauriUpgrade);
+    assert_eq!(upgrade()?, target.canonicalize()?);
     fs::write(old.join("database-location.json"), b"custom data location")?;
     assert_eq!(select()?, old.canonicalize()?);
+    assert_eq!(upgrade()?, old.canonicalize()?);
     fs::write(target.join("instance.lock"), b"")?;
     assert_eq!(select()?, target.canonicalize()?);
-    assert_eq!(profile_root(Some(&local))?, old.canonicalize()?);
+    assert_eq!(
+        profile_root(Some(&local), ProfileUse::Launch)?,
+        old.canonicalize()?
+    );
     Ok(())
 }
 
@@ -195,7 +216,7 @@ pub fn launch(
     use sha2::{Digest, Sha256};
     use std::os::windows::ffi::OsStrExt;
     let parent = parent.or_else(profile_parent_from_env);
-    let root = profile_root(parent.as_deref())?;
+    let root = profile_root(parent.as_deref(), ProfileUse::Launch)?;
     // The login entry must retain its identity after a toolchain or binary upgrade.
     let path_bytes: Vec<_> = root
         .as_os_str()

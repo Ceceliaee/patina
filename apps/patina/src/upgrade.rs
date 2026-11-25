@@ -3,8 +3,10 @@ use std::{
     error::Error,
     ffi::OsStr,
     fs, io,
+    os::windows::fs::OpenOptionsExt,
     path::{Path, PathBuf},
 };
+use windows::Win32::Storage::FileSystem::FILE_FLAG_DELETE_ON_CLOSE;
 use winreg::{
     RegKey,
     enums::{HKEY_CURRENT_USER, KEY_READ, KEY_WOW64_64KEY, REG_BINARY},
@@ -66,8 +68,19 @@ pub fn adopt_tauri_profile(
     let parent = parent
         .map(Path::to_owned)
         .or_else(super::profile_parent_from_env);
-    let profile = super::profile_root(parent.as_deref())?;
-    let _lock = super::lock_profile(&profile)?;
+    let profile = super::profile_root(parent.as_deref(), super::ProfileUse::TauriUpgrade)?;
+    // A failed first adoption must not leave an instance.lock that redirects later launches.
+    // On success database-location.json identifies the adopted profile.
+    let _lock = match fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .share_mode(0)
+        .custom_flags(FILE_FLAG_DELETE_ON_CLOSE.0)
+        .open(profile.join("instance.lock"))
+    {
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => super::lock_profile(&profile)?,
+        result => result?,
+    };
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?
