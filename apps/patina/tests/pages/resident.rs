@@ -265,6 +265,9 @@ fn exercise_resident_preferences(check_shell_icon: bool) -> Result<(), Error> {
     assert!(button(hwnd, "Open Windows startup settings").is_some());
     let refresh = || -> Result<(), Error> {
         click(hwnd, "History")?;
+        wait("history page opened before returning to settings", || {
+            button(hwnd, "Previous day")
+        })?;
         click(hwnd, "Settings")
     };
     unsafe {
