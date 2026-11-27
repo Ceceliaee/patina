@@ -93,12 +93,12 @@ struct Dispatch {
     restart: u32,
     recorder: RecordingControl,
     locale: Rc<Cell<Locale>>,
-    visible: Rc<Cell<bool>>,
+    registration: Rc<IconRegistration>,
 }
 
 pub struct Tray {
     class: windows::core::HSTRING,
-    visible: Rc<Cell<bool>>,
+    registration: Rc<IconRegistration>,
     pub(super) behavior: Cell<patina_activity::DesktopBehaviorSettings>,
     silent_start: Cell<bool>,
     hwnd: HWND,
@@ -142,6 +142,89 @@ fn register_icon(hwnd: HWND, icon: HICON) -> Result<()> {
         }
         Ok(())
     }
+}
+
+const RETRY_ICON: usize = 1;
+
+#[derive(Default)]
+struct IconRegistration {
+    wanted: Cell<bool>,
+    present: Cell<bool>,
+    retries: Cell<u32>,
+}
+
+impl IconRegistration {
+    fn cancel_retry(&self, hwnd: HWND) {
+        unsafe {
+            let _ = KillTimer(Some(hwnd), RETRY_ICON);
+        }
+    }
+
+    fn add(&self, hwnd: HWND, icon: HICON) {
+        self.cancel_retry(hwnd);
+        if let Some(delay) = self.try_register(|| register_icon(hwnd, icon)) {
+            unsafe {
+                SetTimer(Some(hwnd), RETRY_ICON, delay, None);
+            }
+        }
+    }
+
+    fn try_register(&self, register: impl FnOnce() -> Result<()>) -> Option<u32> {
+        if !self.wanted.get() || self.present.get() {
+            return None;
+        }
+        if let Err(error) = register() {
+            let attempt = self.retries.get();
+            if attempt == 0 {
+                eprintln!("register tray icon: {error}");
+            }
+            if attempt < 4 {
+                self.retries.set(attempt + 1);
+                return Some(1000 << attempt);
+            }
+        } else {
+            self.present.set(true);
+            self.retries.set(0);
+        }
+        None
+    }
+
+    fn set(&self, hwnd: HWND, icon: HICON, wanted: bool) -> Result<()> {
+        if self.wanted.get() == wanted {
+            return Ok(());
+        }
+        if !wanted && self.present.get() {
+            unsafe {
+                if let Err(error) = Shell_NotifyIconW(NIM_DELETE, &icon_data(hwnd, icon)).ok()
+                    && FindWindowW(w!("Shell_TrayWnd"), None).is_ok()
+                {
+                    return Err(error);
+                }
+            }
+            self.present.set(false);
+        }
+        self.wanted.set(wanted);
+        self.retries.set(0);
+        self.add(hwnd, icon);
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn tray_registration_waits_for_explorer_and_respects_current_visibility() {
+    let icon = IconRegistration::default();
+    icon.wanted.set(true);
+    for delay in [Some(1000), Some(2000), Some(4000), Some(8000), None] {
+        assert_eq!(icon.try_register(|| Err(Error::from_thread())), delay);
+        assert!(!icon.present.get());
+    }
+    assert_eq!(icon.try_register(|| Ok(())), None);
+    assert!(icon.present.get());
+    icon.try_register(|| panic!("duplicate registration"));
+    icon.present.set(false);
+    icon.wanted.set(false);
+    icon.try_register(|| panic!("hidden icon registered"));
 }
 
 impl Tray {
@@ -195,7 +278,7 @@ impl Tray {
             };
             let tray = Self {
                 class: name,
-                visible: Rc::new(Cell::new(false)),
+                registration: Rc::default(),
                 behavior: Cell::new(behavior),
                 silent_start: Cell::new(silent),
                 hwnd,
@@ -206,7 +289,6 @@ impl Tray {
             if restart == 0 {
                 return Err(Error::from_thread());
             }
-            tray.apply_visibility(behavior)?;
             WTSRegisterSessionNotification(hwnd, NOTIFY_FOR_THIS_SESSION)?;
             STATE.with(|state| {
                 *state.borrow_mut() = Some(Dispatch {
@@ -215,9 +297,10 @@ impl Tray {
                     restart,
                     recorder,
                     locale,
-                    visible: tray.visible.clone(),
+                    registration: tray.registration.clone(),
                 })
             });
+            tray.apply_visibility(behavior)?;
             Ok(tray)
         }
     }
@@ -229,7 +312,7 @@ impl Tray {
 
     pub(super) fn update_recording(&self, paused: bool) -> Result<()> {
         self.icon
-            .update(self.hwnd, self.visible.get(), None, paused)
+            .update(self.hwnd, self.registration.present.get(), None, paused)
     }
 
     pub(super) fn apply_visibility(
@@ -238,23 +321,15 @@ impl Tray {
     ) -> Result<()> {
         let visible = behavior.should_keep_tray_visible()
             || (self.silent_start.get() && behavior.show_tray_icon);
-        if visible != self.visible.get() {
-            if visible {
-                register_icon(self.hwnd, self.icon.handle())?;
-            } else {
-                unsafe {
-                    Shell_NotifyIconW(NIM_DELETE, &icon_data(self.hwnd, self.icon.handle())).ok()?
-                };
-            }
-            self.visible.set(visible);
-        }
-        Ok(())
+        self.registration
+            .set(self.hwnd, self.icon.handle(), visible)
     }
 }
 
 impl Drop for Tray {
     fn drop(&mut self) {
         STATE.with(|state| state.borrow_mut().take());
+        self.registration.cancel_retry(self.hwnd);
         unsafe {
             let _ = WTSUnRegisterSessionNotification(self.hwnd);
             let _ = Shell_NotifyIconW(NIM_DELETE, &icon_data(self.hwnd, self.icon.handle()));
@@ -309,7 +384,7 @@ unsafe extern "system" fn dispatch(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -
         restart,
         recorder,
         locale,
-        visible,
+        registration,
     }) = STATE.with(|s| s.borrow().clone())
     {
         let power = match (msg, w.0 as u32) {
@@ -332,7 +407,7 @@ unsafe extern "system" fn dispatch(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -
         if (matches!(msg, WM_SETTINGCHANGE | WM_THEMECHANGED) || msg == restart)
             && let Err(e) = icon.update(
                 hwnd,
-                visible.get() && msg != restart,
+                registration.present.get() && msg != restart,
                 icon::light_taskbar(),
                 recorder.paused(),
             )
@@ -340,12 +415,13 @@ unsafe extern "system" fn dispatch(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -
             eprintln!("tray appearance: {e}");
         }
         if msg == restart {
-            if visible.get()
-                && let Err(e) = register_icon(hwnd, icon.handle())
-            {
-                eprintln!("tray restore: {e}");
-                let _ = tx.try_send(Action::Exit);
-            }
+            registration.present.set(false);
+            registration.retries.set(0);
+            registration.add(hwnd, icon.handle());
+            return LRESULT(0);
+        }
+        if msg == WM_TIMER && w.0 == RETRY_ICON {
+            registration.add(hwnd, icon.handle());
             return LRESULT(0);
         }
         if msg == CALLBACK {
