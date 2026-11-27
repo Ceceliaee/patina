@@ -22,13 +22,26 @@ App note en: TBD.
 
 ### Fixed
 
-- 修复在分类页将部分辅助进程关联到主程序时无法保存的问题。
-- 缩短 Windows 登录启动项的名称与资料参数，修复开发版与正式版共存时，Windows 可能跳过 Patina 及其后续启动项的问题。更新后首次手动启动会迁移现有登记，并保留 Windows 的禁用决定。
-- 修复 Windows 登录时任务栏尚未就绪导致 Patina 退出、活动漏记，以及从 Tauri 版升级时启动项可能丢失的问题。设置页可查看 Windows 的禁用状态，并修复缺失的启动项。
-
 ### Removed
 
 ### Internal
+
+## [2.0.1] - 2026-11-27
+
+Release: 修复 Windows 登录时 Patina 可能未启动或提前退出导致活动漏记的问题，并修复分类页无法保存部分辅助进程关联的问题。
+App note: 修复 Windows 登录时 Patina 可能未启动或提前退出导致活动漏记的问题，并修复分类页无法保存部分辅助进程关联的问题。
+App note en: Fixes gaps in activity history when Patina failed to start or quit early at Windows sign-in, and fixes an issue that prevented some helper processes from being linked to their main app on the Classification page.
+
+### Changed
+
+- 「设置」中的「开机自启动」现在会显示 Windows 是否已禁用启动项。如果启动项缺失，可以点击「修复启动项」恢复。
+
+### Fixed
+
+- 修复开发版与正式版共存时，Windows 登录可能跳过 Patina 和排在其后的启动项的问题。更新后首次手动打开 Patina 会迁移原有启动项，并保留 Windows 中的禁用状态。
+- 修复从 v1.10.0 升级时可能丢失已开启的自启动项的问题。
+- Windows 登录时任务栏尚未就绪，或运行中任务栏重新加载时，Patina 会继续按原设置记录活动，并重试显示托盘图标。
+- 修复在分类页将部分辅助进程关联到主程序时无法保存的问题。
 
 ## [2.0.0] - 2026-11-25
 
