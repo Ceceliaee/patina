@@ -34,7 +34,7 @@ App note en: Fixes gaps in activity history when Patina failed to start or quit 
 
 ### Changed
 
-- 「设置」中的「开机自启动」现在会显示 Windows 是否已禁用启动项。如果启动项缺失，可以点击「修复启动项」恢复。
+- 在「设置」中，启动项缺失时可点击「开机自启动」旁的「修复启动项」恢复。如果已被 Windows 禁用，同一位置会显示「打开 Windows 启动设置」。
 
 ### Fixed
 

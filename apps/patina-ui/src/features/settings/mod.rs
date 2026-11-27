@@ -584,12 +584,58 @@ impl Render for Settings {
                 |p, v| p.desktop.show_tray_icon = v,
             ),
         );
-        let startup = pair(
-            toggle_row(
-                "settings.launchAtLoginLabel",
-                behavior.launch_at_login,
-                |p, v| p.desktop.launch_at_login = v,
+        let login_status = self.login_status.filter(|_| {
+            self.saved
+                .as_ref()
+                .is_some_and(|saved| saved.desktop.launch_at_login == behavior.launch_at_login)
+        });
+        let windows_startup = || {
+            text_button("windows-startup", tr("settings.loginWindows"), c, !busy)
+                .on_click(|_, _, cx| cx.open_url("ms-settings:startupapps"))
+        };
+        let login_action = match login_status {
+            Some(LoginStatus::Missing) if behavior.launch_at_login => Some(
+                text_button(
+                    "repair-login",
+                    tr("settings.loginRepair"),
+                    c,
+                    !busy && !changed,
+                )
+                .aria_description(tr("settings.loginMissing"))
+                .on_click(cx.listener(|s, _, _, cx| s.check_login(true, cx))),
             ),
+            Some(LoginStatus::DisabledByWindows) if behavior.launch_at_login => {
+                Some(windows_startup().aria_description(tr("settings.loginDisabled")))
+            }
+            _ => None,
+        };
+        let login_label = tr("settings.launchAtLoginLabel");
+        let launch_at_login = div()
+            .flex()
+            .flex_1()
+            .items_center()
+            .gap(px(8.))
+            .when(busy, |row| row.opacity(0.52))
+            .child(
+                settings_row_label(login_label.clone())
+                    .whitespace_nowrap()
+                    .font_weight(FontWeight::BOLD)
+                    .text_color(c.text),
+            )
+            .children(login_action)
+            .child(
+                quietpro::switch_control(
+                    "settings.launchAtLoginLabel",
+                    login_label,
+                    behavior.launch_at_login,
+                    !busy,
+                    c,
+                    update_toggle(|p, v| p.desktop.launch_at_login = v),
+                )
+                .ml_auto(),
+            );
+        let startup = pair(
+            launch_at_login,
             toggle_row(
                 "settings.startMinimizedLabel",
                 behavior.start_minimized,
@@ -735,50 +781,25 @@ impl Render for Settings {
             ],
         );
         let mut launch_group = settings_group("settings.runtimeBehaviorTitle", startup);
-        if self
-            .saved
-            .as_ref()
-            .is_some_and(|saved| saved.desktop.launch_at_login == behavior.launch_at_login)
-        {
-            let message = match self.login_status {
-                Some(LoginStatus::DisabledByWindows) if behavior.launch_at_login => {
-                    Some("settings.loginDisabled")
-                }
-                Some(LoginStatus::Missing) if behavior.launch_at_login => {
-                    Some("settings.loginMissing")
-                }
-                Some(LoginStatus::Conflict) => Some("settings.loginConflict"),
-                Some(LoginStatus::Unavailable) => Some("settings.loginUnavailable"),
-                _ => None,
-            };
-            if let Some(message) = message {
-                let mut row = div()
+        let login_notice = match login_status {
+            Some(LoginStatus::Conflict) => Some(("settings.loginConflict", windows_startup())),
+            Some(LoginStatus::Unavailable) => Some((
+                "settings.loginUnavailable",
+                text_button("retry-login", tr("common.retry"), c, !busy)
+                    .on_click(cx.listener(|s, _, _, cx| s.check_login(false, cx))),
+            )),
+            _ => None,
+        };
+        if let Some((message, action)) = login_notice {
+            launch_group = launch_group.child(
+                div()
                     .flex()
                     .flex_wrap()
                     .items_center()
                     .gap(px(8.))
-                    .child(label(tr(message)));
-                row = match self.login_status {
-                    Some(LoginStatus::Missing) => row.child(
-                        text_button(
-                            "repair-login",
-                            tr("settings.loginRepair"),
-                            c,
-                            !busy && !changed,
-                        )
-                        .on_click(cx.listener(|s, _, _, cx| s.check_login(true, cx))),
-                    ),
-                    Some(LoginStatus::Unavailable) => row.child(
-                        text_button("retry-login", tr("common.retry"), c, !busy)
-                            .on_click(cx.listener(|s, _, _, cx| s.check_login(false, cx))),
-                    ),
-                    _ => row.child(
-                        text_button("windows-startup", tr("settings.loginWindows"), c, !busy)
-                            .on_click(|_, _, cx| cx.open_url("ms-settings:startupapps")),
-                    ),
-                };
-                launch_group = launch_group.child(row);
-            }
+                    .child(label(tr(message)))
+                    .child(action),
+            );
         }
         let resident = section(
             settings_title(c, Icon::Monitor, tr("settings.residentTitle")),

@@ -5,26 +5,23 @@ use windows::Win32::UI::Shell::{NOTIFYICONIDENTIFIER, Shell_NotifyIconGetRect};
 mod login;
 use login::TestLoginEntry;
 
-fn toggle(hwnd: HWND, name: &str) -> Result<IUIAutomationTogglePattern, Error> {
+fn toggle_element(hwnd: HWND, name: &str) -> Result<IUIAutomationElement, Error> {
     wait(name, || {
-        controls(hwnd).ok()?.into_iter().find_map(|el| unsafe {
-            if el.CurrentName().ok()? != name {
-                return None;
-            }
-            el.GetCurrentPatternAs(UIA_TogglePatternId).ok()
-        })
-    })
-}
-
-fn change(hwnd: HWND, name: &str, expected: ToggleState, keyboard: bool) -> Result<(), Error> {
-    let control = wait(name, || {
         controls(hwnd).ok()?.into_iter().find(|el| unsafe {
             el.CurrentName().is_ok_and(|n| n == name)
                 && el
                     .GetCurrentPatternAs::<IUIAutomationTogglePattern>(UIA_TogglePatternId)
                     .is_ok()
         })
-    })?;
+    })
+}
+
+fn toggle(hwnd: HWND, name: &str) -> Result<IUIAutomationTogglePattern, Error> {
+    Ok(unsafe { toggle_element(hwnd, name)?.GetCurrentPatternAs(UIA_TogglePatternId)? })
+}
+
+fn change(hwnd: HWND, name: &str, expected: ToggleState, keyboard: bool) -> Result<(), Error> {
+    let control = toggle_element(hwnd, name)?;
     activate_control(hwnd, &control, keyboard)?;
     wait(name, || unsafe {
         (control
@@ -43,6 +40,23 @@ fn change(hwnd: HWND, name: &str, expected: ToggleState, keyboard: bool) -> Resu
         )
         .into()
     })
+}
+
+fn assert_inline_login_action(hwnd: HWND, action: &str, old_hint: &str) -> Result<(), Error> {
+    let action = wait(action, || button(hwnd, action))?;
+    let switch = toggle_element(hwnd, "Launch at login")?;
+    let action = unsafe { action.CurrentBoundingRectangle()? };
+    let switch = unsafe { switch.CurrentBoundingRectangle()? };
+    let center_y = (switch.top + switch.bottom) / 2;
+    assert!(
+        action.left < action.right
+            && action.right <= switch.left
+            && action.top < center_y
+            && center_y < action.bottom,
+        "login action {action:?} should be on the same row, before the switch {switch:?}"
+    );
+    assert!(named(hwnd, old_hint).is_none());
+    Ok(())
 }
 
 #[test]
@@ -205,7 +219,7 @@ fn exercise_resident_preferences(check_shell_icon: bool) -> Result<(), Error> {
     wait("login settings loaded", || {
         named(login_window, "Launch at login")
     })?;
-    assert!(named(login_window, "This startup item is missing in Windows.").is_none());
+    assert!(button(login_window, "Repair startup item").is_none());
     change(login_window, "Launch at login", ToggleState_Off, true)?;
     click(login_window, "Save")?;
     wait("disabled the previous login entry", || {
@@ -255,14 +269,15 @@ fn exercise_resident_preferences(check_shell_icon: bool) -> Result<(), Error> {
         unsafe { toggle(hwnd, "Launch silently")?.CurrentToggleState()? },
         ToggleState_Off
     );
-    wait("migrated system decision", || {
-        named(hwnd, "Disabled in Windows.")
-    })?;
+    assert_inline_login_action(
+        hwnd,
+        "Open Windows startup settings",
+        "Disabled in Windows.",
+    )?;
     assert_eq!(
         entry.approval.get_raw_value(&entry.name)?.bytes,
         disabled.bytes
     );
-    assert!(button(hwnd, "Open Windows startup settings").is_some());
     let refresh = || -> Result<(), Error> {
         click(hwnd, "History")?;
         wait("history page opened before returning to settings", || {
@@ -288,17 +303,22 @@ fn exercise_resident_preferences(check_shell_icon: bool) -> Result<(), Error> {
         )?;
     }
     wait("return from Windows settings rereads approval", || {
-        (named(hwnd, "Disabled in Windows.").is_none() && named(hwnd, "Launch at login").is_some())
-            .then_some(())
+        (button(hwnd, "Open Windows startup settings").is_none()
+            && named(hwnd, "Launch at login").is_some())
+        .then_some(())
     })?;
     entry.key.delete_value(&entry.name)?;
     refresh()?;
-    wait("missing login entry", || {
-        named(hwnd, "This startup item is missing in Windows.")
-    })?;
+    assert_inline_login_action(
+        hwnd,
+        "Repair startup item",
+        "This startup item is missing in Windows.",
+    )?;
     press(hwnd, "Repair startup item")?;
     wait("explicit repair writes original command", || {
-        (entry.key.get_value::<String, _>(&entry.name).ok()? == login_command).then_some(())
+        (entry.key.get_value::<String, _>(&entry.name).ok()? == login_command
+            && button(hwnd, "Repair startup item").is_none())
+        .then_some(())
     })?;
     entry.key.set_value(&entry.name, &"different.exe")?;
     refresh()?;
