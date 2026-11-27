@@ -18,14 +18,9 @@ fn invalid(message: impl Into<String>) -> SqliteOperationError {
 
 fn valid_identity(key: &str) -> bool {
     !key.is_empty()
-        && key.trim() == key
-        && key.to_lowercase() == key
-        && key.trim_matches('"') == key
+        && crate::domain::classification::canonical_exe(key) == key
         && !key.chars().any(char::is_control)
         && key.len() + APP_LINK_PREFIX.len() <= 256
-        && crate::domain::tracking::resolve_app_override_executable(key).is_some_and(|canonical| {
-            canonical == key || (!key.ends_with(".exe") && canonical == format!("{key}.exe"))
-        })
 }
 
 pub async fn apply_change(

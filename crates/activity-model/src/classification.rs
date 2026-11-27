@@ -111,7 +111,7 @@ pub struct ResolvedCategory {
 
 #[derive(Clone, Debug, Default)]
 pub struct ClassificationSnapshot {
-    app_links: HashMap<String, String>,
+    app_link_owners: HashMap<String, String>,
     app_overrides: HashMap<String, ClassificationOverride>,
     web_overrides: HashMap<String, ClassificationOverride>,
     web_sites: crate::web_links::WebLinkRules,
@@ -134,7 +134,12 @@ impl ClassificationSnapshot {
                 continue;
             }
             if let Some(member) = key.strip_prefix("__app_link::") {
-                snapshot.app_links.insert(member.to_string(), value);
+                // A chosen parent can itself be a helper with a different inferred owner.
+                snapshot
+                    .app_link_owners
+                    .entry(value.clone())
+                    .or_insert_with(|| value.clone());
+                snapshot.app_link_owners.insert(member.to_string(), value);
                 continue;
             }
             if key == "language" {
@@ -226,18 +231,15 @@ impl ClassificationSnapshot {
         }
         let association_key = crate::tracking::resolve_app_override_executable(&canonical)
             .unwrap_or_else(|| canonical.clone());
-        let canonical = self
-            .app_links
-            .get(&canonical)
-            .or_else(|| self.app_links.get(&association_key))
-            .cloned()
-            .unwrap_or(canonical);
+        let owner = self
+            .linked_app_owner(&canonical, &association_key)
+            .unwrap_or(&canonical);
         let raw_category = self
             .app_overrides
-            .get(&canonical)
+            .get(owner)
             .and_then(|value| value.category.clone())
             .unwrap_or_else(|| {
-                if SYSTEM_EXECUTABLES.contains(&canonical.as_str()) {
+                if SYSTEM_EXECUTABLES.contains(&owner) {
                     "system".to_string()
                 } else {
                     "other".to_string()
@@ -334,14 +336,20 @@ impl ClassificationSnapshot {
     reason = "native Today presentation also consumes this classification snapshot"
 )]
 impl ClassificationSnapshot {
+    fn linked_app_owner(&self, exe: &str, inferred: &str) -> Option<&str> {
+        self.app_link_owners
+            .get(exe)
+            .or_else(|| self.app_link_owners.get(inferred))
+            .or_else(|| self.app_link_owners.get(inferred.trim_end_matches(".exe")))
+            .map(String::as_str)
+    }
+
     pub fn app_owner(&self, exe: &str) -> String {
-        let canonical = crate::tracking::resolve_app_override_executable(exe)
-            .unwrap_or_else(|| canonical_exe(exe));
-        self.app_links
-            .get(&canonical)
-            .or_else(|| self.app_links.get(canonical.trim_end_matches(".exe")))
-            .cloned()
-            .unwrap_or(canonical)
+        let observed = canonical_exe(exe);
+        let inferred = crate::tracking::resolve_app_override_executable(exe).unwrap_or_default();
+        self.linked_app_owner(&observed, &inferred)
+            .map(str::to_owned)
+            .unwrap_or(inferred)
     }
 
     pub fn app_appearance(&self, owner: &str) -> (Option<&str>, Option<&str>) {
@@ -597,6 +605,34 @@ mod tests {
             classification.resolve_session_category("code.exe").id,
             "other"
         );
+    }
+
+    #[test]
+    fn explicit_helper_links_take_precedence_over_inferred_executables() {
+        let classification = snapshot(&[
+            ("__app_link::douyin_tray.exe", "studio.exe"),
+            ("__app_link::editor.exe", "douyin_widget.exe"),
+            ("__app_link::douyin.exe", "player.exe"),
+            (
+                "__app_override::studio.exe",
+                r#"{"category":"development"}"#,
+            ),
+            (
+                "__app_override::douyin_widget.exe",
+                r#"{"category":"office"}"#,
+            ),
+            ("__app_override::player.exe", r#"{"category":"video"}"#),
+        ]);
+        for (exe, owner, category) in [
+            ("Douyin_Tray.EXE", "studio.exe", "development"),
+            ("editor.exe", "douyin_widget.exe", "office"),
+            ("douyin_widget.exe", "douyin_widget.exe", "office"),
+            ("douyin_helper.exe", "player.exe", "video"),
+        ] {
+            assert_eq!(classification.app_owner(exe), owner);
+            assert_eq!(classification.resolve_session_category(exe).id, category);
+        }
+        assert_eq!(snapshot(&[]).app_owner("douyin_tray.exe"), "douyin.exe");
     }
 
     #[test]

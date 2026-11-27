@@ -180,6 +180,78 @@ fn detail_preferences_and_current_activity() -> Result<(), Error> {
     Ok(())
 }
 
+#[tokio::test]
+async fn classification_saves_and_unlinks_observed_helper_executables() -> Result<(), Error> {
+    let root = tempfile::tempdir()?;
+    let pool = patina_activity::open_database(&root.path().join("patina.db")).await?;
+    let start = Local
+        .with_ymd_and_hms(2024, 1, 15, 12, 0, 0)
+        .single()
+        .unwrap()
+        .timestamp_millis();
+    let helpers = ["douyin_tray.exe", "douyin_widget.exe"];
+    for (index, exe) in ["douyin.exe", helpers[0], helpers[1]]
+        .into_iter()
+        .enumerate()
+    {
+        let from = start + index as i64 * 60_000;
+        sqlx::query("INSERT INTO sessions(exe_name,app_name,start_time,end_time,duration) VALUES(?,?,?,?,60000)")
+            .bind(exe)
+            .bind(exe)
+            .bind(from)
+            .bind(from + 60_000)
+            .execute(&pool)
+            .await?;
+    }
+    let classification = patina_activity::Classification::new(pool.clone());
+    let rules = classification.load_classification_rules().await?;
+    let card = |exe: &str| rules.apps.iter().find(|a| a.exe == exe).unwrap();
+    let mut parent = card("douyin.exe").clone();
+    parent.name = "抖音".into();
+    parent.category = "video".into();
+    let links = helpers
+        .into_iter()
+        .map(|exe| patina_activity::AppLinkEdit {
+            member: card(exe).exe.clone(),
+            parent: Some(parent.exe.clone()),
+            original: None,
+        })
+        .collect();
+    classification
+        .save_classification_rules(vec![parent], Some(rules.websites), links, vec![])
+        .await?;
+
+    let saved = classification.load_classification_rules().await?;
+    for helper in helpers {
+        assert_eq!(
+            saved.app_links.get(helper).map(String::as_str),
+            Some("douyin.exe")
+        );
+    }
+    let day = patina_activity::ActivityQueries::new(pool)
+        .load_day_summary_at(start + 180_000, patina_activity::Locale::ZhCn)
+        .await?;
+    let group = day.apps.iter().find(|a| a.key == "douyin.exe").unwrap();
+    assert_eq!(group.name, "抖音");
+    assert_eq!(group.category, "video");
+    assert_eq!(group.duration_ms, 180_000);
+    let unlink = patina_activity::AppLinkEdit {
+        member: helpers[0].into(),
+        original: saved.app_links.get(helpers[0]).cloned(),
+        parent: None,
+    };
+    classification
+        .save_classification_rules(vec![], None, vec![unlink], vec![])
+        .await?;
+    let reloaded = classification.load_classification_rules().await?;
+    assert!(!reloaded.app_links.contains_key(helpers[0]));
+    assert_eq!(
+        reloaded.app_links.get(helpers[1]).map(String::as_str),
+        Some("douyin.exe")
+    );
+    Ok(())
+}
+
 #[test]
 fn classification_and_preferences_reject_stale_edits_without_partial_writes() -> Result<(), Error> {
     let root = tempfile::tempdir()?;

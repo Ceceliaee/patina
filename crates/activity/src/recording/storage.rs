@@ -540,10 +540,10 @@ async fn import_categories(
     let mut changes = vec![];
     let now = crate::platform::clock::unix_timestamp_millis_i64();
     for entry in candidates {
-        let Some(exe) = crate::domain::tracking::resolve_app_override_executable(&entry.exe_name)
-        else {
+        let owner = catalog.app_owner(&entry.exe_name);
+        if owner.is_empty() {
             continue;
-        };
+        }
         let mut ids = vec![];
         for name in entry.categories {
             let id = labels.entry(name.to_lowercase()).or_insert_with(|| {
@@ -564,7 +564,7 @@ async fn import_categories(
             if id == "other" {
                 continue;
             }
-            let key = format!("__app_override::{}", catalog.app_owner(&exe));
+            let key = format!("__app_override::{owner}");
             let current: Option<String> =
                 sqlx::query_scalar("SELECT value FROM settings WHERE key=?")
                     .bind(&key)
