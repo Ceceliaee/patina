@@ -6,7 +6,7 @@ pub(super) async fn save(
     current: DesktopBehaviorSettings,
     original: DesktopBehaviorSettings,
     edited: DesktopBehaviorSettings,
-    login: impl Fn(bool) -> io::Result<()>,
+    login: impl Fn(bool) -> io::Result<bool>,
     visibility: impl Fn(DesktopBehaviorSettings) -> io::Result<()>,
     persist: impl Future<Output = Result<(), ActivityError>>,
 ) -> Result<DesktopBehaviorSettings, RequestError> {
@@ -17,20 +17,17 @@ pub(super) async fn save(
     }
     let desired = if original == edited { current } else { edited };
     let login_changed = desired.launch_at_login != current.launch_at_login;
-    if login_changed {
-        login(desired.launch_at_login).map_err(|e| e.to_string())?;
-    }
+    let previous_registration = login_changed
+        .then(|| login(desired.launch_at_login))
+        .transpose()
+        .map_err(|e| e.to_string())?;
     let result = match visibility(desired) {
         Ok(()) => persist.await.map_err(super::activity_error),
         Err(error) => Err(RequestError::Rejected(error.to_string())),
     };
     if let Err(error) = result {
         let icon = visibility(current);
-        let registration = if login_changed {
-            login(current.launch_at_login)
-        } else {
-            Ok(())
-        };
+        let registration = previous_registration.map(login).transpose();
         if icon.is_err() || registration.is_err() {
             return Err(RequestError::Rejected(format!(
                 "{error}; restore tray: {icon:?}, restore login: {registration:?}"
@@ -63,10 +60,7 @@ mod tests {
             edited.desktop.show_tray_icon = !initial.desktop.show_tray_icon;
             let registered = Cell::new(initial.desktop.launch_at_login);
             let visible = Cell::new(initial.desktop);
-            let login = |value| {
-                registered.set(value);
-                Ok(())
-            };
+            let login = |value| Ok(registered.replace(value));
             let visibility = |value| {
                 visible.set(value);
                 Ok(())
@@ -140,10 +134,7 @@ mod tests {
             current,
             current,
             edited,
-            |value| {
-                registered.set(value);
-                Ok(())
-            },
+            |value| Ok(registered.replace(value)),
             |value| {
                 Err(io::Error::other(if value == edited {
                     "apply failed"

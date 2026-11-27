@@ -76,6 +76,7 @@ impl Dispatch {
             | WindowRequest::SaveMini(_)
             | WindowRequest::HistoryZoom(_)
             | WindowRequest::HistoryModes(_)
+            | WindowRequest::RepairLogin
             | WindowRequest::SavePreferences(..) => Self::Serial,
             WindowRequest::OpenExternal(_)
             | WindowRequest::Storage(_)
@@ -87,6 +88,7 @@ impl Dispatch {
             | WindowRequest::DeleteWebsite(..)
             | WindowRequest::SaveRules(..)
             | WindowRequest::Preferences
+            | WindowRequest::LoginStatus
             | WindowRequest::Trends(..)
             | WindowRequest::History { .. }
             | WindowRequest::Today
@@ -231,12 +233,30 @@ impl DesktopRequests {
             WindowRequest::Preferences => {
                 Reply::Preferences(prefs.preferences().await.map_err(activity_error)?)
             }
+            WindowRequest::LoginStatus => Reply::Login(self.login.status()),
+            WindowRequest::RepairLogin => {
+                if self.tray.behavior.get().launch_at_login
+                    && self.login.status() == patina_desktop_protocol::LoginStatus::Missing
+                {
+                    self.login
+                        .migrate_previous(true)
+                        .map_err(|e| e.to_string())?;
+                    self.login.apply(true).map_err(|e| e.to_string())?;
+                }
+                Reply::Login(self.login.status())
+            }
             WindowRequest::SavePreferences(old, next) => {
                 let desired = settings::save(
                     self.tray.behavior.get(),
                     old.desktop,
                     next.desktop,
-                    |enabled| self.login.apply(enabled),
+                    |enabled| {
+                        self.login
+                            .migrate_previous(self.tray.behavior.get().launch_at_login)?;
+                        let previous = self.login.registered()?;
+                        self.login.apply(enabled)?;
+                        Ok(previous)
+                    },
                     |state| {
                         self.tray
                             .apply_visibility(state)

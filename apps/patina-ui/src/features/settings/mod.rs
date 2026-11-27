@@ -9,6 +9,7 @@ use gpui_kit::{
     *,
 };
 use patina_activity_model::{AppPreferences, CloseBehavior, Locale, Theme, text};
+use patina_desktop_protocol::LoginStatus;
 use quietpro::{ButtonSizeExt, ControlSize, Icon, IconControl, text_button};
 use quietpro::{CARD_TITLE_GAP, content_card, heading, page, page_actions, page_title_row};
 use std::rc::Rc;
@@ -41,6 +42,8 @@ pub(crate) struct Settings {
     storage: Entity<storage::StorageCard>,
     client: Rc<Client>,
     saved: Option<AppPreferences>,
+    login_status: Option<LoginStatus>,
+    login_read: Option<Task<()>>,
     load: Option<Task<()>>,
     write: Option<Task<()>>,
     draft: Option<AppPreferences>,
@@ -249,6 +252,12 @@ impl Settings {
         })
         .detach();
         let storage = cx.new(|cx| storage::StorageCard::new(client.clone(), win, cx));
+        cx.observe_window_activation(win, |s: &mut Self, win, cx| {
+            if win.is_window_active() && !s.busy() {
+                s.check_login(false, cx);
+            }
+        })
+        .detach();
         cx.subscribe(
             &storage,
             |_, _, event: &crate::windows::main::Feedback, cx| cx.emit(event.clone()),
@@ -259,6 +268,8 @@ impl Settings {
             services,
             client,
             saved: None,
+            login_status: None,
+            login_read: None,
             load: None,
             write: None,
             draft: None,
@@ -338,6 +349,7 @@ impl Settings {
         if let Some(p) = preferences {
             self.saved = Some(p);
             self.reset(win, cx);
+            self.check_login(false, cx);
         } else {
             self.failure = Some(Failure::Load);
             cx.notify();
@@ -369,6 +381,28 @@ impl Settings {
     }
     fn busy(&self) -> bool {
         self.load.is_some() || self.write.is_some()
+    }
+    fn check_login(&mut self, repair: bool, cx: &mut Context<Self>) {
+        self.login_read = None;
+        let read = self.client.login_status(repair);
+        let task = cx.spawn(async move |view, cx| {
+            let status = read.await.unwrap_or(LoginStatus::Unavailable);
+            let _ = view.update(cx, |s, cx| {
+                s.login_status = Some(status);
+                if repair {
+                    s.write = None;
+                } else {
+                    s.login_read = None;
+                }
+                cx.notify();
+            });
+        });
+        if repair {
+            self.write = Some(task);
+        } else {
+            self.login_read = Some(task);
+        }
+        cx.notify();
     }
     pub(crate) fn dirty(&self) -> bool {
         self.saved != self.draft || self.services.invalid_port || self.write.is_some()
@@ -411,6 +445,7 @@ impl Settings {
                     cx.refresh_windows();
                     cx.emit(crate::windows::main::Saved { show_toast: true });
                 }
+                t.check_login(false, cx);
                 cx.notify();
             });
         }));
@@ -699,11 +734,57 @@ impl Render for Settings {
                 settings_group("settings.interfaceGroupTitle", interface),
             ],
         );
+        let mut launch_group = settings_group("settings.runtimeBehaviorTitle", startup);
+        if self
+            .saved
+            .as_ref()
+            .is_some_and(|saved| saved.desktop.launch_at_login == behavior.launch_at_login)
+        {
+            let message = match self.login_status {
+                Some(LoginStatus::DisabledByWindows) if behavior.launch_at_login => {
+                    Some("settings.loginDisabled")
+                }
+                Some(LoginStatus::Missing) if behavior.launch_at_login => {
+                    Some("settings.loginMissing")
+                }
+                Some(LoginStatus::Conflict) => Some("settings.loginConflict"),
+                Some(LoginStatus::Unavailable) => Some("settings.loginUnavailable"),
+                _ => None,
+            };
+            if let Some(message) = message {
+                let mut row = div()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .gap(px(8.))
+                    .child(label(tr(message)));
+                row = match self.login_status {
+                    Some(LoginStatus::Missing) => row.child(
+                        text_button(
+                            "repair-login",
+                            tr("settings.loginRepair"),
+                            c,
+                            !busy && !changed,
+                        )
+                        .on_click(cx.listener(|s, _, _, cx| s.check_login(true, cx))),
+                    ),
+                    Some(LoginStatus::Unavailable) => row.child(
+                        text_button("retry-login", tr("common.retry"), c, !busy)
+                            .on_click(cx.listener(|s, _, _, cx| s.check_login(false, cx))),
+                    ),
+                    _ => row.child(
+                        text_button("windows-startup", tr("settings.loginWindows"), c, !busy)
+                            .on_click(|_, _, cx| cx.open_url("ms-settings:startupapps")),
+                    ),
+                };
+                launch_group = launch_group.child(row);
+            }
+        }
         let resident = section(
             settings_title(c, Icon::Monitor, tr("settings.residentTitle")),
             [
                 settings_group("settings.windowBehaviorTitle", windows),
-                settings_group("settings.runtimeBehaviorTitle", startup),
+                launch_group,
             ],
         );
         shell = shell.child(

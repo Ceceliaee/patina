@@ -37,7 +37,7 @@ pub use domain::tool_notifications::{
     PreferencesPatch as NoticePreferencesPatch, Sound as NoticeSound,
 };
 use patina_activity_model::color;
-pub use patina_storage::location::adopt_existing_database;
+pub use patina_storage::location::{adopt_existing_database, adopted_tauri_database};
 pub use recent::Recent;
 pub use recording::services::{ensure_machine_id, ActivityBridges};
 pub use recording::storage::{prepare_database_for_startup, StorageOperations, StorageRequest};

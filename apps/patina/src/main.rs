@@ -17,6 +17,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut parent = None;
     let mut autostart = false;
     while let Some(arg) = args.next() {
+        if arg == "--handoff-tauri-login" {
+            let [parent, previous] = args
+                .collect::<Vec<_>>()
+                .try_into()
+                .map_err(|_| "invalid login handoff arguments")?;
+            return patina::handoff_tauri_login(
+                (!parent.is_empty()).then(|| std::path::Path::new(&parent)),
+                previous.to_str().ok_or("invalid previous login identity")?,
+            );
+        }
         if arg == "--upgrade-tauri-profile" {
             let [profile_parent, roaming, key, login] = args
                 .collect::<Vec<_>>()
@@ -33,7 +43,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             autostart = true;
             continue;
         }
-        if arg == "--profile-parent" {
+        if arg == "--profile-parent" || arg == "-a" {
+            autostart |= arg == "-a";
             parent = Some(args.next().ok_or("missing profile parent")?.into());
             continue;
         }

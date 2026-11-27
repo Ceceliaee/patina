@@ -3,7 +3,7 @@ mod bundled_tools;
 mod dev_preview;
 mod login;
 mod upgrade;
-pub use upgrade::adopt_tauri_profile;
+pub use upgrade::{adopt_tauri_profile, handoff_tauri_login};
 mod message_loop;
 mod requests;
 mod tool_events;
@@ -206,6 +206,18 @@ pub fn run(
     launch(send, actions, None, false, false)
 }
 
+fn profile_digest(root: &Path) -> String {
+    use sha2::{Digest, Sha256};
+    use std::os::windows::ffi::OsStrExt;
+    let path_bytes: Vec<_> = root
+        .as_os_str()
+        .to_ascii_lowercase()
+        .encode_wide()
+        .flat_map(u16::to_le_bytes)
+        .collect();
+    format!("{:x}", Sha256::digest(path_bytes))
+}
+
 pub fn launch(
     send: async_channel::Sender<Action>,
     actions: async_channel::Receiver<Action>,
@@ -213,22 +225,14 @@ pub fn launch(
     forward: bool,
     autostart: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use sha2::{Digest, Sha256};
-    use std::os::windows::ffi::OsStrExt;
     let parent = parent.or_else(profile_parent_from_env);
     let root = profile_root(parent.as_deref(), ProfileUse::Launch)?;
     // The login entry must retain its identity after a toolchain or binary upgrade.
-    let path_bytes: Vec<_> = root
-        .as_os_str()
-        .to_ascii_lowercase()
-        .encode_wide()
-        .flat_map(u16::to_le_bytes)
-        .collect();
-    let digest = Sha256::digest(path_bytes);
-    let profile_id = format!("{APP_ID}.{digest:x}");
-    let mut previous_ids = vec![format!("{PREVIOUS_DESKTOP_ID}.{digest:x}")];
+    let digest = profile_digest(&root);
+    let profile_id = format!("{APP_ID}.{digest}");
+    let mut previous_ids = vec![format!("{PREVIOUS_DESKTOP_ID}.{digest}")];
     if root.ends_with(PREVIOUS_PROFILE) {
-        previous_ids.push(format!("{PREVIOUS_PROFILE}.{digest:x}"));
+        previous_ids.push(format!("{PREVIOUS_PROFILE}.{digest}"));
     }
     let _profile_lock = match lock_profile(&root) {
         Err(e) if forward && e.raw_os_error() == Some(32) => {
@@ -251,6 +255,30 @@ pub fn launch(
     let pool = &database_runtime.pool;
     runtime.block_on(patina_activity::ensure_machine_id(pool))?;
     let initial = runtime.block_on(patina_activity::load_app_preferences(pool.clone()))?;
+    let enabled = initial.desktop.launch_at_login;
+    if autostart && !enabled {
+        return Ok(());
+    }
+    let mut login = login::LoginEntry::new(&digest, parent.as_deref())?;
+    login
+        .previous
+        .extend(previous_ids.iter().map(|id| (id.clone(), false)));
+    let mut reconcile = || -> Result<(), Box<dyn std::error::Error>> {
+        if parent.is_none() && patina_activity::adopted_tauri_database(&root)?.is_some() {
+            login.previous.insert(0, ("Patina".into(), true));
+        }
+        // Explorer can still be enumerating Run when it launches this process.
+        if !autostart {
+            login.migrate_previous(enabled)?;
+            if !enabled {
+                login.apply(false)?;
+            }
+        }
+        Ok(())
+    };
+    if let Err(error) = reconcile() {
+        eprintln!("check login registration: {error}");
+    }
     let locale = Rc::new(std::cell::Cell::new(initial.locale));
     let signals = RecordingSignals::new({
         let send = send.clone();
@@ -304,16 +332,6 @@ pub fn launch(
         &profile_id,
         silent,
     )?;
-    let login = login::LoginEntry::new(&profile_id, parent.as_deref())?;
-    if let Err(e) = login.apply(behavior.launch_at_login) {
-        eprintln!("restore login entry: {e}");
-    } else {
-        for name in previous_ids {
-            if let Err(e) = login::remove_entry(&name) {
-                eprintln!("remove previous login entry: {e}");
-            }
-        }
-    }
     let updater = make_updater(&root).map_err(io::Error::other)?;
     let update_shutdown = updater.clone();
     let (tools, worker) = tool_service::ToolService::start(

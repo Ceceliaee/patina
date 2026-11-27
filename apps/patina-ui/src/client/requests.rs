@@ -129,6 +129,17 @@ impl Client {
     ) -> impl Future<Output = Result<model::AppPreferences, RequestError>> + 'static {
         self.request(WindowRequest::Preferences)
     }
+    pub(crate) fn login_status(
+        &self,
+        repair: bool,
+    ) -> impl Future<Output = Result<patina_desktop_protocol::LoginStatus, RequestError>> + 'static
+    {
+        self.request(if repair {
+            WindowRequest::RepairLogin
+        } else {
+            WindowRequest::LoginStatus
+        })
+    }
     pub(crate) fn save_preferences(
         &self,
         old: model::AppPreferences,

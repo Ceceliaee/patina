@@ -175,6 +175,22 @@ Function .onInit
   ${EndIf}
 options_done:
   System::Call 'kernel32::LocalFree(p r0)'
+  ; A published native binary with its Tauri registration still present needs
+  ; the same handoff when the user reopens setup without updater arguments.
+  ${If} $TauriUpdate != 1
+    ReadRegStr $1 HKCU "${TAURI_UNINSTALL_KEY}" "InstallLocation"
+    StrCpy $3 $1 1
+    ${If} $3 == '"'
+      StrCpy $1 $1 -1 1
+    ${EndIf}
+    ${If} $1 != ""
+    ${AndIf} ${FileExists} "$1\patina-installation"
+      ${If} $INSTDIR == $1
+      ${OrIf} $INSTDIR == "${DEFAULT_INSTALL_DIR}"
+        StrCpy $TauriUpdate 1
+      ${EndIf}
+    ${EndIf}
+  ${EndIf}
   ${If} $TauriUpdate == 1
     ReadRegStr $1 HKCU "${TAURI_UNINSTALL_KEY}" "InstallLocation"
     ReadRegStr $2 HKCU "${TAURI_UNINSTALL_KEY}" "MainBinaryName"
@@ -435,6 +451,19 @@ Section "Patina"
   IfFileExists "$INSTDIR\.patina-publishing" rollback
   !insertmacro CleanOwned ".patina-previous"
   RMDir "$INSTDIR\.patina-staging"
+  ${If} $TauriUpdate == 1
+    StrCpy $1 ""
+    ${If} $ProfileParent != ""
+      StrCpy $1 "$ProfileParent\."
+    ${EndIf}
+    nsExec::ExecToStack '"$INSTDIR\patina.exe" --handoff-tauri-login "$1" "${TAURI_PRODUCT}"'
+    Pop $1
+    Pop $2
+    ${If} $1 != 0
+      SetErrorLevel 1
+      Abort "Patina was installed. Run setup again to finish transferring the login item."
+    ${EndIf}
+  ${EndIf}
   WriteRegStr HKCU "Software\${INSTALLATION_ID}" "InstallLocation" "$INSTDIR"
   WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayName" "Patina"
   WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayVersion" "${APP_VERSION}"
@@ -464,9 +493,6 @@ Section "Patina"
       Call SetShortcutAppId
     ${EndIf}
     DeleteRegKey HKCU "${TAURI_UNINSTALL_KEY}"
-    ${If} $TauriLogin == 1
-      DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${TAURI_PRODUCT}"
-    ${EndIf}
   ${EndIf}
 !ifdef PREVIOUS_INSTALLATION_ID
   !insertmacro RemovePreviousRegistration "${PREVIOUS_INSTALLATION_ID}" $PreviousInstallDir "${PREVIOUS_SHORTCUT_NAME}"

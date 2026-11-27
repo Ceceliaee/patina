@@ -12,7 +12,7 @@ use std::{
 
 pub mod tools;
 pub const APP_ID: &str = "Ceceliaee.Patina";
-pub const WIRE_VERSION: &str = "15";
+pub const WIRE_VERSION: &str = "16";
 pub const MAX_PENDING: usize = 256;
 const MAX_FRAME: u64 = 128 * 1024 * 1024;
 
@@ -53,6 +53,8 @@ pub enum WindowRequest {
         Vec<patina_activity_model::CategoryEdit>,
     ),
     Preferences,
+    LoginStatus,
+    RepairLogin,
     SavePreferences(
         patina_activity_model::AppPreferences,
         patina_activity_model::AppPreferences,
@@ -68,6 +70,15 @@ pub enum WindowRequest {
     Recent,
     Icons(Vec<String>),
     Edit(String, AppEdit),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum LoginStatus {
+    Registered,
+    Missing,
+    DisabledByWindows,
+    Conflict,
+    Unavailable,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -96,6 +107,7 @@ pub enum ToWindow {
 #[derive(Serialize, Deserialize)]
 pub enum Reply {
     Done,
+    Login(LoginStatus),
     Storage(StorageReply),
     Update(patina_updater::Snapshot),
     Zoom(f32),
@@ -171,6 +183,7 @@ macro_rules! reply_types {
     }
 }
 reply_types! {
+    Login(LoginStatus),
     Storage(StorageReply), Update(patina_updater::Snapshot), Zoom(f32), HistoryModes(([u8;2],bool)),
     Rules(model::ClassificationRules), Deletion(model::DeletionImpact), Preferences(model::AppPreferences),
     Trends(model::Trends), History(model::HistoryDay), Today(model::DaySummary), Recent(model::Recent),

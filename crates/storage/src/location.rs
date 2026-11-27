@@ -47,6 +47,13 @@ pub fn load_location(profile: &Path) -> Result<Location, String> {
         Err(e) => Err(e.to_string()),
     }
 }
+pub fn adopted_tauri_database(profile: &Path) -> Result<Option<PathBuf>, String> {
+    let state = load_location(profile)?;
+    Ok(state
+        .upgraded_from_tauri
+        .then(|| state.active.join("patina.db")))
+}
+
 fn save_location(profile: &Path, state: &Location) -> Result<(), String> {
     // A roaming profile can have a different absolute path on the next computer.
     let mut stored = state.clone();

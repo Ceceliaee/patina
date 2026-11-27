@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use sqlx::Connection;
 use std::{
     error::Error,
     ffi::OsStr,
@@ -89,5 +90,39 @@ pub fn adopt_tauri_profile(
             &source,
             login_enabled,
         ))?;
+    Ok(())
+}
+
+pub fn handoff_tauri_login(parent: Option<&Path>, previous: &str) -> Result<(), Box<dyn Error>> {
+    let parent = parent
+        .map(|p| p.components().collect::<PathBuf>())
+        .or_else(super::profile_parent_from_env);
+    let root = super::profile_root(parent.as_deref(), super::ProfileUse::Launch)?;
+    let _lock = super::lock_profile(&root)?;
+    let database =
+        patina_activity::adopted_tauri_database(&root)?.ok_or("missing adopted profile")?;
+    let setting: String = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?
+        .block_on(async {
+            let mut conn = sqlx::SqliteConnection::connect_with(
+                &sqlx::sqlite::SqliteConnectOptions::new()
+                    .filename(database)
+                    .read_only(true),
+            )
+            .await?;
+            sqlx::query_scalar("SELECT value FROM settings WHERE key='launch_at_login'")
+                .fetch_one(&mut conn)
+                .await
+        })?;
+    let enabled = match setting.trim().to_ascii_lowercase().as_str() {
+        "1" | "yes" | "true" | "on" => true,
+        "0" | "no" | "false" | "off" => false,
+        _ => return Err("unrecognized launch_at_login preference".into()),
+    };
+    let mut entry =
+        super::login::LoginEntry::new(&super::profile_digest(&root), parent.as_deref())?;
+    entry.previous.insert(0, (previous.to_owned(), true));
+    entry.migrate_previous(enabled)?;
     Ok(())
 }
