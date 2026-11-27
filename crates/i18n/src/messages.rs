@@ -527,6 +527,12 @@ pub fn settings_interface_group_title(locale: Locale) -> String { super::format_
 pub fn settings_language_label(locale: Locale) -> String { super::format_text(locale, "settings.languageLabel", &[]) }
 pub fn settings_launch_at_login_label(locale: Locale) -> String { super::format_text(locale, "settings.launchAtLoginLabel", &[]) }
 pub fn settings_load_failed(locale: Locale) -> String { super::format_text(locale, "settings.loadFailed", &[]) }
+pub fn settings_login_conflict(locale: Locale) -> String { super::format_text(locale, "settings.loginConflict", &[]) }
+pub fn settings_login_disabled(locale: Locale) -> String { super::format_text(locale, "settings.loginDisabled", &[]) }
+pub fn settings_login_missing(locale: Locale) -> String { super::format_text(locale, "settings.loginMissing", &[]) }
+pub fn settings_login_repair(locale: Locale) -> String { super::format_text(locale, "settings.loginRepair", &[]) }
+pub fn settings_login_unavailable(locale: Locale) -> String { super::format_text(locale, "settings.loginUnavailable", &[]) }
+pub fn settings_login_windows(locale: Locale) -> String { super::format_text(locale, "settings.loginWindows", &[]) }
 pub fn settings_recording_options_title(locale: Locale) -> String { super::format_text(locale, "settings.recordingOptionsTitle", &[]) }
 pub fn settings_remote_status_bridge_machine_id_label(locale: Locale) -> String { super::format_text(locale, "settings.remoteStatusBridgeMachineIdLabel", &[]) }
 pub fn settings_remote_status_bridge_title(locale: Locale) -> String { super::format_text(locale, "settings.remoteStatusBridgeTitle", &[]) }
