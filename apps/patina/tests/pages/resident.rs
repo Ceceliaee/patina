@@ -1,43 +1,9 @@
 use super::*;
 use std::os::windows::process::CommandExt;
 use windows::Win32::UI::Shell::{NOTIFYICONIDENTIFIER, Shell_NotifyIconGetRect};
-use winreg::{
-    RegKey,
-    enums::{HKEY_CURRENT_USER, KEY_QUERY_VALUE, KEY_SET_VALUE},
-};
-
-struct TestLoginEntry {
-    key: RegKey,
-    name: String,
-}
-
-impl TestLoginEntry {
-    fn for_profile(hwnd: HWND) -> Result<Self, Error> {
-        let mut class = [0u16; 256];
-        let n = unsafe { GetClassNameW(hwnd, &mut class) };
-        let name = String::from_utf16(&class[..n as usize])?;
-        assert!(name.starts_with(patina::APP_ID));
-        Self::new(name)
-    }
-
-    fn new(name: String) -> Result<Self, Error> {
-        let key = RegKey::predef(HKEY_CURRENT_USER).open_subkey_with_flags(
-            r"Software\Microsoft\Windows\CurrentVersion\Run",
-            KEY_QUERY_VALUE | KEY_SET_VALUE,
-        )?;
-        assert_eq!(
-            key.get_raw_value(&name).unwrap_err().kind(),
-            std::io::ErrorKind::NotFound
-        );
-        Ok(Self { key, name })
-    }
-}
-
-impl Drop for TestLoginEntry {
-    fn drop(&mut self) {
-        let _ = self.key.delete_value(&self.name);
-    }
-}
+#[path = "../../../../crates/test-support/login.rs"]
+mod login;
+use login::TestLoginEntry;
 
 fn toggle(hwnd: HWND, name: &str) -> Result<IUIAutomationTogglePattern, Error> {
     wait(name, || {
@@ -98,7 +64,9 @@ fn settings_compensate_and_reopen() -> Result<(), Error> {
 fn exercise_resident_preferences(check_shell_icon: bool) -> Result<(), Error> {
     let _com = ComApartment::init()?;
     unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
-    let root = tempfile::tempdir()?;
+    let root = tempfile::Builder::new()
+        .prefix("Patina login test ")
+        .tempdir()?;
     let dir = root.path().join(patina::PROFILE_DIRECTORY);
     fs::create_dir(&dir)?;
     let db = dir.join("patina.db");
@@ -123,7 +91,7 @@ fn exercise_resident_preferences(check_shell_icon: bool) -> Result<(), Error> {
             Shell_NotifyIconGetRect(&icon).ok()
         })?;
     }
-    let entry = TestLoginEntry::for_profile(tray)?;
+    let entry = TestLoginEntry::for_profile(&dir)?;
     assert!(main().is_none());
     assert!(launch().status()?.success());
     let hwnd = wait("relaunch opens original host", main)?;
@@ -177,8 +145,7 @@ fn exercise_resident_preferences(check_shell_icon: bool) -> Result<(), Error> {
     wait("saved resident settings", || named(hwnd, "Saved"))?;
     let login_command: String = entry.key.get_value(&entry.name)?;
     assert!(
-        login_command.contains("--autostart")
-            && login_command.contains(root.path().to_str().unwrap())
+        login_command.contains(" -a ") && login_command.contains(root.path().to_str().unwrap())
     );
     if check_shell_icon {
         assert!(unsafe { Shell_NotifyIconGetRect(&icon) }.is_err());
@@ -195,14 +162,23 @@ fn exercise_resident_preferences(check_shell_icon: bool) -> Result<(), Error> {
     command(tray, 2)?;
     assert!(wait("tray exit", || host.0.try_wait().ok().flatten())?.success());
 
-    let previous = TestLoginEntry::new(entry.name.replacen(patina::APP_ID, "Patina.Desktop", 1))?;
+    let previous = TestLoginEntry::new(format!(
+        "{}.{}",
+        patina::APP_ID,
+        TestLoginEntry::profile_digest(&dir)?
+    ))?;
+    let previous_command = login_command.replace(" -a \"", " --autostart --profile-parent \"");
     entry.key.delete_value(&entry.name)?;
-    previous.key.set_value(&previous.name, &login_command)?;
+    previous.key.set_value(&previous.name, &previous_command)?;
+    let disabled = winreg::RegValue {
+        vtype: winreg::enums::REG_BINARY,
+        bytes: [3, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0].as_slice().into(),
+    };
     let mut registered = Command::new(env!("CARGO_BIN_EXE_patina"));
-    let command = login_command
+    let quoted = previous_command
         .strip_prefix('"')
         .ok_or("unquoted login executable")?;
-    let (exe, args) = command.split_once('"').ok_or("missing login arguments")?;
+    let (exe, args) = quoted.split_once('"').ok_or("missing login arguments")?;
     assert_eq!(
         Path::new(exe).canonicalize()?,
         Path::new(env!("CARGO_BIN_EXE_patina")).canonicalize()?
@@ -210,7 +186,55 @@ fn exercise_resident_preferences(check_shell_icon: bool) -> Result<(), Error> {
     registered
         .raw_arg(args.trim_start())
         .env_remove("PATINA_PROFILE_PARENT");
-    let mut next = TestChild(registered.spawn()?);
+    let mut from_login = TestChild(registered.spawn()?);
+    let login_pid = from_login.0.id();
+    let login_tray = wait("host started from the previous login entry", || {
+        window(login_pid, w!("Patina Tray"))
+    })?;
+    assert_eq!(
+        previous.key.get_value::<String, _>(&previous.name)?,
+        previous_command
+    );
+    assert_eq!(
+        entry.key.get_raw_value(&entry.name).unwrap_err().kind(),
+        std::io::ErrorKind::NotFound
+    );
+    let login_window = wait("login settings window", || {
+        children::find(login_pid, |p| window(p, w!("Patina")))
+    })?;
+    wait("login settings loaded", || {
+        named(login_window, "Launch at login")
+    })?;
+    assert!(named(login_window, "This startup item is missing in Windows.").is_none());
+    change(login_window, "Launch at login", ToggleState_Off, true)?;
+    click(login_window, "Save")?;
+    wait("disabled the previous login entry", || {
+        named(login_window, "Saved")
+    })?;
+    for item in [&entry, &previous] {
+        assert_eq!(
+            item.key.get_raw_value(&item.name).unwrap_err().kind(),
+            std::io::ErrorKind::NotFound
+        );
+    }
+    change(login_window, "Launch at login", ToggleState_On, true)?;
+    click(login_window, "Save")?;
+    wait("explicit enable registers the current item", || {
+        (entry.key.get_value::<String, _>(&entry.name).ok()? == login_command).then_some(())
+    })?;
+    command(login_tray, 2)?;
+    assert!(
+        wait("login host exited", || from_login
+            .0
+            .try_wait()
+            .ok()
+            .flatten())?
+        .success()
+    );
+    entry.key.delete_value(&entry.name)?;
+    previous.key.set_value(&previous.name, &previous_command)?;
+    previous.approval.set_raw_value(&previous.name, &disabled)?;
+    let mut next = TestChild(launch().spawn()?);
     let next_pid = next.0.id();
     let hwnd = wait("foreground startup", || {
         children::find(next_pid, |p| window(p, w!("Patina")))
@@ -231,6 +255,73 @@ fn exercise_resident_preferences(check_shell_icon: bool) -> Result<(), Error> {
         unsafe { toggle(hwnd, "Launch silently")?.CurrentToggleState()? },
         ToggleState_Off
     );
+    wait("migrated system decision", || {
+        named(hwnd, "Disabled in Windows.")
+    })?;
+    assert_eq!(
+        entry.approval.get_raw_value(&entry.name)?.bytes,
+        disabled.bytes
+    );
+    assert!(button(hwnd, "Open Windows startup settings").is_some());
+    let refresh = || -> Result<(), Error> {
+        click(hwnd, "History")?;
+        click(hwnd, "Settings")
+    };
+    unsafe {
+        PostMessageW(
+            Some(hwnd),
+            WM_ACTIVATE,
+            WPARAM(WA_INACTIVE as usize),
+            LPARAM(0),
+        )?;
+    }
+    entry.approval.delete_value(&entry.name)?;
+    unsafe {
+        PostMessageW(
+            Some(hwnd),
+            WM_ACTIVATE,
+            WPARAM(WA_ACTIVE as usize),
+            LPARAM(0),
+        )?;
+    }
+    wait("return from Windows settings rereads approval", || {
+        (named(hwnd, "Disabled in Windows.").is_none() && named(hwnd, "Launch at login").is_some())
+            .then_some(())
+    })?;
+    entry.key.delete_value(&entry.name)?;
+    refresh()?;
+    wait("missing login entry", || {
+        named(hwnd, "This startup item is missing in Windows.")
+    })?;
+    press(hwnd, "Repair startup item")?;
+    wait("explicit repair writes original command", || {
+        (entry.key.get_value::<String, _>(&entry.name).ok()? == login_command).then_some(())
+    })?;
+    entry.key.set_value(&entry.name, &"different.exe")?;
+    refresh()?;
+    wait("foreign command", || {
+        named(
+            hwnd,
+            "The startup item points to another command. Check Windows startup settings.",
+        )
+    })?;
+    assert_eq!(
+        entry.key.get_value::<String, _>(&entry.name)?,
+        "different.exe"
+    );
+    entry.key.set_value(&entry.name, &login_command)?;
+    entry.approval.set_value(&entry.name, &"unknown")?;
+    refresh()?;
+    wait("unknown system state", || {
+        named(hwnd, "Could not verify the Windows startup item.")
+    })?;
+    entry.approval.delete_value(&entry.name)?;
+    press(hwnd, "Retry")?;
+    wait("state refreshed", || {
+        named(hwnd, "Could not verify the Windows startup item.")
+            .is_none()
+            .then_some(())
+    })?;
     change(hwnd, "Hide on close", ToggleState_Off, true)?;
     change(hwnd, "Launch at login", ToggleState_Off, true)?;
     click(hwnd, "Save")?;
@@ -241,5 +332,19 @@ fn exercise_resident_preferences(check_shell_icon: bool) -> Result<(), Error> {
     );
     press(hwnd, "Close window")?;
     assert!(wait("close exits recorder", || next.0.try_wait().ok().flatten())?.success());
+    entry.key.set_value(&entry.name, &login_command)?;
+    let mut stale = TestChild(registered.spawn()?);
+    assert!(
+        wait("queued launch honors the saved opt-out", || stale
+            .0
+            .try_wait()
+            .ok()
+            .flatten())?
+        .success()
+    );
+    assert_eq!(
+        entry.key.get_value::<String, _>(&entry.name)?,
+        login_command
+    );
     Ok(())
 }

@@ -3,6 +3,9 @@ mod children;
 #[path = "../../../crates/test-support/windows.rs"]
 mod desktop;
 
+#[path = "../../../crates/test-support/login.rs"]
+mod login;
+
 use desktop::{ComApartment, Error, TestChild, controls, wait, window};
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
 use std::{
@@ -140,6 +143,123 @@ async fn recording(db: &mut SqliteConnection) -> sqlx::Result<Option<(i64, i64)>
          t.key='__tracker_last_successful_sample_ms' WHERE s.exe_name='fixture.exe' AND s.end_time IS NULL",
     )
     .fetch_optional(db).await
+}
+
+#[test]
+#[ignore = "isolated Win32 desktop without an Explorer tray"]
+fn login_keeps_recording_when_explorer_is_unavailable() -> Result<(), Error> {
+    use std::os::windows::process::CommandExt;
+    use windows::Win32::UI::WindowsAndMessaging::{FindWindowW, RegisterWindowMessageW};
+    if !patina_test_support::run_case()? {
+        return Ok(());
+    }
+    assert!(unsafe { FindWindowW(w!("Shell_TrayWnd"), None) }.is_err());
+    let restart = unsafe { RegisterWindowMessageW(w!("TaskbarCreated")) };
+    assert_ne!(restart, 0);
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    for (silent, icon, paused) in [
+        (true, true, false),
+        (false, true, true),
+        (true, false, true),
+        (false, false, false),
+    ] {
+        let root = tempfile::tempdir()?;
+        let profile = root.path().join(patina::PROFILE_DIRECTORY);
+        fs::create_dir(&profile)?;
+        let path = profile.join("patina.db");
+        rt.block_on(async {
+            let pool = patina_activity::open_database(&path).await?;
+            for (key, flag) in [
+                ("start_minimized", silent),
+                ("show_tray_icon", icon),
+                ("tracking_paused", paused),
+                ("launch_at_login", true),
+            ] {
+                sqlx::query("INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)")
+                    .bind(key)
+                    .bind(if flag { "1" } else { "0" })
+                    .execute(&pool)
+                    .await?;
+            }
+            pool.close().await;
+            Ok::<_, Error>(())
+        })?;
+        let exe = r"C:\fixture\fixture.exe";
+        fs::write(
+            root.path().join("native-probe-fixture.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "foreground":{"hwnd":"0x42","root_owner_hwnd":"0x42","process_id":42,"window_class":"Fixture","title":"Fixture","exe_name":"fixture.exe","process_path":exe,"is_afk":false,"idle_time_ms":0},"names":{(exe):"Fixture"}
+            }))?,
+        )?;
+        let entry = login::TestLoginEntry::for_profile(&profile)?;
+        let binary = env!("CARGO_BIN_EXE_patina");
+        let command = format!(r#""{binary}" -a "{}""#, root.path().display());
+        entry.key.set_value(&entry.name, &command)?;
+        let stored: String = entry.key.get_value(&entry.name)?;
+        let (exe, args) = stored
+            .strip_prefix('"')
+            .and_then(|s| s.split_once('"'))
+            .ok_or("invalid Run command")?;
+        let mut host = TestChild(
+            Command::new(exe)
+                .raw_arg(args.trim_start())
+                .env_remove("PATINA_PROFILE_PARENT")
+                .env("PATINA_E2E_DATA_ROOT", root.path())
+                .env("PATINA_E2E", "1")
+                .env("PATINA_E2E_NATIVE_FIXTURE", "1")
+                .spawn()?,
+        );
+        let pid = host.0.id();
+        let tray = wait("login host", || window(pid, w!("Patina Tray")))?;
+        let main = || children::find(pid, |p| window(p, w!("Patina")));
+        let mut db = rt.block_on(SqliteConnection::connect_with(
+            &SqliteConnectOptions::new().filename(&path),
+        ))?;
+        let before = if paused {
+            None
+        } else {
+            Some(wait("first login sample", || {
+                rt.block_on(recording(&mut db)).ok().flatten()
+            })?)
+        };
+        unsafe {
+            PostMessageW(Some(tray), restart, WPARAM(0), LPARAM(0))?;
+        }
+        if let Some((id, sample)) = before {
+            wait("same session after taskbar recreation", || {
+                let (next, time) = rt.block_on(recording(&mut db)).ok().flatten()?;
+                (id == next && time > sample).then_some(())
+            })?;
+        }
+        if silent {
+            assert!(main().is_none());
+            assert!(
+                Command::new(binary)
+                    .arg("--main")
+                    .arg("--profile-parent")
+                    .arg(root.path())
+                    .status()?
+                    .success()
+            );
+        }
+        wait("same host owns visible main window", main)?;
+        unsafe {
+            PostMessageW(Some(tray), WM_COMMAND, WPARAM(2), LPARAM(0))?;
+        }
+        assert!(
+            wait("login host exited normally", || host
+                .0
+                .try_wait()
+                .ok()
+                .flatten())?
+            .success()
+        );
+        let count:i64=rt.block_on(sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE exe_name='fixture.exe' AND end_time IS NOT NULL").fetch_one(&mut db))?;
+        assert_eq!(count, if paused { 0 } else { 1 });
+    }
+    Ok(())
 }
 
 #[test]

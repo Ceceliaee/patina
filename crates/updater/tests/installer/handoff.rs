@@ -1,5 +1,8 @@
 use super::{Cleanup, Error, run};
 use patina_test_support::{polling::wait_observed, process};
+#[path = "../../../test-support/login.rs"]
+mod login;
+use login::TestLoginEntry;
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
 use std::{
     env, fs,
@@ -45,6 +48,23 @@ fn sample(path: &Path) -> Result<(i64, i64, String), Error> {
         let integrity:String=sqlx::query_scalar("PRAGMA quick_check").fetch_one(&mut conn).await?;
         assert_eq!(integrity,"ok");conn.close().await?; Ok(result)
     })
+}
+
+fn login_preference(database: &Path, enabled: bool) -> Result<(), Error> {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?
+        .block_on(async {
+            let mut conn =
+                SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(database))
+                    .await?;
+            sqlx::query("INSERT OR REPLACE INTO settings(key,value) VALUES('launch_at_login',?)")
+                .bind(if enabled { "1" } else { "0" })
+                .execute(&mut conn)
+                .await?;
+            conn.close().await?;
+            Ok(())
+        })
 }
 
 #[test]
@@ -110,6 +130,11 @@ fn published_profile_copy_survives_install_upgrade_and_uninstall() -> Result<(),
     let install = local.join("Patina");
     fs::create_dir_all(&install)?;
     fs::write(install.join("Patina.exe"), b"previous Patina")?;
+    fs::create_dir_all(&profile)?;
+    let target = TestLoginEntry::for_profile(&profile)?;
+    let old = TestLoginEntry::new(previous.id.clone())?;
+    let old_command = format!("{} --autostart", install.join("Patina.exe").display());
+    target.key.set_value(&old.name, &old_command)?;
     fs::write(install.join("uninstall.exe"), b"previous uninstaller")?;
     let old_registration = format!(
         "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{}",
@@ -131,6 +156,7 @@ fn published_profile_copy_survives_install_upgrade_and_uninstall() -> Result<(),
         .arg("/DAPP_VERSION=1.10.1")
         .arg("/DRESOURCE_VERSION=1.10.1.0")
         .arg(format!("/DINSTALLATION_ID={id}"))
+        .arg(format!("/DDEFAULT_INSTALL_DIR={}", install.display()))
         .arg(format!("/DTAURI_PRODUCT={}", previous.id))
         .arg(format!("/DTAURI_STORAGE_KEY={storage_key}"))
         .arg(format!("/DTAURI_DATA_DIR={}", old_dir.display()))
@@ -161,6 +187,8 @@ fn published_profile_copy_survives_install_upgrade_and_uninstall() -> Result<(),
     );
     assert!(hkcu.open_subkey(&old_registration).is_ok());
     assert!(!control.exists());
+    assert_eq!(target.key.get_value::<String, _>(&old.name)?, old_command);
+    assert!(target.key.get_raw_value(&target.name).is_err());
     assert!(!profile.join("instance.lock").exists());
     fs::copy(&source, &database)?;
     let existing = profile.join("patina.db");
@@ -170,9 +198,24 @@ fn published_profile_copy_survives_install_upgrade_and_uninstall() -> Result<(),
     assert_eq!(fs::read(&database)?, old_bytes);
     assert_eq!(fs::read(install.join("Patina.exe"))?, b"previous Patina");
     fs::remove_file(existing)?;
-    let setup_and_exit = |tauri: bool| -> Result<(), Error> {
-        if tauri {
-            run(&mut tauri_update())?;
+    login_preference(&database, true)?;
+    target.key.set_value(&target.name, &"foreign.exe")?;
+    assert!(!tauri_update().status()?.success());
+    assert_eq!(target.key.get_value::<String, _>(&old.name)?, old_command);
+    assert_eq!(
+        target.key.get_value::<String, _>(&target.name)?,
+        "foreign.exe"
+    );
+    assert!(hkcu.open_subkey(&old_registration).is_ok());
+    target.key.delete_value(&target.name)?;
+    let setup_and_exit = |resume_handoff: bool| -> Result<(), Error> {
+        if resume_handoff {
+            run(Command::new(&setup)
+                .arg("/S")
+                .env("APPDATA", &parent)
+                .env("LOCALAPPDATA", &local)
+                .env_remove("PATINA_PROFILE_PARENT")
+                .env_remove("PATINA_GPUI_PROFILE_PARENT"))?;
         } else {
             run(Command::new(&setup)
                 .arg("/S")
@@ -250,6 +293,73 @@ fn published_profile_copy_survives_install_upgrade_and_uninstall() -> Result<(),
         Ok(())
     };
     setup_and_exit(true)?;
+    let expected = format!("\"{}\" --autostart", install.join("patina.exe").display());
+    assert!(
+        target
+            .key
+            .get_value::<String, _>(&target.name)?
+            .eq_ignore_ascii_case(&expected)
+    );
+    assert!(target.key.get_raw_value(&old.name).is_err());
+    let handoff = || {
+        Command::new(install.join("patina.exe"))
+            .env("APPDATA", &parent)
+            .env("LOCALAPPDATA", &local)
+            .env_remove("PATINA_PROFILE_PARENT")
+            .env_remove("PATINA_GPUI_PROFILE_PARENT")
+            .args(["--handoff-tauri-login", "", &old.name])
+            .status()
+    };
+    // A previous attempt wrote the target but exited before deleting the source.
+    target.key.set_value(&old.name, &old_command)?;
+    target.approval.set_value(&old.name, &"unrecognized")?;
+    assert!(!handoff()?.success());
+    assert_eq!(target.key.get_value::<String, _>(&old.name)?, old_command);
+    let disabled = RegValue {
+        vtype: REG_BINARY,
+        bytes: [3, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0].as_slice().into(),
+    };
+    target.approval.set_raw_value(&old.name, &disabled)?;
+    assert!(handoff()?.success());
+    assert!(handoff()?.success());
+    assert_eq!(
+        target.approval.get_raw_value(&target.name)?.bytes,
+        disabled.bytes
+    );
+    assert!(target.key.get_raw_value(&old.name).is_err());
+    assert!(
+        target
+            .key
+            .get_value::<String, _>(&target.name)?
+            .eq_ignore_ascii_case(&expected)
+    );
+    // A 2.0.0 upgrade can leave only the old Windows disable decision.
+    assert!(old.approval.get_raw_value(&old.name).is_err());
+    old.approval.set_raw_value(&old.name, &disabled)?;
+    target.key.delete_value(&target.name)?;
+    target.approval.delete_value(&target.name)?;
+    assert!(handoff()?.success());
+    assert_eq!(
+        target.approval.get_raw_value(&target.name)?.bytes,
+        disabled.bytes
+    );
+    assert!(
+        target
+            .key
+            .get_value::<String, _>(&target.name)?
+            .eq_ignore_ascii_case(&expected)
+    );
+    // An adopted profile alone cannot explain who removed the registration.
+    target.key.delete_value(&target.name)?;
+    target.approval.delete_value(&target.name)?;
+    assert!(old.approval.get_raw_value(&old.name).is_err());
+    assert!(handoff()?.success());
+    assert!(target.key.get_raw_value(&target.name).is_err());
+    login_preference(&database, false)?;
+    target.key.set_value(&old.name, &old_command)?;
+    assert!(handoff()?.success());
+    assert!(target.key.get_raw_value(&target.name).is_err());
+    assert!(target.key.get_raw_value(&old.name).is_err());
     assert!(hkcu.open_subkey(&old_registration).is_err());
     let location = fs::read(&control)?;
     let selected: serde_json::Value = serde_json::from_slice(&location)?;
@@ -272,7 +382,34 @@ fn published_profile_copy_survives_install_upgrade_and_uninstall() -> Result<(),
             fs::copy(previous.join(name), install.join(name))?;
         }
     }
+    login_preference(&database, true)?;
+    let args = format!(" --autostart --profile-parent \"{}\"", parent.display());
+    let retired = format!("\"{}\"{args}", install.join("patina-gpui.exe").display());
+    let previous_login = TestLoginEntry::new(format!(
+        "Ceceliaee.Patina.{}",
+        TestLoginEntry::profile_digest(&profile)?
+    ))?;
+    previous_login
+        .key
+        .set_value(&previous_login.name, &retired)?;
     setup_and_exit(false)?;
+    let replacement = format!(
+        "\"{}\" -a \"{}\"",
+        install.join("patina.exe").display(),
+        parent.display()
+    );
+    assert!(
+        previous_login
+            .key
+            .get_raw_value(&previous_login.name)
+            .is_err()
+    );
+    assert!(
+        target
+            .key
+            .get_value::<String, _>(&target.name)?
+            .eq_ignore_ascii_case(&replacement)
+    );
     // Uninstall owns the program files, while storage and its location belong to the user.
     assert_eq!(legacy.get_raw_value("State")?.bytes, old_control);
     run(Command::new(install.join("Uninstall.exe"))

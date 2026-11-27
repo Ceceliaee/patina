@@ -30,6 +30,7 @@ patina-test-support = { path = "../test-support" }
 winreg = "0.56"
 
 [target.'cfg(windows)'.dev-dependencies]
+sha2 = "0.10"
 zip = { version = "9.0.5", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 sqlx.workspace = true
 tokio = { version = "1", features = ["rt", "time"] }
