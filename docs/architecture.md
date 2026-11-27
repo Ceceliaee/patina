@@ -24,6 +24,12 @@ Windows 前台观察经过 tracking 决策，在同一事务中提交活动事�
 
 ### 运行身份与持久化隔离
 
+Windows 按当前用户的 `Run` 项启动 Patina。每份资料的登记名取 `Patina.` 加资料摘要的前十个十六进制字符；宿主核对完整程序路径与资料参数后才修改已有命令。默认资料使用 `--autostart`，显式资料使用 `-a "<资料上级目录>"`。安装完成后的普通启动会迁移相符的旧项，登录启动保留 Windows 正在枚举的清单。[登记与迁移](../apps/patina/src/login.rs)
+
+登录命令读取该资料的自启偏好。开启时按已保存的暂停和静默设置启动，关闭时直接退出。Explorer 暂时不能接收托盘图标时，后台继续持有资料锁、处理窗口唤出并按原设置采样。托盘会限次补试，收到 `TaskbarCreated` 后按最新的图标偏好重新登记。[后台启动](../apps/patina/src/lib.rs) · [托盘生命周期](../apps/patina/src/tray.rs)
+
+开启登录自启时，设置页会核对该资料的 Windows 启动命令和系统禁用状态。原因不明的缺项由用户点「修复启动项」补回。已被 Windows 禁用的启动项可从系统启动设置管理，返回 Patina 后会刷新状态。命令归属冲突或系统状态不可读时，设置页会显示相应提示。[启动项读写](../apps/patina/src/login.rs) · [设置页](../apps/patina-ui/src/features/settings/mod.rs)
+
 新安装的用户资料位于 `%APPDATA%/Patina/`。数据库和备份默认随 Windows 漫游用户配置一起迁移。已设置的自定义数据库目录继续使用原路径。从 v1.10.0 升级时，安装器沿用旧数据库和备份，详见[Windows 安装与更新](release.md#windows-安装与更新)。
 
 启动时优先使用 Roaming 里的桌面配置。以前在 Local 建立的桌面配置可继续原地使用，其中依次查找 `Patina`、`Patina.Desktop` 和早期开发版目录。开发启动器默认使用 `%LOCALAPPDATA%/Patina.Dev/Patina/`，自动化测试使用临时目录。`--profile-parent` 或 `PATINA_PROFILE_PARENT` 可将查找范围限定在指定的绝对父目录。桌面入口按规范化后的资料路径建立单实例身份。

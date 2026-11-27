@@ -22,6 +22,10 @@ App note en: TBD.
 
 ### Fixed
 
+- 修复在分类页将部分辅助进程关联到主程序时无法保存的问题。
+- 缩短 Windows 登录启动项的名称与资料参数，修复开发版与正式版共存时，Windows 可能跳过 Patina 及其后续启动项的问题。更新后首次手动启动会迁移现有登记，并保留 Windows 的禁用决定。
+- 修复 Windows 登录时任务栏尚未就绪导致 Patina 退出、活动漏记，以及从 Tauri 版升级时启动项可能丢失的问题。设置页可查看 Windows 的禁用状态，并修复缺失的启动项。
+
 ### Removed
 
 ### Internal

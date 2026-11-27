@@ -401,6 +401,8 @@ Tauri v1.10.0 通过 `latest.json` 取得同一架构的签名安装包。首个
 
 手动迁移也可在 v1.10.0 创建本地 ZIP 备份，退出旧版，安装新版，再通过「备份与恢复」预览并恢复。首次正式发布前，使用面向用户的签名候选包从已发布客户端验收检查、下载、安装和重启。
 
+从 Tauri 版升级时，安装器在最终程序就位后交接已确认归属的登录启动项。开启自启的资料先继承旧项的 Windows 禁用决定，再登记并读回新命令，最后移除旧命令。交接失败会保留旧安装登记供重试。已经升级且启动项缺失的资料，可从设置页核对并修复。[安装器](../packaging/windows/patina.nsi) · [启动项交接](../apps/patina/src/upgrade.rs)
+
 [`crates/updater/config.json`](../crates/updater/config.json) 拥有更新源及公钥：先检查 GitHub Releases，访问或解析失败再尝试 R2。两个通道发布同版本、同字节的资产。清单包含 `schema: 1`、`application`、SemVer `version`、可选 `notes`，以及按 `windows-x86_64`、`windows-aarch64` 索引的 `platforms`；每个包提供 HTTPS `url`、字节数 `size` 和 Base64 编码的完整 Minisign `signature`。
 
 安装包签名使用预哈希 Minisign，签名的 trusted comment 必须严格等于 `patina-desktop <version> <platform>`。客户端同时验证包字节和该签名注释，防止把旧版本、其他架构或 Tauri 安装包改名后作为当前桌面版的更新。版本不高于当前版本时不提供安装；稳定版不接受预发布版。更新签名与 Windows Authenticode 是不同契约。
